@@ -9,6 +9,7 @@
 
 #include <linux/sched.h>
 #include <linux/pm_runtime.h>
+#include <trace/events/power.h>
 #include "power.h"
 
 static int rpm_resume(struct device *dev, int rpmflags);
@@ -49,6 +50,7 @@ void update_pm_runtime_accounting(struct device *dev)
 static void __update_runtime_status(struct device *dev, enum rpm_status status)
 {
 	update_pm_runtime_accounting(dev);
+	trace_runtime_pm_status(dev, status);
 	dev->power.runtime_status = status;
 }
 
@@ -735,6 +737,8 @@ int __pm_runtime_idle(struct device *dev, int rpmflags)
 	might_sleep_if(!(rpmflags & RPM_ASYNC));
 
 	if (rpmflags & RPM_GET_PUT) {
+		trace_runtime_pm_usage(dev,
+			atomic_read(&dev->power.usage_count)-1);
 		if (!atomic_dec_and_test(&dev->power.usage_count))
 			return 0;
 	}
@@ -766,6 +770,8 @@ int __pm_runtime_suspend(struct device *dev, int rpmflags)
 	might_sleep_if(!(rpmflags & RPM_ASYNC) && !dev->power.irq_safe);
 
 	if (rpmflags & RPM_GET_PUT) {
+		trace_runtime_pm_usage(dev,
+			atomic_read(&dev->power.usage_count)-1);
 		if (!atomic_dec_and_test(&dev->power.usage_count))
 			return 0;
 	}
@@ -797,6 +803,7 @@ int __pm_runtime_resume(struct device *dev, int rpmflags)
 
 	if (rpmflags & RPM_GET_PUT)
 		atomic_inc(&dev->power.usage_count);
+	trace_runtime_pm_usage(dev, atomic_read(&dev->power.usage_count));
 
 	spin_lock_irqsave(&dev->power.lock, flags);
 	retval = rpm_resume(dev, rpmflags);
@@ -1053,6 +1060,7 @@ void pm_runtime_forbid(struct device *dev)
 
 	dev->power.runtime_auto = false;
 	atomic_inc(&dev->power.usage_count);
+	trace_runtime_pm_usage(dev, atomic_read(&dev->power.usage_count));
 	rpm_resume(dev, 0);
 
  out:
@@ -1073,6 +1081,7 @@ void pm_runtime_allow(struct device *dev)
 		goto out;
 
 	dev->power.runtime_auto = true;
+	trace_runtime_pm_usage(dev, atomic_read(&dev->power.usage_count)-1);
 	if (atomic_dec_and_test(&dev->power.usage_count))
 		rpm_idle(dev, RPM_AUTO);
 
@@ -1141,6 +1150,8 @@ static void update_autosuspend(struct device *dev, int old_delay, int old_use)
 		/* If it used to be allowed then prevent it. */
 		if (!old_use || old_delay >= 0) {
 			atomic_inc(&dev->power.usage_count);
+			trace_runtime_pm_usage(dev,
+				atomic_read(&dev->power.usage_count));
 			rpm_resume(dev, 0);
 		}
 	}
@@ -1149,9 +1160,11 @@ static void update_autosuspend(struct device *dev, int old_delay, int old_use)
 	else {
 
 		/* If it used to be prevented then allow it. */
-		if (old_use && old_delay < 0)
+		if (old_use && old_delay < 0) {
 			atomic_dec(&dev->power.usage_count);
-
+			trace_runtime_pm_usage(dev,
+				atomic_read(&dev->power.usage_count));
+		}
 		/* Maybe we can autosuspend now. */
 		rpm_idle(dev, RPM_AUTO);
 	}
