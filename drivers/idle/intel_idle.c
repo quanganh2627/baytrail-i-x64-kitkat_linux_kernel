@@ -64,9 +64,6 @@
 #include <asm/mwait.h>
 #include <asm/msr.h>
 #include <asm/mrst.h>
-#ifdef CONFIG_X86_MDFLD
-#include <linux/intel_mid_pm.h>
-#endif
 
 #define INTEL_IDLE_VERSION "0.4"
 #define PREFIX "intel_idle: "
@@ -359,14 +356,9 @@ int intel_mid_idle(struct cpuidle_device *dev, struct cpuidle_state *state)
 	if (!need_resched()) {
 #ifdef CONFIG_X86_MRST
 		if (eax == -1UL) {
-			do_s0i3();
+			;//do_s0i3();
 		} else
-#elseif CONFIG_X86_MDFLD
-		if (eax == -1UL) {
-			mfld_s0i3_enter();
-			pmu_enable_forward_msi();
-		} else
-#endif
+#endif		
 		{
 			/* Conventional MWAIT */
 
