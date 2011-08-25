@@ -123,6 +123,7 @@ struct sdhci_host {
 	unsigned int clk_mul;	/* Clock Muliplier value */
 
 	unsigned int clock;	/* Current clock (MHz) */
+	unsigned int iosclock;  /* Last clock asked via set_ios */
 	u8 pwr;			/* Current voltage */
 
 	struct mmc_request *mrq;	/* Current request */

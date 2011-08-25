@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/leds.h>
 
@@ -1274,6 +1275,7 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct sdhci_host *host;
 	unsigned long flags;
 	u8 ctrl;
+	unsigned int lastclock;
 
 	host = mmc_priv(mmc);
 
@@ -1281,6 +1283,19 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (host->flags & SDHCI_DEVICE_DEAD)
 		goto out;
+
+	lastclock = host->iosclock;
+	host->iosclock = ios->clock;
+	if (lastclock == 0 && ios->clock != 0) {
+		spin_unlock_irqrestore(&host->lock, flags);
+		pm_runtime_get_sync(host->mmc->parent);
+		spin_lock_irqsave(&host->lock, flags);
+	} else if (lastclock != 0 && ios->clock == 0) {
+		spin_unlock_irqrestore(&host->lock, flags);
+		pm_runtime_mark_last_busy(host->mmc->parent);
+		pm_runtime_put_autosuspend(host->mmc->parent);
+		spin_lock_irqsave(&host->lock, flags);
+	}
 
 	/*
 	 * Reset the chip on each power off.
@@ -2313,6 +2328,32 @@ void sdhci_enable_irq_wakeups(struct sdhci_host *host)
 EXPORT_SYMBOL_GPL(sdhci_enable_irq_wakeups);
 
 #endif /* CONFIG_PM */
+#ifdef CONFIG_PM_RUNTIME
+
+int sdhci_runtime_suspend_host(struct sdhci_host *host)
+{
+	int ret = 0;
+
+	if (host->vmmc)
+		ret = regulator_disable(host->vmmc);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sdhci_runtime_suspend_host);
+
+int sdhci_runtime_resume_host(struct sdhci_host *host)
+{
+	int ret = 0;
+
+	if (host->vmmc)
+		if ((ret = regulator_enable(host->vmmc)))
+			return ret;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sdhci_runtime_resume_host);
+
+#endif
 
 /*****************************************************************************\
  *                                                                           *
@@ -2334,6 +2375,7 @@ struct sdhci_host *sdhci_alloc_host(struct device *dev,
 
 	host = mmc_priv(mmc);
 	host->mmc = mmc;
+	host->iosclock = 0;
 
 	return host;
 }
