@@ -21,6 +21,7 @@
 #include <linux/mmc/host.h>
 #include <linux/scatterlist.h>
 #include <linux/io.h>
+#include <asm/intel_scu_ipc.h>
 #include <linux/pm_runtime.h>
 
 #include "sdhci.h"
@@ -38,6 +39,8 @@
 #define  PCI_SLOT_INFO_FIRST_BAR_MASK	0x07
 
 #define MAX_SLOTS			8
+
+#define IPC_EMMC_MUTEX_CMD		0xEE
 
 struct sdhci_pci_chip;
 struct sdhci_pci_slot;
@@ -166,8 +169,60 @@ static int mrst_hc_probe(struct sdhci_pci_chip *chip)
 
 static int mfd_emmc_probe_slot(struct sdhci_pci_slot *slot)
 {
+	int ret;
+	u32 mutex_var_addr[3];
+	struct pci_dev *pdev;
+
 	slot->host->mmc->caps |= MMC_CAP_8_BIT_DATA;
+	/*
+	 * for some card, it is should be none removable, e.g.eMMC card
+	 * So if we are a eMMC slot, the mmc host capability can be set
+	 * by MMC_CAP_NONREMOVABLE
+	 */
+	slot->host->mmc->caps |= MMC_CAP_NONREMOVABLE;
+
+	pdev = slot->chip->pdev;
+	if (pdev->device != PCI_DEVICE_ID_INTEL_MFD_EMMC0)
+		return 0;
+
+	ret = intel_scu_ipc_command(IPC_EMMC_MUTEX_CMD, 0,
+			NULL, 0, mutex_var_addr, 3);
+	if (ret) {
+		dev_err(&slot->chip->pdev->dev, "IPC error: %d\n", ret);
+		slot->host->sram_addr = 0;
+	} else {
+		/* 3 housekeeping mutex variables, 12 bytes length */
+		slot->host->sram_addr = ioremap_nocache(mutex_var_addr[0], 16);
+		if (!slot->host->sram_addr) {
+			dev_err(&slot->chip->pdev->dev, "ioremap failed!\n");
+		} else {
+			dev_info(&slot->chip->pdev->dev, "mapped addr: %p\n",
+				slot->host->sram_addr);
+			dev_info(&slot->chip->pdev->dev, "current eMMC owner:"
+				" %d, IA req: %d, SCU req: %d\n",
+				readl(slot->host->sram_addr +
+					DEKKER_EMMC_OWNER_OFFSET),
+				readl(slot->host->sram_addr +
+					DEKKER_IA_REQ_OFFSET),
+				readl(slot->host->sram_addr +
+					DEKKER_SCU_REQ_OFFSET));
+		}
+	}
+
 	return 0;
+}
+
+static void mfd_emmc_remove_slot(struct sdhci_pci_slot *slot, int dead)
+{
+	struct pci_dev *pdev;
+	if (dead)
+		return;
+
+	pdev = slot->chip->pdev;
+	if (pdev->device == PCI_DEVICE_ID_INTEL_MFD_EMMC0) {
+		if (slot->host->sram_addr)
+			iounmap(slot->host->sram_addr);
+	}
 }
 
 static const struct sdhci_pci_fixes sdhci_intel_mrst_hc0 = {
@@ -191,6 +246,7 @@ static const struct sdhci_pci_fixes sdhci_intel_mfd_sdio = {
 static const struct sdhci_pci_fixes sdhci_intel_mfd_emmc = {
 	.quirks		= SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC,
 	.probe_slot	= mfd_emmc_probe_slot,
+	.remove_slot	= mfd_emmc_remove_slot,
 };
 
 /* O2Micro extra registers */
