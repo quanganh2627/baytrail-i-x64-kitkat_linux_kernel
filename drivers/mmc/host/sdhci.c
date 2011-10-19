@@ -2791,8 +2791,6 @@ int sdhci_add_host(struct sdhci_host *host)
 	}
 
 	sdhci_init(host, 0);
-	host->iosclock = 1; /* default clk_gate is 0 */
-	pm_runtime_get_noresume(host->mmc->parent);
 
 #ifdef CONFIG_MMC_DEBUG
 	sdhci_dumpregs(host);
