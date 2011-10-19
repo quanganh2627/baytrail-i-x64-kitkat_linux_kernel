@@ -1296,9 +1296,6 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		pm_runtime_put_autosuspend(host->mmc->parent);
 		spin_lock_irqsave(&host->lock, flags);
 	}
-	/* no need to configure the rest.. */
-	if (host->iosclock == 0)
-		goto out;
 
 	/*
 	 * Reset the chip on each power off.
