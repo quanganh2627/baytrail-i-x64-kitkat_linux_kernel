@@ -21,7 +21,6 @@
 #include <linux/mmc/host.h>
 #include <linux/scatterlist.h>
 #include <linux/io.h>
-#include <linux/pm_runtime.h>
 
 #include "sdhci.h"
 
@@ -945,95 +944,6 @@ static int sdhci_pci_resume(struct pci_dev *pdev)
 
 #endif /* CONFIG_PM */
 
-#ifdef CONFIG_PM_RUNTIME
-
-static int sdhci_pci_runtime_suspend(struct device *dev)
-{
-	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
-	struct sdhci_pci_chip *chip;
-	struct sdhci_pci_slot *slot;
-	pm_message_t state = { .event = PM_EVENT_SUSPEND };
-	int i, ret;
-
-	chip = pci_get_drvdata(pdev);
-	if (!chip)
-		return 0;
-
-	for (i = 0; i < chip->num_slots; i++) {
-		slot = chip->slots[i];
-		if (!slot)
-			continue;
-
-		ret = sdhci_runtime_suspend_host(slot->host);
-
-		if (ret) {
-			for (i--; i >= 0; i--)
-				sdhci_runtime_resume_host(chip->slots[i]->host);
-			return ret;
-		}
-	}
-
-	if (chip->fixes && chip->fixes->suspend) {
-		ret = chip->fixes->suspend(chip, state);
-		if (ret) {
-			for (i = chip->num_slots - 1; i >= 0; i--)
-				sdhci_runtime_resume_host(chip->slots[i]->host);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int sdhci_pci_runtime_resume(struct device *dev)
-{
-	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
-	struct sdhci_pci_chip *chip;
-	struct sdhci_pci_slot *slot;
-	int i, ret;
-
-	chip = pci_get_drvdata(pdev);
-	if (!chip)
-		return 0;
-
-	if (chip->fixes && chip->fixes->resume) {
-		ret = chip->fixes->resume(chip);
-		if (ret)
-			return ret;
-	}
-
-	for (i = 0; i < chip->num_slots; i++) {
-		slot = chip->slots[i];
-		if (!slot)
-			continue;
-
-		ret = sdhci_runtime_resume_host(slot->host);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
-static int sdhci_pci_runtime_idle(struct device *dev)
-{
-	return 0;
-}
-
-#else
-
-#define sdhci_pci_runtime_suspend	NULL
-#define sdhci_pci_runtime_resume	NULL
-#define sdhci_pci_runtime_idle		NULL
-
-#endif
-
-static const struct dev_pm_ops sdhci_pci_pm_ops = {
-	.runtime_suspend = sdhci_pci_runtime_suspend,
-	.runtime_resume = sdhci_pci_runtime_resume,
-	.runtime_idle = sdhci_pci_runtime_idle,
-};
-
 /*****************************************************************************\
  *                                                                           *
  * Device probing/removal                                                    *
@@ -1223,12 +1133,6 @@ static int __devinit sdhci_pci_probe(struct pci_dev *pdev,
 		chip->slots[i] = slot;
 	}
 
-	pm_runtime_put_noidle(&pdev->dev);
-	pm_runtime_allow(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, 50);
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_suspend_ignore_children(&pdev->dev, 1);
-
 	return 0;
 
 free:
@@ -1255,8 +1159,6 @@ static void __devexit sdhci_pci_remove(struct pci_dev *pdev)
 		kfree(chip);
 	}
 
-	pm_runtime_forbid(&pdev->dev);
-	pm_runtime_get_noresume(&pdev->dev);
 	pci_disable_device(pdev);
 }
 
@@ -1267,9 +1169,6 @@ static struct pci_driver sdhci_driver = {
 	.remove =	__devexit_p(sdhci_pci_remove),
 	.suspend =	sdhci_pci_suspend,
 	.resume	=	sdhci_pci_resume,
-	.driver =	{
-		.pm =   &sdhci_pci_pm_ops
-	},
 };
 
 /*****************************************************************************\
