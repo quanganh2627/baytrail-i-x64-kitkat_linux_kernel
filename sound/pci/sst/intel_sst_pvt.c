@@ -35,8 +35,8 @@
 #include <linux/fs.h>
 #include <linux/firmware.h>
 #include <linux/sched.h>
-#include "intel_sst.h"
-#include "intel_sst_ioctl.h"
+#include <sound/intel_sst.h>
+#include <sound/intel_sst_ioctl.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 
@@ -310,4 +310,3 @@ int sst_enable_rx_timeslot(int status)
 				&sst_drv_ctx->hs_info_blk, SST_BLOCK_TIMEOUT);
 	return retval;
 }
-

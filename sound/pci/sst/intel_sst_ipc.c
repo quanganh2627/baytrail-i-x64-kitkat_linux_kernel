@@ -31,8 +31,8 @@
 #include <linux/pci.h>
 #include <linux/firmware.h>
 #include <linux/sched.h>
-#include "intel_sst.h"
-#include "intel_sst_ioctl.h"
+#include <sound/intel_sst.h>
+#include <sound/intel_sst_ioctl.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 
@@ -54,7 +54,6 @@ static void sst_send_sound_card_type(void)
 	list_add_tail(&msg->node, &sst_drv_ctx->ipc_dispatch_list);
 	spin_unlock(&sst_drv_ctx->list_spin_lock);
 	sst_post_message(&sst_drv_ctx->ipc_post_msg_wq);
-	return;
 }
 
 /**
@@ -123,7 +122,6 @@ void sst_post_message(struct work_struct *work)
 
 	kfree(msg->mailbox_data);
 	kfree(msg);
-	return;
 }
 
 /*
@@ -170,9 +168,7 @@ static int process_fw_init(struct sst_ipc_msg_wq *msg)
 
 	pr_debug("*** FW Init msg came***\n");
 	if (init->result) {
-		mutex_lock(&sst_drv_ctx->sst_lock);
-		sst_drv_ctx->sst_state = SST_ERROR;
-		mutex_unlock(&sst_drv_ctx->sst_lock);
+		sst_set_fw_state_locked(sst_drv_ctx, SST_ERROR);
 		pr_debug("FW Init failed, Error %x\n", init->result);
 		pr_err("FW Init failed, Error %x\n", init->result);
 		retval = -init->result;
@@ -222,11 +218,14 @@ void sst_process_message(struct work_struct *work)
 
 	case IPC_SST_GET_PLAY_FRAMES:
 		if (sst_drv_ctx->pci_id == SST_MRST_PCI_ID) {
+			struct stream_info *stream ;
+
 			if (sst_validate_strid(str_id)) {
 				pr_err("strid %d invalid\n", str_id);
 				break;
 			}
 			/* call sst_play_frame */
+			stream = &sst_drv_ctx->streams[str_id];
 			pr_debug("sst_play_frames for %d\n",
 					msg->header.part.str_id);
 			mutex_lock(&sst_drv_ctx->streams[str_id].lock);
@@ -332,16 +331,16 @@ void sst_process_reply(struct work_struct *work)
 		}
 		break;
 	case IPC_IA_ALG_PARAMS: {
-		pr_debug("sst:IPC_ALG_PARAMS response %x\n", msg->header.full);
-		pr_debug("sst: data value %x\n", msg->header.part.data);
-		pr_debug("sst: large value %x\n", msg->header.part.large);
+		pr_debug("IPC_ALG_PARAMS response %x\n", msg->header.full);
+		pr_debug("data value %x\n", msg->header.part.data);
+		pr_debug("large value %x\n", msg->header.part.large);
 
 		if (!msg->header.part.large) {
 			if (!msg->header.part.data) {
-				pr_debug("sst: alg set success\n");
+				pr_debug("alg set success\n");
 				sst_drv_ctx->ppp_params_blk.ret_code = 0;
 			} else {
-				pr_debug("sst: alg set failed\n");
+				pr_debug("alg set failed\n");
 				sst_drv_ctx->ppp_params_blk.ret_code =
 							-msg->header.part.data;
 			}
@@ -350,20 +349,21 @@ void sst_process_reply(struct work_struct *work)
 			struct snd_ppp_params *mailbox_params, *get_params;
 			char *params;
 
-			pr_debug("sst: alg get success\n");
+			pr_debug("alg get success\n");
 			mailbox_params = (struct snd_ppp_params *)msg->mailbox;
 			get_params = kzalloc(sizeof(*get_params), GFP_KERNEL);
-			if (get_params == NULL) {
-				pr_err("sst: out of memory for ALG PARAMS");
+			if (!get_params) {
+				pr_debug("mem alloc failed\n");
 				break;
 			}
 			memcpy_fromio(get_params, mailbox_params,
 							sizeof(*get_params));
 			get_params->params = kzalloc(mailbox_params->size,
 							GFP_KERNEL);
-			if (get_params->params == NULL) {
+			if (!get_params->params) {
+				pr_debug("mem alloc failed\n");
 				kfree(get_params);
-				pr_err("sst: out of memory for ALG PARAMS block");
+				pr_err("out of memory for ALG PARAMS block");
 				break;
 			}
 			params = msg->mailbox;
@@ -383,7 +383,7 @@ void sst_process_reply(struct work_struct *work)
 
 	case IPC_IA_TUNING_PARAMS:
 	case IPC_IA_SET_RUNTIME_PARAMS: {
-		pr_debug("sst:IPC_TUNING_PARAMS resp: %x\n", msg->header.full);
+		pr_debug("IPC_TUNING_PARAMS resp: %x\n", msg->header.full);
 		pr_debug("data value %x\n", msg->header.part.data);
 		if (msg->header.part.large) {
 			pr_debug("alg set failed\n");
@@ -397,6 +397,7 @@ void sst_process_reply(struct work_struct *work)
 			sst_drv_ctx->ppp_params_blk.condition = true;
 			wake_up(&sst_drv_ctx->wait_queue);
 		}
+		break;
 	}
 
 	case IPC_IA_GET_FW_INFO: {
@@ -602,6 +603,7 @@ void sst_process_reply(struct work_struct *work)
 			wake_up(&sst_drv_ctx->wait_queue);
 		}
 		break;
+
 	case IPC_IA_PAUSE_STREAM:
 	case IPC_IA_RESUME_STREAM:
 	case IPC_IA_SET_STREAM_PARAMS:
@@ -697,16 +699,15 @@ void sst_process_reply(struct work_struct *work)
 		break;
 	}
 	case IPC_IA_SET_FW_CTXT: {
-		int retval;
+		int retval = msg->header.part.data;
 
 		if (!msg->header.part.data) {
-			pr_debug("sst: Msg IPC_IA_SET_FW_CTXT succedded %x\n",
-				 msg->header.part.msg_id);
+			pr_debug("Msg IPC_IA_SET_FW_CTXT succedded %x\n",
+				       msg->header.part.msg_id);
 		} else {
-			pr_err("sst:  Msg %x reply error %x\n",
-			       msg->header.part.msg_id, msg->header.part.data);
+			pr_err("Msg %x reply error %x\n",
+			msg->header.part.msg_id, msg->header.part.data);
 		}
-		retval = msg->header.part.data;
 		sst_wake_up_alloc_block(sst_drv_ctx, FW_DWNL_ID, retval, NULL);
 		break;
 	}

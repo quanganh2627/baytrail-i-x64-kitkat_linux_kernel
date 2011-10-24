@@ -37,10 +37,11 @@
 #include <linux/firmware.h>
 #include <linux/miscdevice.h>
 #include <linux/pm_runtime.h>
+#include <linux/async.h>
 #include <asm/mrst.h>
 #include <asm/intel_scu_ipc.h>
-#include "intel_sst.h"
-#include "intel_sst_ioctl.h"
+#include <sound/intel_sst.h>
+#include <sound/intel_sst_ioctl.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 
@@ -55,6 +56,7 @@ MODULE_VERSION(SST_DRIVER_VERSION);
 
 struct intel_sst_drv *sst_drv_ctx;
 static struct mutex drv_ctx_lock;
+struct class *sst_class;
 
 /* fops Routines */
 static const struct file_operations intel_sst_fops = {
@@ -110,6 +112,7 @@ static irqreturn_t intel_sst_interrupt(int irq, void *context)
 	/* Do not handle interrupt in suspended state */
 	if (drv->sst_state == SST_SUSPENDED)
 		return IRQ_NONE;
+
 	/* Interrupt arrived, check src */
 	isr.full = sst_shim_read(drv->shim, SST_ISRX);
 
@@ -123,6 +126,7 @@ static irqreturn_t intel_sst_interrupt(int irq, void *context)
 				stream->period_elapsed(stream->pcm_substream);
 			return IRQ_HANDLED;
 		}
+		pr_err("recieved IPC %x\n", header.full);
 		if (header.part.large)
 			size = header.part.data;
 		if (header.part.msg_id & REPLY_MSG) {
@@ -204,8 +208,10 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 	sst_drv_ctx->unique_id = 0;
 	sst_drv_ctx->pmic_port_instance = SST_DEFAULT_PMIC_PORT;
 	sst_drv_ctx->fw = NULL;
+	sst_drv_ctx->fw_in_mem = NULL;
 
 	INIT_LIST_HEAD(&sst_drv_ctx->ipc_dispatch_list);
+	INIT_LIST_HEAD(&sst_drv_ctx->fw_list);
 	INIT_WORK(&sst_drv_ctx->ipc_post_msg.wq, sst_post_message);
 	INIT_WORK(&sst_drv_ctx->ipc_process_msg.wq, sst_process_message);
 	INIT_WORK(&sst_drv_ctx->ipc_process_reply.wq, sst_process_reply);
@@ -288,12 +294,14 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 	pr_debug("SRAM Ptr %p\n", sst_drv_ctx->mailbox);
 
 	/* IRAM */
+	sst_drv_ctx->iram_base = pci_resource_start(pci, 3);
 	sst_drv_ctx->iram = pci_ioremap_bar(pci, 3);
 	if (!sst_drv_ctx->iram)
 		goto do_unmap_sram;
 	pr_debug("IRAM Ptr %p\n", sst_drv_ctx->iram);
 
 	/* DRAM */
+	sst_drv_ctx->dram_base = pci_resource_start(pci, 4);
 	sst_drv_ctx->dram = pci_ioremap_bar(pci, 4);
 	if (!sst_drv_ctx->dram)
 		goto do_unmap_iram;
@@ -425,11 +433,11 @@ static void __devexit intel_sst_remove(struct pci_dev *pci)
 	destroy_workqueue(sst_drv_ctx->process_msg_wq);
 	destroy_workqueue(sst_drv_ctx->post_msg_wq);
 	destroy_workqueue(sst_drv_ctx->mad_wq);
-	kfree(pci_get_drvdata(pci));
-	if (sst_drv_ctx->fw) {
-		release_firmware(sst_drv_ctx->fw);
-		sst_drv_ctx->fw = NULL;
-	}
+	release_firmware(sst_drv_ctx->fw);
+	sst_drv_ctx->fw = NULL;
+	kfree(sst_drv_ctx->fw_in_mem);
+	sst_drv_ctx->fw_in_mem = NULL;
+	kfree(sst_drv_ctx);
 	sst_drv_ctx = NULL;
 	pci_release_regions(pci);
 	pci_disable_device(pci);
@@ -439,7 +447,7 @@ static void __devexit intel_sst_remove(struct pci_dev *pci)
 static void sst_save_dsp_context(void)
 {
 	struct snd_sst_ctxt_params fw_context;
-	unsigned int pvt_id, i;
+	unsigned int pvt_id;
 	struct ipc_post *msg = NULL;
 
 	/*check cpu type*/
@@ -455,8 +463,7 @@ static void sst_save_dsp_context(void)
 	if (sst_create_large_msg(&msg))
 		return;
 	pvt_id = sst_assign_pvt_id(sst_drv_ctx);
-	i = sst_get_block_stream(sst_drv_ctx);
-	sst_drv_ctx->alloc_block[i].sst_id = pvt_id;
+	sst_drv_ctx->alloc_block[0].sst_id = pvt_id;
 	sst_fill_header(&msg->header, IPC_IA_GET_FW_CTXT, 1, pvt_id);
 	msg->header.part.data = sizeof(fw_context) + sizeof(u32);
 	fw_context.address = virt_to_phys((void *)sst_drv_ctx->fw_cntx);
@@ -469,9 +476,9 @@ static void sst_save_dsp_context(void)
 	spin_unlock(&sst_drv_ctx->list_spin_lock);
 	sst_post_message(&sst_drv_ctx->ipc_post_msg_wq);
 	/*wait for reply*/
-	if (sst_wait_timeout(sst_drv_ctx, &sst_drv_ctx->alloc_block[i]))
+	if (sst_wait_timeout(sst_drv_ctx, &sst_drv_ctx->alloc_block[0]))
 		pr_debug("err fw context save timeout  ...\n");
-	sst_drv_ctx->alloc_block[i].sst_id = BLOCK_UNINIT;
+	sst_drv_ctx->alloc_block[0].sst_id = BLOCK_UNINIT;
 	pr_debug("fw context saved  ...\n");
 	return;
 }
@@ -525,11 +532,10 @@ static int intel_sst_runtime_suspend(struct device *dev)
 {
 	union config_status_reg csr;
 
-	pr_debug("sst: runtime_suspend called\n");
-
-	if (sst_drv_ctx->stream_cnt) {
-		pr_err("active streams,not able to suspend\n");
-		return -EBUSY;
+	pr_debug("runtime_suspend called\n");
+	if (sst_drv_ctx->sst_state == SST_SUSPENDED) {
+		pr_err("System already in Suspended state");
+		return 0;
 	}
 	/*save fw context*/
 	sst_save_dsp_context();
@@ -551,7 +557,7 @@ static int intel_sst_runtime_resume(struct device *dev)
 {
 	u32 csr;
 
-	pr_debug("sst: runtime_resume called\n");
+	pr_debug("runtime_resume called\n");
 	if (sst_drv_ctx->sst_state != SST_SUSPENDED) {
 		pr_err("SST is not in suspended state\n");
 		return 0;
@@ -565,6 +571,7 @@ static int intel_sst_runtime_resume(struct device *dev)
 	 * CSR - Configuration and Status Register.
 	 */
 	csr |= (sst_drv_ctx->csr_value | 0x30000);
+	sst_shim_write(sst_drv_ctx->shim, SST_CSR, csr);
 
 	intel_sst_set_pll(true, SST_PLL_AUDIO);
 	mutex_lock(&sst_drv_ctx->sst_lock);
@@ -576,9 +583,12 @@ static int intel_sst_runtime_resume(struct device *dev)
 static int intel_sst_runtime_idle(struct device *dev)
 {
 	pr_debug("runtime_idle called\n");
-	if (sst_drv_ctx->stream_cnt == 0 && sst_drv_ctx->am_cnt == 0)
+	if (!sst_drv_ctx->am_cnt && sst_drv_ctx->sst_state != SST_UN_INIT) {
 		pm_schedule_suspend(dev, SST_SUSPEND_DELAY);
-	return -EBUSY;
+		return -EBUSY;
+	} else {
+		return 0;
+	}
 }
 
 static const struct dev_pm_ops intel_sst_pm = {
@@ -643,13 +653,9 @@ static void __exit intel_sst_exit(void)
 	pci_unregister_driver(&driver);
 
 	pr_debug("driver unloaded\n");
-	if (sst_drv_ctx->fw) {
-		release_firmware(sst_drv_ctx->fw);
-		sst_drv_ctx->fw = NULL;
-	}
 	sst_drv_ctx = NULL;
 	return;
 }
 
-module_init(intel_sst_init);
+module_init_async(intel_sst_init);
 module_exit(intel_sst_exit);

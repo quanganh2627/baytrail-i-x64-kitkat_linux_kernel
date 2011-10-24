@@ -41,8 +41,8 @@
 #include <linux/rar_register.h>
 #include "../../../drivers/staging/memrar/memrar.h"
 #endif
-#include "intel_sst.h"
-#include "intel_sst_ioctl.h"
+#include <sound/intel_sst.h>
+#include <sound/intel_sst_ioctl.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 
@@ -62,6 +62,7 @@ static int intel_sst_check_device(void)
 	int retval = 0;
 
 	if (sst_drv_ctx->sst_state == SST_UN_INIT) {
+		sst_drv_ctx->sst_state = SST_START_INIT;
 		/* FW is not downloaded */
 		retval = sst_download_fw();
 		if (retval)
@@ -95,6 +96,7 @@ int intel_sst_open(struct inode *i_node, struct file *file_ptr)
 	retval = intel_sst_check_device();
 	if (retval) {
 		pm_runtime_put(&sst_drv_ctx->pci->dev);
+		sst_drv_ctx->sst_state = SST_UN_INIT;
 		mutex_unlock(&sst_drv_ctx->stream_lock);
 		return retval;
 	}
@@ -918,7 +920,6 @@ static long intel_sst_ioctl_dsp(unsigned int cmd, unsigned long arg)
 		retval = sst_create_algo_ipc(&algo_params, &msg);
 		if (retval < 0)
 			break;
-		algo_params.reserved = 1;
 		if (copy_from_user(msg->mailbox_data + retval,
 				algo_params.params, algo_params.size))	{
 			kfree(msg);
@@ -974,13 +975,17 @@ static int sst_ioctl_tuning_params(unsigned int cmd, unsigned long arg)
 {
 	struct snd_sst_tuning_params params;
 	struct ipc_post *msg;
+	unsigned long address;
 
 	if (copy_from_user(&params, (void __user *)arg, sizeof(params)))
 		return -EFAULT;
+	if (params.size > SST_MAILBOX_SIZE)
+		return -ENOMEM;
 	pr_debug("Parameter %d, Stream %d, Size %d\n", params.type,
 			params.str_id, params.size);
 	if (sst_create_large_msg(&msg))
 		return -ENOMEM;
+	address = (unsigned long)params.addr;
 
 	switch (_IOC_NR(cmd)) {
 	case _IOC_NR(SNDRV_SST_TUNING_PARAMS):
@@ -995,8 +1000,7 @@ static int sst_ioctl_tuning_params(unsigned int cmd, unsigned long arg)
 	memcpy(msg->mailbox_data + sizeof(u32), &params, sizeof(params));
 	/* driver doesn't need to send address, so overwrite addr with data */
 	if (copy_from_user(msg->mailbox_data + sizeof(u32) + sizeof(params) - sizeof(params.addr),
-			(void __user *)(unsigned long)params.addr,
-			params.size)) {
+			(void __user *)address, params.size)) {
 		kfree(msg->mailbox_data);
 		kfree(msg);
 		return -EFAULT;
@@ -1085,6 +1089,13 @@ long intel_sst_ioctl(struct file *file_ptr, unsigned int cmd, unsigned long arg)
 			pr_debug("SET_STREAM_PARAMS received!\n");
 			/* allocated set params only */
 			retval = sst_set_stream_param(str_id, &str_param);
+			/* Block the call for reply */
+			if (!retval) {
+				int sfreq = 0, word_size = 0, num_channel = 0;
+				sfreq =	str_param.sparams.uc.pcm_params.sfreq;
+				word_size = str_param.sparams.uc.pcm_params.pcm_wd_sz;
+				num_channel = str_param.sparams.uc.pcm_params.num_chan;
+			}
 		}
 		break;
 	}

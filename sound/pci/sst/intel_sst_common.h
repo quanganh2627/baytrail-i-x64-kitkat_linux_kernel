@@ -28,6 +28,9 @@
  *  Common private declarations for SST
  */
 
+#include <linux/dmaengine.h>
+#include <linux/intel_mid_dma.h>
+
 #define SST_DRIVER_VERSION "2.0.04"
 #define SST_VERSION_NUM 0x2004
 
@@ -42,6 +45,7 @@
 enum sst_states {
 	SST_FW_LOADED = 1,
 	SST_FW_RUNNING,
+	SST_START_INIT,
 	SST_UN_INIT,
 	SST_ERROR,
 	SST_SUSPENDED,
@@ -317,6 +321,35 @@ struct mad_ops_wq {
 #define SST_MMAP_PAGES	(640*1024 / PAGE_SIZE)
 #define SST_MMAP_STEP	(40*1024 / PAGE_SIZE)
 
+/* FIXME optimze this */
+enum sst_dma_desc {
+	SST_DESC_NULL = 0,
+	SST_DESC_PREPARED,
+	SST_DESC_SUBMITTED,
+	SST_DESC_DONE,
+};
+
+struct sst_firmware_list {
+	unsigned long src;
+	unsigned long dstn;
+	unsigned int len;
+	struct list_head node;
+	struct dma_async_tx_descriptor *desc;
+	enum sst_dma_desc trf_status;
+	bool is_last;
+	wait_queue_t *wait;
+	wait_queue_head_t *queue;
+};
+
+struct sst_dma {
+	struct dma_chan *ch;
+	struct intel_mid_dma_slave slave;
+	struct pci_dev *dmac;
+};
+
+#define PCI_DMAC_ID 0x0830
+#define SST_MAX_DMA_LEN (4095*4)
+#define SST_DMA_DELAY 2000
 /***
  * struct intel_sst_drv - driver ops
  *
@@ -373,6 +406,8 @@ struct intel_sst_drv {
 	void __iomem		*mailbox;
 	void __iomem		*iram;
 	void __iomem		*dram;
+	unsigned int		iram_base;
+	unsigned int		dram_base;
 	unsigned int		shim_phy_add;
 	struct list_head	ipc_dispatch_list;
 	struct work_struct	ipc_post_msg_wq;
@@ -386,7 +421,7 @@ struct intel_sst_drv {
 	struct workqueue_struct *process_msg_wq;
 	struct workqueue_struct *process_reply_wq;
 
-	struct stream_info	streams[MAX_NUM_STREAMS];
+	struct stream_info streams[MAX_NUM_STREAMS+1]; /*str_id 0 is not used*/
 	struct stream_alloc_block alloc_block[MAX_ACTIVE_STREAM];
 	struct sst_block	tgt_dev_blk, fw_info_blk, ppp_params_blk,
 				vol_info_blk, mute_info_blk, hs_info_blk;
@@ -419,7 +454,9 @@ struct intel_sst_drv {
 	unsigned int		pll_mode;
 	const struct firmware *fw;
 
-	unsigned int		fw_downloaded;
+	struct list_head	fw_list;
+	struct sst_dma		dma;
+	void			*fw_in_mem;
 };
 
 extern struct intel_sst_drv *sst_drv_ctx;
@@ -490,7 +527,8 @@ ssize_t intel_sst_aio_write(struct kiocb *kiocb, const struct iovec *iov,
 ssize_t intel_sst_aio_read(struct kiocb *kiocb, const struct iovec *iov,
 			unsigned long nr_segs, loff_t offset);
 
-int sst_load_fw(const struct firmware *fw, void *context);
+int sst_request_fw(void);
+int sst_load_fw(const void *fw_in_mem, void *context);
 int sst_load_library(struct snd_sst_lib_download *lib, u8 ops);
 int sst_spi_mode_enable(void);
 int sst_get_block_stream(struct intel_sst_drv *sst_drv_ctx);
@@ -616,5 +654,13 @@ static inline int sst_shim_write(void __iomem *addr, int offset, int value)
 static inline int sst_shim_read(void __iomem *addr, int offset)
 {
 	return readl(addr + offset);
+}
+
+static inline void
+sst_set_fw_state_locked(struct intel_sst_drv *sst_drv_ctx, int sst_state)
+{
+	mutex_lock(&sst_drv_ctx->sst_lock);
+	sst_drv_ctx->sst_state = sst_state;
+	mutex_unlock(&sst_drv_ctx->sst_lock);
 }
 #endif /* __INTEL_SST_COMMON_H__ */

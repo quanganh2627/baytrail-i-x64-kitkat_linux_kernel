@@ -33,8 +33,8 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
-#include "intel_sst_ioctl.h"
-#include "intel_sst.h"
+#include <sound/intel_sst_ioctl.h>
+#include <sound/intel_sst.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 
@@ -203,9 +203,15 @@ int sst_alloc_stream_response(unsigned int str_id,
 	str_info = &sst_drv_ctx->streams[str_id];
 	if (resp->str_type.result == SST_LIB_ERR_LIB_DNLD_REQUIRED) {
 		lib_dnld = kzalloc(sizeof(*lib_dnld), GFP_KERNEL);
-		memcpy(lib_dnld, &resp->lib_dnld, sizeof(*lib_dnld));
-	} else
+		if (!lib_dnld) {
+			pr_debug("SST DBG: mem alloc failed\n");
+			retval = -ENOMEM;
+		} else {
+			memcpy(lib_dnld, &resp->lib_dnld, sizeof(*lib_dnld));
+		}
+	} else {
 		lib_dnld = NULL;
+	}
 	if (str_info->ctrl_blk.on == true) {
 		str_info->ctrl_blk.on = false;
 		str_info->ctrl_blk.data = lib_dnld;
@@ -213,6 +219,10 @@ int sst_alloc_stream_response(unsigned int str_id,
 		str_info->ctrl_blk.ret_code = resp->str_type.result;
 		pr_debug("SST DEBUG: sst_alloc_stream_response: waking up.\n");
 		wake_up(&sst_drv_ctx->wait_queue);
+	} else {
+		kfree(lib_dnld);
+		pr_debug("SST DEBUG: sst_alloc_stream_response: ctrl block not on\n");
+		retval = -EIO;
 	}
 	return retval;
 }
@@ -311,7 +321,7 @@ int sst_pause_stream(int str_id)
 		if (str_info->prev == STREAM_UN_INIT)
 			return -EBADRQC;
 		if (str_info->ctrl_blk.on == true) {
-			pr_err("SST ERR: control path is in use\n");
+			pr_err("control path is in use\n");
 			return -EINVAL;
 		}
 		if (sst_create_short_msg(&msg))
@@ -339,7 +349,7 @@ int sst_pause_stream(int str_id)
 		}
 	} else {
 		retval = -EBADRQC;
-		pr_err("SST ERR: BADQRC for stream\n");
+		pr_err("BADQRC for stream\n");
 	}
 
 	return retval;
@@ -474,8 +484,7 @@ int sst_drop_stream(int str_id)
 		}
 	} else {
 		retval = -EBADRQC;
-		pr_debug("SST ERR:BADQRC for stream, state %x\n",
-			 str_info->status);
+		pr_debug("BADQRC for stream, state %x\n", str_info->status);
 	}
 	return retval;
 }
@@ -541,16 +550,6 @@ int sst_free_stream(int str_id)
 	struct stream_info *str_info;
 
 	pr_debug("SST DBG:sst_free_stream for %d\n", str_id);
-	if (sst_drv_ctx->sst_state == SST_SUSPENDED) {
-		pm_runtime_get_sync(&sst_drv_ctx->pci->dev);
-		pr_debug("sst: DSP Downloading FW now...\n");
-		retval = sst_download_fw();
-		if (retval) {
-			pr_err("sst: FW download fail %x, abort\n", retval);
-			pm_runtime_put(&sst_drv_ctx->pci->dev);
-			return retval;
-		}
-	}
 	retval = sst_validate_strid(str_id);
 	if (retval)
 		return retval;

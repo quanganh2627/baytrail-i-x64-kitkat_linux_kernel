@@ -414,7 +414,7 @@ struct snd_sst_tuning_params {
 } __attribute__ ((packed));
 /*IOCTL defined here */
 /*SST MMF IOCTLS only */
-#define SNDRV_SST_STREAM_SET_PARAMS _IOR('L', 0x00, \
+#define SNDRV_SST_STREAM_SET_PARAMS _IOWR('L', 0x00, \
 					struct snd_sst_stream_params *)
 #define SNDRV_SST_STREAM_GET_PARAMS _IOWR('L', 0x01, \
 					struct snd_sst_get_stream_params *)

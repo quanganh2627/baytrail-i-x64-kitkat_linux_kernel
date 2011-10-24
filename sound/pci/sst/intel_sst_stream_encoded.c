@@ -36,8 +36,8 @@
 #include <linux/rar_register.h>
 #include "../memrar/memrar.h"
 #endif
-#include "intel_sst_ioctl.h"
-#include "intel_sst.h"
+#include <sound/intel_sst_ioctl.h>
+#include <sound/intel_sst.h>
 #include "intel_sst_fw_ipc.h"
 #include "intel_sst_common.h"
 /**
@@ -384,7 +384,7 @@ static int sst_send_target(struct snd_sst_target_device *target)
 static int sst_target_device_validate(struct snd_sst_target_device *target)
 {
 	int retval = 0;
-       int i;
+	int i;
 
 	for (i = 0; i < SST_MAX_TARGET_DEVICES; i++) {
 		if (target->devices[i].device_type == SND_SST_DEVICE_PCM) {
@@ -435,7 +435,7 @@ int sst_target_device_select(struct snd_sst_target_device *target)
 
 	pr_debug("Target Device Select\n");
 
-	if (target->device_route > 2) {
+	if (target->device_route < 0 || target->device_route > 2) {
 		pr_err("device route is invalid\n");
 		return -EINVAL;
 	}
@@ -790,7 +790,7 @@ static int sst_send_decode_mess(int str_id, struct stream_info *str_info,
 	struct ipc_post *msg = NULL;
 	int retval = 0;
 
-	pr_debug("SST DBG:sst_set_mute:called\n");
+	pr_debug("sst_set_mute:called\n");
 
 	if (str_info->decode_ibuf_type == SST_BUF_RAR) {
 #ifdef CONFIG_MRST_RAR_HANDLER
@@ -891,6 +891,7 @@ static int sst_prepare_input_buffers_rar(struct stream_info *str_info,
 	return retval;
 }
 #endif
+
 /*This function is used to prepare the kernel input buffers with contents
 before sending for decode*/
 static int sst_prepare_input_buffers(struct stream_info *str_info,
@@ -1136,7 +1137,7 @@ int sst_decode(int str_id, struct snd_sst_dbufs *dbufs)
 
 		retval = sst_send_decode_mess(str_id, str_info, &dec_info);
 		if (retval || dec_info.input_bytes_consumed == 0) {
-			pr_err("SST ERR: mess failed or no input consumed\n");
+			pr_err("messg failed or no input consumed\n");
 			goto finish;
 		}
 		input_bytes = dec_info.input_bytes_consumed;
