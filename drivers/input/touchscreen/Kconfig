@@ -752,4 +752,12 @@ config TOUCHSCREEN_CYTTSP_CORE
        help
          Always activated for Cypress TTSP touchscreen
 
+config TOUCHSCREEN_ATMEL_MXT224
+	tristate "ATMEL mXT224 touchscreen"
+	depends on I2C
+	default n
+	help
+		Say Y here if you have a mXT224 touchscreen
+		If unsure, say N.
+          
 endif
