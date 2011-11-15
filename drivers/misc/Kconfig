@@ -538,6 +538,7 @@ config APANIC_PLABEL
 config A1026
 	tristate "Audience a1026/eS305 Voice Processor"
 	depends on I2C
+	depends on SND_INTEL_SST
 	help
 	  Provides an interface to the Audience voice processing
 	  unit via an I2C bus interface.
