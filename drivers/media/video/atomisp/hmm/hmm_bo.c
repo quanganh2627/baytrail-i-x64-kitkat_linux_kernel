@@ -339,10 +339,13 @@ static int alloc_private_pages(struct hmm_buffer_object *bo, int from_highmem,
 	unsigned int pgnr, order, blk_pgnr;
 	struct page *pages;
 	struct page_block *pgblk;
-	gfp_t gfp;
+	gfp_t gfp = GFP_NOWAIT;
 	int i, j;
+	int failure_number = 0;
+	bool reduce_order = false;
+	bool lack_mem = false;
 
-	gfp = GFP_KERNEL;
+
 	if (from_highmem)
 		gfp |= __GFP_HIGHMEM;
 
@@ -357,7 +360,13 @@ static int alloc_private_pages(struct hmm_buffer_object *bo, int from_highmem,
 	i = 0;
 	while (pgnr) {
 		order = nr_to_order_bottom(pgnr);
-		if (order > HMM_MAX_ORDER)
+		/*
+		 * if be short of memory, we will set order to 0
+		 * everytime
+		 */
+		if (lack_mem)
+			order = HMM_MIN_ORDER;
+		else if (order > HMM_MAX_ORDER)
 			order = HMM_MAX_ORDER;
 retry:
 		pages = alloc_pages(gfp, order);
@@ -378,6 +387,16 @@ retry:
 				  "reduing page order to %d.\n",
 				  order, HMM_MIN_ORDER);
 			order = HMM_MIN_ORDER;
+			failure_number++;
+			reduce_order = true;
+			/*
+			 * if fail two times continuously, we think be
+			 * short of memory now
+			 */
+			if (failure_number == 2) {
+				lack_mem = true;
+				failure_number = 0;
+			}
 			goto retry;
 		} else {
 			blk_pgnr = order_to_nr(order);
@@ -412,6 +431,15 @@ retry:
 					goto cleanup;
 				}
 			}
+
+			/*
+			 * if order is not reduced this time, clear
+			 * failure number
+			 */
+			if (reduce_order)
+				reduce_order = false;
+			else
+				failure_number = 0;
 		}
 	}
 
