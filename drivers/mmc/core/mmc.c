@@ -920,6 +920,14 @@ static void mmc_remove(struct mmc_host *host)
 }
 
 /*
+ * Card detection - card is alive.
+ */
+static int mmc_alive(struct mmc_host *host)
+{
+	return mmc_send_status(host->card, NULL);
+}
+
+/*
  * Card detection callback from host.
  */
 static void mmc_detect(struct mmc_host *host)
@@ -934,7 +942,7 @@ static void mmc_detect(struct mmc_host *host)
 	/*
 	 * Just check if our card has been removed.
 	 */
-	err = mmc_send_status(host->card, NULL);
+	err = _mmc_detect_card_removed(host);
 
 	mmc_release_host(host);
 
@@ -1035,6 +1043,7 @@ static const struct mmc_bus_ops mmc_ops = {
 	.suspend = NULL,
 	.resume = NULL,
 	.power_restore = mmc_power_restore,
+	.alive = mmc_alive,
 };
 
 static const struct mmc_bus_ops mmc_ops_unsafe = {
@@ -1045,6 +1054,7 @@ static const struct mmc_bus_ops mmc_ops_unsafe = {
 	.suspend = mmc_suspend,
 	.resume = mmc_resume,
 	.power_restore = mmc_power_restore,
+	.alive = mmc_alive,
 };
 
 static void mmc_attach_bus_ops(struct mmc_host *host)
