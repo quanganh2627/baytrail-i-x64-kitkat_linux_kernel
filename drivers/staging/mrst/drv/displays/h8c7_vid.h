@@ -21,13 +21,12 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- * Thomas Eaton <thomas.g.eaton@intel.com>
- * Scott Rowe <scott.m.rowe@intel.com>
+ * Jim Liu <jim.liu@intel.com>
 */
 
 
-#ifndef TMD_6X10_VID_H
-#define TMD_6X10_VID_H
+#ifndef H8_C7_VID_H 
+#define H8_C7_VID_H
 
 #include <drm/drmP.h>
 #include <drm/drm.h>
@@ -36,5 +35,5 @@
 
 #include "mdfld_output.h"
 
-void tmd_6x10_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs);
+void h8c7_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs);
 #endif

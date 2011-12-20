@@ -192,4 +192,10 @@ extern void mdfld_dbi_dsr_timer_start(struct mdfld_dbi_dsr_info * dsr_info);
 extern int mdfld_dsi_dbi_update_power(struct mdfld_dsi_dbi_output * dbi_output, int mode);
 extern void mdfld_dsi_controller_dbi_init(struct mdfld_dsi_config * dsi_config, int pipe);
 
+extern void mdfld_dsi_dbi_update_fb (struct mdfld_dsi_dbi_output * dbi_output, int pipe);
+extern void mdfld_dsi_dbi_dpms(struct drm_encoder *encoder, int mode);
+extern void mdfld_dsi_dbi_commit(struct drm_encoder * encoder);
+extern void mdfld_dsi_dbi_prepare(struct drm_encoder * encoder);
+extern void mdfld_dsi_dbi_mode_set(struct drm_encoder * encoder, struct drm_display_mode * mode, struct drm_display_mode * adjusted_mode);
+void mdfld_dsi_dbi_set_power(struct drm_encoder * encoder, bool on);
 #endif /*__MDFLD_DSI_DBI_H__*/

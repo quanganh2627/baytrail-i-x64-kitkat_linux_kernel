@@ -151,7 +151,7 @@ static int mdfld_dsi_tpo_vid_set_brightness(struct mdfld_dsi_config *dsi_config,
 /*TPO DPI encoder helper funcs*/
 static const struct drm_encoder_helper_funcs mdfld_tpo_dpi_encoder_helper_funcs = {
 	.dpms = mdfld_dsi_dpi_dpms,
-	.mode_fixup = mdfld_dsi_dpi_mode_fixup,
+	.mode_fixup = mdfld_dsi_mode_fixup,
 	.prepare = mdfld_dsi_dpi_prepare,
 	.mode_set = mdfld_dsi_dpi_mode_set,
 	.commit = mdfld_dsi_dpi_commit,

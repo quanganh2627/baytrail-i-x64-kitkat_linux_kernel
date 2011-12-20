@@ -44,7 +44,28 @@
 #if !defined(SUPPORT_DRI_DRM)
 #error "SUPPORT_DRI_DRM must be set"
 #endif
+/*
+	DSR
+*/
+extern int drm_psb_dsr;
+extern struct drm_device *gpDrmDevice;
+extern void ospm_suspend_display(struct drm_device *dev);
+extern void ospm_resume_display(struct pci_dev *pdev);
 
+static void dsr_wq_handler(struct work_struct *work);
+DECLARE_DELAYED_WORK(dsr_work, dsr_wq_handler);
+
+void dsr_wq_handler(struct work_struct *work)
+{
+	ospm_suspend_display(gpDrmDevice);
+}
+static void dsrexit_wq_handler(struct work_struct *work);
+DECLARE_DELAYED_WORK(dsr_exitwork, dsrexit_wq_handler);
+
+void dsrexit_wq_handler(struct work_struct *work)
+{
+	ospm_resume_display(gpDrmDevice->pdev);
+}
 static void *gpvAnchor;
 extern int drm_psb_3D_vblank;
 
@@ -989,6 +1010,10 @@ static MRST_BOOL MRSTLFBVSyncIHandler(MRSTLFB_DEVINFO *psDevInfo)
 		
 		psFlipItem = &psSwapChain->psVSyncFlips[psSwapChain->ulRemoveIndex];
 	}
+
+	if (drm_psb_dsr)
+		schedule_delayed_work(&dsr_work, 10);
+
 	if (psSwapChain->ulRemoveIndex == psSwapChain->ulInsertIndex)
 		bStatus = MRST_TRUE;
 ExitUnlock:
@@ -1046,7 +1071,11 @@ static IMG_BOOL ProcessFlip(IMG_HANDLE  hCmdCookie,
 	psBuffer = (MRSTLFB_BUFFER*)psFlipCmd->hExtBuffer;
 	psSwapChain = (MRSTLFB_SWAPCHAIN*) psFlipCmd->hExtSwapChain;
 
+
 	spin_lock_irqsave(&psDevInfo->sSwapChainLock, ulLockFlags);
+
+	if (drm_psb_dsr)
+		schedule_delayed_work(&dsr_exitwork, 0);
 
 #if defined(MRST_USING_INTERRUPTS)
 	

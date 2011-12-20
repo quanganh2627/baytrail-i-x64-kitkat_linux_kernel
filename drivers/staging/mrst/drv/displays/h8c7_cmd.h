@@ -21,13 +21,12 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- * Thomas Eaton <thomas.g.eaton@intel.com>
- * Scott Rowe <scott.m.rowe@intel.com>
+ * Jim Liu <jim.liu@intel.com>
 */
 
 
-#ifndef TMD_6X10_VID_H
-#define TMD_6X10_VID_H
+#ifndef H8_C7_CMD_H 
+#define H8_C7_CMD_H
 
 #include <drm/drmP.h>
 #include <drm/drm.h>
@@ -36,5 +35,15 @@
 
 #include "mdfld_output.h"
 
-void tmd_6x10_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs);
+struct drm_display_mode *h8c7_get_config_mode(struct drm_device *dev);
+int h8c7_get_panel_info(struct drm_device *dev,
+				int pipe,
+				struct panel_info *pi);
+int mdfld_dsi_h8c7_panel_reset(struct mdfld_dsi_config *dsi_config,
+		int reset_from);
+int mdfld_dsi_h8c7_detect(struct mdfld_dsi_config *dsi_config,
+				int pipe);
+int mdfld_dsi_h8c7_set_brightness(struct mdfld_dsi_config *dsi_config,
+					int level);
+void h8c7_cmd_init(struct drm_device *dev, struct panel_funcs *p_funcs);
 #endif

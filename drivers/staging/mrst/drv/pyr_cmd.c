@@ -427,17 +427,21 @@ static void pyr_dsi_dbi_dpms(struct drm_encoder *encoder, int mode)
 	PSB_DEBUG_ENTRY("%s \n",  (mode == DRM_MODE_DPMS_ON ? "on":"off"));
 
 	if (mode == DRM_MODE_DPMS_ON){
+#if 0
 		 if(gbgfxsuspended && bdispoff){
                         bdispoff = false;
                         gbdispstatus = true;
                         gbgfxsuspended = false;
                         mdfld_dsi_dbi_exit_dsr (dev, MDFLD_DSR_2D_3D, 0, 0);
                 }
+#endif
 		pyr_dsi_dbi_set_power(encoder, true);
 		
 	} else {
+#if 0
 		bdispoff = true;
 		gbdispstatus = false;
+#endif
 		pyr_dsi_dbi_set_power(encoder, false);
 	}
 }

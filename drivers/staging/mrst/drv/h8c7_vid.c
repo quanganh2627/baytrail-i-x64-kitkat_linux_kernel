@@ -23,65 +23,56 @@
  * Authors:
  * Jim Liu <jim.liu@intel.com>
  * Jackie Li <yaodong.li@intel.com>
- * Gideon Eaton <thomas.g.eaton@intel.com>
- * Scott Rowe <scott.m.rowe@intel.com>
  */
 
-#include "displays/tmd_6x10_vid.h"
+#include "displays/h8c7_vid.h"
 #include "mdfld_dsi_dpi.h"
 #include "mdfld_dsi_pkg_sender.h"
-#include <linux/gpio.h>
-#include <linux/sfi.h>
-#include "psb_drv.h"
-
-#define GPIO_MIPI_PANEL_RESET 128
 
 /* ************************************************************************* *\
- * FUNCTION: mdfld_dsi_tmd_6X10_ic_init
+ * FUNCTION: mdfld_h8c7_dpi_ic_init
  *
  * DESCRIPTION:  This function is called only by mrst_dsi_mode_set and
  *               restore_display_registers.  since this function does not
  *               acquire the mutex, it is important that the calling function
  *               does!
 \* ************************************************************************* */
-static u32 pr2_mcs_protect_off[] = {0x000004b0};
-static u32 pr2_pixel_format[] = {0x008700b3};
-static u32 pr2_dsi_control[] = {0x008330b6};
-static u32 pr2_panel_driving[] = {0x850001c0, 0x00000000};
-static u32 pr2_v_timing[] = {0x001000c1, 0x00000001};
-static u32 pr2_control[] = {0x001900c3};
-static u32 pr2_test_mode_0[] = {0x000003c4};
-static u32 pr2_h_timing[] = {0x050100c5, 0x00005e04, 0x170b0000, 0x00000005};
-static u32 pr2_can_skip[] = {0x000000c6};
-static u32 pr2_gamma_set_a[] = {0x18150ac8, 0x000d1c1b, 0x00000000, 0x00000000};
-static u32 pr2_gamma_set_b[] = {0x1f1d0dc9, 0x00101f1f, 0x00000000, 0x00000000};
-static u32 pr2_gamma_set_c[] = {0x1e1f1eca, 0x00101d1d, 0x00000000, 0x00000000};
-static u32 pr2_charge_pump_setting[] = {0xa30002d0, 0x000000b8};
-static u32 pr2_test_mode_1[] = {0x531410d1, 0x00000064};
-static u32 pr2_source_amplifiers[] = {0x0000b3d2};
-static u32 pr2_power_supply_circuit[] = {0x000333d3};
-static u32 pr2_vreg_setting[] = {0x000000d5};
-static u32 pr2_test_mode_2[] = {0x000001d6};
-static u32 pr2_timing_control_0[] = {0x840009d7, 0xB5bc6181, 0x00000005};
-static u32 pr2_timing_control_1[] = {0x902504d8, 0x0000924c};
-static u32 pr2_timing_control_2[] = {0x057F5bd9};
-static u32 pr2_white_balance[] = {0x000000cb, 0x0000001c};
-static u32 pr2_vcs_setting[] = {0x000053dd};
-static u32 pr2_vcom_dc_setting[] = {0x000043de};
-static u32 pr2_test_mode_3[] = {0x220000e4, 0x000000aa};
-static u32 pr2_mcs_protect_on[] = {0x000003b0};
-static u32 pr2_set_address_mode[] = {0x00000036};
-static u32 pr2_set_pixel_format[] = {0x0000703a};
-static u32 pr2_exit_sleep_mode[] = {0x00000011};
-static u32 pr2_set_display_on[] = {0x00000029};
-static u32 pr2_set_display_off[] = {0x00000028};
-static u32 pr2_enter_sleep_mode[] = {0x00000010};
-static u32 pr2_enter_low_power_mode[] = {0x000001b1};
-static u32 pr2_backlight_control_1[] = {0x0f0f01b8, 0xc8c8ffff, 0x18180f0f,
-					0x02001010, 0x5A371D0c, 0x00FFBE87};
-static u32 pr2_backlight_control_2[] = {0x00cc01b9, 0x00000018};
+static u32 h8c7_exit_sleep_mode[] = {0x00000011};
+static u32 h8c7_mcs_protect_off[] = {0x9283ffb9};
+static u32 h8c7_set_tear_on[] = {0x00000035};
+static u32 h8c7_set_brightness[] = {0x00000051};
+static u32 h8c7_set_full_brightness[] = {0x0000ff51};
+static u32 h8c7_turn_on_backlight[] = {0x00002453};
+static u32 h8c7_disable_cabc[] = {0x00000055};
+static u32 h8c7_ic_bias_current[] = {0x826005bf, 0x00000000};
+static u32 h8c7_set_power[] = {0x44007cb1, 0x0d0d0024, 0x3f3f1a12, 0x00007242};
+static u32 h8c7_set_disp_reg[] = {0x05c80fb2, 0x0084080f, 0x040f05ff, 0x00000020};
+static u32 h8c7_set_command_cyc[] = {0x050000b4, 0x1605a000, 0x1603309d,
+	0x00030300, 0x0707061b, 0x00000000};
+static u32 h8c7_set_mipi_ctrl[] = {0x008312ba};
+static u32 h8c7_video_mode[] = {0x000003c2};
+static u32 h8c7_set_blanking_opt_2[] = {0x004000c7};
+static u32 h8c7_set_panel[] = {0x000008cc};
+static u32 h8c7_set_eq_func_ltps[] = {0x00000cd4};
+static u32 h8c7_set_ltps_ctrl_output[] = {0x080800d5, 0x66554400, 0xcccccc77,
+	0x667700cc, 0xcccc4455, 0x0000cccc};
+static u32 h8c7_set_video_cyc[] = {0x040000d8, 0x1604a000, 0x1603309d,
+	0x00030300, 0x0707061b, 0x00000000};
+static u32 h8c7_gamma_r[] = {0x3c3e3ae0, 0x3332312f, 0x0c080446, 0x110f100d,
+	0x3e3a1710, 0x32312f3c, 0x08044633, 0x0f100d0c, 0x00171011};
+static u32 h8c7_gamma_g[] = {0x3d3e3be1, 0x33323131, 0x0b070346, 0x110e100d,
+	0x3e3b1710, 0x3231313d, 0x07034633, 0x0e100d0b, 0x00171011};
+static u32 h8c7_gamma_b[] = {0x070601e2, 0x1f322a2d, 0x0e0c0540, 0x13121411,
+	0x0601180f, 0x322a2d07, 0x0c05401f, 0x1214110e, 0x00180f13};
 
-void mdfld_dsi_pr2_ic_init(struct mdfld_dsi_config *dsi_config, int pipe)
+static u32 h8c7_mcs_protect_on[] = {0x000000b9};
+static u32 h8c7_set_address_mode[] = {0x00000036};
+static u32 h8c7_set_pixel_format[] = {0x0000703a};
+static u32 h8c7_set_display_on[] = {0x00000029};
+static u32 h8c7_set_display_off[] = {0x00000028};
+static u32 h8c7_enter_sleep_mode[] = {0x00000010};
+
+static void mdfld_h8c7_dpi_ic_init(struct mdfld_dsi_config *dsi_config, int pipe)
 {
 	struct mdfld_dsi_pkg_sender *sender
 			= mdfld_dsi_get_pkg_sender(dsi_config);
@@ -99,40 +90,131 @@ void mdfld_dsi_pr2_ic_init(struct mdfld_dsi_config *dsi_config, int pipe)
 	while (time_before_eq(jiffies, wait_timeout))
 		cpu_relax();
 
-	mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_off, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_pixel_format, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_dsi_control, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_panel_driving, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_v_timing, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_control, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_test_mode_0, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_h_timing, 4, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_can_skip, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_gamma_set_a, 4, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_gamma_set_b, 4, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_gamma_set_c, 4, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_charge_pump_setting, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_test_mode_1, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_source_amplifiers, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_power_supply_circuit, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_vreg_setting, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_test_mode_2, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_timing_control_0, 3, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_timing_control_1, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_timing_control_2, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_white_balance, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_vcs_setting, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_vcom_dc_setting, 1, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_test_mode_3, 2, 0);
-	mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_on, 1, 0);
-	mdfld_dsi_send_mcs_long_hs(sender, pr2_set_address_mode, 1, 0);
-	mdfld_dsi_send_mcs_long_hs(sender, pr2_set_pixel_format, 1, 0);
+	/* sleep out and wait for 150ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_exit_sleep_mode, 1, 0);
+	wait_timeout = jiffies + (3 * HZ / 20);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
-	/* Now In Sleep Mode */
+	/* set password and wait for 10ms. */
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_mcs_protect_off, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	/* set TE on and wait for 10ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_tear_on, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	/* set backlight to full brightness and wait for 10ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_full_brightness, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	/* set backlight on and wait for 10ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_turn_on_backlight, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	/* disalble CABC and wait for 10ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_disable_cabc, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_ic_bias_current, 2, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_power, 4, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_disp_reg, 4, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_command_cyc, 6, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_mipi_ctrl, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_video_mode, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_blanking_opt_2, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_panel, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_eq_func_ltps, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_ltps_ctrl_output, 6, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_set_video_cyc, 6, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_gamma_r, 9, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_gamma_g, 9, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_gamma_b, 9, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	/* disable password and wait for 10ms. */
+	mdfld_dsi_send_gen_long_hs(sender, h8c7_mcs_protect_on, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_address_mode, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
+
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_pixel_format, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 }
 
 static void
-mdfld_dsi_pr2_dsi_controller_init(struct mdfld_dsi_config *dsi_config,
+mdfld_h8c7_dpi_controller_init(struct mdfld_dsi_config *dsi_config,
 				int pipe, int update)
 {
 	struct mdfld_dsi_hw_context *hw_ctx =
@@ -201,7 +283,7 @@ mdfld_dsi_pr2_dsi_controller_init(struct mdfld_dsi_config *dsi_config,
 	}
 }
 
-static int mdfld_dsi_pr2_detect(struct mdfld_dsi_config *dsi_config,
+int mdfld_dsi_h8c7_detect(struct mdfld_dsi_config *dsi_config,
 				int pipe)
 {
 	int status;
@@ -212,7 +294,7 @@ static int mdfld_dsi_pr2_detect(struct mdfld_dsi_config *dsi_config,
 	if (pipe == 0) {
 		/*reconfig lane configuration*/
 		dsi_config->lane_count = 3;
-		dsi_config->lane_config = MDFLD_DSI_DATA_LANE_3_1;
+		dsi_config->lane_config = MDFLD_DSI_DATA_LANE_4_0;
 		dsi_config->dsi_hw_context.pll_bypass_mode = 1;
 		/* This is for 400 mhz.  Set it to 0 for 800mhz */
 		dsi_config->dsi_hw_context.cck_div = 1;
@@ -230,7 +312,7 @@ static int mdfld_dsi_pr2_detect(struct mdfld_dsi_config *dsi_config,
 }
 
 static int
-mdfld_dsi_pr2_get_power_state(struct mdfld_dsi_config *dsi_config,
+mdfld_h8c7_get_power_state(struct mdfld_dsi_config *dsi_config,
 				int pipe)
 {
 	struct mdfld_dsi_hw_registers *regs;
@@ -262,12 +344,11 @@ mdfld_dsi_pr2_get_power_state(struct mdfld_dsi_config *dsi_config,
 	return powerstatus;
 }
 
-static int mdfld_dsi_pr2_power_on(struct mdfld_dsi_config *dsi_config)
+static int mdfld_dsi_h8c7_power_on(struct mdfld_dsi_config *dsi_config)
 {
 	struct mdfld_dsi_pkg_sender *sender =
 		mdfld_dsi_get_pkg_sender(dsi_config);
-	struct drm_psb_private *dev_priv =
-		(struct drm_psb_private *) gpDrmDevice->dev_private;
+	unsigned long wait_timeout;
 	int err;
 
 	PSB_DEBUG_ENTRY("Turn on video mode TMD panel...\n");
@@ -277,33 +358,20 @@ static int mdfld_dsi_pr2_power_on(struct mdfld_dsi_config *dsi_config)
 		return -EINVAL;
 	}
 
-	/*Just turn on panel for WiDi Extended Mode.*/
-	if (!dev_priv->drm_psb_widi) {
-		mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_off, 1, 0);
-		/*change power state*/
-		mdfld_dsi_send_mcs_long_hs(sender, pr2_exit_sleep_mode, 1, 0);
+	/* sleep out and wait for 150ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_exit_sleep_mode, 1, 0);
+	wait_timeout = jiffies + (3 * HZ / 20);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
-		msleep(120);
+	/*set display on*/
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_display_on, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
-		/*enable PWMON*/
-		pr2_backlight_control_2[0] |= BIT8;
-		mdfld_dsi_send_mcs_long_hs(sender,
-			pr2_backlight_control_2, 2, 0);
+	/* FIXME Enable CABC later*/
 
-		/*set display on*/
-		mdfld_dsi_send_mcs_long_hs(sender, pr2_set_display_on, 1, 0);
-
-		msleep(21);
-
-		/*Enable BLON , CABC*/
-		if (drm_psb_enable_pr2_cabc) {
-			pr2_backlight_control_1[0] |= BIT8;
-			mdfld_dsi_send_gen_long_hs(sender,
-				pr2_backlight_control_1, 6, 0);
-			printk(KERN_ALERT "enable pr2 cabc\n");
-		}
-
-	}
 	/*send TURN_ON packet*/
 	err = mdfld_dsi_send_dpi_spk_pkg_hs(sender,
 				MDFLD_DSI_DPI_SPK_TURN_ON);
@@ -311,15 +379,15 @@ static int mdfld_dsi_pr2_power_on(struct mdfld_dsi_config *dsi_config)
 		DRM_ERROR("Failed to send turn on packet\n");
 		return err;
 	}
+
 	return 0;
 }
 
-static int mdfld_dsi_pr2_power_off(struct mdfld_dsi_config *dsi_config)
+static int mdfld_dsi_h8c7_power_off(struct mdfld_dsi_config *dsi_config)
 {
 	struct mdfld_dsi_pkg_sender *sender =
 		mdfld_dsi_get_pkg_sender(dsi_config);
-	struct drm_psb_private *dev_priv =
-		(struct drm_psb_private *) gpDrmDevice->dev_private;
+	unsigned long wait_timeout;
 	int err;
 
 	PSB_DEBUG_ENTRY("Turn off video mode TMD panel...\n");
@@ -337,39 +405,31 @@ static int mdfld_dsi_pr2_power_off(struct mdfld_dsi_config *dsi_config)
 		return err;
 	}
 
-	/*Just turn off panel for WiDi Extended Mode.*/
-	if (!dev_priv->drm_psb_widi) {
-		mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_off, 1, 0);
-		/*change power state here*/
-		mdfld_dsi_send_mcs_long_hs(sender, pr2_set_display_off, 1, 0);
+	/* FIXME disable CABC later*/
 
-		/*disable BLCON, disable CABC*/
-		pr2_backlight_control_1[0] &= (~BIT8);
-		mdfld_dsi_send_gen_long_hs(sender,
-			pr2_backlight_control_1, 6, 0);
-		printk(KERN_ALERT "disable pr2 cabc\n");
+	/*set display off*/
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_display_off, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
-		msleep(21);
+	/* sleep in and wait for 150ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_enter_sleep_mode, 1, 0);
+	wait_timeout = jiffies + (3 * HZ / 20);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
-		mdfld_dsi_send_mcs_long_hs(sender, pr2_enter_sleep_mode, 1, 0);
-
-		msleep(120);
-
-		/*put panel into deep standby mode*/
-		mdfld_dsi_send_gen_long_hs(sender,
-			pr2_enter_low_power_mode, 1, 0);
-
-		mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_on, 1, 0);
-	}
 	return 0;
 }
 
-static int mdfld_dsi_pr2_set_brightness(struct mdfld_dsi_config *dsi_config,
+int mdfld_dsi_h8c7_set_brightness(struct mdfld_dsi_config *dsi_config,
 					int level)
 {
 	struct mdfld_dsi_pkg_sender *sender =
 		mdfld_dsi_get_pkg_sender(dsi_config);
 	int duty_val = 0;
+	static int cabc_enable = 1;
+	unsigned long wait_timeout;
 
 	PSB_DEBUG_P2("Set brightness level %d...\n", level);
 
@@ -379,40 +439,18 @@ static int mdfld_dsi_pr2_set_brightness(struct mdfld_dsi_config *dsi_config,
 	}
 
 	duty_val = (255 * level) / 100;
+	h8c7_set_brightness[0] = (0x00000051 | (duty_val << 8));
 
-	mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_off, 1, 0);
-
-	/*update duty value*/
-	pr2_backlight_control_2[0] =  (0x0000001b9 | (duty_val << 16));
-
-	mdfld_dsi_send_gen_long_hs(sender, pr2_backlight_control_2, 2, 0);
-
-	mdfld_dsi_send_gen_long_hs(sender, pr2_mcs_protect_on, 1, 0);
+	/* set backlight to full brightness and wait for 10ms. */
+	mdfld_dsi_send_mcs_long_hs(sender, h8c7_set_brightness, 1, 0);
+	wait_timeout = jiffies + (HZ / 100);
+	while (time_before_eq(jiffies, wait_timeout))
+		cpu_relax();
 
 	return 0;
 }
 
-/* MIPI display panel reset GPIO */
-static int mdfld_mipi_panel_gpio_reset = -EINVAL;
-
-static int mdfld_mipi_panel_gpio_parse(struct sfi_table_header *table)
-{
-	struct sfi_table_simple *sb = (struct sfi_table_simple *)table;
-	struct sfi_gpio_table_entry *entry;
-	int i, num;
-
-	num = SFI_GET_NUM_ENTRIES(sb, struct sfi_gpio_table_entry);
-	entry = (struct sfi_gpio_table_entry *)sb->pentry;
-
-	for (i = 0; i < num; i++, entry++) {
-		if (!strncmp(entry->pin_name, "mipi-reset", SFI_NAME_LEN))
-			mdfld_mipi_panel_gpio_reset = entry->pin_no;
-	}
-
-	return 0;
-}
-
-static int mdfld_dsi_pr2_panel_reset(struct mdfld_dsi_config *dsi_config,
+int mdfld_dsi_h8c7_panel_reset(struct mdfld_dsi_config *dsi_config,
 		int reset_from)
 {
 	struct mdfld_dsi_hw_registers *regs;
@@ -426,16 +464,14 @@ static int mdfld_dsi_pr2_panel_reset(struct mdfld_dsi_config *dsi_config,
 	ctx = &dsi_config->dsi_hw_context;
 	dev = dsi_config->dev;
 
-	if (IS_CTP(dev)) {
-		sfi_table_parse(SFI_SIG_GPIO, NULL, NULL, mdfld_mipi_panel_gpio_parse);
-		gpio_mipi_panel_reset = mdfld_mipi_panel_gpio_reset;
-	}
+	if (IS_CTP(dev))
+		gpio_mipi_panel_reset = 103;
 
 	if (reset_from == RESET_FROM_BOOT_UP) {
 		b_gpio_required[dsi_config->pipe] = false;
 		if (dsi_config->pipe) {
 			PSB_DEBUG_ENTRY(
-				"PR2 GPIO reset for MIPIC is skipped!\n");
+				"GPIO reset for MIPIC is skipped!\n");
 			goto fun_exit;
 		}
 		ret = gpio_request(gpio_mipi_panel_reset, "gfx");
@@ -483,7 +519,7 @@ err:
 	return 0;
 }
 
-struct drm_display_mode *pr2_vid_get_config_mode(struct drm_device *dev)
+struct drm_display_mode *h8c7_get_config_mode(struct drm_device *dev)
 {
 	struct drm_display_mode *mode;
 	struct drm_psb_private *dev_priv =
@@ -529,17 +565,15 @@ struct drm_display_mode *pr2_vid_get_config_mode(struct drm_device *dev)
 		PSB_DEBUG_ENTRY("vtotal is %d\n", mode->vtotal);
 		PSB_DEBUG_ENTRY("clock is %d\n", mode->clock);
 	} else {
-		mode->hdisplay = 800;
-		mode->vdisplay = 1024;
-		mode->hsync_start = 823;
-		mode->hsync_end = 831;
-		mode->htotal = 847;
-		mode->vsync_start = 1031;
-		mode->vsync_end = 1033;
-		mode->vtotal = 1035;
-		mode->vrefresh = 60;
-		mode->clock = mode->vrefresh * (mode->vtotal + 1) *
-				(mode->htotal + 1) / 1000;
+		mode->hdisplay = 720;
+		mode->vdisplay = 1280;
+		mode->hsync_start = 816;
+		mode->hsync_end = 824;
+		mode->htotal = 920;
+		mode->vsync_start = 1284;
+		mode->vsync_end = 1286;
+		mode->vtotal = 1300;
+		mode->clock = 16500;  /* calculated value is 71760; */
 	}
 
 	drm_mode_set_name(mode);
@@ -550,22 +584,22 @@ struct drm_display_mode *pr2_vid_get_config_mode(struct drm_device *dev)
 	return mode;
 }
 
-static int pr2_vid_get_panel_info(struct drm_device *dev,
+int h8c7_get_panel_info(struct drm_device *dev,
 				int pipe,
 				struct panel_info *pi)
 {
 	if (!dev || !pi)
 		return -EINVAL;
 
-	pi->width_mm = TMD_PANEL_WIDTH;
-	pi->height_mm = TMD_PANEL_HEIGHT;
+	pi->width_mm = PANEL_4DOT3_WIDTH;
+	pi->height_mm = PANEL_4DOT3_HEIGHT;
 
 	return 0;
 }
 
 /*PR2 panel DPI encoder helper funcs*/
 static const
-struct drm_encoder_helper_funcs mdfld_pr2_dpi_encoder_helper_funcs = {
+struct drm_encoder_helper_funcs mdfld_h8c7_dpi_encoder_helper_funcs = {
 	.save = mdfld_dsi_dpi_save,
 	.restore = mdfld_dsi_dpi_restore,
 	.dpms = mdfld_dsi_dpi_dpms,
@@ -576,11 +610,11 @@ struct drm_encoder_helper_funcs mdfld_pr2_dpi_encoder_helper_funcs = {
 };
 
 /*PR2 panel DPI encoder funcs*/
-static const struct drm_encoder_funcs mdfld_pr2_dpi_encoder_funcs = {
+static const struct drm_encoder_funcs mdfld_h8c7_dpi_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
 
-void tmd_6x10_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs)
+void h8c7_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs)
 {
 	if (!dev || !p_funcs) {
 		DRM_ERROR("Invalid parameters\n");
@@ -589,17 +623,17 @@ void tmd_6x10_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs)
 
 	PSB_DEBUG_ENTRY("\n");
 
-	p_funcs->encoder_funcs = &mdfld_pr2_dpi_encoder_funcs;
-	p_funcs->encoder_helper_funcs = &mdfld_pr2_dpi_encoder_helper_funcs;
-	p_funcs->get_config_mode = &pr2_vid_get_config_mode;
+	p_funcs->encoder_funcs = &mdfld_h8c7_dpi_encoder_funcs;
+	p_funcs->encoder_helper_funcs = &mdfld_h8c7_dpi_encoder_helper_funcs;
+	p_funcs->get_config_mode = &h8c7_get_config_mode;
 	p_funcs->update_fb = NULL;
-	p_funcs->get_panel_info = pr2_vid_get_panel_info;
-	p_funcs->reset = mdfld_dsi_pr2_panel_reset;
-	p_funcs->drv_ic_init = mdfld_dsi_pr2_ic_init;
-	p_funcs->dsi_controller_init = mdfld_dsi_pr2_dsi_controller_init;
-	p_funcs->detect = mdfld_dsi_pr2_detect;
-	p_funcs->get_panel_power_state = mdfld_dsi_pr2_get_power_state;
-	p_funcs->power_on = mdfld_dsi_pr2_power_on;
-	p_funcs->power_off = mdfld_dsi_pr2_power_off;
-	p_funcs->set_brightness = mdfld_dsi_pr2_set_brightness;
+	p_funcs->get_panel_info = h8c7_get_panel_info;
+	p_funcs->reset = mdfld_dsi_h8c7_panel_reset;
+	p_funcs->drv_ic_init = mdfld_h8c7_dpi_ic_init;
+	p_funcs->dsi_controller_init = mdfld_h8c7_dpi_controller_init;
+	p_funcs->detect = mdfld_dsi_h8c7_detect;
+	p_funcs->get_panel_power_state = mdfld_h8c7_get_power_state;
+	p_funcs->power_on = mdfld_dsi_h8c7_power_on;
+	p_funcs->power_off = mdfld_dsi_h8c7_power_off;
+	p_funcs->set_brightness = mdfld_dsi_h8c7_set_brightness;
 }

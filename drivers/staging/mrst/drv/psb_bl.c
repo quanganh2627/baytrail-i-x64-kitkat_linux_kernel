@@ -68,15 +68,14 @@ int psb_set_brightness(struct backlight_device *bd)
 	else
 		level = lastFailedBrightness;
 
-    DRM_DEBUG_DRIVER("backlight level set to %d\n", level);
-	PSB_DEBUG_ENTRY( "[DISPLAY] %s: level is %d\n", __func__, level);  //DIV5-MM-DISPLAY-NC-LCM_INIT-00
+	PSB_DEBUG_PM( "[DISPLAY] %s: level is %d\n", __func__, level);  //DIV5-MM-DISPLAY-NC-LCM_INIT-00
 
 	/* Perform value bounds checking */
 	if (level < BRIGHTNESS_MIN_LEVEL)
 		level = BRIGHTNESS_MIN_LEVEL;
 
 	if(!gbdispstatus){
-		PSB_DEBUG_ENTRY( "[DISPLAY]: already OFF ignoring brighness request \n");
+		DRM_ERROR( "[DISPLAY]: already OFF ignoring brighness request \n");
 		//! there may exist concurrent racing, the gbdispstatus may haven't been set in gfx_late_resume yet.
 		//! record here, and we may call brightness setting at the end of gfx_late_resume
 		lastFailedBrightness = level;
@@ -130,7 +129,7 @@ int psb_set_brightness(struct backlight_device *bd)
 			if(!(dev_priv->dsr_fb_update & MDFLD_DSR_MIPI_CONTROL) && 
 				(dev_priv->dbi_panel_on || dev_priv->dbi_panel_on2)){
 				mdfld_dsi_dbi_exit_dsr(dev,MDFLD_DSR_MIPI_CONTROL, 0, 0);
-				PSB_DEBUG_ENTRY("Out of DSR before set brightness to %d.\n",adjusted_level);
+				PSB_DEBUG_PM("Out of DSR before set brightness to %d.\n",adjusted_level);
 			}
 #endif
 
@@ -147,7 +146,7 @@ int psb_set_brightness(struct backlight_device *bd)
 
 int psb_get_brightness(struct backlight_device *bd)
 {
-	DRM_DEBUG_DRIVER("brightness = 0x%x \n", psb_brightness);
+	PSB_DEBUG_PM("brightness = 0x%x \n", psb_brightness);
 
 	/* return locally cached var instead of HW read (due to DPST etc.) */
 	return psb_brightness;
