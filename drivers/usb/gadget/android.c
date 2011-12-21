@@ -212,16 +212,21 @@ static struct android_usb_function adb_function = {
 };
 
 
-#define MAX_ACM_INSTANCES 4
+#define MAX_ACM_INSTANCES 1
 struct acm_function_config {
 	int instances;
 };
 
 static int acm_function_init(struct android_usb_function *f, struct usb_composite_dev *cdev)
 {
+	struct acm_function_config	*config;
+
 	f->config = kzalloc(sizeof(struct acm_function_config), GFP_KERNEL);
 	if (!f->config)
 		return -ENOMEM;
+
+	config = f->config;
+	config->instances = MAX_ACM_INSTANCES;
 
 	return gserial_setup(cdev->gadget, MAX_ACM_INSTANCES);
 }
