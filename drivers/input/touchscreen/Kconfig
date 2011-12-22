@@ -759,5 +759,7 @@ config TOUCHSCREEN_ATMEL_MXT224
 	help
 		Say Y here if you have a mXT224 touchscreen
 		If unsure, say N.
+
+source "drivers/input/touchscreen/rmi/Kconfig"
           
 endif
