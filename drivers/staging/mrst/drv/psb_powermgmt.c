@@ -48,7 +48,6 @@
 #undef OSPM_GFX_DPK
 #define SCU_CMD_VPROG2  0xe3
 
-extern int drm_psb_dsr;
 struct drm_device *gpDrmDevice = NULL;
 static struct mutex g_ospm_mutex;
 static bool gbSuspendInProgress = false;
@@ -63,16 +62,6 @@ extern u32 DISP_PLANEB_STATUS;
 static bool gbSuspended = false;
 bool gbgfxsuspended = false;
 
-static void psb_runtimepm_wq_handler(struct work_struct *work);
-DECLARE_DELAYED_WORK(rtpm_work, psb_runtimepm_wq_handler);
-
-void psb_runtimepm_wq_handler(struct work_struct *work)
-{
-	struct drm_psb_private * dev_priv =  gpDrmDevice->dev_private;
-
-	if(gbdispstatus == false)
-	        pm_runtime_allow(&gpDrmDevice->pdev->dev);
-}
 /*
  * gfx_early_suspend
  *
@@ -839,8 +828,7 @@ static int mdfld_save_display_registers (struct drm_device *dev, int pipe)
 	 */
 #ifndef CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY
 	if (pipe != 1 && ((get_panel_type(dev, pipe) == TMD_VID) ||
-		(get_panel_type(dev, pipe) == TMD_6X10_VID) ||
-		(get_panel_type(dev, pipe) == H8C7_VID)))
+		(get_panel_type(dev, pipe) == TMD_6X10_VID)))
 		return 0;
 #endif
 
@@ -1028,8 +1016,6 @@ static int mdfld_restore_display_registers(struct drm_device *dev, int pipe)
 	u32 dpll = 0;
 	u32 timeout = 0;
 	u32 reg_offset = 0;
-        u32 temp = 0;
-        u32 device_ready_reg = DEVICE_READY_REG;
 
 	/* regester */
 	u32 dpll_reg = MRST_DPLL_A;
@@ -1085,8 +1071,7 @@ static int mdfld_restore_display_registers(struct drm_device *dev, int pipe)
 	 */
 #ifndef CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY
 	if (pipe != 1 && ((get_panel_type(dev, pipe) == TMD_VID) ||
-		(get_panel_type(dev, pipe) == TMD_6X10_VID) ||
-		(get_panel_type(dev, pipe) == H8C7_VID)))
+		(get_panel_type(dev, pipe) == TMD_6X10_VID)))
 		return 0;
 #endif
 
@@ -1269,6 +1254,9 @@ static int mdfld_restore_display_registers(struct drm_device *dev, int pipe)
 		else
 			msleep(20);
 
+		/*TODO: remove MIPI restore code later*/
+		/*dsi_config->dvr_ic_inited = 0;*/
+		/*mdfld_dsi_tmd_drv_ic_init(dsi_config, pipe);*/
 	}
 
 	/*enable the plane*/
@@ -1279,28 +1267,29 @@ static int mdfld_restore_display_registers(struct drm_device *dev, int pipe)
     else
 	msleep(20);
 
-	if ( drm_psb_dsr ) {
-		/* LP Hold Release */
-		temp = REG_READ(mipi_reg);
-		temp |= LP_OUTPUT_HOLD_RELEASE;
-		REG_WRITE(mipi_reg, temp);
-		mdelay(1);
+#if 0 /* revisit it later and check if we want to enter/exit from ULPS */
+        /* LP Hold Release */
+        temp = REG_READ(mipi_reg);
+        temp |= LP_OUTPUT_HOLD_RELEASE;
+        REG_WRITE(mipi_reg, temp);
+        mdelay(1);
 
 
-		/* Set DSI host to exit from Utra Low Power State */
-		temp = REG_READ(device_ready_reg);
-		temp &= ~ULPS_MASK;
-		temp |= 0x3;
-		temp |= EXIT_ULPS_DEV_READY;
-		REG_WRITE(device_ready_reg, temp);
-		mdelay(1);
+        /* Set DSI host to exit from Utra Low Power State */
+        temp = REG_READ(device_ready_reg);
+        temp &= ~ULPS_MASK;
+        temp |= 0x3;
+        temp |= EXIT_ULPS_DEV_READY;
+        REG_WRITE(device_ready_reg, temp);
+        mdelay(1);
 
-		temp = REG_READ(device_ready_reg);
-		temp &= ~ULPS_MASK;
-		temp |= EXITING_ULPS;
-		REG_WRITE(device_ready_reg, temp);
-		mdelay(1);
-	}
+        temp = REG_READ(device_ready_reg);
+        temp &= ~ULPS_MASK;
+        temp |= EXITING_ULPS;
+        REG_WRITE(device_ready_reg, temp);
+        mdelay(1);
+#endif
+
 	/*enable the pipe*/
     PSB_WVDC32(pipeconf_val, pipeconf_reg);
 
@@ -1387,9 +1376,6 @@ void ospm_suspend_display(struct drm_device *dev)
 {
 	struct drm_psb_private *dev_priv = dev->dev_private;
 	int pp_stat, ret=0;
-        u32 temp = 0;
-        u32 device_ready_reg = DEVICE_READY_REG;
-       u32 mipi_reg = MIPI;
 
 #ifdef OSPM_GFX_DPK
 	printk(KERN_ALERT "%s\n", __func__);
@@ -1427,19 +1413,19 @@ void ospm_suspend_display(struct drm_device *dev)
 		dev_priv->saveGL3_USE_WRT_INVAL = PSB_RVDC32(MDFLD_GL3_USE_WRT_INVAL);
 #endif
 
-		if ( drm_psb_dsr ) {
-			/* Put the panel in ULPS mode for S0ix. */
-			temp = REG_READ(device_ready_reg);
-			temp &= ~ULPS_MASK;
-			temp |= ENTERING_ULPS;
-			REG_WRITE(device_ready_reg, temp);
+#if 0 /* revisit it later and check if we want to enter/exit from ULPS */
+		/* Put the panel in ULPS mode for S0ix. */
+		temp = REG_READ(device_ready_reg);
+		temp &= ~ULPS_MASK;
+		temp |= ENTERING_ULPS;
+		REG_WRITE(device_ready_reg, temp);
 
-			/* LP Hold */
-			temp = REG_READ(mipi_reg);
-			temp &= ~LP_OUTPUT_HOLD;
-			REG_WRITE(mipi_reg, temp);
-			mdelay(1);
-			}
+		/* LP Hold */
+		temp = REG_READ(mipi_reg);
+		temp &= ~LP_OUTPUT_HOLD;
+		REG_WRITE(mipi_reg, temp);
+		mdelay(1);
+#endif
 
 	} else {
 		save_display_registers(dev);
@@ -1485,10 +1471,6 @@ void ospm_suspend_display(struct drm_device *dev)
 	}
 
 	ospm_power_island_down(OSPM_DISPLAY_ISLAND);
-	if ( drm_psb_dsr ) {
-		gbdispstatus = false;
-		schedule_delayed_work(&rtpm_work, 0);
-	}
 }
 
 /*
@@ -1506,10 +1488,6 @@ void ospm_resume_display(struct pci_dev *pdev)
 	char *uevent_string = NULL;
 #endif
 
-	if ( drm_psb_dsr ) {
-		gbdispstatus = true;
-		pm_runtime_forbid(&gpDrmDevice->pdev->dev);
-	}
 #ifdef OSPM_GFX_DPK
 	printk(KERN_ALERT "%s\n", __func__);
 #endif
@@ -1702,16 +1680,12 @@ static void gfx_early_suspend(struct early_suspend *h)
 	printk(KERN_ALERT "\n   gfx_early_suspend\n");
 #endif
 
-	if (gbSuspended)
-		return;
-
 	if( dev_priv->drm_psb_widi )
 		dev_priv->drm_psb_widi = 0;
 
 	/*Display off*/
 	if (IS_MDFLD(gpDrmDevice)) {
 		if ((dev_priv->panel_id == TMD_VID) ||
-			(dev_priv->panel_id == H8C7_VID) ||
 			(dev_priv->panel_id == TMD_6X10_VID)) {
 #ifdef CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY
 			if (dev_priv->encoder0 &&
@@ -1733,8 +1707,7 @@ static void gfx_early_suspend(struct early_suspend *h)
 						enc_funcs->save(encoder);
 			}
 #endif
-		} else if ((dev_priv->panel_id == TPO_CMD) ||
-			       (dev_priv->panel_id == H8C7_CMD)) {
+		} else if (dev_priv->panel_id == TPO_CMD) {
 			if (dev_priv->encoder0 &&
 				(dev_priv->panel_desc & DISPLAY_A))
 				mdfld_dsi_dbi_set_power(
@@ -1753,7 +1726,7 @@ static void gfx_early_suspend(struct early_suspend *h)
 #ifdef OSPM_GFX_DPK
 	printk(KERN_ALERT " allow GFX runtime_pm\n");
 #endif
-	schedule_delayed_work(&rtpm_work, 0);
+	pm_runtime_allow(&gpDrmDevice->pdev->dev);
 #endif
 
 }
@@ -1768,9 +1741,6 @@ static void gfx_late_resume(struct early_suspend *h)
 #ifdef OSPM_GFX_DPK
 	printk(KERN_ALERT "\ngfx_late_resume\n");
 #endif
-
-	if (!gbSuspended)
-		return;
 
 	if( dev_priv->drm_psb_widi )
 		dev_priv->drm_psb_widi = 0;
@@ -1787,7 +1757,6 @@ static void gfx_late_resume(struct early_suspend *h)
 #endif
 		if (IS_MDFLD(gpDrmDevice)) {
 			if ((dev_priv->panel_id == TMD_VID) ||
-				(dev_priv->panel_id == H8C7_VID) ||
 				(dev_priv->panel_id == TMD_6X10_VID)) {
 #ifdef CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY
 				if (dev_priv->encoder0 &&
@@ -1807,10 +1776,9 @@ static void gfx_late_resume(struct early_suspend *h)
 						continue;
 					if (enc_funcs && enc_funcs->restore)
 						enc_funcs->restore(encoder);
-				}
+			}
 #endif
-			} else if ((dev_priv->panel_id == TPO_CMD) ||
-			       (dev_priv->panel_id == H8C7_CMD)) {
+			} else if (dev_priv->panel_id == TPO_CMD) {
 				if (dev_priv->encoder0 &&
 					(dev_priv->panel_desc & DISPLAY_A))
 					mdfld_dsi_dbi_set_power(

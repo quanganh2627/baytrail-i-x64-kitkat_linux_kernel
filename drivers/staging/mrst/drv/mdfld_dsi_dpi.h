@@ -70,6 +70,9 @@ extern struct mdfld_dsi_encoder *mdfld_dsi_dpi_init(struct drm_device *dev,
 
 /*MDFLD DPI helper functions*/
 extern void mdfld_dsi_dpi_dpms(struct drm_encoder *encoder, int mode);
+extern bool mdfld_dsi_dpi_mode_fixup(struct drm_encoder *encoder,
+				     struct drm_display_mode *mode,
+				     struct drm_display_mode *adjusted_mode);
 extern void mdfld_dsi_dpi_prepare(struct drm_encoder *encoder);
 extern void mdfld_dsi_dpi_commit(struct drm_encoder *encoder);
 extern void mdfld_dsi_dpi_mode_set(struct drm_encoder *encoder,

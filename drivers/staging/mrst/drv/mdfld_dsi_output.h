@@ -401,6 +401,8 @@ struct mdfld_dsi_config {
 	int pipe;
 	int changed;
 
+	int dvr_ic_inited;
+
 	int bpp;
 	mdfld_dsi_encoder_t type;
 	int lane_count;
@@ -514,7 +516,5 @@ extern int mdfld_dsi_get_diagnostic_result(struct mdfld_dsi_config *dsi_config,
 					u8 transmission);
 extern int mdfld_dsi_panel_reset(struct mdfld_dsi_config *dsi_config,
 			int reset_from);
-extern bool mdfld_dsi_mode_fixup(struct drm_encoder *encoder,
-				     struct drm_display_mode *mode,
-				     struct drm_display_mode *adjusted_mode);
+
 #endif /*__MDFLD_DSI_OUTPUT_H__*/

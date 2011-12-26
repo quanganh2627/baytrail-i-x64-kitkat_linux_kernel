@@ -118,7 +118,7 @@ static int handle_dsi_error(struct mdfld_dsi_pkg_sender *sender, u32 mask)
 	u32 intr_stat_reg = sender->mipi_intr_stat_reg;
 	struct drm_device *dev = sender->dev;
 
-	PSB_DEBUG_DSI("Handling error 0x%08x\n", mask);
+	PSB_DEBUG_ENTRY("Handling error 0x%08x\n", mask);
 
 	switch(mask) {
 	case BIT0:
@@ -135,14 +135,14 @@ static int handle_dsi_error(struct mdfld_dsi_pkg_sender *sender, u32 mask)
 	case BIT11:
 	case BIT12:
 	case BIT13:
-		PSB_DEBUG_DSI("No Action required\n");
+		PSB_DEBUG_ENTRY("No Action required\n");
 		break;
 	case BIT14:
 		/*wait for all fifo empty*/
 		/*wait_for_all_fifos_empty(sender)*/;
 		break;
 	case BIT15:
-		PSB_DEBUG_DSI("No Action required\n");
+		PSB_DEBUG_ENTRY("No Action required\n");
 		break;
 	case BIT16:
 		break;
@@ -150,14 +150,14 @@ static int handle_dsi_error(struct mdfld_dsi_pkg_sender *sender, u32 mask)
 		break;
 	case BIT18:
 	case BIT19:
-		PSB_DEBUG_DSI("High/Low contention detected\n");
+		PSB_DEBUG_ENTRY("High/Low contention detected\n");
 		/*wait for contention recovery time*/
 		/*mdelay(10);*/
 		/*wait for all fifo empty*/
 		if(0) wait_for_all_fifos_empty(sender);
 		break;
 	case BIT20:
-		PSB_DEBUG_DSI("No Action required\n");
+		PSB_DEBUG_ENTRY("No Action required\n");
 		break;
 	case BIT21:
 		/*wait for all fifo empty*/
@@ -170,24 +170,24 @@ static int handle_dsi_error(struct mdfld_dsi_pkg_sender *sender, u32 mask)
 	case BIT25:
 	case BIT26:
 	case BIT27:
-		PSB_DEBUG_DSI("HS Gen fifo full\n");
+		PSB_DEBUG_ENTRY("HS Gen fifo full\n");
 		REG_WRITE(intr_stat_reg, mask);
 		wait_for_hs_fifos_empty(sender);
 		break;
 	case BIT28:
-		PSB_DEBUG_DSI("LP Gen fifo full\n");
+		PSB_DEBUG_ENTRY("LP Gen fifo full\n");
 		REG_WRITE(intr_stat_reg, mask);
 		wait_for_lp_fifos_empty(sender);
 		break;
 	case BIT29:
 	case BIT30:
 	case BIT31:
-		PSB_DEBUG_DSI("No Action required\n");
+		PSB_DEBUG_ENTRY("No Action required\n");
 		break;
 	}
 
 	if(mask & REG_READ(intr_stat_reg)) {
-		PSB_DEBUG_DSI("Cannot clean interrupt 0x%08x\n", mask);
+		PSB_DEBUG_ENTRY("Cannot clean interrupt 0x%08x\n", mask);
 	}
 
 	return 0;
@@ -207,7 +207,7 @@ static int dsi_error_handler(struct mdfld_dsi_pkg_sender * sender)
 	for(i=0; i<32; i++) {
 		mask = (0x00000001UL) << i;
 		if(intr_stat & mask) {
-			PSB_DEBUG_DSI("[DSI]: %s\n", dsi_errors[i]);
+			PSB_DEBUG_ENTRY("[DSI]: %s\n", dsi_errors[i]);
 			err = handle_dsi_error(sender, mask);
 			if(err)
 				DRM_ERROR("Cannot handle error\n");
@@ -260,7 +260,7 @@ static int send_dcs_pkg(struct mdfld_dsi_pkg_sender * sender,
 		return -ENOTSUPP;
 	}
 
-	PSB_DEBUG_DSI("Sending DCS pkg 0x%x...\n", dcs_pkg->cmd);
+	PSB_DEBUG_ENTRY("Sending DCS pkg 0x%x...\n", dcs_pkg->cmd);
 
 	/*wait for DBI fifo empty*/
 	wait_for_dbi_fifo_empty(sender);
@@ -284,7 +284,7 @@ static int send_dcs_pkg(struct mdfld_dsi_pkg_sender * sender,
 		return -EAGAIN;
 	}
 
-	PSB_DEBUG_DSI("sent DCS pkg 0x%x...\n", dcs_pkg->cmd);
+	PSB_DEBUG_ENTRY("sent DCS pkg 0x%x...\n", dcs_pkg->cmd);
 
 	return 0;
 }
@@ -354,7 +354,7 @@ static int __send_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 		wait_for_hs_fifos_empty(sender);
 
 		for(i=0; i<long_pkg->len; i++) {
-			PSB_DEBUG_DSI("HS Sending data 0x%08x\n", *(dp + i));
+			PSB_DEBUG_ENTRY("HS Sending data 0x%08x\n", *(dp + i));
 
 			REG_WRITE(hs_gen_data_reg, *(dp + i));
 		}
@@ -365,7 +365,7 @@ static int __send_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 		wait_for_lp_fifos_empty(sender);
 
 		for(i=0; i<long_pkg->len; i++) {
-			PSB_DEBUG_DSI("LP Sending data 0x%08x\n", *(dp + i));
+			PSB_DEBUG_ENTRY("LP Sending data 0x%08x\n", *(dp + i));
 
 			REG_WRITE(lp_gen_data_reg, *(dp + i));
 		}
@@ -383,7 +383,7 @@ static int __send_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 static int send_mcs_short_pkg(struct mdfld_dsi_pkg_sender * sender,
 				struct mdfld_dsi_pkg * pkg)
 {
-	PSB_DEBUG_DSI("Sending MCS short pkg...\n");
+	PSB_DEBUG_ENTRY("Sending MCS short pkg...\n");
 
 	return __send_short_pkg(sender, pkg);
 }
@@ -391,7 +391,7 @@ static int send_mcs_short_pkg(struct mdfld_dsi_pkg_sender * sender,
 static int send_mcs_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 				struct mdfld_dsi_pkg * pkg)
 {
-	PSB_DEBUG_DSI("Sending MCS long pkg...\n");
+	PSB_DEBUG_ENTRY("Sending MCS long pkg...\n");
 
 	return __send_long_pkg(sender, pkg);
 }
@@ -399,7 +399,7 @@ static int send_mcs_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 static int send_gen_short_pkg(struct mdfld_dsi_pkg_sender * sender,
 				struct mdfld_dsi_pkg * pkg)
 {
-	PSB_DEBUG_DSI("Sending GEN short pkg...\n");
+	PSB_DEBUG_ENTRY("Sending GEN short pkg...\n");
 
 	return __send_short_pkg(sender, pkg);
 }
@@ -407,7 +407,7 @@ static int send_gen_short_pkg(struct mdfld_dsi_pkg_sender * sender,
 static int send_gen_long_pkg(struct mdfld_dsi_pkg_sender * sender,
 				struct mdfld_dsi_pkg * pkg)
 {
-	PSB_DEBUG_DSI("Sending GEN long pkg...\n");
+	PSB_DEBUG_ENTRY("Sending GEN long pkg...\n");
 
 	return __send_long_pkg(sender, pkg);
 }
@@ -454,7 +454,7 @@ static int send_pkg_prepare(struct mdfld_dsi_pkg_sender * sender,
 	u8 cmd;
 	u8 * data;
 
-	PSB_DEBUG_DSI("Prepare to Send type 0x%x pkg\n", pkg->pkg_type);
+	PSB_DEBUG_ENTRY("Prepare to Send type 0x%x pkg\n", pkg->pkg_type);
 
 	switch(pkg->pkg_type) {
 	case MDFLD_DSI_PKG_DCS:
@@ -484,7 +484,7 @@ static int send_pkg_done(struct mdfld_dsi_pkg_sender * sender,
 	u8 cmd;
 	u8 * data;
 
-	PSB_DEBUG_DSI("Sent type 0x%x pkg\n", pkg->pkg_type);
+	PSB_DEBUG_ENTRY("Sent type 0x%x pkg\n", pkg->pkg_type);
 
 	switch(pkg->pkg_type) {
 	case MDFLD_DSI_PKG_DCS:
@@ -519,7 +519,7 @@ static int do_send_pkg(struct mdfld_dsi_pkg_sender * sender,
 {
 	int ret = 0;
 
-	PSB_DEBUG_DSI("Sending type 0x%x pkg\n", pkg->pkg_type);
+	PSB_DEBUG_ENTRY("Sending type 0x%x pkg\n", pkg->pkg_type);
 
 	if(sender->status == MDFLD_DSI_PKG_SENDER_BUSY) {
 		DRM_ERROR("sender is busy\n");
@@ -647,13 +647,13 @@ static int mdfld_dbi_cb_init(struct mdfld_dsi_pkg_sender * sender, struct psb_gt
 	sender->dbi_cb_phy = phy;
 	sender->dbi_cb_addr = virt_addr;
 
-	PSB_DEBUG_DSI("DBI command buffer initailized. phy %x, addr %p\n", phy, virt_addr);
+	PSB_DEBUG_ENTRY("DBI command buffer initailized. phy %x, addr %p\n", phy, virt_addr);
 
 	return 0;
 }
 
 static void mdfld_dbi_cb_destroy(struct mdfld_dsi_pkg_sender * sender) {
-	PSB_DEBUG_DSI("\n");
+	PSB_DEBUG_ENTRY("\n");
 
 	if(sender && sender->dbi_cb_addr)
 		iounmap(sender->dbi_cb_addr);
@@ -1019,7 +1019,7 @@ void dsi_controller_dbi_init(struct mdfld_dsi_config * dsi_config, int pipe)
 	int lane_count = dsi_config->lane_count;
 	u32 val = 0;
 
-	PSB_DEBUG_DSI("Init DBI interface on pipe %d...\n", pipe);
+	PSB_DEBUG_ENTRY("Init DBI interface on pipe %d...\n", pipe);
 
 	/*un-ready device*/
 	REG_WRITE((MIPIA_DEVICE_READY_REG + reg_offset), 0x00000000);
@@ -1071,7 +1071,7 @@ void dsi_controller_dpi_init(struct mdfld_dsi_config * dsi_config, int pipe)
 	struct drm_display_mode * mode = dsi_config->mode;
 	u32 val = 0;
 
-	PSB_DEBUG_DSI("Init DPI interface on pipe %d...\n", pipe);
+	PSB_DEBUG_ENTRY("Init DPI interface on pipe %d...\n", pipe);
 
 	/*un-ready device*/
 	REG_WRITE((MIPIA_DEVICE_READY_REG + reg_offset), 0x00000000);
@@ -1566,7 +1566,7 @@ int mdfld_dsi_pkg_sender_init(struct mdfld_dsi_connector * dsi_connector, int pi
 		list_add_tail(&pkg->entry, &pkg_sender->free_list);
 	}
 
-	PSB_DEBUG_DSI("initialized\n");
+	PSB_DEBUG_ENTRY("initialized\n");
 
 	return 0;
 
@@ -1610,5 +1610,5 @@ void mdfld_dsi_pkg_sender_destroy(struct mdfld_dsi_pkg_sender * sender)
 	/*free*/
 	kfree(sender);
 
-	PSB_DEBUG_DSI("destroyed\n");
+	PSB_DEBUG_ENTRY("destroyed\n");
 }

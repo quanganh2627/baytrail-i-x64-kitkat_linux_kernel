@@ -1693,18 +1693,43 @@ void mdfld_dsi_dpi_dpms(struct drm_encoder *encoder, int mode)
 {
 	PSB_DEBUG_ENTRY(
 		"%s\n", (mode == DRM_MODE_DPMS_ON ? "on" : "off"));
-#if 0
 	if (!gbdispstatus) {
 		PSB_DEBUG_ENTRY(
 		"panel in suspend status, skip turn on/off from DMPS");
 		return ;
 	}
-#endif
 
 	if (mode == DRM_MODE_DPMS_ON)
 		mdfld_dsi_dpi_set_power(encoder, true);
 	else
 		mdfld_dsi_dpi_set_power(encoder, false);
+}
+
+bool mdfld_dsi_dpi_mode_fixup(struct drm_encoder *encoder,
+				struct drm_display_mode *mode,
+				struct drm_display_mode *adjusted_mode)
+{
+	struct mdfld_dsi_encoder *dsi_encoder = MDFLD_DSI_ENCODER(encoder);
+	struct mdfld_dsi_config *dsi_config =
+		mdfld_dsi_encoder_get_config(dsi_encoder);
+	struct drm_display_mode *fixed_mode = dsi_config->fixed_mode;
+
+	PSB_DEBUG_ENTRY("\n");
+
+	if(fixed_mode) {
+		adjusted_mode->hdisplay = fixed_mode->hdisplay;
+		adjusted_mode->hsync_start = fixed_mode->hsync_start;
+		adjusted_mode->hsync_end = fixed_mode->hsync_end;
+		adjusted_mode->htotal = fixed_mode->htotal;
+		adjusted_mode->vdisplay = fixed_mode->vdisplay;
+		adjusted_mode->vsync_start = fixed_mode->vsync_start;
+		adjusted_mode->vsync_end = fixed_mode->vsync_end;
+		adjusted_mode->vtotal = fixed_mode->vtotal;
+		adjusted_mode->clock = fixed_mode->clock;
+		drm_mode_set_crtcinfo(adjusted_mode, CRTC_INTERLACE_HALVE_V);
+	}
+	
+	return true;
 }
 
 void mdfld_dsi_dpi_prepare(struct drm_encoder *encoder)
@@ -2312,17 +2337,23 @@ static int mipi_dsi_dev_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user*)arg;
+#if defined(CONFIG_SUPPORT_TMD_MIPI_600X1024_DISPLAY) \
+	|| defined(CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY)
 	struct drm_encoder *encoder = gencoder;
+#endif
 
 	PSB_DEBUG_ENTRY("[DISPLAY] %s: MIPI DSI driver IOCTL, cmd = %d.\n", __func__, cmd);
 
 	switch (cmd) {
+#if defined(CONFIG_SUPPORT_TMD_MIPI_600X1024_DISPLAY) \
+	|| defined(CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY)
 		case IOCTL_LCM_POWER_ON:
 			mdfld_dsi_dpi_set_power(encoder, 1);
 			break;
 		case IOCTL_LCM_POWER_OFF:
 			mdfld_dsi_dpi_set_power(encoder, 0);
 			break;
+#endif
 		default:
 			printk(KERN_ERR "[DISPLAY] %s: MIPI DSI driver not support IOCTL.\n", __func__);
 			break;

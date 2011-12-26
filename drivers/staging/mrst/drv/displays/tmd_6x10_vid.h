@@ -37,4 +37,9 @@
 #include "mdfld_output.h"
 
 void tmd_6x10_vid_init(struct drm_device *dev, struct panel_funcs *p_funcs);
+struct drm_display_mode *tmd_6x10_vid_get_config_mode(struct drm_device *dev);
+void mdfld_tmd_6X10_bkl_control(struct mdfld_dsi_config *dsi_config,
+				u32 pipe,
+				int level);
+
 #endif

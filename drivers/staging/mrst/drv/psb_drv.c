@@ -90,7 +90,6 @@ int drm_topaz_pmpolicy = PSB_PMPOLICY_NOPM;
 int drm_topaz_sbuswa;
 int drm_psb_ospm = 1;
 int drm_psb_gl3_enable = 1;
-int drm_psb_dsr = 0;
 int drm_psb_topaz_clockgating = 0;
 int gfxrtdelay = 2 * 1000;
 int drm_psb_3D_vblank = 1;
@@ -136,7 +135,6 @@ module_param_named(topaz_pmpolicy, drm_topaz_pmpolicy, int, 0600);
 module_param_named(topaz_sbuswa, drm_topaz_sbuswa, int, 0600);
 module_param_named(ospm, drm_psb_ospm, int, 0600);
 module_param_named(gl3_enabled, drm_psb_gl3_enable, int, 0600);
-module_param_named(dsr, drm_psb_dsr, int, 0600);
 module_param_named(rtpm, gfxrtdelay, int, 0600);
 module_param_named(topaz_clockgating, drm_psb_topaz_clockgating, int, 0600);
 module_param_named(PanelID, PanelID, int, 0600);
@@ -174,21 +172,8 @@ static int __init config_gl3(char *arg)
 
 	return 0;
 }
-static int __init config_dsr(char *arg)
-{
-	if (!arg)
-		return -EINVAL;
-
-	if (!strcasecmp(arg, "0"))
-		drm_psb_dsr = 0;
-	else if (!strcasecmp(arg, "1"))
-		drm_psb_dsr = 1;
-
-	return 0;
-}
 early_param("ospm", config_ospm);
 early_param("gl3_enabled", config_gl3);
-early_param("dsr", config_dsr);
 #endif
 
 static struct pci_device_id pciidlist[] = {
@@ -2663,7 +2648,7 @@ static int psb_dpu_dsr_on_ioctl(struct drm_device *dev, void *arg,
 static int psb_dpu_dsr_off_ioctl(struct drm_device *dev, void *arg,
 				 struct drm_file *file_priv)
 {
-//	static int pipe = 0;
+	static int pipe = 0;
 #if defined(CONFIG_MDFLD_DSI_DPU)
 	struct drm_psb_drv_dsr_off_arg *dsr_off_arg = (struct drm_psb_drv_dsr_off_arg *) arg;
 	struct psb_drm_dpu_rect rect = dsr_off_arg->damage_rect;
@@ -2673,13 +2658,12 @@ static int psb_dpu_dsr_off_ioctl(struct drm_device *dev, void *arg,
 	struct drm_psb_private * dev_priv =
 		(struct drm_psb_private *)dev->dev_private;
 
-//	pipe++;
+	pipe++;
 
 	if ((dev_priv->dsr_fb_update & MDFLD_DSR_2D_3D) != MDFLD_DSR_2D_3D) {
 		mdfld_dsi_dbi_exit_dsr(dev, MDFLD_DSR_2D_3D, 0, 0);
 	}
 
-#if 0
 	if (pipe > 0) {
 		pipe = 0;
 		if (gdbi_output && gbdispstatus == false) {
@@ -2688,7 +2672,6 @@ static int psb_dpu_dsr_off_ioctl(struct drm_device *dev, void *arg,
 			mdfld_dsi_dbi_enter_dsr(gdbi_output, 2);
 		}
 	}
-#endif
 
 #endif
 	return 0;
@@ -3415,33 +3398,6 @@ static int psb_rtpm_write(struct file *file, const char *buffer,
 	}
 	return count;
 }
-static int psb_dsr_read(char *buf, char **start, off_t offset, int request,
-			 int *eof, void *data)
-{
-	if (drm_psb_dsr)
-		DRM_INFO("GFX DSR: enabled	      ");
-	else
-		DRM_INFO("GFX DSR: disabled	      ");
-
-	return 0;
-}
-
-static int psb_dsr_write(struct file *file, const char *buffer,
-			  unsigned long count, void *data)
-{
-	char buf[2];
-	if (count != sizeof(buf)) {
-		return -EINVAL;
-	} else {
-		if (copy_from_user(buf, buffer, count))
-			return -EINVAL;
-		if (buf[count-1] != '\n')
-			return -EINVAL;
-		drm_psb_dsr = buf[0] - '0';
-	}
-
-	return 0;
-}
 
 static int psb_ospm_read(char *buf, char **start, off_t offset, int request,
 			 int *eof, void *data)
@@ -3721,23 +3677,19 @@ static int psb_proc_init(struct drm_minor *minor)
 	struct proc_dir_entry *ent;
 	struct proc_dir_entry *ent1;
 	struct proc_dir_entry *rtpm;
-	struct proc_dir_entry *dsr;
 	struct proc_dir_entry *ent_display_status;
 	ent = create_proc_entry(OSPM_PROC_ENTRY, 0644, minor->proc_root);
 	rtpm = create_proc_entry(RTPM_PROC_ENTRY, 0644, minor->proc_root);
-	dsr = create_proc_entry(DSR_PROC_ENTRY, 0644, minor->proc_root);
 	ent_display_status = create_proc_entry(DISPLAY_PROC_ENTRY, 0644, minor->proc_root);
 	ent1 = proc_create_data(BLC_PROC_ENTRY, 0, minor->proc_root, &psb_blc_proc_fops, minor);
 
-	if (!ent || !ent1 || !rtpm || !ent_display_status || !dsr)
+	if (!ent || !ent1 || !rtpm || !ent_display_status)
 		return -1;
 	ent->read_proc = psb_ospm_read;
 	ent->write_proc = psb_ospm_write;
 	ent->data = (void *)minor;
 	rtpm->read_proc = psb_rtpm_read;
 	rtpm->write_proc = psb_rtpm_write;
-	dsr->read_proc = psb_dsr_read;
-	dsr->write_proc = psb_dsr_write;
 	ent_display_status->write_proc = psb_display_register_write;
 	ent_display_status->read_proc = psb_display_register_read;
 	ent_display_status->data = (void *)minor;
@@ -3827,16 +3779,12 @@ static __init int parse_panelid(char *arg)
 		PanelID = TPO_CMD;
 	else if (!strcasecmp(arg, "PYR_CMD"))
 		PanelID = PYR_CMD;
-	else if (!strcasecmp(arg, "H8C7_CMD"))
-		PanelID = H8C7_CMD;
 	else if (!strcasecmp(arg, "TMD_VID"))
 		PanelID = TMD_VID;
 	else if (!strcasecmp(arg, "TPO_VID"))
 		PanelID = TPO_VID;
 	else if (!strcasecmp(arg, "PYR_VID"))
 		PanelID = PYR_VID;
-	else if (!strcasecmp(arg, "H8C7_VID"))
-		PanelID = H8C7_VID;
 	else
 		PanelID = GCT_DETECT;
 

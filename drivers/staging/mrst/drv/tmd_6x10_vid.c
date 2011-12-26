@@ -92,7 +92,7 @@ void mdfld_dsi_pr2_ic_init(struct mdfld_dsi_config *dsi_config, int pipe)
 		return;
 	}
 
-	PSB_DEBUG_ENTRY("\n");
+	printk(KERN_ALERT "[DISPLAY TRK] Enter %s\n", __func__);
 
 	/*wait for 5ms*/
 	wait_timeout = jiffies + (HZ / 200);
@@ -371,7 +371,7 @@ static int mdfld_dsi_pr2_set_brightness(struct mdfld_dsi_config *dsi_config,
 		mdfld_dsi_get_pkg_sender(dsi_config);
 	int duty_val = 0;
 
-	PSB_DEBUG_P2("Set brightness level %d...\n", level);
+	PSB_DEBUG_ENTRY("Set brightness level %d...\n", level);
 
 	if (!sender) {
 		DRM_ERROR("Failed to get DSI packet sender\n");
@@ -569,7 +569,7 @@ struct drm_encoder_helper_funcs mdfld_pr2_dpi_encoder_helper_funcs = {
 	.save = mdfld_dsi_dpi_save,
 	.restore = mdfld_dsi_dpi_restore,
 	.dpms = mdfld_dsi_dpi_dpms,
-	.mode_fixup = mdfld_dsi_mode_fixup,
+	.mode_fixup = mdfld_dsi_dpi_mode_fixup,
 	.prepare = mdfld_dsi_dpi_prepare,
 	.mode_set = mdfld_dsi_dpi_mode_set,
 	.commit = mdfld_dsi_dpi_commit,

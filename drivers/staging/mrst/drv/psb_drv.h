@@ -69,8 +69,6 @@ enum panel_type {
 	TMD_CMD,
 	TMD_VID,
 	TMD_6X10_VID,
-	H8C7_CMD,
-	H8C7_VID,
 	PYR_CMD,
 	PYR_VID,
 	TPO,
@@ -95,7 +93,6 @@ enum panel_type {
 #define DRIVER_AUTHOR "Intel Corporation"
 #define OSPM_PROC_ENTRY "ospm"
 #define RTPM_PROC_ENTRY "rtpm"
-#define DSR_PROC_ENTRY "dsr"
 #define BLC_PROC_ENTRY "mrst_blc"
 #define DISPLAY_PROC_ENTRY "display_status"
 
@@ -1311,9 +1308,6 @@ struct backlight_device * psb_get_backlight_device(void);
 #define PSB_D_REG     (1 << 8)
 #define PSB_D_MSVDX   (1 << 9)
 #define PSB_D_TOPAZ   (1 << 10)
-/* debug DSI */
-#define PSB_D_DSI   (1 << 16)
-#define PSB_D_P2   (1 << 17)
 
 #ifndef DRM_DEBUG_CODE
 /* To enable debug printout, set drm_psb_debug in psb_drv.c
@@ -1350,10 +1344,6 @@ extern int drm_topaz_sbuswa;
 	PSB_DEBUG(PSB_D_MSVDX, _fmt, ##_arg)
 #define PSB_DEBUG_TOPAZ(_fmt, _arg...) \
 	PSB_DEBUG(PSB_D_TOPAZ, _fmt, ##_arg)
-#define PSB_DEBUG_DSI(_fmt, _arg...) \
-	PSB_DEBUG(PSB_D_DSI, _fmt, ##_arg)
-#define PSB_DEBUG_P2(_fmt, _arg...) \
-	PSB_DEBUG(PSB_D_P2, _fmt, ##_arg)
 
 #if DRM_DEBUG_CODE
 #define PSB_DEBUG(_flag, _fmt, _arg...)					\

@@ -38,8 +38,6 @@
 #include "displays/pyr_cmd.h"
 #include "displays/pyr_vid.h"
 #include "displays/tmd_6x10_vid.h"
-#include "displays/h8c7_vid.h"
-#include "displays/h8c7_cmd.h"
 #include "displays/hdmi.h"
 #include "psb_drv.h"
 
@@ -60,13 +58,11 @@ int is_panel_vid_or_cmd(struct drm_device *dev)
 	switch(dev_priv->panel_id) {
 	case TMD_VID:
 	case TMD_6X10_VID:
-	case H8C7_VID:
 	case TPO_VID:
 	case PYR_VID:
 		ret =  MDFLD_DSI_ENCODER_DPI;
 		break;
 	case TMD_CMD:
-	case H8C7_CMD:
 	case TPO_CMD:
 	case PYR_CMD:
 	default:
@@ -85,6 +81,7 @@ void mdfld_output_init(struct drm_device* dev)
 	PSB_DEBUG_ENTRY( "[DISPLAY] %s: panel type is %d\n", __func__, p_type1);  //DIV5-MM-DISPLAY-NC-LCM_INIT-00
 	init_panel(dev, 0, p_type1);
 
+	p_type2 = PYR_CMD; // Set the panel type as PYR_CMD by default
 #ifdef CONFIG_MDFD_DUAL_MIPI
 	/* MIPI panel 2 */
 	p_type2 = get_panel_type(dev, 2);
@@ -125,20 +122,6 @@ void init_panel(struct drm_device* dev, int mipi_pipe, enum panel_type p_type)
 		kfree(p_cmd_funcs);
 		p_cmd_funcs = NULL;
 		tmd_6x10_vid_init(dev, p_vid_funcs);
-		ret = mdfld_dsi_output_init(dev, mipi_pipe,
-					NULL,
-					NULL,
-					p_vid_funcs);
-		break;
-	case H8C7_CMD:
-		kfree(p_vid_funcs);
-		p_vid_funcs = NULL;
-		h8c7_cmd_init(dev, p_cmd_funcs);
-		ret = mdfld_dsi_output_init(dev, mipi_pipe, NULL, p_cmd_funcs, NULL);
-	case H8C7_VID:
-		kfree(p_cmd_funcs);
-		p_cmd_funcs = NULL;
-		h8c7_vid_init(dev, p_vid_funcs);
 		ret = mdfld_dsi_output_init(dev, mipi_pipe,
 					NULL,
 					NULL,

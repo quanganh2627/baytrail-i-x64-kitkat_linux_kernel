@@ -440,10 +440,10 @@ static enum drm_connector_status mdfld_dsi_connector_detect
 	struct mdfld_dsi_connector *dsi_connector
 		= MDFLD_DSI_CONNECTOR(psb_output);
 
-	PSB_DEBUG_ENTRY("\n");
 #ifdef CONFIG_SUPPORT_TOSHIBA_MIPI_DISPLAY
 	dsi_connector->status = connector_status_connected;
 #else
+	PSB_DEBUG_ENTRY("\n");
 	return dsi_connector->status;
 #endif
 }
@@ -611,8 +611,6 @@ static void mdfld_dsi_connector_dpms(struct drm_connector *connector, int mode)
 	struct drm_psb_private * dev_priv = dev->dev_private;
 	bool panel_on, panel_on2;
 #endif
-	PSB_DEBUG_ENTRY("\n");
-
 	/*first, execute dpms*/
 	drm_helper_connector_dpms(connector, mode);
 
@@ -1070,8 +1068,13 @@ int mdfld_dsi_output_init(struct drm_device *dev,
 	}
 	
 	if(pipe && dev_priv->dsi_configs[0]) {
+		dsi_config->dvr_ic_inited = 0;
 		dev_priv->dsi_configs[1] = dsi_config;
 	} else if(pipe == 0) {
+		if (get_panel_type(dev, pipe) == TMD_6X10_VID)
+			dsi_config->dvr_ic_inited = 0;
+		else
+			dsi_config->dvr_ic_inited = 1;
 		dev_priv->dsi_configs[0] = dsi_config;
 	} else {
 		DRM_ERROR("Trying to init MIPI1 before MIPI0\n");
@@ -1173,31 +1176,3 @@ dsi_init_err0:
 
 	return -EIO;
 }
-
-bool mdfld_dsi_mode_fixup(struct drm_encoder *encoder,
-				struct drm_display_mode *mode,
-				struct drm_display_mode *adjusted_mode)
-{
-	struct mdfld_dsi_encoder *dsi_encoder = MDFLD_DSI_ENCODER(encoder);
-	struct mdfld_dsi_config *dsi_config =
-		mdfld_dsi_encoder_get_config(dsi_encoder);
-	struct drm_display_mode *fixed_mode = dsi_config->fixed_mode;
-
-	PSB_DEBUG_ENTRY("\n");
-
-	if(fixed_mode) {
-		adjusted_mode->hdisplay = fixed_mode->hdisplay;
-		adjusted_mode->hsync_start = fixed_mode->hsync_start;
-		adjusted_mode->hsync_end = fixed_mode->hsync_end;
-		adjusted_mode->htotal = fixed_mode->htotal;
-		adjusted_mode->vdisplay = fixed_mode->vdisplay;
-		adjusted_mode->vsync_start = fixed_mode->vsync_start;
-		adjusted_mode->vsync_end = fixed_mode->vsync_end;
-		adjusted_mode->vtotal = fixed_mode->vtotal;
-		adjusted_mode->clock = fixed_mode->clock;
-		drm_mode_set_crtcinfo(adjusted_mode, CRTC_INTERLACE_HALVE_V);
-	}
-
-	return true;
-}
-
