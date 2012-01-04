@@ -2276,15 +2276,14 @@ static void update_all_lss_states(struct pmu_ss_states *pmu_config)
 	   table for certain firmwares. This is the case for HSI firmwares,
 	   SPI3 device is not advertised, and would then prevent s0i3. */
 	/* Also take IGNORE_CFG in account (for e.g. GPIO1)*/
-	pmu_config->pmu2_states[0] |= S0IX_TARGET_SSS0 & ~PCIALLDEV_CFG[0];
+	pmu_config->pmu2_states[0] |= S0IX_TARGET_SSS0_MASK & ~PCIALLDEV_CFG[0];
 	pmu_config->pmu2_states[0] &= ~IGNORE_SSS0;
-	pmu_config->pmu2_states[1] |= S0IX_TARGET_SSS1 & ~PCIALLDEV_CFG[1];
+	pmu_config->pmu2_states[1] |= S0IX_TARGET_SSS1_MASK & ~PCIALLDEV_CFG[1];
 	pmu_config->pmu2_states[1] &= ~IGNORE_SSS1;
-	pmu_config->pmu2_states[2] |= S0IX_TARGET_SSS2 & ~PCIALLDEV_CFG[2];
+	pmu_config->pmu2_states[2] |= S0IX_TARGET_SSS2_MASK & ~PCIALLDEV_CFG[2];
 	pmu_config->pmu2_states[2] &= ~IGNORE_SSS2;
-	pmu_config->pmu2_states[3] |= S0IX_TARGET_SSS3 & ~PCIALLDEV_CFG[3];
+	pmu_config->pmu2_states[3] |= S0IX_TARGET_SSS3_MASK & ~PCIALLDEV_CFG[3];
 	pmu_config->pmu2_states[3] &= ~IGNORE_SSS3;
-
 }
 
 static pci_power_t _pmu_choose_state(int device_lss)
@@ -2295,7 +2294,9 @@ static pci_power_t _pmu_choose_state(int device_lss)
 	case PMU_SECURITY_LSS_04:
 		state = PCI_D2;
 		break;
+
 	case PMU_USB_OTG_LSS_06:
+	case PMU_USB_HSIC_LSS_07:
 	case PMU_UART2_LSS_41:
 		state = PCI_D1;
 		break;
