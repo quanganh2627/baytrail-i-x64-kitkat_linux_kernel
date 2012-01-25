@@ -1,5 +1,5 @@
 /*
- * mrst.h: Intel Moorestown platform specific setup code
+ * intel-mid.h: Intel MID specific setup code
  *
  * (C) Copyright 2009 Intel Corporation
  *
@@ -8,8 +8,8 @@
  * as published by the Free Software Foundation; version 2
  * of the License.
  */
-#ifndef _ASM_X86_MRST_H
-#define _ASM_X86_MRST_H
+#ifndef _ASM_X86_INTEL_MID_H
+#define _ASM_X86_INTEL_MID_H
 
 #include <linux/sfi.h>
 #include <linux/pci.h>
@@ -135,7 +135,7 @@ enum {
 	MFLD_BID_PR3         = 0x35,
 	MFLD_BID_PR3_PNP     = 0x18
 };
-extern u32 mfld_board_id (void);
+extern u32 mfld_board_id(void);
 
 
 /*
@@ -168,7 +168,8 @@ extern void *cloverview_usb_otg_get_pdata(void);
 
 extern void intel_mid_rtc_init(void);
 
-extern int mrst_pmu_pci_set_power_state(struct pci_dev *pdev, pci_power_t state);
+extern int mrst_pmu_pci_set_power_state(struct pci_dev *pdev,
+					pci_power_t state);
 
 #ifdef CONFIG_X86_MDFLD
 extern int pmu_pci_set_power_state(struct pci_dev *pdev, pci_power_t state);
@@ -196,4 +197,4 @@ extern int get_force_shutdown_occured(void);
 extern const struct atomisp_platform_data *intel_get_v4l2_subdev_table(void);
 
 extern void (*saved_shutdown)(void);
-#endif /* _ASM_X86_MRST_H */
+#endif /* _ASM_X86_INTEL_MID_H */
