@@ -66,11 +66,12 @@ static int rtc_resume(struct device *dev)
 	time_t			newtime;
 	struct timespec		time;
 	struct timespec		newts;
+	int			delta;
 
 	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
 
-	ktime_get_ts(&newts);
+	getnstimeofday(&newts);
 	rtc_read_time(rtc, &tm);
 	if (rtc_valid_tm(&tm) != 0) {
 		pr_debug("%s:  bogus resume time\n", dev_name(&rtc->dev));
@@ -82,13 +83,14 @@ static int rtc_resume(struct device *dev)
 			pr_debug("%s:  time travel!\n", dev_name(&rtc->dev));
 		return 0;
 	}
-	/* calculate the RTC time delta */
-	set_normalized_timespec(&time, newtime - oldtime, 0);
 
-	/* subtract kernel time between rtc_suspend to rtc_resume */
-	time = timespec_sub(time, timespec_sub(newts, oldts));
+	/* we assume MSIC RTC is correct and accurate to a second */
+	delta = newts.tv_sec - newtime;
+	if (delta < -1 || delta > 1) {
+		newts.tv_sec -= delta;
+		do_settimeofday(&newts);
+	}
 
-	timekeeping_inject_sleeptime(&time);
 	return 0;
 }
 
