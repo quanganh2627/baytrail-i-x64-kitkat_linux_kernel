@@ -571,6 +571,23 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	data->timeout_clks = card->csd.tacc_clks * mult;
 
 	/*
+	 * Some MMC card also cannot meet their CSD guaranteed write response
+	 * time. Some Medfield boards has been observed -110 timeout issue and
+	 * MMC card status is 0xc00 when timeout error happens. This error is
+	 * only observed with write command.
+	 * Increase MMC card timeout value to workaround this.
+	 * This change should not impact performance.
+	 */
+	if ((data->flags & MMC_DATA_WRITE) && mmc_card_mmc(card)) {
+		/*
+		 * This is a expirence value, and can be tuninged if this
+		 * timeout value is still not encough
+		 */
+		data->timeout_ns *= 4;
+		data->timeout_clks *= 4;
+	}
+
+	/*
 	 * SD cards also have an upper limit on the timeout.
 	 */
 	if (mmc_card_sd(card)) {
