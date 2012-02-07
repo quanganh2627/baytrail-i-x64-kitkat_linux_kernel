@@ -1,5 +1,5 @@
 /*
- * early_printk_mrst.c - early consoles for Intel MID platforms
+ * early_printk_intel_mid.c - early consoles for Intel MID platforms
  *
  * Copyright (c) 2008-2010, Intel Corporation
  *
@@ -232,7 +232,8 @@ static void early_mrst_spi_putc(char c)
 }
 
 /* Early SPI only uses polling mode */
-static void early_mrst_spi_write(struct console *con, const char *str, unsigned n)
+static void early_mrst_spi_write(struct console *con, const char *str,
+				unsigned n)
 {
 	int i;
 

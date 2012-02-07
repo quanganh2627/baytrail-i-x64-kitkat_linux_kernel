@@ -1,5 +1,5 @@
 /*
- * vrtc.c: Driver for virtual RTC device on Intel MID platform
+ * intel_mid_vrtc.c: Driver for virtual RTC device on Intel MID platform
  *
  * (C) Copyright 2009 Intel Corporation
  *
