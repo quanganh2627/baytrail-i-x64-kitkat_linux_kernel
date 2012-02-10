@@ -147,6 +147,12 @@
 #define DISABLE_PLL 0
 #define ENABLE_PLL 1
 
+#define HEADSET_DAI_NAME "SN95031 Headset"
+#define SPKR_DAI_NAME "SN95031 Speaker"
+#define VOICE_DAI_NAME "SN95031 Voice"
+#define VIBRA1_DAI_NAME "SN95031 Vibra1"
+#define VIBRA2_DAI_NAME "SN95031 Vibra2"
+
 enum sn95031_pll_status {
 	PLL_DISABLED,
 	PLL_ENABLE_PENDING,
