@@ -2581,6 +2581,11 @@ static int __devinit mid_pmu_probe(struct pci_dev *dev,
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&mid_pmu_cxt->pmu_wake_lock,
 					WAKE_LOCK_SUSPEND, "mid_pmu");
+	/* FIXME:: ON CVT S3 is not enabled. So Acquiring Wake_Lock to
+	 * prevent CVT platform to try for S3
+	 */
+	if (__intel_mid_cpu_chip == INTEL_MID_CPU_CHIP_CLOVERVIEW)
+		wake_lock(&mid_pmu_cxt->pmu_wake_lock);
 #endif
 
 	/* Init the device */
