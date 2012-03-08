@@ -149,6 +149,9 @@
 /* FIXME:: Avoid CVT platform to Hang on enabling RTPM*/
 #define USB_DEVICE_ID 0xe006
 #define SPI1_DEVICE_ID 0x8e1
+#define UART0_DEVICE_ID 0x8fc
+#define UART1_DEVICE_ID 0x8fd
+#define UART2_DEVICE_ID 0x8fe
 
 #define MID_PCI_INDEX_HASH_BITS		7 /*size 128*/
 #define MID_PCI_INDEX_HASH_SIZE		(1<<MID_PCI_INDEX_HASH_BITS)
