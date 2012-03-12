@@ -174,7 +174,6 @@ IMG_VOID PVRSRVReleasePrintf(const IMG_CHAR *pszFormat, ...)
 	va_list vaArgs;
 	unsigned long ulLockFlags = 0;
 	IMG_CHAR *pszBuf;
-	const IMG_CHAR *pszName = "PVR_K: ";
 	IMG_UINT32 ui32BufSiz;
 
 	SelectBuffer(&pszBuf, &ui32BufSiz);
@@ -182,7 +181,7 @@ IMG_VOID PVRSRVReleasePrintf(const IMG_CHAR *pszFormat, ...)
 	va_start(vaArgs, pszFormat);
 
 	GetBufferLock(&ulLockFlags);
-	strncpy (pszBuf, pszName, strlen(pszName));
+	strncpy (pszBuf, "PVR_K: ", (ui32BufSiz -1));
 
 	if (VBAppend(pszBuf, ui32BufSiz, pszFormat, vaArgs))
 	{

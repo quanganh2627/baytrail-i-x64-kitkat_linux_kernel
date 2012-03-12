@@ -3924,7 +3924,7 @@ static __init int parse_hdmi_edid(char *arg)
 	if ((!arg) || (strlen(arg) >= 20))
 		return -EINVAL;
 
-	strncpy(HDMI_EDID, arg, strlen(arg));
+	strncpy(HDMI_EDID, arg, sizeof(HDMI_EDID));
 
 	return 0;
 }
