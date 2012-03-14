@@ -561,8 +561,19 @@ static int snd_intelhad_open(struct snd_pcm_substream *substream)
 		return -ENODEV;
 	}
 
+	/*
+	 * HDMI driver might suspend the device already,
+	 * so we return it on
+	 */
+	if (!ospm_power_using_hw_begin(OSPM_DISPLAY_ISLAND,
+			OSPM_UHB_FORCE_POWER_ON)) {
+		pr_err("HDMI device can't be turned on\n");
+		return -ENODEV;
+	}
+
 	if (had_get_hwstate(intelhaddata)) {
 		pr_err("%s: HDMI cable plugged-out\n", __func__);
+		ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
 		return -ENODEV;
 	}
 
@@ -571,8 +582,11 @@ static int snd_intelhad_open(struct snd_pcm_substream *substream)
 	/* Check, if device already in use */
 	if (runtime->private_data) {
 		pr_err("Device already in use\n");
+		ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
 		return -EBUSY;
 	}
+
+	ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
 
 	/* set the runtime hw parameter with local snd_pcm_hardware struct */
 	runtime->hw = snd_intel_hadstream;
