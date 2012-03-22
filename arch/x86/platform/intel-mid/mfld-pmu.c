@@ -2412,16 +2412,10 @@ static int pmu_init(void)
 	 */
 	pmu_initialized = true;
 
-	/* FIXME:: This is the workaround to enable the PM on CVT Platform.
-	 * Currenlty CVT Platform is getting hanged in this portion.
-	 * In mfld this is code is for Power optimisation
+	/* get the current status of each of the driver
+	 * and update it in SCU
 	 */
-	if (__intel_mid_cpu_chip != INTEL_MID_CPU_CHIP_CLOVERVIEW) {
-		/* get the current status of each of the driver
-		 * and update it in SCU
-		 */
-		update_all_lss_states(&pmu_config);
-	}
+	update_all_lss_states(&pmu_config);
 
 	/* send a interactive command to fw */
 	mid_pmu_cxt->interactive_cmd_sent = true;
