@@ -409,6 +409,7 @@ static const struct sdhci_pci_fixes sdhci_intel_mfd_emmc = {
 	.remove_slot	= mfd_emmc_remove_slot,
 };
 
+#define CONFIG_BOARD_MRFLD_HVP	1
 static int intel_mrfl_mmc_probe(struct sdhci_pci_chip *chip)
 {
 	int ret = 0;
