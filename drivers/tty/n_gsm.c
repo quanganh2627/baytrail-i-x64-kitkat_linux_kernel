@@ -1552,8 +1552,7 @@ static void gsm_dlci_data(struct gsm_dlci *dlci, u8 *data, int clen)
 	unsigned int modem = 0;
 	int len = clen;
 
-	if (debug & 16)
-		pr_debug("%s: %d bytes for tty %p\n", __func__, len, tty);
+	pr_err("%s: %d bytes for tty %d\n", __func__, len, dlci->addr);
 
 	if (tty) {
 		switch (dlci->adaption)  {
@@ -1743,8 +1742,7 @@ static void gsm_queue(struct gsm_mux *gsm)
 	}
 	if (gsm->fcs != GOOD_FCS) {
 		gsm->bad_fcs++;
-		if (debug & 4)
-			pr_debug("BAD FCS %02x\n", gsm->fcs);
+		pr_err("BAD FCS %02x\n", gsm->fcs);
 		return;
 	}
 	address = gsm->address >> 1;
@@ -1907,7 +1905,7 @@ static void gsm0_receive(struct gsm_mux *gsm, unsigned char c)
 			gsm->state = GSM_SEARCH;
 			break;
 		}
-		pr_debug("wait for GSM0_SOF, while got 0x%x\n", (u32)c);
+		pr_err("wait for GSM0_SOF, while got 0x%x\n", (u32)c);
 		break;
 	}
 }
@@ -2633,7 +2631,7 @@ static int gsmld_ioctl(struct tty_struct *tty, struct file *file,
 
 static int gsm_mux_net_open(struct net_device *net)
 {
-	pr_debug("%s called\n", __func__);
+	pr_err("%s called\n", __func__);
 	netif_start_queue(net);
 	return 0;
 }
@@ -2659,6 +2657,7 @@ static void net_free(struct kref *ref)
 	if (dlci->net) {
 		dlci->adaption = 1;
 		dlci->data = gsm_dlci_data;
+		pr_err("net_free %d", kfifo_len(dlci->fifo));
 		unregister_netdev(dlci->net);
 		free_netdev(dlci->net);
 		dlci->net = 0;
@@ -2840,6 +2839,7 @@ static int gsm_create_network(struct gsm_dlci *dlci, struct gsm_netconfig *nc)
 	mux_net->dlci = dlci;
 	kref_init(&mux_net->ref);
 	strncpy(nc->if_name, net->name, IFNAMSIZ); /* return net name */
+	pr_err("netif done");
 	return net->ifindex;	/* return network index */
 
 error_ret:
@@ -3072,6 +3072,7 @@ static int gsmtty_ioctl(struct tty_struct *tty,
 
 	switch (cmd) {
 	case GSMIOC_ENABLE_NET:
+		pr_err("GSMIOC_ENABLE_NET");
 		if (copy_from_user(&nc, (void __user *)arg, sizeof(nc)))
 			return -EFAULT;
 		nc.if_name[IFNAMSIZ-1] = '\0';
@@ -3081,6 +3082,7 @@ static int gsmtty_ioctl(struct tty_struct *tty,
 			return -EFAULT;
 		return index;
 	case GSMIOC_DISABLE_NET:
+		pr_err("GSMIOC_DISABLE_NET");
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		gsm_destroy_network(dlci);
