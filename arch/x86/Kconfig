@@ -1950,6 +1950,10 @@ source "drivers/cpuidle/Kconfig"
 
 source "drivers/idle/Kconfig"
 
+config ATOM_SOC_POWER
+	def_bool y
+	depends on INTEL_ATOM_MDFLD_POWER || INTEL_ATOM_CLV_POWER || INTEL_ATOM_MRFLD_POWER
+
 endmenu
 
 menu "Bus options (PCI etc.)"
