@@ -315,12 +315,7 @@ static int alloc_private_pages(struct hmm_buffer_object *bo, int from_highmem,
 	unsigned int pgnr, order, blk_pgnr;
 	struct page *pages;
 	struct page_block *pgblk;
-#ifdef CONFIG_BOARD_CTP
-	/* CLV runs easily out of memory, so try to allocate a bit harder */
-	gfp_t gfp = GFP_KERNEL | __GFP_NOWARN;
-#else
 	gfp_t gfp = GFP_NOWAIT | __GFP_NOWARN;
-#endif
 	int i, j;
 	int failure_number = 0;
 	bool reduce_order = false;
