@@ -728,7 +728,7 @@ static int __init sfi_parse_devs(struct sfi_table_header *table)
 
 		dev = get_device_id(pentry->type, pentry->name);
 
-		if ((dev == NULL) || (dev->get_platform_data == NULL))
+		if (dev == NULL)
 			continue;
 
 		if (dev->device_handler) {
