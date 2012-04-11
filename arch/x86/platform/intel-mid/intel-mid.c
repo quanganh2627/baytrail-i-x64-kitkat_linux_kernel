@@ -563,11 +563,6 @@ static int __init intel_scu_ipc_subdev_init(void)
 			.name = "intel_scu_mip",
 			.bus_id = IPC_SCU,
 		},
-
-		[2] = {
-			.name = "intel_mid_osip",
-			.bus_id = IPC_SCU,
-		},
 	};
 
 	for (i = 0; i < ARRAY_SIZE(info); i++) {

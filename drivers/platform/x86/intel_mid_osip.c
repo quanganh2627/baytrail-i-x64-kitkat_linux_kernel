@@ -28,8 +28,6 @@
 #include <linux/debugfs.h>
 #include <linux/genhd.h>
 #include <linux/seq_file.h>
-#include <linux/ipc_device.h>
-#include <asm/intel_mid_osip.h>
 
 /* change to "loop0" and use losetup for safe testing */
 #define OSIP_BLKDEVICE "mmcblk0"
@@ -69,127 +67,6 @@ struct OSIP_header {            /* os image profile */
 /* A boolean variable, that is set, when wants to make the platform
     force shuts down */
 static int force_shutdown_occured;
-
-#define OSHOB_SIZE              60
-#define OSNIB_SIZE              32
-#define IPCMSG_GET_HOBADDR      0xE5
-
-int intel_mid_osip_read_oshob(u8 *data, int len, int offset)
-{
-	int ret, i;
-	u32 oshob_base;
-	void __iomem *oshob_addr;
-
-	ret = intel_scu_ipc_command(IPCMSG_GET_HOBADDR, 0, NULL, 0,
-			&oshob_base, 1);
-	if (ret < 0) {
-		pr_err("ipc_read_oshob failed!!\n");
-		goto exit;
-	}
-
-	pr_info("OSHOB addr values is %x\n", oshob_base);
-
-	oshob_addr = ioremap_nocache(oshob_base, OSHOB_SIZE);
-	if (!oshob_addr) {
-		pr_err("ioremap failed!\n");
-		ret = -ENOMEM;
-		goto exit;
-	} else {
-		u8 *ptr = data;
-		for (i = 0; i < len; i = i+1) {
-			*ptr = readb(oshob_addr + offset + i);
-			pr_info("addr=%8x, offset=%2x, value=%2x\n",
-					(u32)(oshob_addr + i),
-					offset + i, *ptr);
-			ptr++;
-		}
-	}
-
-	iounmap(oshob_addr);
-exit:
-	return ret;
-}
-EXPORT_SYMBOL_GPL(intel_mid_osip_read_oshob);
-
-#define IPCMSG_WRITE_OSNIB      0xE4
-#define POSNIBW_OFFSET          0x34
-
-int intel_mid_osip_write_osnib(u8 *data, int len, int offset, u32 mask)
-{
-	int i;
-	int ret = 0;
-	u32 posnibw, oshob_base;
-	void __iomem *oshob_addr, *osnibw_addr;
-
-	ret = intel_scu_ipc_command(IPCMSG_GET_HOBADDR, 0, NULL, 0,
-			&oshob_base, 1);
-	if (ret < 0) {
-		pr_err("ipc_get_hobaddr failed!!\n");
-		goto exit;
-	}
-
-	pr_info("OSHOB addr values is %x\n", oshob_base);
-
-	intel_scu_ipc_lock();
-
-	oshob_addr = ioremap_nocache(oshob_base, OSHOB_SIZE);
-	if (!oshob_addr) {
-		pr_err("ioremap failed!\n");
-		ret = -ENOMEM;
-		goto exit;
-	}
-
-	posnibw = readl(oshob_addr + POSNIBW_OFFSET);
-	if (posnibw == 0) { /* workaround here for BZ 2914 */
-		posnibw = 0xFFFF3400;
-		pr_err("ERR: posnibw from oshob is 0, manually set it here\n");
-	}
-
-	pr_info("POSNIB: %x\n", posnibw);
-
-	osnibw_addr = ioremap_nocache(posnibw, OSNIB_SIZE);
-	if (!osnibw_addr) {
-		pr_err("ioremap failed!\n");
-		ret = -ENOMEM;
-		goto unmap_oshob_addr;
-	}
-
-	for (i = 0; i < len; i++)
-		writeb(*(data + i), (osnibw_addr + offset + i));
-
-	ret = intel_scu_ipc_raw_cmd(IPCMSG_WRITE_OSNIB, 0, NULL, 0, NULL,
-			0, 0, mask);
-	if (ret < 0)
-		pr_err("ipc_write_osnib failed!!\n");
-
-	iounmap(osnibw_addr);
-
-unmap_oshob_addr:
-	iounmap(oshob_addr);
-exit:
-	intel_scu_ipc_unlock();
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(intel_mid_osip_write_osnib);
-
-#define OSNIB_OFFSET	0x0C
-#define OSNIB_RR_OFFSET	OSNIB_OFFSET
-#define OSNIB_RR_MASK	0x00000001
-
-int intel_mid_osip_write_osnib_rr(u8 rr)
-{
-	return intel_mid_osip_write_osnib(&rr, 1,
-			OSNIB_RR_OFFSET - OSNIB_OFFSET,
-			OSNIB_RR_MASK);
-}
-EXPORT_SYMBOL_GPL(intel_mid_osip_write_osnib_rr);
-
-int intel_mid_osip_read_osnib_rr(u8 *rr)
-{
-	return intel_mid_osip_read_oshob(rr, 1, OSNIB_RR_OFFSET);
-}
-EXPORT_SYMBOL_GPL(intel_mid_osip_read_osnib_rr);
 
 int mmcblk0_match(struct device *dev, void *data)
 {
@@ -358,15 +235,15 @@ static int osip_reboot_notifier_call(struct notifier_block *notifier,
 					"plugged in\n", __func__);
 				pr_info("charger connected ...\n");
 #ifdef DEBUG
-				intel_mid_osip_read_osnib_rr(&rbt_reason);
+				intel_scu_ipc_read_osnib_rr(&rbt_reason);
 #endif
-				ret_ipc = intel_mid_osip_write_osnib_rr(
+				ret_ipc = intel_scu_ipc_write_osnib_rr(
 							SIGNED_COS_ATTR);
 				if (ret_ipc < 0)
 					pr_err("%s cannot write reboot reason"
 						" in OSNIB\n", __func__);
 #ifdef DEBUG
-				intel_mid_osip_read_osnib_rr(&rbt_reason);
+				intel_scu_ipc_read_osnib_rr(&rbt_reason);
 #endif
 			} else {
 				pr_warn("[SHTDWN] %s, Shutdown without charger"
@@ -383,9 +260,9 @@ static int osip_reboot_notifier_call(struct notifier_block *notifier,
 		pr_warn("[SHTDWN] %s, invalidating osip and rebooting into "
 			"Recovery\n", __func__);
 #ifdef DEBUG
-		intel_mid_osip_read_osnib_rr(&rbt_reason);
+		intel_scu_ipc_read_osnib_rr(&rbt_reason);
 #endif
-		ret_ipc = intel_mid_osip_write_osnib_rr(SIGNED_RECOVERY_ATTR);
+		ret_ipc = intel_scu_ipc_write_osnib_rr(SIGNED_RECOVERY_ATTR);
 		if (ret_ipc < 0)
 			pr_err("%s cannot write reboot reason in OSNIB\n",
 				__func__);
@@ -394,7 +271,7 @@ static int osip_reboot_notifier_call(struct notifier_block *notifier,
 	} else if (0 == strncmp(cmd, "bootloader", 11)) {
 		pr_warn("[SHTDWN] %s, invalidating osip and rebooting into "
 			"Fastboot\n", __func__);
-		ret_ipc = intel_mid_osip_write_osnib_rr(SIGNED_POS_ATTR);
+		ret_ipc = intel_scu_ipc_write_osnib_rr(SIGNED_POS_ATTR);
 		if (ret_ipc < 0)
 			pr_err("%s cannot write reboot reason in OSNIB\n",
 				__func__);
@@ -402,7 +279,7 @@ static int osip_reboot_notifier_call(struct notifier_block *notifier,
 	} else if (0 == strncmp(cmd, "android", 8)) {
 		pr_warn("[SHTDWN] %s, restoring OSIP and rebooting into "
 			"Android\n", __func__);
-		ret_ipc = intel_mid_osip_write_osnib_rr(SIGNED_MOS_ATTR);
+		ret_ipc = intel_scu_ipc_write_osnib_rr(SIGNED_MOS_ATTR);
 		if (ret_ipc < 0)
 			pr_err("%s cannot write reboot reason in OSNIB\n",
 				 __func__);
@@ -665,43 +542,17 @@ static void remove_debugfs_files(void)
 }
 #endif
 
-static int __devinit intel_osip_probe(struct ipc_device *ipcdev)
-{
-	return 0;
-}
-
-static int __devexit intel_osip_remove(struct ipc_device *ipcdev)
-{
-	return 0;
-}
-
-static struct ipc_driver osip_driver = {
-	.driver = {
-		.name = "intel_mid_osip",
-		.owner = THIS_MODULE,
-	},
-	.probe = intel_osip_probe,
-	.remove = __devexit_p(intel_osip_remove),
-};
-
 static int __init osip_init(void)
 {
-	if (intel_mid_identify_cpu() == 0)
-		return -ENODEV;
-
 	if (register_reboot_notifier(&osip_reboot_notifier))
 		pr_warning("osip: unable to register reboot notifier");
-
 	create_debugfs_files();
-
-	return ipc_driver_register(&osip_driver);
+	return 0;
 }
-
 static void __exit osip_exit(void)
 {
 	unregister_reboot_notifier(&osip_reboot_notifier);
 	remove_debugfs_files();
-	ipc_driver_unregister(&osip_driver);
 }
 module_init(osip_init);
 module_exit(osip_exit);

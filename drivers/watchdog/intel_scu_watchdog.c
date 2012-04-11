@@ -54,7 +54,6 @@
 #include <asm/atomic.h>
 #include <linux/intel_mid_pm.h>
 #include <asm/intel_scu_ipc.h>
-#include <asm/intel_mid_osip.h>
 #include <asm/apb_timer.h>
 
 #include "intel_scu_watchdog.h"
@@ -400,7 +399,7 @@ int ret;
 	/* Let shared OSNIB (sram) know we are open */
 	/* To publish a proc and ioctl to do this and leave userland decide */
 	/* when it is sensible to do it (boot completed intent) */
-	ret = intel_mid_osip_write_osnib(&osnib_reset, OSNIB_WRITE_SIZE,
+	ret = intel_scu_ipc_write_osnib(&osnib_reset, OSNIB_WRITE_SIZE,
 		OSNIB_WDOG_OFFSET, OSNIB_WRITE_MASK);
 
 	if (ret != 0) {
