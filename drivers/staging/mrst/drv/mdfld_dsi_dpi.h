@@ -51,14 +51,6 @@ struct mdfld_dsi_dpi_output {
 	struct panel_funcs *p_funcs;
 };
 
-enum mipi_panel_state {
-	INVALID,
-	PANEL_TURN_ON,
-	PANEL_TURN_OFF,
-	PANEL_POWER_ON,
-	PANEL_POWER_OFF
-};
-
 #define MDFLD_DSI_DPI_OUTPUT(dsi_encoder) \
 	container_of(dsi_encoder, struct mdfld_dsi_dpi_output, base)
 

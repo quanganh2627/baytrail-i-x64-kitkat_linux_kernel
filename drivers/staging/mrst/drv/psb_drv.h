@@ -1066,6 +1066,7 @@ struct drm_psb_private {
 	spinlock_t flip_lock;
 	/*whether is DVI port*/
 	bool bDVIport;
+	unsigned int drm_psb_widi;
 
 	/*hdmi connected status */
 	bool bhdmiconnected;

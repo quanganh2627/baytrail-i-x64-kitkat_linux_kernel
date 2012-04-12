@@ -1725,43 +1725,6 @@ power_off_err:
 	return err;
 }
 
-static int __dpi_panel_turn_on(struct mdfld_dsi_config *dsi_config)
-{
-	struct mdfld_dsi_pkg_sender *sender =
-		mdfld_dsi_get_pkg_sender(dsi_config);
-	struct mdfld_dsi_hw_registers *regs;
-	struct mdfld_dsi_hw_context *ctx;
-	struct drm_device *dev;
-	int err;
-
-	regs = &dsi_config->regs;
-	ctx = &dsi_config->dsi_hw_context;
-	dev = dsi_config->dev;
-
-	err = mdfld_dsi_send_dpi_spk_pkg_hs(sender,
-				MDFLD_DSI_DPI_SPK_TURN_ON);
-
-	return err;
-}
-
-static int __dpi_panel_turn_off(struct mdfld_dsi_config *dsi_config)
-{
-	struct mdfld_dsi_pkg_sender *sender =
-		mdfld_dsi_get_pkg_sender(dsi_config);
-	struct mdfld_dsi_hw_registers *regs;
-	struct mdfld_dsi_hw_context *ctx;
-	struct drm_device *dev;
-	int err;
-
-	regs = &dsi_config->regs;
-	ctx = &dsi_config->dsi_hw_context;
-	dev = dsi_config->dev;
-
-	err = mdfld_dsi_send_dpi_spk_pkg_hs(sender,
-				MDFLD_DSI_DPI_SPK_SHUT_DOWN);
-	return err;
-}
-
 /**
  * Setup Display Controller to turn on/off a video mode panel.
  * Most of the video mode MIPI panel should follow the power on/off
@@ -1770,7 +1733,7 @@ static int __dpi_panel_turn_off(struct mdfld_dsi_config *dsi_config)
  * new panel function callbacks to make this function available for a
  * new video mode panel
  */
-static int __mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, enum mipi_panel_state opera)
+static int __mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, bool on)
 {
 	struct mdfld_dsi_encoder *dsi_encoder;
 	struct mdfld_dsi_connector *dsi_connector;
@@ -1780,8 +1743,8 @@ static int __mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, enum mipi_pane
 	int pipe;
 	struct drm_device *dev;
 	struct drm_psb_private *dev_priv;
-	bool power = false;
-	static enum mipi_panel_state state = INVALID;
+
+	PSB_DEBUG_ENTRY("%s: mode %s\n", __func__, (on ? "on" : "off"));
 
 	if (!encoder) {
 		DRM_ERROR("Invalid encoder\n");
@@ -1802,70 +1765,45 @@ static int __mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, enum mipi_pane
 
 	mutex_lock(&dsi_config->context_lock);
 
-	power = (opera == PANEL_TURN_ON || opera == PANEL_TURN_OFF) ? false : true;
-	PSB_DEBUG_ENTRY("%s: operation is %x, last state is %x\n", __func__, opera, state);
-
-	if (dpi_output->first_boot) {
-		printk(KERN_ALERT "skip panel power setting for first boot!\n");
-		if (dsi_config->dsi_hw_context.panel_on)
-			state = PANEL_POWER_ON;
-		else
-			state = PANEL_POWER_OFF;
-		goto fun_exit;
-	}
-
-	if (!power) {
-		if (opera == PANEL_TURN_ON) {
-			if (state == PANEL_POWER_OFF) {
-				PSB_DEBUG_ENTRY("%s: Panel is aready powered off\n", __func__);
-				goto fun_exit;
-			} else if (state == PANEL_POWER_ON || state == PANEL_TURN_ON)
-				goto fun_exit;
-			else { /*INVALID or PANEL_TURN_OFF*/
-				if (__dpi_panel_turn_on(dsi_config)) {
-					DRM_ERROR("Failed to turn off panel\n");
-					goto set_power_err;
-				}
-				state = opera;
-				dsi_config->dsi_hw_context.panel_on = 1;
+	if (on && !dsi_config->dsi_hw_context.panel_on) {
+		if (!dev_priv->drm_psb_widi && !dev_priv->dpms_on_off) {
+			if (__dpi_panel_power_on(dsi_config, p_funcs)) {
+				DRM_ERROR("Failed to power on\n");
+				goto set_power_err;
 			}
-		} else { /*opera == PANEL_TURN_OFF*/
-			if (state == PANEL_TURN_OFF || state == PANEL_POWER_OFF)
-				goto fun_exit;
-			else if (state == PANEL_TURN_ON || state == PANEL_POWER_ON
-					|| state == INVALID) {
-				if (__dpi_panel_turn_off(dsi_config)) {
-					DRM_ERROR("Failed to turn off panel\n");
+		} else {
+			if (p_funcs && p_funcs->power_on) {
+				if (p_funcs->power_on(dsi_config)) {
+					DRM_ERROR("Failed to power on panel\n");
 					goto set_power_err;
 				}
-				state = opera;
-				dsi_config->dsi_hw_context.panel_on = 0;
 			}
 		}
-	} else { /*panel power management*/
-		if (opera == PANEL_POWER_ON) {
-			if (state == PANEL_TURN_ON || state == PANEL_POWER_ON)
-				goto fun_exit;
-			else {
-				if (__dpi_panel_power_on(dsi_config, p_funcs)) {
-					DRM_ERROR("Failed to power on\n");
-					goto set_power_err;
-				}
-				state = opera;
-				dsi_config->dsi_hw_context.panel_on = 1;
+		dsi_config->dsi_hw_context.panel_on = 1;
+		/*if power on , then default turn off color mode,
+			let panel in full color*/
+		mdfld_dsi_dpi_set_color_mode(dsi_config, false);
+	} else if (!on && dsi_config->dsi_hw_context.panel_on) {
+		if (dpi_output->first_boot) {
+			pr_debug("DPMS OFF first boot!\n");
+			goto set_power_err;
+		}
+		/*Just turn off panel for WiDi Extended Mode.*/
+		if (!dev_priv->drm_psb_widi && !dev_priv->dpms_on_off) {
+			if (__dpi_panel_power_off(dsi_config, p_funcs)) {
+				DRM_ERROR("Failed to power off\n");
+				goto set_power_err;
 			}
-		} else {/*opera == PANEL_POWER_OFF*/
-			if (state == PANEL_POWER_OFF)
-				goto fun_exit;
-			else{
-				if (__dpi_panel_power_off(dsi_config, p_funcs)) {
-					DRM_ERROR("Failed to power on\n");
+		} else {
+			if (p_funcs && p_funcs->power_off) {
+				if (p_funcs->power_off(dsi_config)) {
+					DRM_ERROR(
+					"Failed to power off panel\n");
 					goto set_power_err;
 				}
-				state = opera;
-				dsi_config->dsi_hw_context.panel_on = 0;
 			}
 		}
+		dsi_config->dsi_hw_context.panel_on = 0;
 	}
 fun_exit:
 	mutex_unlock(&dsi_config->context_lock);
@@ -1880,18 +1818,17 @@ set_power_err:
 void mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, bool on)
 {
 	struct mdfld_dsi_encoder *dsi_encoder = MDFLD_DSI_ENCODER(encoder);
+	struct mdfld_dsi_dpi_output *dpi_output =
+		MDFLD_DSI_DPI_OUTPUT(dsi_encoder);
 	struct mdfld_dsi_config *dsi_config =
 		mdfld_dsi_encoder_get_config(dsi_encoder);
 	int pipe = mdfld_dsi_encoder_get_pipe(dsi_encoder);
 	struct drm_device *dev = dsi_config->dev;
 	struct drm_psb_private *dev_priv = dev->dev_private;
-	struct mdfld_dsi_dpi_output *dpi_output = NULL;
 	u32 mipi_reg = MIPI;
 	u32 pipeconf_reg = PIPEACONF;
 
 	PSB_DEBUG_ENTRY("set power %s on pipe %d\n", on ? "On" : "Off", pipe);
-
-	dpi_output = MDFLD_DSI_DPI_OUTPUT(dsi_encoder);
 
 	if (pipe)
 		if (!(dev_priv->panel_desc & DISPLAY_B) ||
@@ -1961,17 +1898,7 @@ void mdfld_dsi_dpi_set_power(struct drm_encoder *encoder, bool on)
 	 * if TMD panel call new power on/off sequences instead.
 	 * NOTE: refine TOSHIBA panel code later
 	 */
-	if (dev_priv->dpms_on_off && !dpi_output->first_boot) {
-		if (on)
-			__mdfld_dsi_dpi_set_power(encoder, PANEL_TURN_ON);
-		else
-			__mdfld_dsi_dpi_set_power(encoder, PANEL_TURN_OFF);
-	} else {
-		if (on)
-			__mdfld_dsi_dpi_set_power(encoder, PANEL_POWER_ON);
-		else
-			__mdfld_dsi_dpi_set_power(encoder, PANEL_POWER_OFF);
-	}
+	__mdfld_dsi_dpi_set_power(encoder, on);
 
 #endif
 	ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
@@ -2464,7 +2391,7 @@ void mdfld_dsi_dpi_save(struct drm_encoder *encoder)
 		return;
 
 	/*turn off*/
-	__mdfld_dsi_dpi_set_power(encoder, PANEL_POWER_OFF);
+	__mdfld_dsi_dpi_set_power(encoder, false);
 }
 
 void mdfld_dsi_dpi_restore(struct drm_encoder *encoder)
@@ -2475,7 +2402,7 @@ void mdfld_dsi_dpi_restore(struct drm_encoder *encoder)
 		return;
 
 	/*turn on*/
-	__mdfld_dsi_dpi_set_power(encoder, PANEL_POWER_ON);
+	__mdfld_dsi_dpi_set_power(encoder, true);
 }
 
 /**

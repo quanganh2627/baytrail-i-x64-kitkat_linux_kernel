@@ -1506,7 +1506,8 @@ int lnc_video_getparam(struct drm_device *dev, void *data,
 		}
 		break;
 	case IMG_DISPLAY_SET_WIDI_EXT_STATE:
-		DRM_ERROR("variable drm_psb_widi has been removed\n");
+		dev_priv->drm_psb_widi = (int)arg->value;
+		DRM_INFO("psb_drm_widi: %d.\n", dev_priv->drm_psb_widi);
 		break;
 	case IMG_VIDEO_GET_HDMI_STATE:
 		ret = copy_to_user((void __user *)((unsigned long)arg->value),
