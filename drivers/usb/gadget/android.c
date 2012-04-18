@@ -1009,7 +1009,7 @@ static int get_serial_string_from_emmc(void)
 		struct gendisk *disk = dev_to_disk(emmc_disk);
 		struct mmc_card *card = mmc_dev_to_card(disk->driverfs_dev);
 		if (card) {
-			snprintf(serial_string, 17, "%016X",
+			snprintf(serial_string, 17, "Medfield%08X",
 				 jhash(&card->cid, sizeof(card->cid), 0));
 			return 0;
 		}
