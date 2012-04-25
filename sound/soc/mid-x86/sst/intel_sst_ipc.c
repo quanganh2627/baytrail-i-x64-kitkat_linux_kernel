@@ -165,7 +165,7 @@ void sst_post_message(struct work_struct *work)
 	msg = list_entry(sst_drv_ctx->ipc_dispatch_list.next,
 			struct ipc_post, node);
 	list_del(&msg->node);
-	pr_debug("Post message: header = %x\n", msg->header.full);
+	pr_info("Post message: header = %x\n", msg->header.full);
 	pr_debug("size: = %x\n", msg->header.part.data);
 	if (msg->header.part.large)
 		memcpy_toio(sst_drv_ctx->mailbox + SST_MAILBOX_SEND,
@@ -257,7 +257,7 @@ void sst_process_message(struct work_struct *work)
 			container_of(work, struct sst_ipc_msg_wq, wq);
 	int str_id = msg->header.part.str_id;
 
-	pr_debug("IPC process for %x\n", msg->header.full);
+	pr_info("IPC process for %x\n", msg->header.full);
 
 	/* based on msg in list call respective handler */
 	switch (msg->header.part.msg_id) {
@@ -369,7 +369,7 @@ void sst_process_reply(struct work_struct *work)
 	int str_id = msg->header.part.str_id;
 	struct stream_info *str_info;
 
-	pr_debug("sst: IPC process reply for %x\n", msg->header.full);
+	pr_info("sst: IPC process reply for %x\n", msg->header.full);
 
 	switch (msg->header.part.msg_id) {
 	case IPC_IA_TARGET_DEV_SELECT:
