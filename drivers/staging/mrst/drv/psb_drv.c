@@ -37,7 +37,6 @@
 #include <linux/cpu.h>
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
-#include "mdfld_dsi_lvds_bridge.h"
 #ifdef CONFIG_GFX_RTPM
 #include <linux/pm_runtime.h>
 #endif
@@ -3871,10 +3870,6 @@ static const struct dev_pm_ops psb_pm_ops = {
 	.runtime_idle = psb_runtime_idle,
 	.suspend = psb_runtime_suspend,
 	.resume = psb_runtime_resume,
-#ifdef CONFIG_SUPPORT_TOSHIBA_MIPI_LVDS_BRIDGE
-	.suspend_noirq = tc35876x_lvds_panel_suspend_noirq,
-	.resume_noirq = tc35876x_lvds_panel_resume_noirq,
-#endif
 };
 
 static struct drm_driver driver = {
