@@ -334,7 +334,6 @@ static int tc35876x_bridge_remove(struct i2c_client *client)
 	return 0;
 }
 
-
 static const struct i2c_device_id tc35876x_bridge_id[] = {
 	{ "i2c_disp_brig", 0 },
 	{ }
@@ -540,9 +539,6 @@ void dsi_lvds_toshiba_bridge_panel_off(void)
 	if (gpio_direction_output(GPIO_MIPI_LCD_BL_EN, 0))
 		gpio_set_value_cansleep(GPIO_MIPI_LCD_BL_EN, 0);
 	mdelay(1);
-
-	if (gpio_direction_output(GPIO_MIPI_LCD_VADD, 0))
-		gpio_set_value_cansleep(GPIO_MIPI_LCD_VADD, 0);
 }
 
 /* ************************************************************************* *\
@@ -555,10 +551,6 @@ void dsi_lvds_toshiba_bridge_panel_on(struct drm_device *dev)
 	struct drm_psb_private *dev_priv = dev->dev_private;
 
 	printk(KERN_INFO "[DISPLAY ] %s\n", __func__);
-
-	if (gpio_direction_output(GPIO_MIPI_LCD_VADD, 1))
-		gpio_set_value_cansleep(GPIO_MIPI_LCD_VADD, 1);
-	msleep(260);
 
 	if (cmi_lcd_i2c_client) {
 		int ret;
@@ -612,6 +604,27 @@ void dsi_lvds_toshiba_bridge_panel_on(struct drm_device *dev)
 
 	mdfld_dsi_brightness_control(dev_priv->dev, 0,
 			dev_priv->brightness_adjusted);
+}
+
+/*
+ * Turn off/on power of LVDS panel only if no device is active
+ */
+int tc35876x_lvds_panel_suspend_noirq(struct device *dev)
+{
+	if (gpio_direction_output(GPIO_MIPI_LCD_VADD, 0))
+		gpio_set_value_cansleep(GPIO_MIPI_LCD_VADD, 0);
+	mdelay(1);
+
+	return 0;
+}
+
+int tc35876x_lvds_panel_resume_noirq(struct device *dev)
+{
+	if (gpio_direction_output(GPIO_MIPI_LCD_VADD, 1))
+		gpio_set_value_cansleep(GPIO_MIPI_LCD_VADD, 1);
+	msleep(260);
+
+	return 0;
 }
 
 /* ************************************************************************* *\

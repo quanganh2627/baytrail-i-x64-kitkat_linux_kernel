@@ -68,5 +68,7 @@ void dsi_lvds_deinit_lvds_bridge(struct drm_device *dev);
 void dsi_lvds_bridge_get_display_params(struct drm_display_mode *mode);
 void dsi_lvds_resume_lvds_bridge(struct drm_device *dev);
 void dsi_lvds_suspend_lvds_bridge(struct drm_device *dev);
+int tc35876x_lvds_panel_resume_noirq(struct device *dev);
+int tc35876x_lvds_panel_suspend_noirq(struct device *dev);
 
 #endif /*__MDFLD_DSI_LVDS_BRIDGE_H__*/
