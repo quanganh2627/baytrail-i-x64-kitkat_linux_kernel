@@ -600,6 +600,13 @@ static void dlp_ctrl_complete_rx(struct hsi_msg *msg)
 	ch_ctx = dlp_drv.channels[hsi_channel];
 
 	switch (params.id) {
+
+	case DLP_CMD_NOP:
+		/* Trace then drop the nop command */
+		PTRACE_NO_FUNC("Gotta nop: 0x40%02X%02X%02X\n",
+				params.data1, params.data2, params.data3);
+		break;
+
 	case DLP_CMD_CREDITS:
 		if (msg_complete) {
 			unsigned long flags;
