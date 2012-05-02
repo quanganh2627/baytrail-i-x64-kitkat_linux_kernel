@@ -45,7 +45,6 @@ void __init *msic_gpio_platform_data(void *info)
 
 	if (gpio < 0)
 		return NULL;
-
 	msic_gpio_pdata.gpio_base = gpio;
 	handle_ipc_irq_res(entry->irq, ipc_msic_gpio_res);
 

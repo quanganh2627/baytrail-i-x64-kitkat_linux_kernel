@@ -20,6 +20,7 @@
 #include <asm/intel-mid.h>
 #include "platform_ipc.h"
 #include "platform_msic_ocd.h"
+#define BCUIRQ	36
 
 static struct resource msic_ocd_resources[] __initdata = {
 	{
@@ -38,13 +39,25 @@ static struct intel_ipc_dev_res ipc_msic_ocd_res[] __initdata = {
 
 void __init *msic_ocd_platform_data(void *info)
 {
+	struct sfi_device_table_entry *entry;
 	static struct intel_msic_ocd_pdata msic_ocd_pdata;
 	int gpio;
+	struct io_apic_irq_attr irq_attr;
+	/* this is a workaorund for BZ 34411 and should not go in mainline*/
+	int ioapic = mp_find_ioapic(BCUIRQ);
 
+	irq_attr.ioapic = ioapic;
+	irq_attr.ioapic_pin = BCUIRQ;
+	irq_attr.trigger = 1;
+	irq_attr.polarity = 0;
+	io_apic_set_pci_routing(NULL, BCUIRQ, &irq_attr);
+	entry = info;
 	gpio = get_gpio_by_name("ocd_gpio");
 
-	if (gpio < 0)
-		return NULL;
+	if (gpio < 0) {
+		pr_err("### gpiio < 0, not returned\n");
+		/*return NULL;*/
+	}
 
 	msic_ocd_pdata.gpio = gpio;
 
