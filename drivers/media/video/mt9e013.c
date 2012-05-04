@@ -680,39 +680,6 @@ static int mt9e013_write_reg_array(struct i2c_client *client,
 	return __mt9e013_flush_reg_array(client, &ctrl);
 }
 
-static int wait_power_on_lock(struct v4l2_subdev *sd)
-{
-	struct mt9e013_device *dev = to_mt9e013_sensor(sd);
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	int power_state;
-
-	power_state = atomic_read(&dev->power_state);
-
-	/* not powered on before, this is not allowed */
-	if (power_state == POWER_OFF)
-		return -EINVAL;
-
-	if (power_state == POWER_ON_INPROGRESS) {
-		if (!wait_for_completion_timeout(&dev->power_complete,
-						 2 * HZ)) {
-			/*
-			 * this is really abnormal case that power on
-			 * should not take such long time.
-			 */
-			dev_err(&client->dev, "waiting power up timeout!\n");
-			return -EAGAIN;
-		}
-		power_state = atomic_read(&dev->power_state);
-	}
-
-	if (power_state == POWER_ON_ERROR) {
-		dev_err(&client->dev, "power up err!\n");
-		return -EIO;
-	}
-
-	return 0;
-}
-
 static int mt9e013_t_focus_abs(struct v4l2_subdev *sd, s32 value)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
@@ -1083,14 +1050,8 @@ out:
 
 static long mt9e013_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
-	int ret;
-
 	switch (cmd) {
 	case ATOMISP_IOC_S_EXPOSURE:
-		ret = wait_power_on_lock(sd);
-		if (ret)
-			return ret;
-
 		return mt9e013_s_exposure(sd, (struct atomisp_exposure *)arg);
 	case ATOMISP_IOC_G_SENSOR_PRIV_INT_DATA:
 		return mt9e013_g_priv_int_data(sd, arg);
@@ -1233,51 +1194,21 @@ static int power_down(struct v4l2_subdev *sd)
 	return ret;
 }
 
-static void mt9e013_powerup_work(struct work_struct *work)
-{
-	struct mt9e013_device *dev = container_of(work,
-						  struct mt9e013_device, work);
-
-	int ret;
-
-	ret = power_up(&dev->sd);
-	if (!ret) {
-		/* init motor initial position */
-		ret =  __mt9e013_init(&dev->sd, 0);
-	}
-
-	if (ret)
-		atomic_set(&dev->power_state, POWER_ON_ERROR);
-	else
-		atomic_set(&dev->power_state, POWER_ON);
-
-	complete(&dev->power_complete);
-}
-
 static int mt9e013_s_power(struct v4l2_subdev *sd, int on)
 {
 	struct mt9e013_device *dev = to_mt9e013_sensor(sd);
-	int ret = 0;
-	int power_state;
-
-	power_state = atomic_read(&dev->power_state);
+	int ret;
 
 	if (on == 0) {
-		if (power_state == POWER_OFF)
-			return 0;
-		else
-			ret = wait_power_on_lock(sd);
-
-		if (ret == -EAGAIN)
-			cancel_work_sync(&dev->work);
-
 		mt9e013_uninit(sd);
 		ret = power_down(sd);
-		atomic_set(&dev->power_state, POWER_OFF);
+		dev->power = 0;
 	} else {
-		if (power_state == POWER_OFF) {
-			atomic_set(&dev->power_state, POWER_ON_INPROGRESS);
-			queue_work(dev->work_queue, &dev->work);
+		ret = power_up(sd);
+		if (!ret) {
+			dev->power = 1;
+			/* init motor initial position */
+			return __mt9e013_init(sd, 0);
 		}
 	}
 
@@ -1718,10 +1649,6 @@ static int mt9e013_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	if ((octrl == NULL) || (octrl->tweak == NULL))
 		return -EINVAL;
 
-	ret = wait_power_on_lock(sd);
-	if (ret)
-		return ret;
-
 	mutex_lock(&dev->input_lock);
 	ret = octrl->tweak(sd, ctrl->value);
 	mutex_unlock(&dev->input_lock);
@@ -1856,10 +1783,6 @@ static int mt9e013_s_mbus_fmt(struct v4l2_subdev *sd,
 		return ret;
 	}
 
-	ret = wait_power_on_lock(sd);
-	if (ret)
-		return ret;
-
 	mutex_lock(&dev->input_lock);
 	dev->fmt_idx = get_resolution_index(fmt->width, fmt->height);
 
@@ -1950,10 +1873,6 @@ static int mt9e013_s_stream(struct v4l2_subdev *sd, int enable)
 	int ret;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct mt9e013_device *dev = to_mt9e013_sensor(sd);
-
-	ret = wait_power_on_lock(sd);
-	if (ret)
-		return ret;
 
 	mutex_lock(&dev->input_lock);
 	if (enable) {
@@ -2067,15 +1986,6 @@ static int mt9e013_s_config(struct v4l2_subdev *sd,
 
 	dev->platform_data = pdata;
 
-	atomic_set(&dev->power_state, POWER_OFF);
-	dev->work_queue = create_singlethread_workqueue("mt9e013_work");
-	if (dev->work_queue == NULL) {
-		v4l2_err(client, "Failed to initialize work queue\n");
-		return -EINVAL;
-	}
-	INIT_WORK(&dev->work, mt9e013_powerup_work);
-	init_completion(&dev->power_complete);
-
 	mutex_lock(&dev->input_lock);
 
 	ret = mt9e013_s_power(sd, 1);
@@ -2084,10 +1994,6 @@ static int mt9e013_s_config(struct v4l2_subdev *sd,
 		mutex_unlock(&dev->input_lock);
 		return ret;
 	}
-
-	ret = wait_power_on_lock(sd);
-	if (ret)
-		goto fail_csi_cfg;
 
 	ret = dev->platform_data->csi_cfg(sd, 1);
 	if (ret)

@@ -182,12 +182,6 @@ enum mt9e013_tok_type {
 	MT9E013_TOK_DELAY  = 0xfe00	/* delay token for reg list */
 };
 
-enum mt9e013_power_state {
-	POWER_OFF,
-	POWER_ON_INPROGRESS,
-	POWER_ON,
-	POWER_ON_ERROR
-};
 /*
  * If register address or register width is not 32 bit width,
  * user needs to convert it manually
@@ -292,6 +286,7 @@ struct mt9e013_device {
 	int fmt_idx;
 	int status;
 	int streaming;
+	int power;
 	u8 res;
 	u8 type;
 	u16 sensor_id;
@@ -311,11 +306,6 @@ struct mt9e013_device {
 	void *fuseid;
 	/* Older VCMs could not maintain the focus position in standby mode. */
 	bool keeps_focus_pos;
-
-	struct workqueue_struct *work_queue;
-	struct work_struct work;
-	atomic_t power_state;
-	struct completion power_complete;
 };
 
 #define MT9E013_MAX_WRITE_BUF_SIZE	32
