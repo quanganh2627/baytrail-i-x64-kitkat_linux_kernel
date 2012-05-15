@@ -206,7 +206,7 @@ void MRSTLFBSavePlaneConfig(MRSTLFB_DEVINFO *psDevInfo)
 		break;
 	case PVRSRV_PIXEL_FORMAT_ARGB8888:
 	default:
-		uPlaneFormat = DISPPLANE_32BPP_NO_ALPHA;
+		uPlaneFormat = DISPPLANE_32BPP;
 		break;
 	}
 
@@ -238,25 +238,16 @@ void MRSTLFBRestorePlaneConfig(MRSTLFB_DEVINFO *psDevInfo)
 	struct drm_psb_private *dev_priv =
 		(struct drm_psb_private *) psDevInfo->psDrmDevice->dev_private;
 	u32 uDspCntr = 0;
-	u32 uOAEn;
 
 	if (!ospm_power_using_hw_begin(OSPM_DISPLAY_ISLAND, false))
 		return;
-	/* Overlay A command register */
-	uOAEn = PSB_RVDC32(OACOMD);
-
 	uDspCntr = PSB_RVDC32(DSPACNTR);
 	uDspCntr &= ~(0xf << 26);
-
-	if ((uOAEn & OV_ENBL) && (psDevInfo->uPlaneACntr == DISPPLANE_32BPP_NO_ALPHA))
-		uDspCntr |= DISPPLANE_32BPP;
-	else
-		uDspCntr |= psDevInfo->uPlaneACntr;
+	uDspCntr |= psDevInfo->uPlaneACntr;
 	PSB_WVDC32(uDspCntr, DSPACNTR);
 	PSB_WVDC32(psDevInfo->uPlaneAStride, DSPASTRIDE);
 	PSB_WVDC32(psDevInfo->uPlaneAPos, DSPAPOS);
 	PSB_WVDC32(psDevInfo->uPlaneASize, DSPASIZE);
-
 #ifdef CONFIG_MDFD_HDMI
 	/*TODO: fully support HDMI later*/
 	/*PSB_WVDC32(psDevInfo->uPlaneBCntr, DSPBCNTR);*/

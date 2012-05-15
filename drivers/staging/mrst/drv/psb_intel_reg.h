@@ -601,9 +601,6 @@ struct dpst_guardband {
 #define OVC_OGAMC1		0x38020
 #define OVC_OGAMC0		0x38024
 
-#define OACOMD			0x30168
-#define OV_ENBL		0x1
-
 /*
  * Some BIOS scratch area registers.  The 845 (and 830?) store the amount
  * of video memory available to the BIOS in SWF1.
