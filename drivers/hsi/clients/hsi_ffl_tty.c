@@ -63,7 +63,7 @@
 #define FFL_RX_DELAY		100000
 
 /* Defaut TX timeout delay expressed in microseconds */
-#define TTY_HANGUP_DELAY	2500000
+#define TTY_HANGUP_DELAY	100000
 
 /* Delays for powering up/resetting the modem, ms */
 #define PO_INTERLINE_DELAY	1
