@@ -2034,8 +2034,6 @@ static int psb_driver_load(struct drm_device *dev, unsigned long chipset)
 #endif
 	}
 
-	dev_priv->dsi_init_done = 1;
-
 	/*must be after mrst_get_fuse_settings()*/
 	ret = psb_backlight_init(dev);
 	if (ret)
