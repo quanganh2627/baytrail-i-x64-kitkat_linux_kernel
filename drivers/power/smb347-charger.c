@@ -1687,6 +1687,15 @@ static int smb347_remove(struct i2c_client *client)
 	return 0;
 }
 
+static int smb347_shutdown(struct i2c_client *client)
+{
+	struct smb347_charger *smb = i2c_get_clientdata(client);
+
+	/* Disable OTG during shutdown */
+	if (smb)
+		smb347_otg_drive_vbus(smb, false);
+}
+
 static const struct i2c_device_id smb347_id[] = {
 	{ "smb347", 0},
 };
@@ -1699,6 +1708,7 @@ static struct i2c_driver smb347_driver = {
 	},
 	.probe		= smb347_probe,
 	.remove		= __devexit_p(smb347_remove),
+	.shutdown	= smb347_shutdown,
 	.id_table	= smb347_id,
 };
 
