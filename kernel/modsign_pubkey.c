@@ -17,6 +17,9 @@
 #include "module-internal.h"
 
 struct key *modsign_keyring;
+#ifdef CONFIG_MODULE_SIG_BLACKLIST
+struct key *modsign_blacklist;
+#endif
 
 extern __initdata const u8 modsign_certificate_list[];
 extern __initdata const u8 modsign_certificate_list_end[];
@@ -42,6 +45,17 @@ static __init int module_verify_init(void)
 					KEY_ALLOC_NOT_IN_QUOTA, NULL);
 	if (IS_ERR(modsign_keyring))
 		panic("Can't allocate module signing keyring\n");
+
+#ifdef CONFIG_MODULE_SIG_BLACKLIST
+	modsign_blacklist = keyring_alloc(".modsign_blacklist",
+				    KUIDT_INIT(0), KGIDT_INIT(0),
+				    current_cred(),
+				    (KEY_POS_ALL & ~KEY_POS_SETATTR) |
+				    KEY_USR_VIEW | KEY_USR_READ,
+				    KEY_ALLOC_NOT_IN_QUOTA, NULL);
+	if (IS_ERR(modsign_blacklist))
+		panic("Can't allocate module signing blacklist keyring\n");
+#endif
 
 	return 0;
 }
