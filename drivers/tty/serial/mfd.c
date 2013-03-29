@@ -125,6 +125,7 @@ struct uart_hsu_port {
 struct hsu_port {
 	void __iomem	*reg;
 	int		dma_irq;
+	int		port_suspend;
 	unsigned long	paddr;
 	unsigned long	iolen;
 	struct uart_hsu_port	port[4];
@@ -2363,6 +2364,23 @@ static int hsu_runtime_idle(struct device *dev)
 	return -EBUSY;
 }
 
+static int hsu_enable_dma_irq(bool en)
+{
+	static DEFINE_MUTEX(dma_lock);
+
+	mutex_lock(&dma_lock);
+	if (en) {
+		if (phsu->port_suspend == 3)
+			enable_irq(phsu->dma_irq);
+		phsu->port_suspend--;
+	} else {
+		phsu->port_suspend++;
+		if (phsu->port_suspend == 3)
+			disable_irq(phsu->dma_irq);
+	}
+	mutex_unlock(&dma_lock);
+}
+
 static int hsu_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
@@ -2383,6 +2401,7 @@ static int hsu_runtime_suspend(struct device *dev)
 			clear_bit(PM_WAKEUP, &up3->pm_flags);
 	}
 #endif
+	hsu_enable_dma_irq(false);
 
 	if (up->index == logic_idx) {
 		struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
@@ -2410,6 +2429,8 @@ static int hsu_runtime_resume(struct device *dev)
 					jiffies + HSU_DMA_TIMEOUT_CHECK_FREQ);
 		}
 	}
+
+	hsu_enable_dma_irq(true);
 
 	if (up->dma_rx_on || dma_rx_on)
 		chan_writel(up->rxc, HSU_CH_CR, 0x3);
@@ -2484,6 +2505,8 @@ static int hsu_suspend(struct device *dev)
 		if (!allow_for_suspend(up))
 			return -EBUSY;
 
+		hsu_enable_dma_irq(false);
+
 		if (up->index == logic_idx) {
 			struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
 			if (up3->running) {
@@ -2513,6 +2536,9 @@ static int hsu_resume(struct device *dev)
 	if (priv && (pdev->device != 0x081E) && (pdev->device != 0x08FF)
 	&& (pdev->device != 0x1192)) {
 		up = priv;
+
+		if (up->suspended)
+			hsu_enable_dma_irq(true);
 
 		if (up->index == logic_idx) {
 			struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
