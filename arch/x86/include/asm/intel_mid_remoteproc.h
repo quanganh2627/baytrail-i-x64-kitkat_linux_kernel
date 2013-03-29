@@ -15,6 +15,10 @@
 #ifndef _ASM_INTEL_MID_REMOTEPROC_H
 #define _ASM_INTEL_MID_REMOTEPROC_H
 
+#define RP_IPC_COMMAND		0xA0
+#define RP_IPC_SIMPLE_COMMAND	0xA1
+#define RP_IPC_RAW_COMMAND	0xA2
+
 #define	RP_PMIC_ACCESS		0xFF
 #define	RP_DFU_REQUEST		0xFE
 #define	RP_SET_WATCHDOG		0xF8
@@ -59,6 +63,7 @@
 #define RP_BCOVE_ADC		0x24
 #define RP_BCOVE_THERMAL	0x25
 #define RP_MRFL_OCD		0x26
+#define RP_FW_LOGGING		0x27
 
 enum rproc_type {
 	RPROC_SCU = 0,

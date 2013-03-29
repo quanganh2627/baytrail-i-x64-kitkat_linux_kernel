@@ -44,6 +44,7 @@
 #include <asm/io.h>
 #include <asm/i8259.h>
 #include <asm/intel_scu_ipc.h>
+#include <asm/intel_mid_rpmsg.h>
 #include <asm/apb_timer.h>
 #include <asm/reboot.h>
 #include <asm/intel_mid_hsu.h>
@@ -76,7 +77,7 @@
 __cpuinitdata enum intel_mid_timer_options intel_mid_timer_options;
 
 struct kobject *spid_kobj;
-struct sfi_soft_platform_id spid;
+struct soft_platform_id spid;
 /* intel_mid_ops to store sub arch ops */
 struct intel_mid_ops *intel_mid_ops;
 /* getter function for sub arch ops*/
@@ -385,10 +386,10 @@ static void intel_mid_reboot(void)
 	}
 	if (force_cold_boot) {
 		pr_info("Immediate COLD BOOT\n");
-		intel_scu_ipc_simple_command(IPCMSG_COLD_BOOT, 0);
+		rpmsg_send_generic_simple_command(IPCMSG_COLD_BOOT, 0);
 	} else {
 		pr_info("Immediate COLD RESET\n");
-		intel_scu_ipc_simple_command(IPCMSG_COLD_RESET, 0);
+		rpmsg_send_generic_simple_command(IPCMSG_COLD_RESET, 0);
 	}
 }
 
@@ -401,10 +402,10 @@ static void intel_mid_emergency_reboot(char *cmd)
 		udelay(10);
 
 	if (force_cold_boot)
-		intel_scu_ipc_raw_cmd(IPCMSG_COLD_BOOT,
+		rpmsg_send_generic_raw_command(IPCMSG_COLD_BOOT,
 			0, NULL, 0, NULL, 0, 0, 0);
 	else
-		intel_scu_ipc_raw_cmd(IPCMSG_COLD_RESET,
+		rpmsg_send_generic_raw_command(IPCMSG_COLD_RESET,
 			0, NULL, 0, NULL, 0, 0, 0);
 }
 
@@ -985,7 +986,7 @@ static int __init sfi_parse_oemb(struct sfi_table_header *table)
 
 	board_id = oemb->board_id | (oemb->board_fab << 4);
 
-	memcpy(&spid, &oemb->spid, sizeof(struct sfi_soft_platform_id));
+	memcpy(&spid, &oemb->spid, sizeof(struct soft_platform_id));
 
 	snprintf(sig, (SFI_SIGNATURE_SIZE + 1), "%s",
 		oemb->header.sig);

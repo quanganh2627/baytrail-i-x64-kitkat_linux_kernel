@@ -53,10 +53,12 @@ static int scu_ipc_raw_command(void *tx_buf)
 
 	tx_msg = (struct tx_ipc_msg *)tx_buf;
 
+	intel_scu_ipc_lock();
 	ret = intel_scu_ipc_raw_cmd(tx_msg->cmd, tx_msg->sub,
 				tx_msg->in, tx_msg->inlen,
 				tx_msg->out, tx_msg->outlen,
 				tx_msg->dptr, tx_msg->sptr);
+	intel_scu_ipc_unlock();
 
 	return ret;
 }
@@ -153,6 +155,27 @@ static int scu_ipc_vrtc_command(void *tx_buf)
 	return ret;
 }
 
+static int scu_ipc_fw_logging_command(void *tx_buf)
+{
+	struct tx_ipc_msg *tx_msg;
+	int ret = 0;
+
+	tx_msg = (struct tx_ipc_msg *)tx_buf;
+
+	switch (tx_msg->cmd) {
+	case IPCMSG_GET_HOBADDR:
+		ret = scu_ipc_command(tx_buf);
+		break;
+	case IPCMSG_CLEAR_FABERROR:
+		ret = scu_ipc_simple_command(tx_buf);
+		break;
+	default:
+		pr_info("Command %x not supported\n", tx_msg->cmd);
+		break;
+	};
+
+	return ret;
+}
 
 /**
  * scu_ipc_rpmsg_handle() - scu rproc specified ipc rpmsg handle
@@ -182,10 +205,15 @@ int scu_ipc_rpmsg_handle(void *rx_buf, void *tx_buf, u32 *r_len, u32 *s_len)
 	case RP_PMIC_ACCESS:
 	case RP_SET_WATCHDOG:
 	case RP_FLIS_ACCESS:
+	case RP_IPC_COMMAND:
 		tmp_msg->status = scu_ipc_command(tx_msg);
 		break;
 	case RP_MIP_ACCESS:
+	case RP_IPC_RAW_COMMAND:
 		tmp_msg->status = scu_ipc_raw_command(tx_msg);
+		break;
+	case RP_IPC_SIMPLE_COMMAND:
+		tmp_msg->status = scu_ipc_simple_command(tx_msg);
 		break;
 	case RP_IPC_UTIL:
 		tmp_msg->status = scu_ipc_util_command(tx_msg);
@@ -195,6 +223,9 @@ int scu_ipc_rpmsg_handle(void *rx_buf, void *tx_buf, u32 *r_len, u32 *s_len)
 		break;
 	case RP_VRTC:
 		tmp_msg->status = scu_ipc_vrtc_command(tx_msg);
+		break;
+	case RP_FW_LOGGING:
+		tmp_msg->status = scu_ipc_fw_logging_command(tx_msg);
 		break;
 	default:
 		tmp_msg->status = 0;

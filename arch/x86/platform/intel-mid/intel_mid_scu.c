@@ -57,7 +57,13 @@ int intel_mid_rproc_init(void)
 {
 	int err;
 
-	register_rpmsg_service("rpmsg_ipc", RPROC_SCU, RP_IPC);
+	/* generic rpmsg channels */
+	register_rpmsg_service("rpmsg_ipc_command", RPROC_SCU, RP_IPC_COMMAND);
+	register_rpmsg_service("rpmsg_ipc_simple_command",
+				RPROC_SCU, RP_IPC_SIMPLE_COMMAND);
+	register_rpmsg_service("rpmsg_ipc_raw_command",
+				RPROC_SCU, RP_IPC_RAW_COMMAND);
+
 	register_rpmsg_service("rpmsg_pmic", RPROC_SCU, RP_PMIC_ACCESS);
 	register_rpmsg_service("rpmsg_mip", RPROC_SCU, RP_MIP_ACCESS);
 	register_rpmsg_service("rpmsg_fw_update",
@@ -68,6 +74,7 @@ int intel_mid_rproc_init(void)
 	register_rpmsg_service("rpmsg_umip", RPROC_SCU, RP_UMIP_ACCESS);
 	register_rpmsg_service("rpmsg_osip", RPROC_SCU, RP_OSIP_ACCESS);
 	register_rpmsg_service("rpmsg_vrtc", RPROC_SCU, RP_VRTC);
+	register_rpmsg_service("rpmsg_fw_logging", RPROC_SCU, RP_FW_LOGGING);
 	register_rpmsg_service("rpmsg_kpd_led", RPROC_SCU,
 				RP_MSIC_KPD_LED);
 
