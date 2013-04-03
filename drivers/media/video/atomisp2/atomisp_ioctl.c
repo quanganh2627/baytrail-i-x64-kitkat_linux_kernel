@@ -1118,8 +1118,12 @@ done:
 		goto error;
 
 	/* TODO: do this better, not best way to queue to css */
-	if (isp->streaming == ATOMISP_DEVICE_STREAMING_ENABLED)
+	if (isp->streaming == ATOMISP_DEVICE_STREAMING_ENABLED) {
 		atomisp_qbuffers_to_css(isp);
+
+		if (!timer_pending(&isp->wdt) && atomisp_buffers_queued(isp))
+			mod_timer(&isp->wdt, jiffies + isp->wdt_duration);
+	}
 	mutex_unlock(&isp->mutex);
 	return ret;
 
@@ -1375,7 +1379,8 @@ static int atomisp_streamon(struct file *file, void *fh,
 		isp->wdt_duration = ATOMISP_ISP_FILE_TIMEOUT_DURATION;
 	else
 		isp->wdt_duration = ATOMISP_ISP_TIMEOUT_DURATION;
-	mod_timer(&isp->wdt, jiffies + isp->wdt_duration);
+	if (atomisp_buffers_queued(isp))
+		mod_timer(&isp->wdt, jiffies + isp->wdt_duration);
 	isp->fr_status = ATOMISP_FRAME_STATUS_OK;
 	isp->sw_contex.invalid_frame = false;
 	isp->params.dis_proj_data_valid = false;
