@@ -39,6 +39,7 @@
 #include <linux/uaccess.h>
 #include <linux/sfi.h>
 #include <linux/io.h>
+#include <linux/workqueue.h>
 
 #include <asm/msr.h>
 #include <asm/processor.h>
@@ -56,6 +57,17 @@ DEFINE_PER_CPU(struct sfi_processor *, sfi_processors);
 static DEFINE_MUTEX(performance_mutex);
 static int sfi_cpufreq_num;
 static u32 sfi_cpu_num;
+static int cpufreqidx = -1;
+
+static struct workqueue_struct *my_workqueue;
+#define		RELEASE_CAP_DELAY	30000
+#define		MAX_FREQ_INDEX		0
+#define		CPU_FREQ_WORK_QUEUE	"CFreq_queue"
+static void release_freq_cap(struct delayed_work *work);
+struct release_cap_wk {
+	struct delayed_work cpufreq_work;
+	struct cpufreq_policy *policy;
+};
 
 #define		SFI_FREQ_MAX            32
 #define		INTEL_MSR_RANGE		(0xffff)
@@ -308,6 +320,22 @@ static unsigned int cpufreq_get_load(struct cpufreq_policy *policy,
 	return (unsigned int)load;
 }
 #endif
+
+static void release_freq_cap(struct delayed_work *work)
+{
+	struct cpufreq_frequency_table *freq_table;
+	unsigned int i;
+	struct cpufreq_policy *policy;
+	struct release_cap_wk *wk = (struct release_cap_wk *)work;
+	if (cpufreqidx > MAX_FREQ_INDEX) {
+		freq_table =
+			cpufreq_frequency_get_table(wk->policy->cpu);
+		if (freq_table[cpufreqidx].frequency == wk->policy->max) {
+			wk->policy->max = \
+			freq_table[MAX_FREQ_INDEX].frequency;
+		}
+	}
+}
 
 static int parse_freq(struct sfi_table_header *table)
 {
@@ -562,7 +590,6 @@ static int __init sfi_cpufreq_early_init(void)
 	return 0;
 }
 
-
 static int sfi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	unsigned int i;
@@ -573,6 +600,7 @@ static int sfi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	struct cpuinfo_x86 *c = &cpu_data(policy->cpu);
 	struct sfi_processor_performance *perf;
 	u32 lo, hi;
+	struct release_cap_wk *work;
 
 	pr_debug("sfi_cpufreq_cpu_init CPU:%d\n", policy->cpu);
 
@@ -672,6 +700,26 @@ static int sfi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	 */
 	data->resume = 1;
 
+	if ((cpufreqidx > 0) && (cpufreqidx < valid_states)) {
+		unsigned int freq = data->freq_table[cpufreqidx].frequency;
+		if (freq != CPUFREQ_ENTRY_INVALID) {
+			policy->max = freq;
+			if (!my_workqueue) {
+				my_workqueue = \
+				create_workqueue(CPU_FREQ_WORK_QUEUE);
+			}
+			work  = kmalloc(sizeof(struct release_cap_wk),
+					GFP_KERNEL);
+			if (work) {
+				INIT_DELAYED_WORK((struct delayed_work *)work,
+					release_freq_cap);
+				work->policy = policy;
+				queue_delayed_work(my_workqueue,
+					(struct delayed_work *)work,
+					msecs_to_jiffies(RELEASE_CAP_DELAY));
+			}
+		}
+	}
 	return result;
 
 err_freqfree:
@@ -730,6 +778,28 @@ static struct cpufreq_driver sfi_cpufreq_driver = {
 	.owner = THIS_MODULE,
 	.attr = sfi_cpufreq_attr,
 };
+
+/**
+ * get_freqidx - get_freqidx command line parameter parsing "capfreq" from
+ * command line parameter.
+ * Use: read the "capfreq" index from the command line for selecting max boot
+ * frequency from the frequency table.
+ * Based on the  "capfreq" index input parameter, will select the frequency
+ * from the frequency table and set as a maximum scaling frequency at the boot
+ * to limit the burst current during boot time.
+ */
+static int __init get_freqidx(char *freqidx)
+{
+	if (!freqidx)
+		return -EINVAL;
+
+	kstrtoul(freqidx, 0, (long unsigned int *)&cpufreqidx);
+	printk(KERN_NOTICE
+		"Shall use max scaling cpu freq from freq table index %d\n",
+		cpufreqidx);
+	return 0;
+}
+early_param("capfreq", get_freqidx);
 
 static int __init parse_cpus(struct sfi_table_header *table)
 {
@@ -802,6 +872,8 @@ static void __exit sfi_cpufreq_exit(void)
 
 	pr_debug("sfi_cpufreq_exit\n");
 
+	if (my_workqueue)
+		destroy_workqueue(my_workqueue);
 	pr = per_cpu(sfi_processors, 0);
 	kfree(pr);
 
