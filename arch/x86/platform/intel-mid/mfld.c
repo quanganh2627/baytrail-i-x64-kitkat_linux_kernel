@@ -35,7 +35,6 @@
 #include <asm/io.h>
 #include <asm/i8259.h>
 #include <asm/intel_scu_ipc.h>
-#include <asm/intel_mid_rpmsg.h>
 #include <asm/apb_timer.h>
 #include <asm/reboot.h>
 
@@ -58,7 +57,7 @@ static void mfld_power_off(void)
 		 * make a force shutdown, even if the charger is
 		 * connected, dont boot(up to COS).
 		 */
-		rpmsg_send_generic_simple_command(IPCMSG_COLD_RESET, 0);
+		intel_scu_ipc_simple_command(IPCMSG_COLD_RESET, 0);
 	} else
 #endif
 	pmu_power_off();

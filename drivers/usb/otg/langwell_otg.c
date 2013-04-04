@@ -36,7 +36,6 @@
 #include <linux/notifier.h>
 #include <linux/delay.h>
 #include <asm/intel_scu_ipc.h>
-#include <asm/intel_mid_rpmsg.h>
 
 #include <linux/usb/langwell_otg.h>
 
@@ -154,7 +153,7 @@ static int langwell_otg_set_vbus(struct otg_transceiver *otg, bool enabled)
 	else
 		sub_id = 0x9; /* Turn off the VBus */
 
-	if (rpmsg_send_generic_simple_command(0xef, sub_id)) {
+	if (intel_scu_ipc_simple_command(0xef, sub_id)) {
 		dev_dbg(lnw->dev, "Failed to set Vbus via IPC commands\n");
 		return -EBUSY;
 	}

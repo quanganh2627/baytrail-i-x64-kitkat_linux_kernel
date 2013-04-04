@@ -25,11 +25,11 @@
 #include <linux/gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/mmc/sdhci-pci-data.h>
+#include <linux/syscalls.h>
 
 #include <asm/intel_scu_ipc.h>
 #include <asm/intel_scu_flis.h>
 #include <asm/intel_scu_pmic.h>
-#include <asm/intel_mid_rpmsg.h>
 
 #include "sdhci.h"
 
@@ -274,7 +274,7 @@ static void mfd_emmc_mutex_register(struct sdhci_pci_slot *slot)
 	u32 mutex_var_addr;
 	int err;
 
-	err = rpmsg_send_generic_command(IPC_EMMC_MUTEX_CMD, 0,
+	err = intel_scu_ipc_command(IPC_EMMC_MUTEX_CMD, 0,
 			NULL, 0, &mutex_var_addr, 1);
 	if (err) {
 		dev_err(&slot->chip->pdev->dev, "IPC error: %d\n", err);
@@ -2008,6 +2008,33 @@ err:
 	return ret;
 }
 
+static void __devexit sdhci_pci_shutdown(struct pci_dev *pdev)
+{
+	int i;
+	struct sdhci_pci_chip *chip;
+
+	chip = pci_get_drvdata(pdev);
+
+	/* sync data before reboot */
+	sys_sync();
+
+	if (chip) {
+		if (chip->allow_runtime_pm) {
+			pm_runtime_get_sync(&pdev->dev);
+			pm_runtime_disable(&pdev->dev);
+			pm_runtime_put_noidle(&pdev->dev);
+		}
+
+		for (i = 0; i < chip->num_slots; i++)
+			sdhci_pci_remove_slot(chip->slots[i]);
+
+		pci_set_drvdata(pdev, NULL);
+		kfree(chip);
+	}
+
+	pci_disable_device(pdev);
+}
+
 static void __devexit sdhci_pci_remove(struct pci_dev *pdev)
 {
 	int i;
@@ -2034,6 +2061,7 @@ static struct pci_driver sdhci_driver = {
 	.id_table =	pci_ids,
 	.probe =	sdhci_pci_probe,
 	.remove =	__devexit_p(sdhci_pci_remove),
+	.shutdown =	__devexit_p(sdhci_pci_shutdown),
 	.driver =	{
 		.pm =   &sdhci_pci_pm_ops
 	},

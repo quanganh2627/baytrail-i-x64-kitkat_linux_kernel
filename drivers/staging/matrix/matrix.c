@@ -30,7 +30,6 @@
 #include <linux/version.h>
 #include <asm/intel_scu_ipc.h>
 #include <asm/intel_scu_pmic.h>
-#include <asm/intel_mid_rpmsg.h>
 #include <asm/intel-mid.h>
 #include <linux/kdev_t.h>
 #include <asm/paravirt.h>
@@ -258,7 +257,7 @@ static struct mtx_size_info xhg_buf_info;
 						ctrl_data & 0xFF; \
 			scu_sub_cmd = (ptr_lut->mmap_##state[lut_loop]. \
 						ctrl_data >> 12) & 0xF; \
-			if ((rpmsg_send_generic_simple_command \
+			if ((intel_scu_ipc_simple_command \
 				     (scu_cmd, scu_sub_cmd)) != 0) { \
 				dev_dbg(matrix_device, \
 					"Unable to get SCU data..\n"); \
