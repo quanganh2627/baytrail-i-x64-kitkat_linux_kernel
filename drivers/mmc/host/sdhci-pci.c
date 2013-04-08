@@ -394,6 +394,45 @@ static const struct sdhci_pci_fixes sdhci_intel_mrst_hc1_hc2 = {
 #define ENCTRL0_OFF		0x10
 #define ENCTRL1_OFF		0x11
 
+static int intel_mfld_clv_sd_power_off(struct sdhci_pci_chip *chip)
+{
+	int err;
+	u16 addr;
+	u8 data;
+
+	pr_info("SDHCI device %04X: power off SD card.\n", chip->pdev->device);
+
+	/* isolate shim */
+	err = intel_scu_ipc_write_shim(ENCTRL0_ISOLATE,
+			STORAGESTIO_FLISNUM, ENCTRL0_OFF);
+	if (err) {
+		pr_err("SDHCI device %04X: ENCTRL0 ISOLATE failed, err %d\n",
+				chip->pdev->device, err);
+		return err;
+	}
+
+	err = intel_scu_ipc_write_shim(ENCTRL1_ISOLATE,
+			STORAGESTIO_FLISNUM, ENCTRL1_OFF);
+	if (err) {
+		pr_err("SDHCI device %04X: ENCTRL1 ISOLATE failed, err %d\n",
+				chip->pdev->device, err);
+		return err;
+	}
+
+	/* power off the VCCSDIO */
+	addr = VCCSDIO_ADDR;
+	data = VCCSDIO_OFF;
+	err = intel_scu_ipc_writev(&addr, &data, 1);
+	if (err) {
+		pr_err("SDHCI device %04X: VCCSDIO turn off failed, err %d\n",
+				chip->pdev->device, err);
+		return err;
+	}
+
+	return 0;
+
+}
+
 static int intel_mfld_clv_sd_suspend(struct sdhci_pci_chip *chip)
 {
 	int err, i;
@@ -2029,11 +2068,25 @@ static void __devexit sdhci_pci_remove(struct pci_dev *pdev)
 	pci_disable_device(pdev);
 }
 
+static void __devexit sdhci_pci_shutdown(struct pci_dev *pdev)
+{
+	int i;
+	struct sdhci_pci_chip *chip;
+
+	chip = pci_get_drvdata(pdev);
+
+	if (chip->pdev->device != PCI_DEVICE_ID_INTEL_CLV_SDIO0)
+		return 0;
+
+	intel_mfld_clv_sd_power_off(chip);
+}
+
 static struct pci_driver sdhci_driver = {
 	.name =		"sdhci-pci",
 	.id_table =	pci_ids,
 	.probe =	sdhci_pci_probe,
 	.remove =	__devexit_p(sdhci_pci_remove),
+	.shutdown =	__devexit_p(sdhci_pci_shutdown),
 	.driver =	{
 		.pm =   &sdhci_pci_pm_ops
 	},
