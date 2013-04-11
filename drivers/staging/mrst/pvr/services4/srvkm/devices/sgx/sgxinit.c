@@ -68,6 +68,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "srvkm.h"
 #include "ttrace.h"
 #include <linux/delay.h>
+#include <linux/printk.h>
+#include <linux/history_record.h>
 
 
 extern int drm_psb_dump_pm_history;
@@ -955,6 +957,12 @@ PVRSRV_ERROR DevInitSGXPart2KM (PVRSRV_PER_PROCESS_DATA *psPerProc,
 	PDUMPCOMMENT("SGX Initialisation Part 2");
 
 	psDeviceNode = (PVRSRV_DEVICE_NODE *)hDevHandle;
+	if (!psDeviceNode)
+	{
+		PVR_DPF((PVR_DBG_ERROR,"DevInitSGXPart2KM: Invalid parameter!"));
+		return PVRSRV_ERROR_INVALID_PARAMS;
+        }
+
 	psDevInfo = (PVRSRV_SGXDEV_INFO *)psDeviceNode->pvDevice;
 
 	/*
@@ -1885,6 +1893,7 @@ SGX_NoUKernel_LockUp:
 IMG_BOOL SGX_ISRHandler (IMG_VOID *pvData)
 {
 	IMG_BOOL bInterruptProcessed = IMG_FALSE;
+	struct saved_history_record *precord = NULL;
 
 
 	/* Real Hardware */
@@ -1959,6 +1968,20 @@ IMG_BOOL SGX_ISRHandler (IMG_VOID *pvData)
 				interrupt.
 			*/
 			g_ui32HostIRQCountSample = psDevInfo->psSGXHostCtl->ui32InterruptCount;
+
+			precord = get_new_history_record();
+			if (precord) {
+				precord->type = 1;
+				precord->record_value.sgx.HostIrqCountSample = g_ui32HostIRQCountSample;
+				precord->record_value.sgx.InterruptCount = psDevInfo->psSGXHostCtl->ui32InterruptCount;
+			}
+		} else {
+			precord = get_new_history_record();
+			if (precord) {
+				precord->type = 2;
+				precord->record_value.sgx.HostIrqCountSample = g_ui32HostIRQCountSample;
+				precord->record_value.sgx.InterruptCount = psDevInfo->psSGXHostCtl->ui32InterruptCount;
+			}
 		}
 	}
 
