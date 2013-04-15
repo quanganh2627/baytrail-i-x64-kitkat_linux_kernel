@@ -883,7 +883,11 @@ static struct snd_compr_ops sst_platform_compr_ops = {
 
 static int __devinit sst_soc_probe(struct snd_soc_platform *platform)
 {
-	pr_debug("%s called\n", __func__);
+	struct sst_data *ctx = snd_soc_platform_get_drvdata(platform);
+	struct soft_platform_id spid;
+
+	memcpy(&spid, ctx->pdata->spid, sizeof(spid));
+	pr_debug("Enter:%s\n", __func__);
 	if (INTEL_MID_BOARD(1, PHONE, CLVTP) ||
 			INTEL_MID_BOARD(1, TABLET, CLVT))
 		return sst_platform_clv_init(platform);
