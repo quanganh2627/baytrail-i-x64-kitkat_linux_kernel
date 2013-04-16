@@ -2265,14 +2265,21 @@ static void bq24192_event_worker(struct work_struct *work)
 		mutex_lock(&chip->event_lock);
 		if (chip->cap.chrg_evt ==
 			POWER_SUPPLY_CHARGER_EVENT_SUSPEND) {
+			dev_info(&chip->client->dev, "Suspend event triggered\n");
+			mutex_unlock(&chip->event_lock);
+			/* Cancel the maintenance worker here */
+			cancel_delayed_work_sync(&chip->maint_chrg_wrkr);
+			mutex_lock(&chip->event_lock);
 			chip->present = 1;
+			chip->online = 0;
+			chip->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		} else {
 			chip->present = 0;
+			chip->online = 0;
+			chip->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 			chip->chrg_type = chip->cap.chrg_type;
 			chip->usb.type = POWER_SUPPLY_TYPE_USB;
 		}
-		chip->online = 0;
-		chip->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 		if (chip->votg) {
 				ret = bq24192_turn_otg_vbus(chip, false);
 				if (ret < 0) {
