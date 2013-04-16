@@ -2070,7 +2070,6 @@ static void __devexit sdhci_pci_remove(struct pci_dev *pdev)
 
 static void __devexit sdhci_pci_shutdown(struct pci_dev *pdev)
 {
-	int i;
 	struct sdhci_pci_chip *chip;
 
 	chip = pci_get_drvdata(pdev);
