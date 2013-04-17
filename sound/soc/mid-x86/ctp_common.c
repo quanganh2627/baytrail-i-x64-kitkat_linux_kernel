@@ -32,6 +32,7 @@
 #include <linux/wakelock.h>
 #include <linux/gpio.h>
 #include <linux/rpmsg.h>
+#include <linux/mod_devicetable.h>
 #include <asm/intel_mid_gpadc.h>
 #include <asm/intel_scu_pmic.h>
 #include <asm/intel_scu_ipcutil.h>
@@ -420,7 +421,7 @@ static int snd_ctp_prepare(struct device *dev)
 	}
 	return snd_soc_suspend(dev);
 }
-static int snd_ctp_complete(struct device *dev)
+static void snd_ctp_complete(struct device *dev)
 {
 	struct snd_soc_card *card = dev_get_drvdata(dev);
 	struct ctp_mc_private *ctx = snd_soc_card_get_drvdata(card);
@@ -433,14 +434,13 @@ static int snd_ctp_complete(struct device *dev)
 			ctx->ops->mclk_switch(dev, true);
 		}
 	}
-	return snd_soc_resume(dev);
+	snd_soc_resume(dev);
 }
 
-static void snd_ctp_poweroff(struct device *dev)
+static int snd_ctp_poweroff(struct device *dev)
 {
 	pr_debug("In %s\n", __func__);
-	snd_soc_poweroff(dev);
-	return 0;
+	return snd_soc_poweroff(dev);
 }
 
 #else
@@ -452,7 +452,7 @@ static void snd_ctp_poweroff(struct device *dev)
 static void free_jack_wake_lock(struct ctp_mc_private *ctx)
 {
 	if (!ctx->ops->jack_support)
-		return 0;
+		return;
 #ifdef CONFIG_HAS_WAKELOCK
 	if (wake_lock_active(ctx->jack_wake_lock))
 		wake_unlock(ctx->jack_wake_lock);
@@ -571,7 +571,6 @@ static int snd_ctp_mc_probe(struct platform_device *pdev)
 {
 	int ret_val = 0;
 	struct ctp_mc_private *ctx;
-	struct ctp_audio_platform_data *pdata = pdev->dev.platform_data;
 
 	pr_debug("In %s\n", __func__);
 	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_ATOMIC);
@@ -582,7 +581,7 @@ static int snd_ctp_mc_probe(struct platform_device *pdev)
 	/* register the soc card */
 	snd_soc_card_ctp.dev = &pdev->dev;
 
-	ctx->ops = platform_get_device_id(pdev)->driver_data;
+	ctx->ops = (struct snd_soc_machine_ops *)platform_get_device_id(pdev)->driver_data;
 	if (ctx->ops == NULL)
 		return -EINVAL;
 
@@ -616,11 +615,11 @@ const struct dev_pm_ops snd_ctp_mc_pm_ops = {
 static struct platform_device_id ctp_audio_ids[] = {
 	{
 		.name		= "ctp_rhb_cs42l73",
-		.driver_data	= &ctp_rhb_cs42l73_ops,
+		.driver_data	= (kernel_ulong_t)&ctp_rhb_cs42l73_ops,
 	},
 	{
 		.name		= "ctp_vb_cs42l73",
-		.driver_data	= &ctp_vb_cs42l73_ops,
+		.driver_data	= (kernel_ulong_t)&ctp_vb_cs42l73_ops,
 	},
 	{ },
 };

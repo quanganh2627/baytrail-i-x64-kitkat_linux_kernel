@@ -534,7 +534,7 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 		if (!sst_drv_ctx->debugfs.ssp)
 			goto do_unmap_dram;
 
-		pr_debug("\n ssp io 0x%x ssp 0x%x size 0x%x",
+		pr_debug("\n ssp io 0x%p ssp 0x%x size 0x%x",
 			sst_drv_ctx->debugfs.ssp,
 			SSP_BASE_CTP, SSP_SIZE_CTP);
 
@@ -543,7 +543,7 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 		if (!sst_drv_ctx->debugfs.dma_reg)
 			goto do_unmap_ssp;
 
-		pr_debug("\n dma io 0x%x ssp 0x%x size 0x%x",
+		pr_debug("\n dma io 0x%p ssp 0x%x size 0x%x",
 			sst_drv_ctx->debugfs.dma_reg,
 			DMA_BASE_CTP, DMA_SIZE_CTP);
 	}
@@ -582,7 +582,7 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 	sst_set_fw_state_locked(sst_drv_ctx, SST_UN_INIT);
 	/* Register the ISR */
 	ret = request_threaded_irq(pci->irq, sst_drv_ctx->ops->interrupt,
-		sst_drv_ctx->ops->irq_thread, NULL, SST_DRV_NAME,
+		sst_drv_ctx->ops->irq_thread, 0, SST_DRV_NAME,
 		sst_drv_ctx);
 	if (ret)
 		goto do_free_probe_bytes;
@@ -854,7 +854,6 @@ static int sst_save_dsp_context2(struct intel_sst_drv *sst)
 	if (sst_create_block_and_ipc_msg(&msg, true, sst, &block,
 				IPC_CMD, pvt_id)) {
 		pr_err("msg/block alloc failed. Not proceeding with context save\n");
-		return;
 	}
 
 	sst_fill_header_mrfld(&msg->mrfld_header, IPC_CMD,

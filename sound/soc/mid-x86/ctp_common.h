@@ -94,8 +94,8 @@ static inline struct ctp_mc_private
 static inline void ctp_config_voicecall_flag(
 		struct snd_pcm_substream *substream, bool state)
 {
-	pr_debug("%s voice call flag: %d\n", __func__, state);
 	struct ctp_mc_private *ctx = substream_to_drv_ctx(substream);
+	pr_debug("%s voice call flag: %d\n", __func__, state);
 	ctx->voice_call_flag = state;
 }
 
