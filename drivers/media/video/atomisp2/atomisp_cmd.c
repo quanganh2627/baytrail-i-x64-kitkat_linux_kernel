@@ -854,9 +854,7 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 					v4l2_dbg(3, dbg_level, &atomisp_dev, "%s thumb no flash in this frame\n",__func__);
 			}
 			vb = atomisp_css_frame_to_vbuf(pipe, buffer);
-			if (!vb)
-				v4l2_err(&atomisp_dev,
-						"dequeued frame unknown!");
+			WARN_ON(!vb);
 			break;
 		case SH_CSS_BUFFER_TYPE_OUTPUT_FRAME:
 			if (isp->sw_contex.invalid_frame) {
@@ -869,6 +867,10 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 			pipe->buffers_in_css--;
 			vb = atomisp_css_frame_to_vbuf(pipe, buffer);
 			frame = buffer;
+			if (!vb) {
+				WARN_ON(1);
+				break;
+			}
 
 			if (isp->params.flash_state == ATOMISP_FLASH_ONGOING) {
 				if (frame->flash_state
@@ -903,9 +905,6 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 
 			isp->params.last_frame_status = isp->frame_status[vb->i];
 
-			if (!vb)
-				v4l2_err(&atomisp_dev,
-						"dequeued frame unknown!");
 			break;
 		default:
 			break;
