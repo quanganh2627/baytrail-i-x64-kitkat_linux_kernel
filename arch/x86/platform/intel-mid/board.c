@@ -45,6 +45,7 @@
 #include "device_libs/platform_mrfl_pmic.h"
 #include "device_libs/platform_mrfl_thermal.h"
 #include "device_libs/platform_mrfl_pmic_i2c.h"
+#include "device_libs/platform_scu_log.h"
 #include <asm/platform_mrfld_audio.h>
 
 /* I2C devices */
@@ -168,6 +169,8 @@ struct devs_id __initconst device_ids[] = {
 						&ipc_device_handler},
 	{"soc_thrm", SFI_DEV_TYPE_IPC, 1, &no_platform_data,
 					&soc_thrm_device_handler},
+	{"scuLog", SFI_DEV_TYPE_IPC, 1, &scu_log_platform_data,
+					&ipc_device_handler},
 
 	/* I2C devices for camera image subsystem */
 	{"lm3554", SFI_DEV_TYPE_I2C, 0, &lm3554_platform_data_func,
