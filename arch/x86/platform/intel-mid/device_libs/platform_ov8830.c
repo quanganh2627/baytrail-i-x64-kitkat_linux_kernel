@@ -121,7 +121,7 @@ static int ov8830_csi_configure(struct v4l2_subdev *sd, int flag)
 {
 	static const int LANES = 4;
 	return camera_sensor_csi(sd, ATOMISP_CAMERA_PORT_PRIMARY, LANES,
-		-1, 0, flag);
+		ATOMISP_INPUT_FORMAT_RAW_10, atomisp_bayer_order_bggr, flag);
 }
 
 /*
@@ -162,6 +162,8 @@ static int ov8830_platform_deinit(void)
 		return 0;
 
 	regulator_put(vprog1_reg);
+
+	return 0;
 }
 static struct camera_sensor_platform_data ov8830_sensor_platform_data = {
 	.gpio_ctrl      = ov8830_gpio_ctrl,

@@ -1002,12 +1002,168 @@ static struct class thermal_class = {
 	.name = "thermal",
 	.dev_release = thermal_release,
 };
+#define THERMAL_WAKE_TIMER
+#ifdef THERMAL_WAKE_TIMER
+/* default expiry for deferrable timer */
+#define DEFERRABLE_TIMEOUT      29
+static DEFINE_MUTEX(def_timer_lock);
+struct deferrable_timer {
+	struct device dev;
+	struct work_struct uevent_work;
+	struct timer_list timer;
+	struct timer_list wdtimer;
+	unsigned int timeout;
+	unsigned int enabled;
+	int updated_once;
+};
+
+static struct deferrable_timer *dt;
+static void dt_timer(unsigned long data);
+/**
+ * this function is just a no-op. the deferable
+ * timer should fire when we are here!
+ */
+static void wd_timer(unsigned long data)
+{
+	return;
+};
+static void dt_uevent_helper(struct work_struct *work);
+#define to_dt(_dev)     container_of(_dev, struct deferrable_timer, dev)
+static int dt_activate_once(struct deferrable_timer *dt)
+{
+	INIT_WORK((&dt->uevent_work), dt_uevent_helper);
+	init_timer_deferrable(&dt->timer);
+	dt->timer.data = (unsigned long) dt;
+	dt->timer.function = dt_timer;
+	dt->timer.expires = jiffies + (dt->timeout * HZ);
+	add_timer(&dt->timer);
+
+	/**
+	 * another normal timer acts as a hard limit backup,
+	 * but this timer func does nothing! the wake was enough
+	 */
+	init_timer(&dt->wdtimer);
+	dt->wdtimer.data = (unsigned long) dt;
+	dt->wdtimer.function = wd_timer;
+	dt->wdtimer.expires = jiffies + (2 * dt->timeout * HZ);
+	add_timer(&dt->wdtimer);
+	return 0;
+}
+
+static ssize_t show_dt_enabled(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct deferrable_timer *dt = to_dt(dev);
+	return sprintf(buf, "%u\n", dt->enabled);
+}
+static ssize_t show_dt_timeout(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf,  size_t count)
+{
+	struct deferrable_timer *dt = to_dt(dev);
+	return sprintf(buf, "%u\n", dt->timeout);
+}
+
+static ssize_t set_dt_enable_once(struct device *dev,
+					struct device_attribute *attr,
+					char *buf, size_t count)
+{
+	unsigned int enable;
+	struct deferrable_timer *dt = to_dt(dev);
+
+	if (kstrtouint(buf, 10, &enable))
+		return -EINVAL;
+
+	mutex_lock(&def_timer_lock);
+	/* one time operation. disallow subsequent writes */
+	if (!dt->updated_once) {
+		dt->enabled = enable;
+		dt->updated_once = 1;
+		if (dt->enabled)
+			dt_activate_once(dt);
+	}
+	mutex_unlock(&def_timer_lock);
+	return count;
+
+}
+static ssize_t set_dt_timeout(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf,  size_t count)
+{
+	struct deferrable_timer *dt = to_dt(dev);
+	int timeout = 0;
+
+	if (kstrtoint(buf, 10, &timeout))
+		return -EINVAL;
+
+	if (timeout <= 0)
+		return count;
+
+	mutex_lock(&def_timer_lock);
+	dt->timeout = timeout;
+	mutex_unlock(&def_timer_lock);
+	return count;
+
+}
+static struct device_attribute dev_attrs[] = {
+	__ATTR(enable, S_IRUGO | S_IWUSR, show_dt_enabled, set_dt_enable_once),
+	__ATTR(timeout, S_IRUGO | S_IWUSR, show_dt_timeout, set_dt_timeout)
+};
+
+static void dt_uevent_helper(struct work_struct *work)
+{
+	struct deferrable_timer *dt =
+		container_of(work, struct deferrable_timer, uevent_work);
+	kobject_uevent(&dt->dev.kobj, KOBJ_CHANGE);
+}
+static void dt_timer(unsigned long data)
+{
+	struct deferrable_timer *dt = (struct deferrable_timer *)data;
+	if (dt->enabled) {
+		schedule_work(&dt->uevent_work);
+		mod_timer(&dt->timer, jiffies + (dt->timeout * HZ));
+		mod_timer(&dt->wdtimer, jiffies + 2 * dt->timeout * HZ);
+	} else {
+		cancel_work_sync(&dt->uevent_work);
+	}
+}
+static int dt_init(void)
+{
+	int ret, ret0, ret1;
+	dt = kzalloc(sizeof(struct deferrable_timer), GFP_KERNEL);
+	if (!dt)
+		return ERR_PTR(-ENOMEM);
+	dt->dev.class = &thermal_class;
+	dev_set_name(&dt->dev, "deferrable_timer");
+	ret = device_register(&dt->dev);
+	if (ret) {
+		kfree(dt);
+		return ret;
+	}
+	ret0 = device_create_file(&dt->dev, &dev_attrs[0]);
+	if (ret0)
+		goto exit0;
+
+	ret1 = device_create_file(&dt->dev, &dev_attrs[1]);
+	if (ret1)
+		goto exit1;
+	dt->timeout = DEFERRABLE_TIMEOUT;
+	return 0;
+exit1:
+	device_remove_file(&dt->dev, &dev_attrs[0]);
+exit0:
+	device_unregister(&dt->dev);
+	kfree(dt);
+	return ERR_PTR(ret);
+}
+#endif
 
 /**
  * thermal_cooling_device_register - register a new thermal cooling device
  * @type:	the thermal cooling device type.
  * @devdata:	device private data.
- * @ops:		standard thermal cooling devices callbacks.
+ * @ops:	standard thermal cooling devices callbacks.
  */
 struct thermal_cooling_device *
 thermal_cooling_device_register(char *type, void *devdata,
@@ -1306,7 +1462,7 @@ struct thermal_zone_device *thermal_zone_device_register(char *type,
 	struct thermal_zone_device *tz;
 	struct thermal_cooling_device *pos;
 	enum thermal_trip_type trip_type;
-	int result;
+	int result, ret;
 	int count;
 	int passive = 0;
 
@@ -1426,6 +1582,15 @@ struct thermal_zone_device *thermal_zone_device_register(char *type,
 
 	thermal_zone_device_update(tz);
 
+	/* start deferrable timer once, if there is one or more tz register*/
+#ifdef THERMAL_WAKE_TIMER
+	if (!dt) {
+		ret = dt_init();
+		if (ret)
+			printk(KERN_DEBUG pr_fmt(
+			"Cant init Thermal deferrable timer: err %d\n"), ret);
+	}
+#endif
 	if (!result)
 		return tz;
 
@@ -1615,6 +1780,13 @@ static void __exit thermal_exit(void)
 	mutex_destroy(&thermal_idr_lock);
 	mutex_destroy(&thermal_list_lock);
 	genetlink_exit();
+#ifdef THERMAL_WAKE_TIMER
+	if (dt) {
+		del_timer_sync(&dt->timer);
+		del_timer_sync(&dt->wdtimer);
+		kfree(dt);
+	}
+#endif
 }
 
 fs_initcall(thermal_init);

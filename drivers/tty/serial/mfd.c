@@ -125,6 +125,7 @@ struct uart_hsu_port {
 struct hsu_port {
 	void __iomem	*reg;
 	int		dma_irq;
+	int		port_suspend;
 	unsigned long	paddr;
 	unsigned long	iolen;
 	struct uart_hsu_port	port[4];
@@ -2249,6 +2250,8 @@ static bool allow_for_suspend(struct uart_hsu_port *up)
 		return false;
 	}
 
+	disable_irq(up->port.irq);
+
 	if (up->running) {
 		if (up->dma_rx_on && dmarx_need_timer(up))
 			del_timer_sync(&up->rxc->rx_timer);
@@ -2308,6 +2311,7 @@ rx_dma_run:
 					jiffies + HSU_DMA_TIMEOUT_CHECK_FREQ);
 		}
 	}
+	enable_irq(up->port.irq);
 
 	return false;
 }
@@ -2360,6 +2364,23 @@ static int hsu_runtime_idle(struct device *dev)
 	return -EBUSY;
 }
 
+static int hsu_enable_dma_irq(bool en)
+{
+	static DEFINE_MUTEX(dma_lock);
+
+	mutex_lock(&dma_lock);
+	if (en) {
+		if (phsu->port_suspend == 3)
+			enable_irq(phsu->dma_irq);
+		phsu->port_suspend--;
+	} else {
+		phsu->port_suspend++;
+		if (phsu->port_suspend == 3)
+			disable_irq(phsu->dma_irq);
+	}
+	mutex_unlock(&dma_lock);
+}
+
 static int hsu_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
@@ -2380,8 +2401,7 @@ static int hsu_runtime_suspend(struct device *dev)
 			clear_bit(PM_WAKEUP, &up3->pm_flags);
 	}
 #endif
-
-	disable_irq(up->port.irq);
+	hsu_enable_dma_irq(false);
 
 	if (up->index == logic_idx) {
 		struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
@@ -2410,7 +2430,8 @@ static int hsu_runtime_resume(struct device *dev)
 		}
 	}
 
-	enable_irq(up->port.irq);
+	hsu_enable_dma_irq(true);
+
 	if (up->dma_rx_on || dma_rx_on)
 		chan_writel(up->rxc, HSU_CH_CR, 0x3);
 
@@ -2426,6 +2447,7 @@ static int hsu_runtime_resume(struct device *dev)
 		if (up3->running)
 			intel_mid_hsu_resume(up3->index);
 	}
+	enable_irq(up->port.irq);
 
 	return 0;
 }
@@ -2483,7 +2505,8 @@ static int hsu_suspend(struct device *dev)
 		if (!allow_for_suspend(up))
 			return -EBUSY;
 
-		disable_irq(up->port.irq);
+		hsu_enable_dma_irq(false);
+
 		if (up->index == logic_idx) {
 			struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
 			if (up3->running) {
@@ -2515,7 +2538,7 @@ static int hsu_resume(struct device *dev)
 		up = priv;
 
 		if (up->suspended)
-			enable_irq(up->port.irq);
+			hsu_enable_dma_irq(true);
 
 		if (up->index == logic_idx) {
 			struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
@@ -2529,12 +2552,13 @@ static int hsu_resume(struct device *dev)
 		}
 
 		if (up->suspended && up->running) {
-			up->suspended = 0;
 			uart_resume_port(&serial_hsu_reg, &up->port);
 			intel_mid_hsu_resume(up->index);
 			schedule_work(&up->qwork);
-		} else
-			up->suspended = 0;
+		}
+		if (up->suspended)
+			enable_irq(up->port.irq);
+		up->suspended = 0;
 	}
 	return 0;
 }

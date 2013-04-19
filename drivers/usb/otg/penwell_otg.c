@@ -3549,7 +3549,8 @@ static void penwell_otg_work(struct work_struct *work)
 			hsm->a_srp_det = 0;
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			PNW_STOP_HOST(pnw);
 
@@ -3576,7 +3577,8 @@ static void penwell_otg_work(struct work_struct *work)
 			hsm->b_bus_req = 0;
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			PNW_STOP_HOST(pnw);
 
@@ -3591,7 +3593,8 @@ static void penwell_otg_work(struct work_struct *work)
 			hsm->b_bus_req = 0;
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			PNW_STOP_HOST(pnw);
 			hsm->a_bus_suspend = 0;
@@ -3808,7 +3811,8 @@ static void penwell_otg_work(struct work_struct *work)
 			penwell_otg_del_timer(TA_WAIT_BCON_TMR);
 
 			/* Start HNP polling */
-			iotg->start_hnp_poll(iotg);
+			if (iotg->start_hnp_poll)
+				iotg->start_hnp_poll(iotg);
 
 			if (!hsm->a_bus_req)
 				hsm->a_bus_req = 1;
@@ -3840,7 +3844,8 @@ static void penwell_otg_work(struct work_struct *work)
 							CHRG_CURR_ACA);
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			penwell_otg_phy_low_power(0);
 
@@ -3860,7 +3865,8 @@ static void penwell_otg_work(struct work_struct *work)
 			hsm->test_device = 0;
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			penwell_otg_phy_low_power(0);
 
@@ -3897,7 +3903,8 @@ static void penwell_otg_work(struct work_struct *work)
 			}
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			PNW_STOP_HOST(pnw);
 
@@ -3913,7 +3920,8 @@ static void penwell_otg_work(struct work_struct *work)
 			/* Move to A_SUSPEND state */
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			/* According to Spec 7.1.5 */
 			penwell_otg_add_timer(TA_AIDL_BDIS_TMR);
@@ -3950,7 +3958,8 @@ static void penwell_otg_work(struct work_struct *work)
 			penwell_otg_del_timer(TTST_MAINT_TMR);
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			penwell_otg_phy_low_power(0);
 
@@ -3975,7 +3984,8 @@ static void penwell_otg_work(struct work_struct *work)
 			}
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			/* add kernel timer */
 			iotg->otg.state = OTG_STATE_A_WAIT_BCON;
@@ -4007,7 +4017,8 @@ static void penwell_otg_work(struct work_struct *work)
 							CHRG_CURR_ACA);
 
 			/* Stop HNP polling */
-			iotg->stop_hnp_poll(iotg);
+			if (iotg->stop_hnp_poll)
+				iotg->stop_hnp_poll(iotg);
 
 			PNW_STOP_HOST(pnw);
 
@@ -4083,7 +4094,8 @@ static void penwell_otg_work(struct work_struct *work)
 			penwell_otg_loc_sof(1);
 
 			/* Start HNP polling */
-			iotg->start_hnp_poll(iotg);
+			if (iotg->start_hnp_poll)
+				iotg->start_hnp_poll(iotg);
 
 			/* allow D3 and D0i3 in A_HOST */
 			pm_runtime_put(pnw->dev);
@@ -4809,8 +4821,8 @@ static int penwell_otg_probe(struct pci_dev *pdev,
 	pnw->iotg.otg.otg->start_srp = penwell_otg_start_srp;
 	pnw->iotg.set_adp_probe = NULL;
 	pnw->iotg.set_adp_sense = NULL;
-	pnw->iotg.start_hnp_poll = penwell_otg_start_hnp_poll;
-	pnw->iotg.stop_hnp_poll = penwell_otg_stop_hnp_poll;
+	pnw->iotg.start_hnp_poll = NULL;
+	pnw->iotg.stop_hnp_poll = NULL;
 	pnw->iotg.otg.state = OTG_STATE_UNDEFINED;
 	pnw->rt_resuming = 0;
 	pnw->rt_quiesce = 0;
@@ -5148,7 +5160,8 @@ static int penwell_otg_suspend_noirq(struct device *dev)
 		break;
 	case OTG_STATE_B_HOST:
 		/* Stop HNP polling */
-		iotg->stop_hnp_poll(iotg);
+		if (iotg->stop_hnp_poll)
+			iotg->stop_hnp_poll(iotg);
 
 		PNW_STOP_HOST(pnw);
 		iotg->hsm.b_bus_req = 0;
@@ -5232,7 +5245,8 @@ static int penwell_otg_suspend(struct device *dev)
 			ret = iotg->suspend_host(iotg);
 		break;
 	case OTG_STATE_A_HOST:
-		iotg->stop_hnp_poll(iotg);
+		if (iotg->stop_hnp_poll)
+			iotg->stop_hnp_poll(iotg);
 		if (iotg->suspend_host)
 			ret = iotg->suspend_host(iotg);
 		break;
