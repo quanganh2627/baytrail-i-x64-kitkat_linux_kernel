@@ -854,9 +854,7 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 					v4l2_dbg(3, dbg_level, &atomisp_dev, "%s thumb no flash in this frame\n",__func__);
 			}
 			vb = atomisp_css_frame_to_vbuf(pipe, buffer);
-			if (!vb)
-				v4l2_err(&atomisp_dev,
-						"dequeued frame unknown!");
+			WARN_ON(!vb);
 			break;
 		case SH_CSS_BUFFER_TYPE_OUTPUT_FRAME:
 			if (isp->sw_contex.invalid_frame) {
@@ -869,6 +867,10 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 			pipe->buffers_in_css--;
 			vb = atomisp_css_frame_to_vbuf(pipe, buffer);
 			frame = buffer;
+			if (!vb) {
+				WARN_ON(1);
+				break;
+			}
 
 			if (isp->params.flash_state == ATOMISP_FLASH_ONGOING) {
 				if (frame->flash_state
@@ -903,9 +905,6 @@ static void atomisp_buf_done(struct atomisp_device *isp, int error,
 
 			isp->params.last_frame_status = isp->frame_status[vb->i];
 
-			if (!vb)
-				v4l2_err(&atomisp_dev,
-						"dequeued frame unknown!");
 			break;
 		default:
 			break;
@@ -1373,36 +1372,9 @@ static u32 get_pixel_depth(u32 pixelformat)
 	}
 }
 
-static int is_pixelformat_raw(u32 pixelformat)
+bool atomisp_is_mbuscode_raw(uint32_t code)
 {
-	switch (pixelformat) {
-	case V4L2_PIX_FMT_SBGGR16:
-	case V4L2_PIX_FMT_SBGGR12:
-	case V4L2_PIX_FMT_SGBRG12:
-	case V4L2_PIX_FMT_SGRBG12:
-	case V4L2_PIX_FMT_SRGGB12:
-	case V4L2_PIX_FMT_SBGGR10:
-	case V4L2_PIX_FMT_SGBRG10:
-	case V4L2_PIX_FMT_SGRBG10:
-	case V4L2_PIX_FMT_SRGGB10:
-	case V4L2_PIX_FMT_SBGGR8:
-	case V4L2_PIX_FMT_SGBRG8:
-	case V4L2_PIX_FMT_SGRBG8:
-	case V4L2_PIX_FMT_SRGGB8:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-int atomisp_is_mbuscode_raw(uint32_t code)
-{
-	const struct atomisp_format_bridge *b =
-		atomisp_get_format_bridge_from_mbus(code);
-
-	BUG_ON(!b);
-
-	return is_pixelformat_raw(b->pixelformat);
+	return code >= 0x3000 && code < 0x4000;
 }
 
 /*

@@ -121,7 +121,7 @@ static void set_mfld_platform_config(void)
 	sst_platform_pdata.pdata = NULL;
 	sst_platform_pdata.bdata = NULL;
 	sst_platform_pdata.use_strm_map = false;
-	sst_platform_pdata.pdev_strm_map = &mfld_strm_map;
+	sst_platform_pdata.pdev_strm_map = mfld_strm_map;
 	sst_platform_pdata.strm_map_size = MAX_DEVICES_MFLD;
 }
 
@@ -136,7 +136,7 @@ static void set_ctp_platform_config(void)
 	if ((INTEL_MID_BOARD(2, PHONE, CLVTP, VB, PRO)) ||
 	   (INTEL_MID_BOARD(2, PHONE, CLVTP, VB, ENG))) {
 
-		sst_platform_pdata.pdev_strm_map = &ctp_vb_strm_map;
+		sst_platform_pdata.pdev_strm_map = ctp_vb_strm_map;
 		sst_platform_pdata.strm_map_size = ARRAY_SIZE(ctp_vb_strm_map);
 
 	} else if ((INTEL_MID_BOARD(2, PHONE, CLVTP, RHB, PRO)) ||
@@ -144,7 +144,7 @@ static void set_ctp_platform_config(void)
 		   (INTEL_MID_BOARD(2, TABLET, CLVT, TBD, PRO)) ||
 		   (INTEL_MID_BOARD(2, TABLET, CLVT, TBD, ENG))) {
 
-		sst_platform_pdata.pdev_strm_map = &ctp_rhb_strm_map;
+		sst_platform_pdata.pdev_strm_map = ctp_rhb_strm_map;
 		sst_platform_pdata.strm_map_size = ARRAY_SIZE(ctp_rhb_strm_map);
 	}
 	pr_debug("audio:ctp:strm_map_size %d\n", sst_platform_pdata.strm_map_size);
@@ -155,7 +155,7 @@ static void set_mrfld_platform_config(void)
 	sst_platform_pdata.pdata = NULL;
 	sst_platform_pdata.bdata = NULL;
 	sst_platform_pdata.use_strm_map = true;
-	sst_platform_pdata.pdev_strm_map = &mrfld_strm_map;
+	sst_platform_pdata.pdev_strm_map = mrfld_strm_map;
 	sst_platform_pdata.strm_map_size = MAX_DEVICES_MRFLD;
 }
 

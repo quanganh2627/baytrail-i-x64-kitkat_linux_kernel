@@ -1758,6 +1758,7 @@ static int dlp_driver_probe(struct device *dev)
 	dlp_drv.client = client;
 	dlp_drv.is_dma_capable = is_device_dma_capable(controller);
 	spin_lock_init(&dlp_drv.lock);
+	dlp_drv.drv_remove_ongoing = 0;
 
 	/* Warn if no DMA capability */
 	if (!dlp_drv.is_dma_capable)
@@ -1778,8 +1779,10 @@ static int dlp_driver_probe(struct device *dev)
 	/* Create DLP contexts */
 	for (i = 0; i < DLP_CHANNEL_COUNT; i++) {
 		dlp_drv.channels[i] = create_funcs[i] (i, hsi_ch[i], dev);
-		if (!dlp_drv.channels[i])
+		if (!dlp_drv.channels[i]) {
+			ret = -ENOMEM;
 			goto cleanup;
+		}
 
 		dlp_drv.channels_hsi[i].edlp_channel = i;
 	}
@@ -1813,6 +1816,7 @@ static int dlp_driver_remove(struct device *dev)
 {
 	struct hsi_client *client = to_hsi_client(dev);
 
+	dlp_drv.drv_remove_ongoing = 1;
 	/* Set TTY as closed to prevent RX/TX transaction */
 	dlp_tty_set_link_valid(1, 0);
 

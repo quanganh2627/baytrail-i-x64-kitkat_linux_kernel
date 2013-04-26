@@ -41,7 +41,6 @@
 #include "psb_irq.h"
 
 #include <linux/time.h>
-#include <linux/history_record.h>
 
 extern int drm_psb_smart_vsync;
 extern atomic_t g_videoenc_access_count;
@@ -49,12 +48,7 @@ extern atomic_t g_videodec_access_count;
 extern struct workqueue_struct *te_wq;
 extern struct workqueue_struct *vsync_wq;
 
-
-
-/*
- * inline functions
- */
-
+/* inline functions */
 static inline u32
 psb_pipestat(int pipe)
 {
@@ -230,13 +224,6 @@ static int mipi_hdmi_vsync_check(struct drm_device *dev, uint32_t pipe)
 	return 1;
 }
 
-/* Store value of surface to be presented over MIPI
- * pipe_surface[0] records MIPI surface during time of MIPI
- * vblank/TE interrupt handler. piper_surface[1] records MIPI
- * surface value at the time of HDMI vblank handling.
- */
-static int pipe_surface[2];
-
 /* Function to check if HDMI and MIPI are presenting the same buffer.
  * If MIPI is faster than HDMI (different refresh rates), then throttle
  * the MIPI buffers by simply dropping them.
@@ -251,6 +238,7 @@ static int mipi_te_hdmi_vsync_check(struct drm_device *dev, uint32_t pipe)
 		(struct drm_psb_private *) dev->dev_private;
 	struct mdfld_dsi_config *dsi_config = dev_priv->dsi_configs[0];
 	int pipea_stat, pipeb_stat, pipeb_ctl, pipeb_cntr, pipeb_config;
+	static int pipe_surf[2];
 	unsigned long irqflags;
 
 	/*check whether need to sync*/
@@ -259,11 +247,7 @@ static int mipi_te_hdmi_vsync_check(struct drm_device *dev, uint32_t pipe)
 		return 1;
 
 	spin_lock_irqsave(&dev_priv->irqmask_lock, irqflags);
-#ifdef CONFIG_SUPPORT_TOSHIBA_MIPI_LVDS_BRIDGE
-	if (dev_priv->bhdmiconnected && dev_priv->dpi_panel_on) {
-#else
 	if (dev_priv->bhdmiconnected && dsi_config->dsi_hw_context.panel_on) {
-#endif
 		if (ospm_power_using_hw_begin(OSPM_DISPLAY_ISLAND,
 					      OSPM_UHB_ONLY_IF_ON)) {
 			pipea_stat = REG_READ(psb_pipestat(0));
@@ -271,11 +255,7 @@ static int mipi_te_hdmi_vsync_check(struct drm_device *dev, uint32_t pipe)
 			pipeb_ctl = REG_READ(HDMIB_CONTROL);
 			pipeb_cntr = REG_READ(DSPBCNTR);
 			pipeb_config = REG_READ(PIPEBCONF);
-			/* We read for pipe 0 here,
-			 * read for pipe 1 happens
-			 * in pipe 1 vblank handler
-			 */
-			pipe_surface[0] = REG_READ(DSPASURF);
+			pipe_surf[pipe] = REG_READ(DSPASURF);
 			ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
 		} else {
 			spin_unlock_irqrestore(&dev_priv->irqmask_lock,
@@ -288,9 +268,9 @@ static int mipi_te_hdmi_vsync_check(struct drm_device *dev, uint32_t pipe)
 			&& (pipeb_ctl & HDMIB_PORT_EN)
 			&& (pipeb_cntr & DISPLAY_PLANE_ENABLE)
 			&& (pipeb_stat & PIPE_VBLANK_INTERRUPT_ENABLE)) {
-			if (pipe_surface[0] == pipe_surface[1]) {
-				pipe_surface[0] = MAX_NUM;
-				pipe_surface[1] = MAX_NUM;
+			if (pipe_surf[0] == pipe_surf[1]) {
+				pipe_surf[0] = MAX_NUM;
+				pipe_surf[1] = MAX_NUM;
 			} else {
 				spin_unlock_irqrestore(&dev_priv->irqmask_lock,
 						       irqflags);
@@ -344,24 +324,20 @@ static void mid_vblank_handler(struct drm_device *dev, uint32_t pipe)
 {
 	struct drm_psb_private *dev_priv =
 		(struct drm_psb_private *) dev->dev_private;
+#if 0
 	/*doesn't use it for now, leave code here for reference*/
-	/*if (pipe == 1)
-		psb_flip_hdmi(dev, pipe);*/
+	if (pipe == 1)
+		psb_flip_hdmi(dev, pipe);
+#endif
 	drm_handle_vblank(dev, pipe);
 
-	/* Record surface address to be flipped on MIPI, when HDMI vblank came
-	 * This information is later used in the MIPI vblank/TE handler to
-	 * ensure that MIPI and HDMI flush the same buffer using
-	 * mipi_te_hdmi_vsync_check() function.
-	 */
-	if (pipe == 1)
-		pipe_surface[pipe] = REG_READ(DSPASURF);
-
-	/* This sync check works only on MFLD and not on CTP, since
-	 * MIPI on CTP does uses the TE interrupt instead of Vblank interrupt
-	 */
-	if (!mipi_hdmi_vsync_check(dev, pipe))
-		return;
+	if (is_cmd_mode_panel(dev)) {
+		if (!mipi_te_hdmi_vsync_check(dev, pipe))
+			return;
+	} else {
+		if (!mipi_hdmi_vsync_check(dev, pipe))
+			return;
+	}
 
 	if (dev_priv->psb_vsync_handler)
 		(*dev_priv->psb_vsync_handler)(dev, pipe);
@@ -663,7 +639,6 @@ irqreturn_t psb_irq_handler(DRM_IRQ_ARGS)
 	uint32_t vdc_stat, dsp_int = 0, sgx_int = 0, msvdx_int = 0, topaz_int = 0;
 	int handled = 0;
 	unsigned long irq_flags;
-	struct saved_history_record *precord = NULL;
 
 #ifdef CONFIG_MDFD_GL3
 	uint32_t gl3_int = 0;
@@ -672,13 +647,8 @@ irqreturn_t psb_irq_handler(DRM_IRQ_ARGS)
 	/*	PSB_DEBUG_ENTRY("\n"); */
 
 	spin_lock_irqsave(&dev_priv->irqmask_lock, irq_flags);
-	vdc_stat = PSB_RVDC32(PSB_INT_IDENTITY_R);
 
-	precord = get_new_history_record();
-	if (precord) {
-		precord->type = 5;
-		precord->record_value.vdc_stat = vdc_stat;
-	}
+	vdc_stat = PSB_RVDC32(PSB_INT_IDENTITY_R);
 
 	if (vdc_stat & _MDFLD_DISP_ALL_IRQ_FLAG) {
 		PSB_DEBUG_IRQ("Got DISP interrupt\n");
@@ -878,7 +848,7 @@ int psb_irq_postinstall_islands(struct drm_device *dev, int hw_islands)
 
 			if (dev->vblank_enabled[0]) {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_enable_pipestat(dev_priv, 0,
 							    PIPE_TE_ENABLE);
@@ -888,7 +858,7 @@ int psb_irq_postinstall_islands(struct drm_device *dev, int hw_islands)
 							    PIPE_VBLANK_INTERRUPT_ENABLE);
 			} else {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_disable_pipestat(dev_priv, 0,
 							     PIPE_TE_ENABLE);
@@ -907,7 +877,7 @@ int psb_irq_postinstall_islands(struct drm_device *dev, int hw_islands)
 
 			if (dev->vblank_enabled[2]) {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_enable_pipestat(dev_priv, 2,
 							    PIPE_TE_ENABLE);
@@ -917,7 +887,7 @@ int psb_irq_postinstall_islands(struct drm_device *dev, int hw_islands)
 							    PIPE_VBLANK_INTERRUPT_ENABLE);
 			} else {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_disable_pipestat(dev_priv, 2,
 							     PIPE_TE_ENABLE);
@@ -988,7 +958,7 @@ void psb_irq_uninstall_islands(struct drm_device *dev, int hw_islands)
 
 			if (dev->vblank_enabled[0]) {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_disable_pipestat(dev_priv, 0,
 							     PIPE_TE_ENABLE);
@@ -1004,7 +974,7 @@ void psb_irq_uninstall_islands(struct drm_device *dev, int hw_islands)
 
 			if (dev->vblank_enabled[2]) {
 				if (dev_priv->platform_rev_id != MDFLD_PNW_A0 &&
-				    !is_panel_vid_or_cmd(dev)) {
+				    is_cmd_mode_panel(dev)) {
 #if 0 /* FIXME need to revisit it */
 					psb_disable_pipestat(dev_priv, 2,
 							     PIPE_TE_ENABLE);
@@ -1198,7 +1168,7 @@ int psb_enable_vblank(struct drm_device *dev, int pipe)
 	PSB_DEBUG_ENTRY("\n");
 
 	if (IS_MDFLD(dev) && (dev_priv->platform_rev_id != MDFLD_PNW_A0) &&
-	    !is_panel_vid_or_cmd(dev) && (pipe != 1))
+	    is_cmd_mode_panel(dev) && (pipe != 1))
 		return mdfld_enable_te(dev, pipe);
 
 	if (ospm_power_using_hw_begin(OSPM_DISPLAY_ISLAND, OSPM_UHB_ONLY_IF_ON)) {
@@ -1240,7 +1210,7 @@ void psb_disable_vblank(struct drm_device *dev, int pipe)
 	PSB_DEBUG_ENTRY("\n");
 
 	if (IS_MDFLD(dev) && (dev_priv->platform_rev_id != MDFLD_PNW_A0) &&
-	    !is_panel_vid_or_cmd(dev) && (pipe != 1))
+	    is_cmd_mode_panel(dev) && (pipe != 1))
 		mdfld_disable_te(dev, pipe);
 
 	dev_priv->b_vblank_enable = false;
