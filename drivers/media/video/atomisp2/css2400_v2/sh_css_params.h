@@ -119,4 +119,6 @@ struct ia_css_isp_parameters {
 	struct sh_css_ddr_address_map_size ddr_ptrs_size;
 };
 
+void sh_css_dequeue_param_buffers(void);
+
 #endif /* _SH_CSS_PARAMS_H_ */

@@ -1633,9 +1633,6 @@ static const struct ia_css_cc_config default_rgb2yuv_cc_config = {
 	{2449, 4809, 934, -1382, -2714, 4096, 4096, -3430, -666}
 };
 
-static void
-sh_css_dequeue_param_buffers(void);
-
 static enum ia_css_err
 ref_sh_css_ddr_address_map(
 		struct sh_css_ddr_address_map *map,
@@ -5112,7 +5109,7 @@ static void sh_css_update_isp_params_to_ddr(
 	sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "sh_css_update_isp_params_to_ddr() leave:\n");
 }
 
-static void sh_css_dequeue_param_buffers(void)
+void sh_css_dequeue_param_buffers(void)
 {
 	hrt_vaddress cpy;
 

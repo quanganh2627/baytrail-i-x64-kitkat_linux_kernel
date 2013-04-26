@@ -1200,11 +1200,19 @@ irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr)
 		}
 	}
 
-	if (frame_done_found &&
-	    isp->params.css_update_params_needed) {
-		sh_css_update_isp_params();
-		isp->params.css_update_params_needed = false;
-		frame_done_found = false;
+	if (frame_done_found) {
+		if (isp->params.css_update_params_needed) {
+			sh_css_update_isp_params();
+			isp->params.css_update_params_needed = false;
+			frame_done_found = false;
+		} else {
+			/*
+			 * Workaround to avoid exhausting CSS parameter
+			 * queue. Dequeue must be called whenever ISP
+			 * params are not updated. See PSI BZ 103963
+			 */
+			sh_css_dequeue_param_buffers();
+		}
 	}
 	atomisp_setup_flash(isp);
 
