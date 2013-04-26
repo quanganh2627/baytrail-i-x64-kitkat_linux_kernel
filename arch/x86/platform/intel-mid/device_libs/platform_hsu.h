@@ -1,7 +1,7 @@
 /*
  * platform_hsu.h: hsu platform data header file
  *
- * (C) Copyright 2008 Intel Corporation
+ * (C) Copyright 2008-2013 Intel Corporation
  * Author:
  *
  * This program is free software; you can redistribute it and/or
@@ -30,6 +30,11 @@ enum hsu_pid {
 	hsu_pid_vtb_pro = 1,
 	hsu_pid_vtb_eng = 2,
 	hsu_pid_max,
+};
+
+struct hsu_func2port {
+	int func;
+	int port;
 };
 
 struct hsu_port_pin_cfg {
