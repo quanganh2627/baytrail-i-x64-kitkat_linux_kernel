@@ -161,6 +161,8 @@ struct atomisp_sw_contex {
 	int  invalid_s3a;
 	int  invalid_dis;
 
+	/* power_lock to avoid race between atomisp_isr/power up/power down*/
+	spinlock_t power_lock;
 	int power_state;
 	int running_freq;
 };

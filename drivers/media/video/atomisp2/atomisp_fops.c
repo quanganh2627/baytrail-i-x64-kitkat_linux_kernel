@@ -388,6 +388,8 @@ int atomisp_init_struct(struct atomisp_device *isp)
 	else
 		isp->sw_contex.running_freq = ISP_FREQ_320MHZ;
 
+	spin_lock_init(&isp->sw_contex.power_lock);
+
 	/* Add for channel */
 	if (isp->inputs[0].camera)
 		isp->input_curr = 0;
