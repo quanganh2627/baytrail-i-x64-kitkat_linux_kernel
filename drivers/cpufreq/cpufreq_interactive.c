@@ -957,7 +957,6 @@ static int __init cpufreq_interactive_init(void)
 	min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
 	above_hispeed_delay_val = DEFAULT_ABOVE_HISPEED_DELAY;
 	timer_rate = DEFAULT_TIMER_RATE;
-	ig_io_is_busy = should_io_be_busy();
 
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
