@@ -841,7 +841,8 @@ static int sst_save_dsp_context2(struct intel_sst_drv *sst)
 	struct ipc_post *msg = NULL;
 	unsigned long irq_flags;
 	struct ipc_dsp_hdr dsp_hdr;
-	struct sst_block *block;
+	struct sst_block *block = NULL;
+	int ret = 0;
 
 	/*not supported for rest*/
 	if (sst->sst_state != SST_FW_RUNNING) {
@@ -851,9 +852,11 @@ static int sst_save_dsp_context2(struct intel_sst_drv *sst)
 
 	/*send msg to fw*/
 	pvt_id = sst_assign_pvt_id(sst);
-	if (sst_create_block_and_ipc_msg(&msg, true, sst, &block,
-				IPC_CMD, pvt_id)) {
+	ret = sst_create_block_and_ipc_msg(&msg, true, sst, &block,
+				IPC_CMD, pvt_id);
+	if (ret) {
 		pr_err("msg/block alloc failed. Not proceeding with context save\n");
+		return ret;
 	}
 
 	sst_fill_header_mrfld(&msg->mrfld_header, IPC_CMD,
