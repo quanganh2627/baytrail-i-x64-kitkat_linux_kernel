@@ -81,7 +81,7 @@ static int try_to_freeze_tasks(bool user_only)
 		 * We need to retry, but first give the freezing tasks some
 		 * time to enter the regrigerator.
 		 */
-		usleep_range(1000, 2000);
+		msleep(10);
 	}
 
 	do_gettimeofday(&end);
