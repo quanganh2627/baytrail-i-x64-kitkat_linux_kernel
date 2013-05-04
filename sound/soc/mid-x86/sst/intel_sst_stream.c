@@ -216,7 +216,7 @@ int sst_alloc_stream_mrfld(char *params, struct sst_block *block)
 	sst_drv_ctx->streams[str_id].pipe_id = pipe_id;
 
 	pvt_id = sst_assign_pvt_id(sst_drv_ctx);
-	alloc_param.ts = (sst_drv_ctx->mailbox_add +
+	alloc_param.ts = (struct snd_sst_tstamp *) (sst_drv_ctx->mailbox_add +
 			sst_drv_ctx->tstamp + (str_id * sizeof(fw_tstamp)));
 	pr_debug("alloc tstamp location = 0x%p\n", alloc_param.ts);
 	pr_debug("assigned pipe id 0x%x\n", pipe_id);
@@ -234,7 +234,7 @@ int sst_alloc_stream_mrfld(char *params, struct sst_block *block)
 
 	sst_fill_header_mrfld(&msg->mrfld_header, IPC_CMD,
 				IPC_QUE_ID_MED, 1, pvt_id);
-	pr_debug("header:%x\n", msg->mrfld_header.p.header_high);
+	pr_debug("header:%x\n", msg->mrfld_header.p.header_high.full);
 	msg->mrfld_header.p.header_high.part.res_rqd = 1;
 
 	len = msg->mrfld_header.p.header_low_payload = sizeof(alloc_param) + sizeof(dsp_hdr);
@@ -255,7 +255,7 @@ int sst_alloc_stream_mrfld(char *params, struct sst_block *block)
 			sizeof(alloc_param));
 #endif
 	str_info = &sst_drv_ctx->streams[str_id];
-	pr_debug("header:%x\n", msg->mrfld_header.p.header_high);
+	pr_debug("header:%x\n", msg->mrfld_header.p.header_high.full);
 	pr_debug("response rqd: %x", msg->mrfld_header.p.header_high.part.res_rqd);
 	spin_lock_irqsave(&sst_drv_ctx->ipc_spin_lock, irq_flags);
 	list_add_tail(&msg->node, &sst_drv_ctx->ipc_dispatch_list);
@@ -493,7 +493,7 @@ int sst_send_byte_stream_mrfld(void *sbytes)
 	unsigned long irq_flags;
 	u32 length;
 	int ret, pvt_id;
-	struct sst_block *block;
+	struct sst_block *block = NULL;
 
 	pr_debug("%s:\ntype:%d\nipc_msg:%x\nblock:%d\ntask_id:%x\npipe: %d\nlength:%d\n",
 		__func__, bytes->type, bytes->ipc_msg,
@@ -641,7 +641,7 @@ int sst_send_probe_bytes(struct intel_sst_drv *sst)
 	list_add_tail(&msg->node, &sst->ipc_dispatch_list);
 	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
 
-	sst->ops->post_message(msg);
+	sst->ops->post_message(&sst->ipc_post_msg_wq);
 
 	ret_val = sst_wait_timeout(sst, block);
 	sst_free_block(sst, block);
@@ -779,7 +779,6 @@ int sst_drop_stream(int str_id)
 	struct stream_info *str_info;
 	struct ipc_post *msg = NULL;
 	struct ipc_dsp_hdr dsp_hdr;
-	u32 len = 0;
 
 	pr_debug("SST DBG:sst_drop_stream for %d\n", str_id);
 	str_info = get_stream_info(str_id);
@@ -883,7 +882,7 @@ int sst_drain_stream(int str_id, bool partial_drain)
  */
 int sst_free_stream(int str_id)
 {
-	int retval = 0, len = 0, pvt_id;
+	int retval = 0, pvt_id;
 	struct ipc_post *msg = NULL;
 	struct stream_info *str_info;
 	struct intel_sst_ops *ops;

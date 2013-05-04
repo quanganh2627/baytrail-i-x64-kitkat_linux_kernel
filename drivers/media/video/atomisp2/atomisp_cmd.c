@@ -471,14 +471,30 @@ static void print_csi_rx_errors(void)
 		v4l2_err(&atomisp_dev, "  line sync error");
 }
 
+/* Clear irq reg at PENWELL B0 */
+static void clear_irq_reg(struct atomisp_device *isp)
+{
+	u32 msg_ret;
+	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
+	msg_ret |= 1 << INTR_IIR;
+	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+}
+
 /* interrupt handling function*/
 irqreturn_t atomisp_isr(int irq, void *dev)
 {
-	u32 msg_ret;
 	struct atomisp_device *isp = (struct atomisp_device *)dev;
 	unsigned int irq_infos = 0;
 	unsigned long flags;
 	int err;
+	irqreturn_t ret;
+
+	spin_lock_irqsave(&isp->sw_contex.power_lock, flags);
+	if (isp->sw_contex.power_state != ATOM_ISP_POWER_UP) {
+		clear_irq_reg(isp);
+		ret = IRQ_HANDLED;
+		goto out;
+	}
 
 	err = sh_css_translate_interrupt(&irq_infos);
 	v4l2_dbg(5, dbg_level, &atomisp_dev, "irq:0x%x\n", irq_infos);
@@ -486,17 +502,17 @@ irqreturn_t atomisp_isr(int irq, void *dev)
 	if (err != sh_css_success) {
 		v4l2_warn(&atomisp_dev, "%s:failed to translate irq (err = %d,"
 			  " infos = %d)\n", __func__, err, irq_infos);
-		return IRQ_NONE;
+		ret = IRQ_NONE;
+		goto out;
 	}
 
-	/* Clear irq reg at PENWELL B0 */
-	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
-	msg_ret |= 1 << INTR_IIR;
-	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+	clear_irq_reg(isp);
 
-	spin_lock_irqsave(&isp->lock, flags);
-	if (isp->streaming != ATOMISP_DEVICE_STREAMING_ENABLED)
+	spin_lock(&isp->lock);
+	if (isp->streaming != ATOMISP_DEVICE_STREAMING_ENABLED) {
+		ret = IRQ_HANDLED;
 		goto out_nowake;
+	}
 
 	if (irq_infos & SH_CSS_IRQ_INFO_CSS_RECEIVER_SOF) {
 		atomic_inc(&isp->sof_count);
@@ -544,15 +560,13 @@ irqreturn_t atomisp_isr(int irq, void *dev)
 		isp->sw_contex.invalid_s3a = 1;
 		isp->sw_contex.invalid_dis = 1;
 	}
-
-	spin_unlock_irqrestore(&isp->lock, flags);
-
-	return IRQ_WAKE_THREAD;
+	ret = IRQ_WAKE_THREAD;
 
 out_nowake:
-	spin_unlock_irqrestore(&isp->lock, flags);
-
-	return IRQ_HANDLED;
+	spin_unlock(&isp->lock);
+out:
+	spin_unlock_irqrestore(&isp->sw_contex.power_lock, flags);
+	return ret;
 }
 
 /*
@@ -1200,11 +1214,19 @@ irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr)
 		}
 	}
 
-	if (frame_done_found &&
-	    isp->params.css_update_params_needed) {
-		sh_css_update_isp_params();
-		isp->params.css_update_params_needed = false;
-		frame_done_found = false;
+	if (frame_done_found) {
+		if (isp->params.css_update_params_needed) {
+			sh_css_update_isp_params();
+			isp->params.css_update_params_needed = false;
+			frame_done_found = false;
+		} else {
+			/*
+			 * Workaround to avoid exhausting CSS parameter
+			 * queue. Dequeue must be called whenever ISP
+			 * params are not updated. See PSI BZ 103963
+			 */
+			sh_css_dequeue_param_buffers();
+		}
 	}
 	atomisp_setup_flash(isp);
 
@@ -3959,6 +3981,7 @@ int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 	int timeout = 100;
 	bool idle;
 	u32 reg;
+	unsigned long flags;
 	v4l2_dbg(3, dbg_level, &atomisp_dev, "%s\n", __func__);
 
 	/* if ISP timeout, we can force powerdown */
@@ -3984,6 +4007,9 @@ int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 	}
 
 done:
+	spin_lock_irqsave(&isp->sw_contex.power_lock, flags);
+	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
+	spin_unlock_irqrestore(&isp->sw_contex.power_lock, flags);
 	if (IS_MRFLD) {
 		/*
 		 * MRFLD IUNIT DPHY is located in an always-power-on island
@@ -4002,7 +4028,6 @@ done:
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
 
-	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
 	return 0;
 }
 
@@ -4010,6 +4035,7 @@ done:
 int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 {
 	u32 pwr_cnt = 0;
+	unsigned long flags;
 	v4l2_dbg(3, dbg_level, &atomisp_dev, "%s\n", __func__);
 
 	/* MRFLD IUNIT DPHY is located in an always-power-on island */
@@ -4022,7 +4048,9 @@ int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
 
+	spin_lock_irqsave(&isp->sw_contex.power_lock, flags);
 	isp->sw_contex.power_state = ATOM_ISP_POWER_UP;
+	spin_unlock_irqrestore(&isp->sw_contex.power_lock, flags);
 
 	return 0;
 }

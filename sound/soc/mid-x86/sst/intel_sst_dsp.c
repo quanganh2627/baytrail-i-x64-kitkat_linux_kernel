@@ -884,8 +884,8 @@ static int sst_parse_elf_module_memcpy(struct intel_sst_drv *sst,
 	if (ret_val)
 		return ret_val;
 
-	ret_val = sst_fill_memcpy_list(memcpy_list,
-					dstn, fw + pr->p_offset, pr->p_filesz, mem_type);
+	ret_val = sst_fill_memcpy_list(memcpy_list, dstn,
+			(void *)fw + pr->p_offset, pr->p_filesz, mem_type);
 	if (ret_val)
 		return ret_val;
 

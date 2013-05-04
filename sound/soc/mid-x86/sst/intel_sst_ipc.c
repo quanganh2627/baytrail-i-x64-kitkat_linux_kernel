@@ -105,19 +105,6 @@ int sst_free_block(struct intel_sst_drv *ctx, struct sst_block *freed)
 	return -EINVAL;
 }
 
-static void dump_bytes(unsigned const char *data,
-		       size_t sz, unsigned int width)
-{
-	unsigned int i, j;
-
-	for (i = 0; i < sz; i += width) {
-		printk(KERN_INFO "%p: ", data + i);
-		for (j = 0; j < width && i+j < sz; j++)
-			printk("%.2hhx ", data[i+j]);
-		printk("\n");
-	}
-}
-
 /**
  * sst_send_ipc_msg_nowait - send ipc msg for algorithm parameters
  *		and returns immediately without waiting for reply
@@ -322,7 +309,8 @@ void sst_post_message_mrfld32(struct work_struct *work)
 
 #ifdef SST_BYTE_DUMP
 	pr_debug("printing %lu bytes", *size+sizeof(u32));
-	dump_bytes((unsigned char *)msg->mailbox_data, *size + sizeof(u32), 8);
+	print_hex_dump_bytes(__func__, DUMP_PREFIX_OFFSET,
+			(unsigned char *)msg->mailbox_data, *size + sizeof(u32));
 #endif
 	memcpy_toio(sst_drv_ctx->mailbox + SST_MAILBOX_SEND,
 		msg->mailbox_data, *size + 4);

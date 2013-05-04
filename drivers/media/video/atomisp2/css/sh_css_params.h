@@ -383,6 +383,8 @@ void
 sh_css_free_stat_buffers(union sh_css_s3a_data *s3a_ptr,
 	struct sh_css_dis_data *dis_ptr);
 
+void sh_css_dequeue_param_buffers(void);
+
 void
 sh_css_update_uds_and_crop_info(
 		const struct sh_css_binary_info *info,

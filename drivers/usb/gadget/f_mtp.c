@@ -37,7 +37,7 @@
 #include <linux/usb/f_mtp.h>
 
 #define MTP_BULK_TX_BUFFER_SIZE       16384
-#define MTP_BULK_RX_BUFFER_SIZE       65536
+#define MTP_BULK_RX_BUFFER_SIZE       (65536*4)
 #define MTP_UDC_LIMITED_SIZE	16384
 #define INTR_BUFFER_SIZE           28
 
@@ -70,6 +70,8 @@
 #define MTP_RESPONSE_DEVICE_BUSY    0x2019
 
 static const char mtp_shortname[] = "mtp_usb";
+
+static unsigned char rx_buffer[RX_REQ_MAX][MTP_BULK_RX_BUFFER_SIZE];
 
 struct mtp_dev {
 	struct usb_function function;
@@ -1345,9 +1347,10 @@ static int mtp_setup(void)
 		goto err1;
 	}
 
+	memset(rx_buffer, 0, RX_REQ_MAX * MTP_BULK_RX_BUFFER_SIZE);
 	/* Request memory buffer for RX */
 	for (i = 0; i < RX_REQ_MAX; i++) {
-		dev->rx_mem[i] = kzalloc(MTP_BULK_RX_BUFFER_SIZE, GFP_KERNEL);
+		dev->rx_mem[i] = rx_buffer[i];
 		if (!dev->rx_mem[i]) {
 			ret = -ENOMEM;
 			goto err2;

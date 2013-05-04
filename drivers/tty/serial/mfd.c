@@ -2379,6 +2379,8 @@ static int hsu_enable_dma_irq(bool en)
 			disable_irq(phsu->dma_irq);
 	}
 	mutex_unlock(&dma_lock);
+
+	return 0;
 }
 
 static int hsu_runtime_suspend(struct device *dev)
