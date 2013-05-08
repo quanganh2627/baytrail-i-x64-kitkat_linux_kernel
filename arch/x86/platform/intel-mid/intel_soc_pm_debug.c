@@ -338,6 +338,9 @@ void time_stamp_in_suspend_flow(int mark, bool start) {}
 
 static char *dstates[] = {"D0", "D0i1", "D0i2", "D0i3"};
 
+/* This can be used to report NC power transitions */
+void (*nc_report_power_state) (u32, int);
+
 #if defined(CONFIG_INTEL_ATOM_MDFLD_POWER)			\
 			|| defined(CONFIG_INTEL_ATOM_CLV_POWER)
 
