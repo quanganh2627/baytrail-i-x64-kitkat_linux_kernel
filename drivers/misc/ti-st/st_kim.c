@@ -488,8 +488,7 @@ long st_kim_start(void *kim_data)
 			/* ldisc installed now */
 			tty_dev = kim_gdata->core_data->tty_dev;
 			if (tty_dev)
-				pm_runtime_resume(tty_dev);
-
+				pm_runtime_get_sync(tty_dev);
 			else
 				err = st_kim_stop(kim_gdata);
 
@@ -497,7 +496,7 @@ long st_kim_start(void *kim_data)
 			err = download_firmware(kim_gdata);
 
 			if (tty_dev)
-				__pm_runtime_idle(tty_dev, 0);
+				pm_runtime_put(tty_dev);
 
 			if (err != 0) {
 				/* ldisc installed but fw download failed,

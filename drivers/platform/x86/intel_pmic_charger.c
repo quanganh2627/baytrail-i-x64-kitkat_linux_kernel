@@ -77,8 +77,7 @@ static int __devinit pmic_charger_probe(struct platform_device *pdev)
 
 	/* Register a handler for USBDET interrupt */
 	ret = request_threaded_irq(irq, pmic_charger_irq_handler,
-			pmic_charger_thread_handler,
-			IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND,
+			pmic_charger_thread_handler, IRQF_TRIGGER_FALLING,
 			"pmic_usbdet_interrupt", dev);
 	if (ret) {
 		dev_info(dev, "register USBDET IRQ with error %d\n", ret);
