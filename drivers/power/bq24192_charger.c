@@ -2270,6 +2270,26 @@ static void bq24192_event_worker(struct work_struct *work)
 			/* Cancel the maintenance worker here */
 			cancel_delayed_work_sync(&chip->maint_chrg_wrkr);
 			mutex_lock(&chip->event_lock);
+
+			/* Get the input src ctrl register value */
+			ret = bq24192_read_reg(chip->client,
+					BQ24192_INPUT_SRC_CNTL_REG);
+			if (ret < 0) {
+				dev_warn(&chip->client->dev,
+					"INPUT CTRL reg read failed\n");
+				goto i2c_write_fail;
+			}
+
+			/* Set HIZ mode */
+			ret |= INPUT_SRC_CNTL_EN_HIZ;
+
+			ret = bq24192_write_reg(chip->client,
+					BQ24192_INPUT_SRC_CNTL_REG, ret);
+			if (ret < 0) {
+				dev_warn(&chip->client->dev, "I2C write failed\n");
+				goto i2c_write_fail;
+			}
+
 			chip->present = 1;
 			chip->online = 0;
 			chip->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;

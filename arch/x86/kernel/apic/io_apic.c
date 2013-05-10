@@ -62,6 +62,7 @@
 #include <asm/hw_irq.h>
 
 #include <asm/apic.h>
+#include <asm/intel-mid.h>
 
 #define __apicdebuginit(type) static type __init
 
@@ -349,6 +350,24 @@ static inline void io_apic_eoi(unsigned int apic, unsigned int vector)
 	writel(vector, &io_apic->eoi);
 }
 
+/*
+ * This index matches with 1024 - 4 address in SCU RTE table area.
+ * That is not used for anything. Works in CLVP only
+ */
+#define LAST_INDEX_IN_IO_APIC_SPACE 255
+#define KERNEL_TO_SCU_PANIC_REQUEST (0x0515dead)
+void apic_scu_panic_dump(void)
+{
+	unsigned long flags;
+
+	printk(KERN_ERR "Request SCU panic dump");
+	raw_spin_lock_irqsave(&ioapic_lock, flags);
+	io_apic_write(0, LAST_INDEX_IN_IO_APIC_SPACE,
+		      KERNEL_TO_SCU_PANIC_REQUEST);
+	raw_spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+EXPORT_SYMBOL_GPL(apic_scu_panic_dump);
+
 static unsigned int __io_apic_read(unsigned int apic, unsigned int reg)
 {
 	struct io_apic __iomem *io_apic = io_apic_base(apic);
@@ -615,7 +634,8 @@ static void unmask_ioapic_irq(struct irq_data *data)
  */
 static void __eoi_ioapic_pin(int apic, int pin, int vector, struct irq_cfg *cfg)
 {
-	if (mpc_ioapic_ver(apic) >= 0x20) {
+	if ((mpc_ioapic_ver(apic) >= 0x20) &&
+		(intel_mid_identify_cpu() != INTEL_MID_CPU_CHIP_CLOVERVIEW)) {
 		/*
 		 * Intr-remapping uses pin number as the virtual vector
 		 * in the RTE. Actual vector is programmed in

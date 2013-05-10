@@ -79,7 +79,7 @@ enum sst_states {
 	SST_FW_CTXT_RESTORE
 };
 
-#define SST_BLOCK_TIMEOUT	1000
+#define SST_BLOCK_TIMEOUT	4000
 #define BLOCK_UNINIT		-1
 #define RX_TIMESLOT_UNINIT	-1
 

@@ -53,6 +53,8 @@
 #include "intel_mid_scu.h"
 #include "intel_mid_sfi.h"
 
+#include "device_libs/platform_scu_log.h"
+
 /*
  * the clockevent devices on Moorestown/Medfield can be APBT or LAPIC clock,
  * cmdline option x86_intel_mid_timer can be used to override the configuration
@@ -864,12 +866,16 @@ static struct sfi_device_table_entry lm3559_entry = {
 	.name = "lm3559",
 };
 
+/* This msi is used by SCU to inform IA it has something to say */
+#define SCU_TRACE_IRQ 5
+
 static int __init sfi_parse_devs(struct sfi_table_header *table)
 {
 	struct sfi_table_simple *sb;
 	struct sfi_device_table_entry *pentry;
+	struct sfi_device_table_entry sculog;
 	struct devs_id *dev = NULL;
-	int num, i;
+	int num, i, sculog_found = 0;
 	int ioapic;
 	struct io_apic_irq_attr irq_attr;
 
@@ -916,6 +922,9 @@ static int __init sfi_parse_devs(struct sfi_table_header *table)
 					pentry->name, irq, ioapic);
 		}
 
+		if (!strncmp(pentry->name, "scuLog", 6))
+			sculog_found = 1;
+
 		dev = get_device_id(pentry->type, pentry->name);
 		if ((dev == NULL) || (dev->get_platform_data == NULL))
 			continue;
@@ -943,6 +952,21 @@ static int __init sfi_parse_devs(struct sfi_table_header *table)
 				break;
 			}
 		}
+	}
+
+	if (intel_mid_identify_cpu() ==
+	    INTEL_MID_CPU_CHIP_CLOVERVIEW && !sculog_found) {
+		strncpy(sculog.name, "scuLog", 7);
+		sculog.irq = SCU_TRACE_IRQ;
+		ioapic = mp_find_ioapic(SCU_TRACE_IRQ);
+		if (ioapic >= 0) {
+			irq_attr.ioapic = ioapic;
+			irq_attr.ioapic_pin = SCU_TRACE_IRQ;
+			irq_attr.trigger = 1;
+			irq_attr.polarity = 1;
+			io_apic_set_pci_routing(NULL, SCU_TRACE_IRQ, &irq_attr);
+		}
+		scu_log_platform_data(&sculog);
 	}
 
 	if ((INTEL_MID_BOARD(2, PHONE, CLVTP, RHB, PRO) ||
