@@ -62,6 +62,8 @@
 #define MAX_NUM_LOGDWORDS_EXTENDED      9
 #define MAX_NUM_ALL_LOGDWORDS           (MAX_NUM_LOGDWORDS +		\
 					 MAX_NUM_LOGDWORDS_EXTENDED)
+#define SIZE_ALL_LOGDWORDS		(MAX_NUM_ALL_LOGDWORDS *	\
+					 sizeof(u32))
 #define FABERR_INDICATOR		0x15
 #define FWERR_INDICATOR			0x7
 #define UNDEFLVL1ERR_IND		0x11
@@ -613,7 +615,7 @@ static int dump_scu_extented_trace(char *buf, int size, int log_offset,
 	*read = 0;
 
 	/* Title for error dump */
-	if (!log_offset)
+	if (log_offset == SIZE_ALL_LOGDWORDS)
 		output_str(ret, buf, size, "SCU Extra trace\n");
 
 	start = log_offset / sizeof(u32);
@@ -644,7 +646,7 @@ static int intel_fw_logging_proc_read(char *buffer, char **start, off_t offset,
 	if (!offset) {
 		/* Fill the buffer, return the buffer size */
 		ret = dump_fwerr_log(buffer, count);
-		read = MAX_NUM_ALL_LOGDWORDS * sizeof(u32);
+		read = SIZE_ALL_LOGDWORDS;
 	} else {
 		ret = dump_scu_extented_trace(buffer, count, offset, &read);
 		if (!read || offset + read > sram_buf_sz)
@@ -662,7 +664,7 @@ static int fw_logging_crash_on_boot(void)
 	int err = 0;
 	u32 read;
 
-	log_buffer_sz = MAX_NUM_ALL_LOGDWORDS * sizeof(u32) + sram_buf_sz;
+	log_buffer_sz = SIZE_ALL_LOGDWORDS + sram_buf_sz;
 	log_buffer = kzalloc(log_buffer_sz, GFP_KERNEL);
 	if (!log_buffer) {
 		pr_err("Failed to allocate memory for log buffer");
@@ -685,7 +687,8 @@ static int fw_logging_crash_on_boot(void)
 		 */
 		read_sram_trace_buf(log_buffer + MAX_NUM_ALL_LOGDWORDS,
 				    sram_trace_buf, sram_buf_sz);
-		length += dump_scu_extented_trace(NULL, 0, 0, &read);
+		length += dump_scu_extented_trace(NULL, 0,
+						  SIZE_ALL_LOGDWORDS, &read);
 	}
 
 #ifdef CONFIG_PROC_FS
