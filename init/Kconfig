@@ -1747,6 +1747,14 @@ config MODULE_SIG_UEFI
 	  signed with those to be loaded.  It will also disallow loading
 	  of modules stored in the UEFI dbx variable.
 
+config MODULE_SIG_BUILTIN_CERTS
+	bool "Import module signature certs when building kernel"
+	depends on MODULE_SIG
+	default y
+	help
+	  Import module signature certificates (x509 and extra certificates)
+	  into kernel at build time.
+
 choice
 	prompt "Which hash algorithm should modules be signed with?"
 	depends on MODULE_SIG
