@@ -16,6 +16,10 @@
 #include <keys/asymmetric-type.h>
 #include "module-internal.h"
 
+#ifdef CONFIG_MODULE_SIG_UEFI
+#include <linux/efi.h>
+#endif
+
 /*
  * Module signature information block.
  *
@@ -205,6 +209,12 @@ int mod_verify_sig(const void *mod, unsigned long *_modlen)
 	int ret;
 
 	pr_devel("==>%s(,%zu)\n", __func__, modlen);
+
+#ifdef CONFIG_MODULE_SIG_UEFI
+	/* Skip module signature checking if UEFI secure boot is OFF. */
+	if (!efi_enabled(EFI_SECURE_BOOT))
+		return 0;
+#endif
 
 	if (modlen <= sizeof(ms))
 		return -EBADMSG;
