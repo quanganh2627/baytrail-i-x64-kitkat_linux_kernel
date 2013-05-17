@@ -315,6 +315,8 @@ struct intel_xfer_ctx {
  * @acwake_delay: Delay between ACWAKE assertion and data xfer
  * @stay_awake: Android wake lock for preventing entering low power mode
  * @dir: debugfs HSI root directory
+ * @wakeup_packet_log: Enable/Disable the dump of the wakeup packet
+ * @resumed: Set to TRUE when the HSI driver exit the resume state
  */
 struct intel_controller {
 	/* Devices and resources */
@@ -383,9 +385,8 @@ struct intel_controller {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry		*dir;
 #endif
-#ifdef CONFIG_HSI_WAKEUP_PACKETS_DUMP
-	u16 packet_dumped;
-#endif
+	u16 wakeup_packet_log;
+	u16 resumed;
 };
 
 /* Disable the following to deactivate the runtime power management
@@ -405,15 +406,12 @@ static unsigned int hsi_pm = 1;
 module_param(hsi_pm, uint, 0644);
 
 /*
- * Helper functions
- */
-
-
-/* Help debugging PnP/Power consumption issues
+ * Dump HSI wakeup packet
+ *
+ * Help debugging PnP/Power consumption issues
  * This will enable dumping the HSI wakeup packets
  */
-#ifdef CONFIG_HSI_WAKEUP_PACKETS_DUMP
-static unsigned int wakeup_packet_len = 20;
+static unsigned int wakeup_packet_len = CONFIG_HSI_WAKEUP_PACKET_DUMP_LEN;
 module_param(wakeup_packet_len, uint, 0644);
 
 #ifndef MIN
@@ -428,8 +426,11 @@ module_param(wakeup_packet_len, uint, 0644);
 static inline void hsi_msg_complete(struct intel_controller *intel_hsi,
 				struct hsi_msg *msg)
 {
-	if (!intel_hsi->packet_dumped) {
-		intel_hsi->packet_dumped = 1;
+	if (!wakeup_packet_len)
+		goto done;
+
+	if (intel_hsi->wakeup_packet_log) {
+		intel_hsi->wakeup_packet_log = 0;
 
 		/* Any data do dump (ex: BREAK frame) ? */
 		if (msg->sgt.sgl) {
@@ -439,16 +440,10 @@ static inline void hsi_msg_complete(struct intel_controller *intel_hsi,
 				MIN(wakeup_packet_len, msg->actual_len), 1);
 		}
 	}
-	msg->complete(msg);
-}
-#else
 
-static inline void hsi_msg_complete(struct intel_controller *intel_hsi,
-				struct hsi_msg *msg)
-{
+done:
 	msg->complete(msg);
 }
-#endif
 
 /**
  * is_using_link_list - checks if the DMA context is using link listing
@@ -766,10 +761,8 @@ static int has_enabled_acready(struct intel_controller *intel_hsi)
 
 	if (do_wakeup)
 		intel_hsi->rx_state = RX_READY;
-	spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 
-	if (do_wakeup)
-		hsi_pm_runtime_get(intel_hsi);
+	spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 
 	return do_wakeup;
 }
@@ -818,13 +811,6 @@ static int has_disabled_acready(struct intel_controller *intel_hsi)
 	}
 	spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 
-	if (do_sleep) {
-		/* Wait for 2 us (more than 1 HSI frame at 20 MHz) to ensure
-		 * that the CAREADY will not rise back too soon */
-		udelay(2);
-		pm_runtime_put(intel_hsi->pdev);
-	}
-
 	return do_sleep;
 }
 
@@ -847,7 +833,8 @@ static void force_disable_acready(struct intel_controller *intel_hsi)
 	do_sleep = (intel_hsi->rx_state != RX_SLEEPING);
 	if (do_sleep) {
 		intel_hsi->prg_cfg &= ~ARASAN_RX_ENABLE;
-		iowrite32(intel_hsi->prg_cfg, ARASAN_REG(PROGRAM));
+		if (likely(intel_hsi->suspend_state == DEVICE_READY))
+			iowrite32(intel_hsi->prg_cfg, ARASAN_REG(PROGRAM));
 		intel_hsi->rx_state = RX_SLEEPING;
 	}
 
@@ -1173,6 +1160,10 @@ static int hsi_ctrl_resume(struct intel_controller *intel_hsi, int rtpm)
 		enable_irq(intel_hsi->irq);
 		intel_hsi->suspend_state--;
 	}
+
+	if (!rtpm)
+		intel_hsi->resumed = 1;
+
 	spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 
 	return err;
@@ -1217,8 +1208,8 @@ static int hsi_ctrl_suspend(struct intel_controller *intel_hsi, int rtpm)
 		    (intel_hsi->rx_state != RX_SLEEPING)) {
 			err = -EBUSY;
 			pr_info(DRVNAME ": Prevent suspend (RX state: %d, TX state: %d)\n",
-					intel_hsi->tx_state,
-					intel_hsi->rx_state);
+					intel_hsi->rx_state,
+					intel_hsi->tx_state);
 			goto exit_ctrl_suspend;
 		}
 
@@ -1249,10 +1240,9 @@ static int hsi_ctrl_suspend(struct intel_controller *intel_hsi, int rtpm)
 		iowrite32(0, ARASAN_REG(PROGRAM));
 		intel_hsi->suspend_state = DEVICE_SUSPENDED;
 
-#ifdef CONFIG_HSI_WAKEUP_PACKETS_DUMP
 		if (!rtpm)
-			intel_hsi->packet_dumped = 0;
-#endif
+			intel_hsi->resumed = 0;
+
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_unlock(&intel_hsi->stay_awake);
 #endif
@@ -1324,12 +1314,15 @@ struct intel_dma_xfer *do_alloc_dma_xfer(int is_tx,
 	sg_size = 0;
 	if (is_arasan_v1(version)) {
 		if (sg_entries > 1) {
-			size += offsetof(struct intel_dma_xfer_v1, with_link_list);
+			size += offsetof(struct intel_dma_xfer_v1,
+					with_link_list);
 			sg_size = sg_entries * sizeof(struct intel_dma_lli);
 			size += sg_size;
-			size += offsetof(struct intel_dma_lli_xfer, lli);
+			size += offsetof(struct intel_dma_lli_xfer,
+					lli);
 		} else {
-			size += offsetof(struct intel_dma_xfer_v1, without_link_list);
+			size += offsetof(struct intel_dma_xfer_v1,
+					without_link_list);
 			size += sizeof(struct intel_dma_plain_xfer);
 		}
 	} else {
@@ -1377,11 +1370,14 @@ struct intel_dma_xfer *do_alloc_dma_xfer(int is_tx,
 
 		for (i = 0; i < sg_entries; i++) {
 			if (is_tx)
-				lli_xfer->lli[i].dar = HSI_DWAHB_TX_ADDRESS(hsi_ch);
+				lli_xfer->lli[i].dar =
+						HSI_DWAHB_TX_ADDRESS(hsi_ch);
 			else
-				lli_xfer->lli[i].sar = HSI_DWAHB_RX_ADDRESS(hsi_ch);
+				lli_xfer->lli[i].sar =
+						HSI_DWAHB_RX_ADDRESS(hsi_ch);
 
-			lli_xfer->lli[i].ctl_lo = HSI_DWAHB_CTL_LO_CFG(is_tx, 1);
+			lli_xfer->lli[i].ctl_lo =
+					HSI_DWAHB_CTL_LO_CFG(is_tx, 1);
 		}
 	} else {
 		struct intel_dma_plain_xfer	*plain_xfer;
@@ -1584,7 +1580,7 @@ static void hsi_ctrl_clean_reset(struct intel_controller *intel_hsi)
 
 	/* Reset the HSI HW (Set HSI lines to low) */
 	iowrite32(1, ARASAN_REG(PROGRAM));
-	do{
+	do {
 		program_reg = ioread32(ARASAN_REG(PROGRAM));
 	} while ((program_reg & ARASAN_RESET));
 
@@ -2071,7 +2067,8 @@ static void do_hsi_prepare_dma_v2(struct hsi_msg *msg,
 		last = sg_is_last(sg);
 		ctrl = ARASAN_LLD_HARD;
 		if (last)
-			ctrl |= ARASAN_LLD_NO_CHAIN | ARASAN_LLD_IOC | ARASAN_LLD_LAST;
+			ctrl |= ARASAN_LLD_NO_CHAIN |
+				ARASAN_LLD_IOC | ARASAN_LLD_LAST;
 		else
 			ctrl |= ARASAN_LLD_CHAINED;
 		lld[i].ctrl = ctrl;
@@ -2394,7 +2391,8 @@ static void hsi_resume_dma_transfers(struct intel_controller *intel_hsi)
 			dma_ctx = intel_hsi->dma_ctx[dma_ch];
 			msg = (dma_ctx) ? dma_ctx->ongoing->msg : NULL;
 			if (msg)
-				hsi_restart_dma(msg, dma_ch, dma_ctx, intel_hsi);
+				hsi_restart_dma(msg, dma_ch,
+						dma_ctx, intel_hsi);
 		}
 	} else {
 		for (i = 0; i < HSI_MID_MAX_CHANNELS; i++) {
@@ -3477,6 +3475,8 @@ static void hsi_isr_tasklet(unsigned long hsi)
 	unsigned long flags;
 	int do_fwd = 0;
 
+	hsi_pm_runtime_get(intel_hsi);
+
 	/* Get a local copy of the current interrupt status */
 	spin_lock_irqsave(&intel_hsi->hw_lock, flags);
 	irq_status = intel_hsi->irq_status;
@@ -3487,59 +3487,72 @@ static void hsi_isr_tasklet(unsigned long hsi)
 	intel_hsi->dma_status = 0;
 	spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 
-	if (irq_status & ARASAN_IRQ_RX_WAKE)
+	if (irq_status & ARASAN_IRQ_RX_WAKE) {
+		if (!intel_hsi->resumed)
+			intel_hsi->wakeup_packet_log = 1;
 		enable_acready(intel_hsi);
+	}
 
 	if (err_status & ARASAN_IRQ_RX_ERROR)
 		hsi_rx_error(intel_hsi);
 
-	if (is_arasan_v1(version)) {
-		u32 dma_mask = ARASAN_IRQ_DMA_COMPLETE(0);
-
-		for (ch = 0; ch < DWAHB_CHAN_CNT; ch++) {
-			if (irq_status & dma_mask)
-				do_fwd |= hsi_dma_complete_v1(intel_hsi, ch);
-			dma_mask <<= 1;
-		}
-	} else {
-		u32 tx_dma_mask = ARASAN_DMA_IRQ_TX_COMPLETE(0);
-		u32 rx_dma_mask = ARASAN_DMA_IRQ_RX_COMPLETE(0);
-
-		for (ch = 0; ch < HSI_MID_MAX_CHANNELS; ch++) {
-			if (dma_status & tx_dma_mask)
-				do_fwd |= hsi_dma_complete_v2(intel_hsi, ch, 1);
-
-			if (dma_status & rx_dma_mask)
-				do_fwd |= hsi_dma_complete_v2(intel_hsi, ch, 0);
-
-			tx_dma_mask <<= 1;
-			rx_dma_mask <<= 1;
-		}
-
-		if (irq_status & ARASAN_IRQ_RX_SLEEP(ARASAN_IP_V2))
-			mod_timer(&intel_hsi->rx_idle_poll,
-					jiffies + IDLE_POLL_JIFFIES);
-	}
-
-	for (ch = 0; ch < HSI_MID_MAX_CHANNELS; ch++) {
-		if (irq_status & tx_mask)
-			irq_cfg |= hsi_pio_tx_complete(intel_hsi, ch);
-		if (irq_status & rx_mask)
-			irq_cfg |= hsi_pio_rx_complete(intel_hsi, ch);
-		tx_mask <<= 1;
-		rx_mask <<= 1;
-	}
-
-	if (err_status & ARASAN_IRQ_ANY_DATA_TIMEOUT)
-		err_cfg = hsi_timeout(intel_hsi, err_status);
-
 	if (err_status & ARASAN_IRQ_BREAK)
 		hsi_break_complete(intel_hsi);
 
-	try_disable_acready(intel_hsi);
+	if (intel_hsi->suspend_state == DEVICE_READY) {
+		if (is_arasan_v1(version)) {
+			u32 dma_mask = ARASAN_IRQ_DMA_COMPLETE(0);
 
-	if (do_fwd)
-		tasklet_schedule(&intel_hsi->fwd_tasklet);
+			for (ch = 0; ch < DWAHB_CHAN_CNT; ch++) {
+				if (irq_status & dma_mask)
+					do_fwd |= hsi_dma_complete_v1(intel_hsi,
+							ch);
+				dma_mask <<= 1;
+			}
+		} else {
+			u32 tx_dma_mask = ARASAN_DMA_IRQ_TX_COMPLETE(0);
+			u32 rx_dma_mask = ARASAN_DMA_IRQ_RX_COMPLETE(0);
+
+			for (ch = 0; ch < HSI_MID_MAX_CHANNELS; ch++) {
+				if (dma_status & tx_dma_mask)
+					do_fwd |= hsi_dma_complete_v2(intel_hsi,
+							ch, 1);
+
+				if (dma_status & rx_dma_mask)
+					do_fwd |= hsi_dma_complete_v2(intel_hsi,
+							ch, 0);
+
+				tx_dma_mask <<= 1;
+				rx_dma_mask <<= 1;
+			}
+
+			if (irq_status & ARASAN_IRQ_RX_SLEEP(ARASAN_IP_V2))
+				mod_timer(&intel_hsi->rx_idle_poll,
+						jiffies + IDLE_POLL_JIFFIES);
+		}
+
+		for (ch = 0; ch < HSI_MID_MAX_CHANNELS; ch++) {
+			if (irq_status & tx_mask)
+				irq_cfg |= hsi_pio_tx_complete(intel_hsi, ch);
+			if (irq_status & rx_mask)
+				irq_cfg |= hsi_pio_rx_complete(intel_hsi, ch);
+			tx_mask <<= 1;
+			rx_mask <<= 1;
+		}
+
+		if (err_status & ARASAN_IRQ_ANY_DATA_TIMEOUT)
+			err_cfg = hsi_timeout(intel_hsi, err_status);
+
+		try_disable_acready(intel_hsi);
+
+		if (do_fwd)
+			tasklet_schedule(&intel_hsi->fwd_tasklet);
+
+	} else
+		/* Re-schedule the ISR tasklet to check the device is ready
+		 * and do the needed access to the controller
+		 */
+		tasklet_hi_schedule(&intel_hsi->isr_tasklet);
 
 	/* Re-enable relevant interrupts */
 	if (irq_cfg || err_cfg) {
@@ -3548,16 +3561,18 @@ static void hsi_isr_tasklet(unsigned long hsi)
 			intel_hsi->irq_cfg |= irq_cfg;
 			if (intel_hsi->suspend_state == DEVICE_READY)
 				hsi_enable_interrupt(ctrl, version,
-							intel_hsi->irq_cfg);
+						intel_hsi->irq_cfg);
 		}
 		if (err_cfg) {
 			intel_hsi->err_cfg |= err_cfg;
 			if (intel_hsi->suspend_state == DEVICE_READY)
 				hsi_enable_error_interrupt(ctrl, version,
-							intel_hsi->err_cfg);
+						intel_hsi->err_cfg);
 		}
 		spin_unlock_irqrestore(&intel_hsi->hw_lock, flags);
 	}
+	pm_runtime_put(intel_hsi->pdev);
+
 }
 
 /**
@@ -4099,6 +4114,7 @@ static int hsi_add_controller(struct hsi_controller *hsi,
 	hsi_controller_set_drvdata(hsi, intel_hsi);
 	intel_hsi->dev = &hsi->device;
 	intel_hsi->irq = pdev->irq;
+	intel_hsi->resumed = 1;
 
 	err = pci_enable_device(pdev);
 	if (err) {

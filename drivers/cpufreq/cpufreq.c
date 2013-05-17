@@ -609,6 +609,58 @@ static struct attribute *default_attrs[] = {
 struct kobject *cpufreq_global_kobject;
 EXPORT_SYMBOL(cpufreq_global_kobject);
 
+static unsigned int platform_maximum_freq = ~0;
+static ssize_t show_platform_max_freq(struct kobject *kobj,
+				 struct attribute *attr, char *buf)
+{
+	unsigned int max_freq = 0;
+	unsigned int freq;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		freq = cpufreq_quick_get_max(cpu);
+		if (freq > max_freq)
+			max_freq = freq;
+	}
+
+	return sprintf(buf, "%u\n", max_freq);
+}
+
+static ssize_t store_platform_max_freq(struct kobject *kobj,
+	struct attribute *attr, const char *buf, size_t count)
+{
+	unsigned int max_freq;
+	ssize_t ret;
+	int cpu;
+
+	ret = sscanf(buf, "%u", &max_freq);
+	if (ret != 1)
+		return -EINVAL;
+
+	for_each_online_cpu(cpu) {
+		unsigned int ret = -EINVAL;
+		struct cpufreq_policy new_policy;
+		struct cpufreq_policy *policy;
+
+		ret = cpufreq_get_policy(&new_policy, cpu);
+		if (ret)
+			return -EINVAL;
+
+		policy = cpufreq_cpu_get(cpu);
+		if (max_freq >= policy->min) {
+			new_policy.max = max_freq;
+			__cpufreq_set_policy(policy, &new_policy);
+			policy->user_policy.max = max_freq;
+		}
+		cpufreq_cpu_put(policy);
+	}
+
+	platform_maximum_freq = max_freq;
+
+	return count;
+}
+define_one_global_rw(platform_max_freq);
+
 #define to_policy(k) container_of(k, struct cpufreq_policy, kobj)
 #define to_attr(a) container_of(a, struct freq_attr, attr)
 
@@ -973,6 +1025,25 @@ static int cpufreq_add_dev(struct device *dev, struct subsys_interface *sif)
 	kobject_uevent(&policy->kobj, KOBJ_ADD);
 	module_put(cpufreq_driver->owner);
 	pr_debug("initialization complete\n");
+
+	/* Now update the platform max freq */
+	{
+		unsigned int ret;
+		struct cpufreq_policy	new_policy;
+		struct cpufreq_policy	*policy;
+		ret = cpufreq_get_policy(&new_policy, cpu);
+		if (ret)
+			return 0;
+
+		policy = cpufreq_cpu_get(cpu);
+		if (platform_maximum_freq &&
+			platform_maximum_freq < policy->max) {
+			new_policy.max = platform_maximum_freq;
+			__cpufreq_set_policy(policy, &new_policy);
+			policy->user_policy.max = platform_maximum_freq;
+		}
+		cpufreq_cpu_put(policy);
+	}
 
 	return 0;
 
@@ -1946,6 +2017,7 @@ EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 static int __init cpufreq_core_init(void)
 {
 	int cpu;
+	int ret = 0;
 
 	if (cpufreq_disabled())
 		return -ENODEV;
@@ -1955,8 +2027,14 @@ static int __init cpufreq_core_init(void)
 		init_rwsem(&per_cpu(cpu_policy_rwsem, cpu));
 	}
 
-	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_subsys.dev_root->kobj);
+	cpufreq_global_kobject = kobject_create_and_add("cpufreq",
+					&cpu_subsys.dev_root->kobj);
 	BUG_ON(!cpufreq_global_kobject);
+
+	ret = sysfs_create_file(cpufreq_global_kobject,
+					&platform_max_freq.attr);
+	BUG_ON(ret);
+
 	register_syscore_ops(&cpufreq_syscore_ops);
 
 	return 0;
