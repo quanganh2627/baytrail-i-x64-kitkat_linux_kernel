@@ -62,7 +62,6 @@
 #include <asm/hw_irq.h>
 
 #include <asm/apic.h>
-#include <asm/intel-mid.h>
 
 #define __apicdebuginit(type) static type __init
 
@@ -634,8 +633,7 @@ static void unmask_ioapic_irq(struct irq_data *data)
  */
 static void __eoi_ioapic_pin(int apic, int pin, int vector, struct irq_cfg *cfg)
 {
-	if ((mpc_ioapic_ver(apic) >= 0x20) &&
-		(intel_mid_identify_cpu() != INTEL_MID_CPU_CHIP_CLOVERVIEW)) {
+	if (mpc_ioapic_ver(apic) >= 0x20) {
 		/*
 		 * Intr-remapping uses pin number as the virtual vector
 		 * in the RTE. Actual vector is programmed in
