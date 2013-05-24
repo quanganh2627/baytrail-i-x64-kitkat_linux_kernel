@@ -1237,7 +1237,7 @@ int dlp_hsi_controller_push(struct dlp_xfer_ctx *xfer_ctx, struct hsi_msg *pdu)
 				ch_ctx->ch_id,
 				ch_ctx->hsi_channel, ch_ctx->tx.seq_num);
 
-		goto out;
+		return -EAGAIN;
 	}
 
 	/* Decrease counters values */
@@ -1260,8 +1260,7 @@ int dlp_hsi_controller_push(struct dlp_xfer_ctx *xfer_ctx, struct hsi_msg *pdu)
 			pr_err(DRVNAME ": Can't push PDU for CH%d => invalid state: %d\n",
 					ch_ctx->ch_id, state);
 
-			err = -EACCES;
-			goto out;
+			return -EACCES;
 		}
 	}
 
@@ -1292,7 +1291,6 @@ int dlp_hsi_controller_push(struct dlp_xfer_ctx *xfer_ctx, struct hsi_msg *pdu)
 			del_timer_sync(&dlp_drv.timer[ch_ctx->ch_id]);
 	}
 
-out:
 	return err;
 }
 
