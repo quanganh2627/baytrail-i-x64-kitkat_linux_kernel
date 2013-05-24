@@ -36,6 +36,7 @@
 #include <linux/tty.h>
 #include <linux/netdevice.h>
 #include <linux/wait.h>
+#include <linux/atomic.h>
 
 #define DRVNAME				"hsi-dlp"
 
@@ -199,7 +200,6 @@ enum {
 
 /*  */
 #define DLP_GLOBAL_STATE_SZ		2
-#define DLP_GLOBAL_STATE_MASK	((1<<DLP_GLOBAL_STATE_SZ)-1)
 
 /*
  * HSI transfer complete callback prototype
@@ -225,7 +225,8 @@ typedef void (*hsi_client_cb) (struct hsi_client *, unsigned long);
  * @timer: context of the TX active timeout/RX TTY insert retry timer
  * @lock: spinlock to serialise access to the TX/RX context information
  * @delay: nb of jiffies for the TX active timeout/RX TTY insert retry timer
- * @state: current TX/RX state (global and internal one)
+ * @link_state: current TX/RX state (physical state)
+ * @link_flag: current TX/RX flag (logical state)
  * @channel: reference to the channel context
  * @ch_num: HSI channel number
  * @payload_len: the fixed (maximal) size of a pdu payload in bytes
@@ -254,7 +255,8 @@ struct dlp_xfer_ctx {
 	struct timer_list timer;
 	rwlock_t lock;
 	unsigned long delay;
-	unsigned int state;
+	atomic_t link_state;
+	unsigned int link_flag;
 
 	struct dlp_channel *channel;
 	unsigned int payload_len;
