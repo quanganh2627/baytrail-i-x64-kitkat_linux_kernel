@@ -647,6 +647,8 @@ static ssize_t store_platform_max_freq(struct kobject *kobj,
 			return -EINVAL;
 
 		policy = cpufreq_cpu_get(cpu);
+		if (policy == NULL)
+			return -EINVAL;
 		if (max_freq >= policy->min) {
 			new_policy.max = max_freq;
 			__cpufreq_set_policy(policy, &new_policy);
@@ -1036,6 +1038,10 @@ static int cpufreq_add_dev(struct device *dev, struct subsys_interface *sif)
 			return 0;
 
 		policy = cpufreq_cpu_get(cpu);
+		if (policy == NULL) {
+			ret = -EINVAL;
+			goto err_out_unregister;
+		}
 		if (platform_maximum_freq &&
 			platform_maximum_freq < policy->max) {
 			new_policy.max = platform_maximum_freq;
