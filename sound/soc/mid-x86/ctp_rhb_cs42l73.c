@@ -109,6 +109,7 @@ static int ctp_cs42l73_hw_params(struct snd_pcm_substream *substream,
 	switch (device) {
 	case CTP_RHB_AUD_ASP_DEV:
 	case CTP_RHB_AUD_VSP_DEV:
+	case CTP_RHB_COMMS_MSIC_VOIP_DEV:
 	case CTP_RHB_AUD_VIRTUAL_ASP_DEV:
 		clk_fmt.clk_id = CS42L73_CLKID_MCLK1;
 		clk_fmt.freq = DEFAULT_MCLK;
