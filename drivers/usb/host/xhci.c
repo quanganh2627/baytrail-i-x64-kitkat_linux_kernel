@@ -4329,7 +4329,11 @@ static int __init xhci_hcd_init(void)
 #endif
 
 #ifdef CONFIG_PCI
+#ifdef CONFIG_USB_USH_HSIC
+	return xhci_register_ush_pci();
+#else
 	retval = xhci_register_pci();
+#endif
 
 	if (retval < 0) {
 		printk(KERN_DEBUG "Problem registering PCI driver.");
@@ -4363,7 +4367,11 @@ static int __init xhci_hcd_init(void)
 	return 0;
 #ifdef CONFIG_PCI
 unreg_pci:
+#ifdef CONFIG_USB_USH_HSIC
+	xhci_unregister_ush_pci();
+#else
 	xhci_unregister_pci();
+#endif
 	return retval;
 #endif
 }
@@ -4375,7 +4383,11 @@ static void __exit xhci_hcd_cleanup(void)
 	platform_driver_unregister(&XHCI_PLATFORM_DRIVER);
 #endif
 #ifdef CONFIG_PCI
+#ifdef CONFIG_USB_USH_HSIC
+	xhci_unregister_ush_pci();
+#else
 	xhci_unregister_pci();
+#endif
 	xhci_unregister_plat();
 #endif
 }

@@ -982,6 +982,20 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 			xhci_ring_device(xhci, slot_id);
 			break;
+		case USB_PORT_FEAT_POWER:
+			/*
+			 * Turn off ports even if there isn't per-port
+			 * swithing. HC will report connect events even
+			 * before this is set. However, khubd will ignore
+			 * the roothub events until the roothub is registered.
+			 */
+			xhci_writel(xhci, temp & ~PORT_POWER,
+					port_array[wIndex]);
+
+			temp = xhci_readl(xhci, port_array[wIndex]);
+			xhci_dbg(xhci, "clear PP, port %d status  = 0x%x\n",
+					wIndex, temp);
+			break;
 		case USB_PORT_FEAT_C_SUSPEND:
 			bus_state->port_c_suspend &= ~(1 << wIndex);
 		case USB_PORT_FEAT_C_RESET:

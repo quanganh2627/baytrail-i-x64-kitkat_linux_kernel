@@ -192,7 +192,7 @@ struct usb_hcd {
 	void (*otg_notify) (struct usb_device *udev, unsigned action);
 #endif
 
-#ifdef CONFIG_USB_HCD_HSIC
+#ifdef CONFIG_USB_HSIC_NOTIFY
 	void (*hsic_notify)(struct usb_device *udev, unsigned action);
 #endif
 
