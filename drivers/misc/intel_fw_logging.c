@@ -35,6 +35,7 @@
 #include <linux/notifier.h>
 #include <linux/delay.h>
 #include <linux/ctype.h>
+#include <linux/intel_mid_pm.h>
 #include <asm/intel_mid_rpmsg.h>
 
 #include <linux/io.h>
@@ -61,6 +62,8 @@
 #define MAX_NUM_LOGDWORDS_EXTENDED      9
 #define MAX_NUM_ALL_LOGDWORDS           (MAX_NUM_LOGDWORDS +		\
 					 MAX_NUM_LOGDWORDS_EXTENDED)
+#define SIZE_ALL_LOGDWORDS		(MAX_NUM_ALL_LOGDWORDS *	\
+					 sizeof(u32))
 #define FABERR_INDICATOR		0x15
 #define FWERR_INDICATOR			0x7
 #define UNDEFLVL1ERR_IND		0x11
@@ -181,6 +184,37 @@ static char *agent_names[] = {
 	"ARC_IOCP_IA",
 	"SCSF_TOCP_TA"
 };
+
+static bool disable_scu_tracing;
+static int set_disable_scu_tracing(const char *val,
+				   const struct kernel_param *kp)
+{
+	int err;
+	bool saved_value;
+
+	saved_value = kp->arg;
+
+	err = param_set_bool(val, kp);
+	if (err || kp->arg == saved_value)
+		return err;
+
+	if (disable_scu_tracing)
+		disable_irq(irq);
+	else
+		enable_irq(irq);
+
+	return 0;
+}
+
+static struct kernel_param_ops disable_scu_tracing_ops = {
+	.set = set_disable_scu_tracing,
+	.get = param_get_bool,
+};
+module_param_cb(disable_scu_tracing, &disable_scu_tracing_ops,
+		&disable_scu_tracing,  S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(disable_scu_tracing,
+		"Disable scu tracing"
+		 "Set to 1 to prevent SCU tracing messages in dmesg");
 
 static irqreturn_t fw_logging_irq_thread(int irq, void *ignored)
 {
@@ -581,7 +615,7 @@ static int dump_scu_extented_trace(char *buf, int size, int log_offset,
 	*read = 0;
 
 	/* Title for error dump */
-	if (!log_offset)
+	if (log_offset == SIZE_ALL_LOGDWORDS)
 		output_str(ret, buf, size, "SCU Extra trace\n");
 
 	start = log_offset / sizeof(u32);
@@ -612,7 +646,7 @@ static int intel_fw_logging_proc_read(char *buffer, char **start, off_t offset,
 	if (!offset) {
 		/* Fill the buffer, return the buffer size */
 		ret = dump_fwerr_log(buffer, count);
-		read = MAX_NUM_ALL_LOGDWORDS * sizeof(u32);
+		read = SIZE_ALL_LOGDWORDS;
 	} else {
 		ret = dump_scu_extented_trace(buffer, count, offset, &read);
 		if (!read || offset + read > sram_buf_sz)
@@ -630,7 +664,7 @@ static int fw_logging_crash_on_boot(void)
 	int err = 0;
 	u32 read;
 
-	log_buffer_sz = MAX_NUM_ALL_LOGDWORDS * sizeof(u32) + sram_buf_sz;
+	log_buffer_sz = SIZE_ALL_LOGDWORDS + sram_buf_sz;
 	log_buffer = kzalloc(log_buffer_sz, GFP_KERNEL);
 	if (!log_buffer) {
 		pr_err("Failed to allocate memory for log buffer");
@@ -653,7 +687,8 @@ static int fw_logging_crash_on_boot(void)
 		 */
 		read_sram_trace_buf(log_buffer + MAX_NUM_ALL_LOGDWORDS,
 				    sram_trace_buf, sram_buf_sz);
-		length += dump_scu_extented_trace(NULL, 0, 0, &read);
+		length += dump_scu_extented_trace(NULL, 0,
+						  SIZE_ALL_LOGDWORDS, &read);
 	}
 
 #ifdef CONFIG_PROC_FS
@@ -733,6 +768,67 @@ out:
 	return 0;
 }
 
+#ifdef CONFIG_ATOM_SOC_POWER
+static void __iomem *ia_trace_buf;
+static void intel_fw_logging_report_nc_pwr(u32 value, int reg_type)
+{
+	struct ia_trace_t *ia_trace = ia_trace_buf;
+
+	switch (reg_type) {
+	case APM_REG_TYPE:
+		ia_trace->apm_cmd[1] = ia_trace->apm_cmd[0];
+		ia_trace->apm_cmd[0] = value;
+		break;
+	case OSPM_REG_TYPE:
+		ia_trace->ospm_pm_ssc[1] = ia_trace->ospm_pm_ssc[0];
+		ia_trace->ospm_pm_ssc[0] = value;
+		break;
+	default:
+		pr_err("Invalid reg type!");
+		break;
+	}
+}
+
+static int intel_fw_logging_start_nc_pwr_reporting(void)
+{
+	u32 buffer;
+
+	if (sram_buf_sz <  sizeof(struct ia_trace_t)) {
+		pr_warn("Sram_buf_sz is smaller than expected");
+		return 0;
+	}
+
+	buffer = intel_scu_ipc_get_scu_trace_buffer();
+	buffer += sram_buf_sz - sizeof(struct ia_trace_t);
+	ia_trace_buf = ioremap_nocache(buffer, sizeof(struct ia_trace_t));
+	if (!ia_trace_buf) {
+		pr_err("Failed to map ia trace buffer");
+		return -ENOMEM;
+	}
+	nc_report_power_state =  intel_fw_logging_report_nc_pwr;
+
+	return 0;
+}
+
+static void intel_fw_logging_stop_nc_pwr_reporting(void)
+{
+	iounmap(ia_trace_buf);
+	nc_report_power_state = NULL;
+}
+
+#else /* !CONFIG_ATOM_SOC_POWER */
+
+static int intel_fw_logging_start_nc_pwr_reporting(void)
+{
+	return 0;
+}
+
+static void intel_fw_logging_stop_nc_pwr_reporting(void)
+{
+}
+
+#endif /* CONFIG_ATOM_SOC_POWER */
+
 static struct notifier_block fw_logging_panic_notifier = {
 	.notifier_call	= intel_fw_logging_panic_handler,
 	.next		= NULL,
@@ -762,11 +858,18 @@ static int intel_fw_logging_probe(struct platform_device *pdev)
 		pr_err("Failed to register notifier!");
 		goto err1;
 	}
+
+	err = intel_fw_logging_start_nc_pwr_reporting();
+	if (err) {
+		pr_err("Failed to start nc power reporting!");
+		goto err2;
+	}
+
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		pr_info("No irq available, SCU tracing not available");
 		err = irq;
-		goto err2;
+		goto err3;
 	}
 
 	err = request_threaded_irq(irq, fw_logging_irq,
@@ -775,9 +878,15 @@ static int intel_fw_logging_probe(struct platform_device *pdev)
 				   &pdev->dev);
 	if (err) {
 		pr_err("Requesting irq failed");
-		goto err2;
+		goto err3;
 	}
+
+	if (!disable_scu_tracing)
+		enable_irq(irq);
+
 	return err;
+err3:
+	intel_fw_logging_stop_nc_pwr_reporting();
 err2:
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					 &fw_logging_panic_notifier);
@@ -788,6 +897,7 @@ err1:
 static int intel_fw_logging_remove(struct platform_device *pdev)
 {
 	free_irq(irq, &pdev->dev);
+	intel_fw_logging_stop_nc_pwr_reporting();
 	return atomic_notifier_chain_unregister(&panic_notifier_list,
 						&fw_logging_panic_notifier);
 }

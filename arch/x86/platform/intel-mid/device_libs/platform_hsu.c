@@ -100,7 +100,6 @@ static struct mfld_hsu_info ctp_hsu_info[] = {
 	[3] = {
 		.id = 1,
 		.name = DEVICE_NAME_3,
-		.wake_gpio = 96+30,
 		.rx_gpio = 96+30,
 		.rx_alt = 1,
 		.tx_gpio = 96+31,

@@ -82,6 +82,9 @@ struct hsu_dma_chan {
 #define CMD_TX	3
 #define CMD_RX_STOP	4
 #define CMD_TX_STOP	5
+#define CMD_TX_DMA	6
+#define CMD_RX_DMA	7
+#define CMD_PORT_IRQ	8
 
 /* to record the pin wakeup states */
 #define PM_WAKEUP	1
@@ -119,6 +122,8 @@ struct uart_hsu_port {
 	int			suspended;
 	int			reopen;
 	int			rts_delay;
+	int			flow_enable;
+	int			flow_disable;
 };
 
 /* Top level data structure of HSU */
@@ -297,7 +302,7 @@ static void serial_out(struct uart_hsu_port *up, int offset, int value)
 
 #ifdef CONFIG_DEBUG_FS
 
-#define HSU_REGS_BUFSIZE	1024
+#define HSU_REGS_BUFSIZE	4096
 
 static int hsu_show_regs_open(struct inode *inode, struct file *file)
 {
@@ -409,6 +414,176 @@ static ssize_t dma_show_regs(struct file *file, char __user *user_buf,
 	return ret;
 }
 
+/*
+wb addr value
+wl addr value
+rb addr
+rl addr
+*/
+
+static ssize_t dbg_read(struct file *file, char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	char *buf;
+	u32 len = 0;
+	ssize_t ret;
+
+	buf = kzalloc(HSU_REGS_BUFSIZE, GFP_KERNEL);
+	if (!buf)
+		return 0;
+
+	len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+			"1byte write: wb addr val\n");
+	len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+			"4byte write: wl addr val\n");
+	len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+			"1byte read: rb addr\n");
+	len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+			"4byte read: rl addr\n");
+
+	if (len > HSU_REGS_BUFSIZE)
+			len = HSU_REGS_BUFSIZE;
+
+	ret =  simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	kfree(buf);
+
+	return ret;
+}
+
+static ssize_t dbg_write(struct file *file, const char __user *userbuf,
+			size_t count, loff_t *ppos)
+{
+	char *buf;
+	int buf_size;
+	char op[4];
+	u32 addr = 0, value = 0, len = 0;
+	ssize_t ret = 0;
+
+	buf = kzalloc(HSU_REGS_BUFSIZE, GFP_KERNEL);
+	if (!buf)
+		return -EFAULT;
+
+
+	buf_size = min(count, HSU_REGS_BUFSIZE);
+
+	if (copy_from_user(buf, userbuf, buf_size))
+		return -EFAULT;
+
+
+	buf[buf_size] = 0;
+
+	sscanf(buf, "%s %lx %lx", op, &addr, &value);
+
+
+	if (!strncmp(op, "wb", 2))
+		writeb(value, addr);
+
+	if (!strncmp(op, "wl", 2))
+		writel(value, addr);
+
+	if (!strncmp(op, "rb", 2))
+		value = readb(addr);
+
+	if (!strncmp(op, "rl", 2))
+		value = readl(addr);
+
+	pr_info("%s op:%s addr:%lx value:%lx\n", __func__, op, addr, value);
+
+	kfree(buf);
+
+	return buf_size;
+}
+
+static ssize_t ports_info_read(struct file *file, char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	struct uart_hsu_port *up;
+	struct circ_buf *xmit;
+	char *buf;
+	u32 len = 0;
+	ssize_t ret;
+	int i;
+
+	buf = kzalloc(HSU_REGS_BUFSIZE, GFP_KERNEL);
+	if (!buf)
+		return 0;
+
+	for (i = 0; i < 4; i++) {
+		up = &phsu->port[i];
+		xmit = &up->port.state->xmit;
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"MFD HSU port[%d] status:\n", up->index);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"=================================\n");
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"use_dma: \t\t0x%08x\n", up->use_dma);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"running: \t\t0x%08x\n", up->running);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"dma_tx_on: \t\t0x%08x\n", up->dma_tx_on);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"dma_rx_on: \t\t0x%08x\n", up->dma_rx_on);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"flow-enable: \t\t0x%08x\n", up->flow_enable);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"flow-disable: \t\t0x%08x\n", up->flow_disable);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"suspended: \t\t0x%08x\n", up->suspended);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"reopen: \t\t0x%08x\n", up->reopen);
+
+		if (xmit) {
+			len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+					"count  : \t\t0x%08x\n",
+					CIRC_CNT_TO_END(xmit->head,
+					xmit->tail, UART_XMIT_SIZE));
+
+			len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+					"head   : \t\t0x%08x\n", xmit->head);
+
+			len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+					"tail   : \t\t0x%08x\n", xmit->tail);
+		}
+
+		if (up->running)
+			len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+					"stopped: \t\t0x%08x\n",
+					uart_tx_stopped(&up->port));
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"tx-addr: \t\t0x%08x\n", up->tx_addr);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"up-addr: \t\t0x%08x\n", up);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"port-addr: \t\t0x%08x\n", up->port.membase);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"rx-dma: \t\t0x%08x\n", up->rxc->reg);
+
+		len += snprintf(buf + len, HSU_REGS_BUFSIZE - len,
+				"tx-dma: \t\t0x%08x\n", up->txc->reg);
+	}
+
+	if (len > HSU_REGS_BUFSIZE)
+			len = HSU_REGS_BUFSIZE;
+
+	ret =  simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	kfree(buf);
+	return ret;
+}
+
 static const struct file_operations port_regs_ops = {
 	.owner		= THIS_MODULE,
 	.open		= hsu_show_regs_open,
@@ -420,6 +595,21 @@ static const struct file_operations dma_regs_ops = {
 	.owner		= THIS_MODULE,
 	.open		= hsu_show_regs_open,
 	.read		= dma_show_regs,
+	.llseek		= default_llseek,
+};
+
+static const struct file_operations addr_rw_ops = {
+	.owner		= THIS_MODULE,
+	.open		= hsu_show_regs_open,
+	.read		= dbg_read,
+	.write		= dbg_write,
+	.llseek		= default_llseek,
+};
+
+static const struct file_operations ports_info_ops = {
+	.owner		= THIS_MODULE,
+	.open		= hsu_show_regs_open,
+	.read		= ports_info_read,
 	.llseek		= default_llseek,
 };
 
@@ -443,6 +633,14 @@ static int hsu_debugfs_init(struct hsu_port *hsu)
 		debugfs_create_file(name, S_IFREG | S_IRUGO,
 			hsu->debugfs, (void *)&hsu->chans[i], &dma_regs_ops);
 	}
+
+	snprintf(name, sizeof(name), "addr_rw_dbg");
+	debugfs_create_file(name, S_IFREG | S_IRUGO,
+		hsu->debugfs, NULL, &addr_rw_ops);
+
+	snprintf(name, sizeof(name), "ports_info");
+	debugfs_create_file(name, S_IFREG | S_IRUGO,
+		hsu->debugfs, NULL, &ports_info_ops);
 
 	return 0;
 }
@@ -559,19 +757,23 @@ static void serial_hsu_start_tx(struct uart_port *port)
 {
 	struct uart_hsu_port *up =
 		container_of(port, struct uart_hsu_port, port);
+	struct circ_buf *circ = &up->qcirc;
 	unsigned long flags;
 
 	if (up->use_dma) {
 		pm_runtime_get(up->dev);
+
 		spin_lock_irqsave(&up->qlock, flags);
-		if (!hsu_port_is_active(up)) {
+		if (hsu_port_is_active(up) &&
+			!(CIRC_CNT(circ->head, circ->tail, MAXQ))) {
+			hsu_dma_tx(up);
+			spin_unlock_irqrestore(&up->qlock, flags);
+		} else {
 			insert_q(up, CMD_TX, 0, 0);
 			spin_unlock_irqrestore(&up->qlock, flags);
 			schedule_work(&up->qwork);
-		} else {
-			spin_unlock_irqrestore(&up->qlock, flags);
-			hsu_dma_tx(up);
 		}
+
 		pm_runtime_put(up->dev);
 	} else if (!(up->ier & UART_IER_THRI)) {
 		up->ier |= UART_IER_THRI;
@@ -584,17 +786,20 @@ static void serial_hsu_stop_tx(struct uart_port *port)
 	struct uart_hsu_port *up =
 		container_of(port, struct uart_hsu_port, port);
 	struct hsu_dma_chan *txc = up->txc;
+	struct circ_buf *circ = &up->qcirc;
 	unsigned long flags;
 
 	pm_runtime_get(up->dev);
 	if (up->use_dma) {
-		if (!hsu_port_is_active(up)) {
-			spin_lock_irqsave(&up->qlock, flags);
+		spin_lock_irqsave(&up->qlock, flags);
+		if (hsu_port_is_active(up) &&
+			!(CIRC_CNT(circ->head, circ->tail, MAXQ))) {
+			chan_writel(txc, HSU_CH_CR, 0x0);
+			spin_unlock_irqrestore(&up->qlock, flags);
+		} else {
 			insert_q(up, CMD_TX_STOP, 0, 0);
 			spin_unlock_irqrestore(&up->qlock, flags);
 			schedule_work(&up->qwork);
-		} else {
-			chan_writel(txc, HSU_CH_CR, 0x0);
 		}
 		up->dma_tx_on = 0;
 	} else if (up->ier & UART_IER_THRI) {
@@ -735,16 +940,20 @@ static void serial_hsu_stop_rx(struct uart_port *port)
 	struct uart_hsu_port *up =
 		container_of(port, struct uart_hsu_port, port);
 	unsigned long flags;
+	struct circ_buf *circ = &up->qcirc;
 
 	if (up->use_dma) {
-		if (!hsu_port_is_active(up)) {
-			spin_lock_irqsave(&up->qlock, flags);
+		spin_lock_irqsave(&up->qlock, flags);
+		if (hsu_port_is_active(up) &&
+			!(CIRC_CNT(circ->head, circ->tail, MAXQ))) {
+			chan_writel(up->rxc, HSU_CH_CR, 0x2);
+			spin_unlock_irqrestore(&up->qlock, flags);
+		} else {
 			insert_q(up, CMD_RX_STOP, 0, 0);
 			spin_unlock_irqrestore(&up->qlock, flags);
 			schedule_work(&up->qwork);
-		} else {
-			chan_writel(up->rxc, HSU_CH_CR, 0x2);
 		}
+
 		up->dma_rx_on = 0;
 		if (dmarx_need_timer(up))
 			del_timer_sync(&up->rxc->rx_timer);
@@ -927,9 +1136,11 @@ static irqreturn_t port_irq(int irq, void *dev_id)
 
 	pm_runtime_get(up->dev);
 #ifdef CONFIG_PM_RUNTIME
-	if (up->dev->power.runtime_status != RPM_ACTIVE &&
-		up->dev->power.runtime_status != RPM_RESUMING) {
+	if (!hsu_port_is_active(up)) {
 		pm_runtime_put(up->dev);
+		spin_lock(&up->qlock);
+		insert_q(up, CMD_PORT_IRQ, 0, 0);
+		spin_unlock(&up->qlock);
 		return IRQ_HANDLED;
 	}
 #endif
@@ -993,22 +1204,25 @@ static inline void dma_chan_irq(struct hsu_dma_chan *chan)
 
 	/* Rx channel */
 	if (up->dma_rx_on && chan->dirt == DMA_FROM_DEVICE) {
-#ifdef CONFIG_PM_RUNTIME
-		if (up->dev->power.runtime_status == RPM_ACTIVE ||
-		up->dev->power.runtime_status == RPM_RESUMING)
-#endif
+		if (hsu_port_is_active(up))
 			hsu_dma_rx(up, int_sts);
+		else {
+			spin_lock_irqsave(&up->qlock, flags);
+			insert_q(up, CMD_RX_DMA, 0, int_sts);
+			spin_unlock_irqrestore(&up->qlock, flags);
+		}
 	}
 	/* Tx channel */
 	if (chan->dirt == DMA_TO_DEVICE) {
-#ifdef CONFIG_PM_RUNTIME
-		if (up->dev->power.runtime_status == RPM_ACTIVE ||
-		up->dev->power.runtime_status == RPM_RESUMING)
-#endif
-		{
-			chan_writel(chan, HSU_CH_CR, 0x0);
+		if (hsu_port_is_active(up)) {
 			up->dma_tx_on = 0;
+			chan_writel(chan, HSU_CH_CR, 0x0);
 			hsu_dma_tx(up);
+		} else {
+			spin_lock_irqsave(&up->qlock, flags);
+			insert_q(up, CMD_TX_DMA, 0, 0);
+			spin_unlock_irqrestore(&up->qlock, flags);
+			schedule_work(&up->qwork);
 		}
 	}
 
@@ -1479,10 +1693,13 @@ serial_hsu_set_termios(struct uart_port *port, struct ktermios *termios,
 
 	serial_out(up, UART_IER, up->ier);
 
-	if (termios->c_cflag & CRTSCTS)
+	if (termios->c_cflag & CRTSCTS) {
+		up->flow_enable++;
 		up->mcr |= UART_MCR_AFE | UART_MCR_RTS;
-	else
+	} else {
+		up->flow_disable++;
 		up->mcr &= ~UART_MCR_AFE;
+	}
 
 	serial_out(up, UART_LCR, cval | UART_LCR_DLAB);	/* set DLAB */
 	serial_out(up, UART_DLL, quot & 0xff);		/* LS of divisor */
@@ -2170,6 +2387,17 @@ static void qwork(struct work_struct *work)
 		case CMD_TX_STOP:
 			chan_writel(up->txc, HSU_CH_CR, 0x0);
 			break;
+		case CMD_TX_DMA:
+			up->dma_tx_on = 0;
+			chan_writel(up->txc, HSU_CH_CR, 0x0);
+			hsu_dma_tx(up);
+			break;
+		case CMD_RX_DMA:
+			hsu_dma_rx(up, value);
+			break;
+		case CMD_PORT_IRQ:
+			check_modem_status(up);
+			break;
 		default:
 			dev_err(up->dev, "wrong queue cmd type!\n");
 		}
@@ -2239,11 +2467,19 @@ static DEFINE_PCI_DEVICE_TABLE(hsu_pci_ids) = {
 #ifdef CONFIG_PM
 static bool allow_for_suspend(struct uart_hsu_port *up)
 {
-	struct circ_buf *xmit = &up->port.state->xmit;
-	struct hsu_dma_chan *chan = up->rxc;
-	struct hsu_dma_buffer *dbuf = &up->rxbuf;
+	struct circ_buf *xmit;
+	struct hsu_dma_chan *chan;
+	struct hsu_dma_buffer *dbuf;
 	int rx_count;
 	u32 loop = 100000;
+
+	if ((!up->running) && (up->index == logic_idx) &&
+		serial_hsu_ports[share_idx]->running)
+		up = serial_hsu_ports[share_idx];
+
+	xmit = &up->port.state->xmit;
+	chan = up->rxc;
+	dbuf = &up->rxbuf;
 
 	if (!uart_circ_empty(xmit) && !uart_tx_stopped(&up->port)) {
 		dev_dbg(up->dev, "%s: circ_not_empty\n", __func__);
@@ -2256,14 +2492,6 @@ static bool allow_for_suspend(struct uart_hsu_port *up)
 		if (up->dma_rx_on && dmarx_need_timer(up))
 			del_timer_sync(&up->rxc->rx_timer);
 		intel_mid_hsu_suspend(up->index);
-	}
-	else if (up->index == logic_idx) {
-		struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
-		if (up3->running) {
-			if (up3->dma_rx_on && dmarx_need_timer(up3))
-				del_timer_sync(&up3->rxc->rx_timer);
-			intel_mid_hsu_suspend(up3->index);
-		}
 	}
 
 	if (up->use_dma && up->dma_rx_on) {
@@ -2301,15 +2529,6 @@ rx_dma_run:
 		if (up->dma_rx_on && dmarx_need_timer(up))
 			mod_timer(&up->rxc->rx_timer,
 				jiffies + HSU_DMA_TIMEOUT_CHECK_FREQ);
-	}
-	else if (up->index == logic_idx) {
-		struct uart_hsu_port *up3 = serial_hsu_ports[share_idx];
-		if (up3->running) {
-			intel_mid_hsu_resume(up3->index);
-			if (up3->dma_rx_on && dmarx_need_timer(up3))
-				mod_timer(&up3->rxc->rx_timer,
-					jiffies + HSU_DMA_TIMEOUT_CHECK_FREQ);
-		}
 	}
 	enable_irq(up->port.irq);
 
