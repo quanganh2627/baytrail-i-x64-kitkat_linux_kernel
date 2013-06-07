@@ -860,7 +860,7 @@ int dlp_tty_do_write(struct dlp_xfer_ctx *xfer_ctx, unsigned char *buf,
 		goto out;
 	}
 
-	write_lock_irqsave(&xfer_ctx->lock, flags);
+	read_lock_irqsave(&xfer_ctx->lock, flags);
 	pdu = dlp_fifo_tail(&xfer_ctx->wait_pdus);
 	if (pdu) {
 		if (pdu->status != HSI_STATUS_PENDING) {
@@ -870,7 +870,7 @@ int dlp_tty_do_write(struct dlp_xfer_ctx *xfer_ctx, unsigned char *buf,
 				pdu->status = HSI_STATUS_PENDING;
 		}
 	}
-	write_unlock_irqrestore(&xfer_ctx->lock, flags);
+	read_unlock_irqrestore(&xfer_ctx->lock, flags);
 
 	if (avail == 0) {
 		pdu = dlp_fifo_recycled_pop(xfer_ctx);
@@ -910,9 +910,9 @@ int dlp_tty_do_write(struct dlp_xfer_ctx *xfer_ctx, unsigned char *buf,
 		write_lock_irqsave(&xfer_ctx->lock, flags);
 		xfer_ctx->buffered += copied;
 		xfer_ctx->room -= copied;
-		pdu->status = HSI_STATUS_COMPLETED;
 		write_unlock_irqrestore(&xfer_ctx->lock, flags);
 
+		pdu->status = HSI_STATUS_COMPLETED;
 		if (dlp_ctx_get_state(xfer_ctx) != IDLE)
 			dlp_pop_wait_push_ctrl(xfer_ctx);
 	} else {
