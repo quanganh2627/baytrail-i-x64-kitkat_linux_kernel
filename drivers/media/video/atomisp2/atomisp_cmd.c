@@ -964,7 +964,6 @@ void atomisp_delayed_init_work(struct work_struct *work)
 	isp->delayed_init = ATOMISP_DELAYED_INIT_WORK_DONE;
 }
 
-
 void atomisp_wdt_work(struct work_struct *work)
 {
 	struct atomisp_device *isp = container_of(work, struct atomisp_device,
@@ -1072,6 +1071,12 @@ void atomisp_wdt_work(struct work_struct *work)
 		if (atomisp_acc_load_extensions(isp) < 0)
 			dev_err(isp->dev, "acc extension failed to reload\n");
 
+		/* The following frame after an ISP timeout
+		 * may be corrupted, so mark it so. */
+		isp->sw_contex.invalid_frame = 1;
+		isp->sw_contex.invalid_vf_frame = 1;
+		isp->sw_contex.invalid_s3a = 1;
+		isp->sw_contex.invalid_dis = 1;
 
 		sh_css_start(css_pipe_id);
 		if (!isp->sw_contex.file_input) {
