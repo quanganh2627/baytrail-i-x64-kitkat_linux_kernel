@@ -19,6 +19,7 @@
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/cpufreq.h>
+#include <linux/kernel_stat.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
@@ -35,6 +36,8 @@
 #include <trace/events/cpufreq_interactive.h>
 
 static atomic_t active_count = ATOMIC_INIT(0);
+
+static bool io_is_busy;
 
 struct cpufreq_interactive_cpuinfo {
 	struct timer_list cpu_timer;
@@ -113,13 +116,6 @@ static int touch_event_val;
 
 static int vsync_count_val;
 
-/*
- * io_is_busy flag is exposed so that it can be controlled
- * from sysfs
- */
-
-static unsigned int ig_io_is_busy;
-
 static inline cputime64_t get_cpu_iowait_time(unsigned int cpu,
 	cputime64_t *wall)
 {
@@ -147,6 +143,41 @@ struct cpufreq_governor cpufreq_gov_interactive = {
 	.max_transition_latency = 10000000,
 	.owner = THIS_MODULE,
 };
+
+static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
+{
+	u64 idle_time;
+	u64 cur_wall_time;
+	u64 busy_time;
+
+	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+
+	busy_time  = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
+
+	idle_time = cur_wall_time - busy_time;
+	if (wall)
+		*wall = jiffies_to_usecs(cur_wall_time);
+
+	return jiffies_to_usecs(idle_time);
+}
+
+static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
+{
+	u64 idle_time = get_cpu_idle_time_us(cpu, NULL);
+
+	if (idle_time == -1ULL)
+		return get_cpu_idle_time_jiffy(cpu, wall);
+	else if (!io_is_busy)
+		idle_time += get_cpu_iowait_time_us(cpu, wall);
+
+	return idle_time;
+}
+
 
 static void cpufreq_interactive_timer(unsigned long data)
 {
@@ -182,7 +213,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 */
 	time_in_idle = pcpu->time_in_idle;
 	idle_exit_time = pcpu->idle_exit_time;
-	now_idle = get_cpu_idle_time_us(data, &pcpu->timer_run_time);
+	now_idle = get_cpu_idle_time(data, &pcpu->timer_run_time);
 	smp_wmb();
 
 	/* If we raced with cancelling a timer, skip. */
@@ -210,9 +241,6 @@ static void cpufreq_interactive_timer(unsigned long data)
 	delta_idle = (unsigned int)(now_idle - pcpu->target_set_time_in_idle);
 	delta_time = (unsigned int)(pcpu->timer_run_time -
 				    pcpu->target_set_time);
-
-	if (ig_io_is_busy && delta_idle >= iowait_time)
-		delta_idle -= iowait_time;
 
 	if ((delta_time == 0) || (delta_idle > delta_time))
 		load_since_change = 0;
@@ -322,7 +350,7 @@ rearm:
 			pcpu->timer_idlecancel = 1;
 		}
 
-		pcpu->time_in_idle = get_cpu_idle_time_us(
+		pcpu->time_in_idle = get_cpu_idle_time(
 			data, &pcpu->idle_exit_time);
 		mod_timer(&pcpu->cpu_timer,
 			  jiffies + usecs_to_jiffies(timer_rate));
@@ -356,7 +384,7 @@ static void cpufreq_interactive_idle_start(void)
 		 * the CPUFreq driver.
 		 */
 		if (!pending) {
-			pcpu->time_in_idle = get_cpu_idle_time_us(
+			pcpu->time_in_idle = get_cpu_idle_time(
 				smp_processor_id(), &pcpu->idle_exit_time);
 			pcpu->timer_idlecancel = 0;
 			mod_timer(&pcpu->cpu_timer,
@@ -410,7 +438,7 @@ static void cpufreq_interactive_idle_end(void)
 	    pcpu->timer_run_time >= pcpu->idle_exit_time &&
 	    pcpu->governor_enabled) {
 		pcpu->time_in_idle =
-			get_cpu_idle_time_us(smp_processor_id(),
+			get_cpu_idle_time(smp_processor_id(),
 					     &pcpu->idle_exit_time);
 		pcpu->timer_idlecancel = 0;
 		mod_timer(&pcpu->cpu_timer,
@@ -493,7 +521,7 @@ static void cpufreq_interactive_boost(void)
 			pcpu->target_freq = touchboost_freq;
 			cpumask_set_cpu(i, &speedchange_cpumask);
 			pcpu->target_set_time_in_idle =
-				get_cpu_idle_time_us(i, &pcpu->target_set_time);
+				get_cpu_idle_time(i, &pcpu->target_set_time);
 			pcpu->hispeed_validate_time = pcpu->target_set_time;
 			anyboost = 1;
 		}
@@ -774,7 +802,7 @@ static struct global_attr boostpulse =
 static ssize_t show_io_is_busy(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
-	return sprintf(buf, "%u\n", ig_io_is_busy);
+	return sprintf(buf, "%u\n", io_is_busy);
 }
 
 static ssize_t store_io_is_busy(struct kobject *kobj, struct attribute *attr,
@@ -786,11 +814,12 @@ static ssize_t store_io_is_busy(struct kobject *kobj, struct attribute *attr,
 	ret = kstrtoul(buf, 0, &val);
 	if (ret < 0)
 		return ret;
-	ig_io_is_busy = !!val;
+	io_is_busy = !!val;
 	return count;
 }
 
-define_one_global_rw(io_is_busy);
+static struct global_attr io_is_busy_attr = __ATTR(io_is_busy, 0644,
+		show_io_is_busy, store_io_is_busy);
 
 static struct attribute *interactive_attributes[] = {
 	&hispeed_freq_attr.attr,
@@ -803,7 +832,7 @@ static struct attribute *interactive_attributes[] = {
 	&vsync_count.attr,
 	&boost.attr,
 	&boostpulse.attr,
-	&io_is_busy.attr,
+	&io_is_busy_attr.attr,
 	&touchboost_freq_attr.attr,
 	&vsync_dec.attr,
 	NULL,
@@ -879,7 +908,7 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 			pcpu->target_freq = policy->cur;
 			pcpu->freq_table = freq_table;
 			pcpu->target_set_time_in_idle =
-				get_cpu_idle_time_us(j,
+				get_cpu_idle_time(j,
 					     &pcpu->target_set_time);
 			pcpu->floor_freq = pcpu->target_freq;
 			pcpu->floor_validate_time =
@@ -957,7 +986,7 @@ static int __init cpufreq_interactive_init(void)
 	min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
 	above_hispeed_delay_val = DEFAULT_ABOVE_HISPEED_DELAY;
 	timer_rate = DEFAULT_TIMER_RATE;
-
+	io_is_busy = should_io_be_busy();
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
 		pcpu = &per_cpu(cpuinfo, i);
