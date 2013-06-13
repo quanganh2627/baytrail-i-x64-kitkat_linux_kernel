@@ -277,8 +277,9 @@ static void dlp_do_tty_forward(struct work_struct *work)
 	struct dlp_tty_context *tty_ctx;
 	struct tty_struct *tty;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+				__func__);
 		return;
 	}
 
@@ -572,6 +573,12 @@ static int dlp_tty_port_activate(struct tty_port *port, struct tty_struct *tty)
 
 	pr_debug(DRVNAME": port activate request\n");
 
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
+		return -ENODEV;
+	}
+
 	/* Get the context reference stored in the TTY open() */
 	ch_ctx = (struct dlp_channel *)tty->driver_data;
 	tx_ctx = &ch_ctx->tx;
@@ -604,6 +611,12 @@ static void dlp_tty_port_shutdown(struct tty_port *port)
 	struct dlp_xfer_ctx *rx_ctx;
 
 	pr_debug(DRVNAME": port shutdown request\n");
+
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
+		return;
+	}
 
 	tty_ctx = container_of(port, struct dlp_tty_context, tty_prt);
 	ch_ctx = tty_ctx->ch_ctx;
@@ -642,9 +655,10 @@ static int dlp_tty_open(struct tty_struct *tty, struct file *filp)
 	pr_debug(DRVNAME": TTY device open request (%s, %d)\n",
 			current->comm, current->tgid);
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
 		ret = -ENODEV;
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		goto out;
 	}
 
@@ -703,8 +717,9 @@ static void dlp_tty_flush_tx_buffer(struct tty_struct *tty)
 	struct dlp_channel *ch_ctx = (struct dlp_channel *)tty->driver_data;
 	struct dlp_xfer_ctx *xfer_ctx = &ch_ctx->tx;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return;
 	}
 
@@ -758,8 +773,9 @@ static void dlp_tty_hangup(struct tty_struct *tty)
 	struct dlp_tty_context *tty_ctx =
 	    (((struct dlp_channel *)tty->driver_data))->ch_data;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return;
 	}
 
@@ -778,8 +794,9 @@ static void dlp_tty_wait_until_sent(struct tty_struct *tty, int timeout)
 {
 	struct dlp_channel *ch_ctx = (struct dlp_channel *)tty->driver_data;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return;
 	}
 
@@ -803,8 +820,9 @@ static void dlp_tty_close(struct tty_struct *tty, struct file *filp)
 
 	/* Set TTY flow_stopped to flush TX buffer */
 	tty->flow_stopped = 1;
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return;
 	}
 
@@ -818,7 +836,7 @@ static void dlp_tty_close(struct tty_struct *tty, struct file *filp)
 	}
 
 	/* Flush everything & Release the HSI port */
-	if (need_cleanup) {
+	if (likely(!atomic_read(&dlp_drv.drv_remove_ongoing)) && need_cleanup) {
 		dlp_ctrl_clean_stored_cmd();
 		pr_debug(DRVNAME": Flushing the HSI controller\n");
 		hsi_flush(dlp_drv.client);
@@ -946,8 +964,9 @@ static int dlp_tty_write(struct tty_struct *tty, const unsigned char *buf,
 	unsigned char *ptr;
 	unsigned long flags;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return -ENODEV;
 	}
 
@@ -993,8 +1012,9 @@ static int dlp_tty_write_room(struct tty_struct *tty)
 	int room;
 	unsigned long flags;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return -ENODEV;
 	}
 
@@ -1019,8 +1039,9 @@ static int dlp_tty_chars_in_buffer(struct tty_struct *tty)
 	int buffered;
 	unsigned long flags;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return -ENODEV;
 	}
 
@@ -1048,8 +1069,9 @@ static int dlp_tty_ioctl(struct tty_struct *tty,
 	unsigned long flags;
 	int ret;
 
-	if (unlikely(dlp_drv.drv_remove_ongoing)) {
-		pr_err(DRVNAME ": Driver is currently removed by the system");
+	if (unlikely(atomic_read(&dlp_drv.drv_remove_ongoing))) {
+		pr_err(DRVNAME ": %s: Driver is currently removed by the system",
+						__func__);
 		return -ENODEV;
 	}
 

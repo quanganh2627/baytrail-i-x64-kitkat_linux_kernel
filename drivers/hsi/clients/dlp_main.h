@@ -31,6 +31,7 @@
 #ifndef _DLP_MAIN_H_
 #define _DLP_MAIN_H_
 
+#include <linux/types.h>
 #include <linux/hsi/hsi.h>
 #include <linux/hsi/hsi_dlp.h>
 #include <linux/tty.h>
@@ -368,7 +369,7 @@ struct dlp_driver {
 	spinlock_t lock;
 	unsigned int tty_closed;
 	unsigned int tx_timeout;
-	unsigned int drv_remove_ongoing;
+	atomic_t drv_remove_ongoing;
 	struct timer_list timer[DLP_CHANNEL_COUNT];
 
 	/* Workqueue for tty buffer forwarding */

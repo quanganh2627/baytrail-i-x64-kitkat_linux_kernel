@@ -2134,6 +2134,13 @@ android_hdmi_detect(struct drm_connector *connector,
 
 		if (connector->status == connector_status_connected)
 			return connector_status_connected;
+
+		if (!ospm_power_using_hw_begin(OSPM_DISPLAY_ISLAND,
+					OSPM_UHB_FORCE_POWER_ON)) {
+			pr_err("Unable to power on display island!");
+			return connector_status_disconnected;
+		}
+
 		/*
 		 * Handle Hot-plug of HDMI. Display B would be power-gated
 		 * by ospm_post_init if HDMI is not detected during driver load.
@@ -2151,6 +2158,9 @@ android_hdmi_detect(struct drm_connector *connector,
 		dev_priv->panel_desc |= DISPLAY_B;
 
 		dev_priv->bhdmiconnected = true;
+
+		ospm_power_using_hw_end(OSPM_DISPLAY_ISLAND);
+
 		return connector_status_connected;
 	} else {
 #ifdef OTM_HDMI_HDCP_ENABLE
