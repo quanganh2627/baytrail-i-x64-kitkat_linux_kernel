@@ -2127,6 +2127,24 @@ void ospm_runtime_pm_forbid(struct drm_device *dev)
 	dev_priv->rpm_enabled = 0;
 }
 
+int psb_suspend_noirq(struct device *dev)
+{
+	int ret = 0;
+	PSB_DEBUG_PM("psb_suspend_noirq is called.\n");
+
+	if (atomic_read(&g_graphics_access_count) ||
+		atomic_read(&g_videoenc_access_count) ||
+		(gbdispstatus == true) ||
+		atomic_read(&g_videodec_access_count) ||
+		atomic_read(&g_display_access_count)) {
+		PSB_DEBUG_WARN("WARN: suspend is failure,\n"
+		"So going to resume\n");
+		return -EBUSY;
+	}
+
+	return ret;
+}
+
 int psb_runtime_suspend(struct device *dev)
 {
 	pm_message_t state;
