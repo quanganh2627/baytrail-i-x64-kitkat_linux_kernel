@@ -4515,6 +4515,7 @@ static const struct dev_pm_ops psb_pm_ops = {
 	.runtime_resume = psb_runtime_resume,
 	.runtime_idle = psb_runtime_idle,
 	.suspend = psb_runtime_suspend,
+	.suspend_noirq = psb_suspend_noirq,
 	.resume = psb_runtime_resume,
 };
 

@@ -123,6 +123,7 @@ void ospm_power_graphics_island_up(int hw_islands);
 /*
  * GFX-Runtime PM callbacks
  */
+int psb_suspend_noirq(struct device *dev);
 int psb_runtime_suspend(struct device *dev);
 int psb_runtime_resume(struct device *dev);
 int psb_runtime_idle(struct device *dev);

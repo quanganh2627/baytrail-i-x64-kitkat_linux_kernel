@@ -53,6 +53,7 @@
 #include <asm/intel_scu_pmic.h>
 #include <linux/mutex.h>
 #include <linux/gpio.h>
+#include <linux/wakelock.h>
 #include "mdfld_dsi_dbi_dsr.h"
 
 #define SCU_CMD_VPROG2  0xe3
@@ -73,6 +74,7 @@ bool gbSuspended; /* Indicate the host PCI suspened or not */
 static int g_hw_power_status_mask;
 static atomic_t g_display_access_count;
 static atomic_t g_graphics_access_count;
+static struct wake_lock psb_wake_lock;
 atomic_t g_videoenc_access_count;
 atomic_t g_videodec_access_count;
 
@@ -422,6 +424,7 @@ void ospm_power_init(struct drm_device *dev)
 	atomic_set(&g_graphics_access_count, 0);
 	atomic_set(&g_videoenc_access_count, 0);
 	atomic_set(&g_videodec_access_count, 0);
+	wake_lock_init(&psb_wake_lock, WAKE_LOCK_SUSPEND, "psb_wakelock");
 
 #if SUPPORT_EARLY_SUSPEND
 	register_early_suspend(&gfx_early_suspend_desc);
@@ -446,6 +449,7 @@ void ospm_power_uninit(void)
     unregister_early_suspend(&gfx_early_suspend_desc);
 #endif /* if SUPPORT_EARLY_SUSPEND */
     mutex_destroy(&g_ospm_mutex);
+	wake_lock_destroy(&psb_wake_lock);
 #ifdef CONFIG_GFX_RTPM
 	pm_runtime_get_noresume(&gpDrmDevice->pdev->dev);
 #endif
@@ -1891,8 +1895,10 @@ bool ospm_power_using_hw_begin(int hw_island, UHBUsage usage)
 		return false;
 
 #ifdef CONFIG_GFX_RTPM
-	if (force_on)
+	if (force_on) {
+		wake_lock_timeout(&psb_wake_lock, 1 * HZ);
 		pm_runtime_get_sync(&pdev->dev);
+	}
 	else
 		pm_runtime_get_noresume(&pdev->dev);
 #endif
@@ -2125,6 +2131,24 @@ void ospm_runtime_pm_forbid(struct drm_device *dev)
 	pm_runtime_forbid(&dev->pdev->dev);
 #endif
 	dev_priv->rpm_enabled = 0;
+}
+
+int psb_suspend_noirq(struct device *dev)
+{
+	int ret = 0;
+	PSB_DEBUG_PM("psb_suspend_noirq is called.\n");
+
+	if (atomic_read(&g_graphics_access_count) ||
+		atomic_read(&g_videoenc_access_count) ||
+		(gbdispstatus == true) ||
+		atomic_read(&g_videodec_access_count) ||
+		atomic_read(&g_display_access_count)) {
+		PSB_DEBUG_WARN("WARN: suspend is failure,\n"
+		"So going to resume\n");
+		return -EBUSY;
+	}
+
+	return ret;
 }
 
 int psb_runtime_suspend(struct device *dev)
