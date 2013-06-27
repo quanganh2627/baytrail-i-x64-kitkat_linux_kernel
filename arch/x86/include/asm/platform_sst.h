@@ -41,7 +41,7 @@ struct sst_gpio_config {
 struct sst_ssp_info {
 	u32 base_add;
 	struct sst_gpio_config gpio;
-	bool in_use;
+	bool gpio_in_use;
 };
 
 struct sst_info {
@@ -94,11 +94,21 @@ struct sst_platform_config_data {
 	u32 sst_dma_base[SST_MAX_DMA];
 };
 
+struct sst_platform_debugfs_data {
+	u32 ssp_reg_size;
+	u32 dma_reg_size;
+	u32 checkpoint_offset;
+	u32 checkpoint_size;
+	u8 num_ssp;
+	u8 num_dma;
+};
+
 struct sst_pci_info {
 	struct sst_info *probe_data;
 	struct sst_ssp_info *ssp_data;
 	struct sst_board_config_data *bdata;
 	struct sst_platform_config_data *pdata;
+	struct sst_platform_debugfs_data *debugfs_data;
 };
 
 #endif
