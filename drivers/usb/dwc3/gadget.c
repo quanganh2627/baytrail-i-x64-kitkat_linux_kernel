@@ -683,7 +683,8 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	dep = to_dwc3_ep(ep);
 	dwc = dep->dwc;
 
-	if (!(dep->flags & DWC3_EP_ENABLED)) {
+	if (!(dep->flags & DWC3_EP_ENABLED) &&
+		dep->flags != DWC3_EP_HIBERNATION) {
 		dev_dbg(dwc->dev, "%s is already disabled\n",
 				dep->name);
 		return 0;
@@ -3221,7 +3222,7 @@ int dwc3_runtime_suspend(struct device *device)
 		dwc3_gadget_get_ep_state(dwc, dep);
 
 		dep->flags_backup = dep->flags;
-		dep->flags = 0;
+		dep->flags = DWC3_EP_HIBERNATION;
 	}
 
 	dwc3_gadget_keep_conn(dwc, 1);
