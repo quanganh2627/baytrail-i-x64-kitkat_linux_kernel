@@ -2636,8 +2636,7 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc)
 	if (!dwc->hibernation.enabled) {
 		dev_info(dwc->dev, "device resumed; notify OTG\n");
 		__dwc3_vbus_draw(dwc, OTG_DEVICE_RESUME);
-	} else
-		pm_runtime_get(dwc->dev);
+	}
 
 	/*
 	 * TODO take core out of low power mode when that's
