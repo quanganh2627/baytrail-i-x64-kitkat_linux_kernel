@@ -2352,6 +2352,16 @@ static int sdhci_get_cd(struct mmc_host *mmc)
 	return present;
 }
 
+static void sdhci_init_card(struct mmc_host *mmc, struct mmc_card *card)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->quirks2 & SDHCI_QUIRK2_NON_STD_CIS) {
+		card->quirks |= MMC_QUIRK_NON_STD_CIS;
+	}
+}
+
+
 static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.set_ios	= sdhci_set_ios,
@@ -2362,6 +2372,7 @@ static const struct mmc_host_ops sdhci_ops = {
 	.execute_tuning			= sdhci_execute_tuning,
 	.enable_preset_value		= sdhci_enable_preset_value,
 	.get_cd		= sdhci_get_cd,
+	.init_card = sdhci_init_card,
 };
 
 /*****************************************************************************\
