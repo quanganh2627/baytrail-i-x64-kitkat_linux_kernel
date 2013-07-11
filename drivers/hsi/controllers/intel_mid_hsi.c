@@ -3347,8 +3347,20 @@ static inline u32 hsi_pio_xfer_complete(struct intel_controller *intel_hsi,
 			for (; sz > 0; sz--) {
 				if (is_tx)
 					iowrite32(*buf, fifo);
-				else
-					*buf = ioread32(fifo);
+				else {
+					if (ioread32(ARASAN_REG(HSI_STATUS)) &
+						ARASAN_RX_NOT_EMPTY(msg->channel)) {
+
+						*buf = ioread32(fifo);
+					} else {
+						pio_ctx->offset -= sz;
+						msg->actual_len -= HSI_FRAMES_TO_BYTES(sz);
+						/* Exit while loop as we don't have more data
+						to read in the FIFO  */
+						avail = 0;
+						break;
+					}
+				}
 				buf++;
 			}
 
