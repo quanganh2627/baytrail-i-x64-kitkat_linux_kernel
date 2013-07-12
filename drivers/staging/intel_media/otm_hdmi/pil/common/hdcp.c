@@ -72,6 +72,7 @@
 #include "otm_hdmi.h"
 #include "otm_hdmi_types.h"
 #include "ipil_hdcp_api.h"
+#include "ipil_hdmi.h"
 
 #define OTM_HDCP_DEBUG_MODULE
 
@@ -565,6 +566,9 @@ static void hdcp_reset(void)
 		hdcp_context->force_reset = false;
 	}
 
+	/* blank TV screen */
+	ipil_enable_planes_on_pipe(1, false);
+
 #ifndef OTM_HDMI_HDCP_ALWAYS_ENC
 	/* this flag will be re-enabled by upper layers */
 	hdcp_context->is_required = false;
@@ -905,6 +909,9 @@ static bool hdcp_start(void)
 	/* Increment Auth Check Counter */
 	hdcp_context->auth_id++;
 
+	/* blank TV screen */
+	ipil_enable_planes_on_pipe(1, false);
+
 	/* Check HDCP Status */
 	if (ipil_hdcp_is_ready() == false)
 		return false;
@@ -912,6 +919,9 @@ static bool hdcp_start(void)
 	/* start 1st stage of hdcp authentication */
 	if (hdcp_stage1_authentication(&is_repeater) == false)
 		return false;
+
+	/* un-blank TV screen */
+	ipil_enable_planes_on_pipe(1, true);
 
 	pr_debug("hdcp: initial authentication completed, repeater:%d\n",
 		is_repeater);
