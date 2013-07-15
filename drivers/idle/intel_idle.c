@@ -209,13 +209,7 @@ static struct cpuidle_state mrfld_cstates[MWAIT_MAX_NUM_CSTATES] = {
 		.exit_latency = 1200,
 		.target_residency = 4000,
 		.enter = &intel_idle },
-	{ /* MWAIT C8-S0i2 */
-		.name = "S0i2-ATM",
-		.desc = "MWAIT 0x62",
-		.flags = CPUIDLE_FLAG_TIME_VALID | CPUIDLE_FLAG_TLB_FLUSHED,
-		.exit_latency = 2000,
-		.target_residency = 8000,
-		.enter = &intel_idle },
+	{ /* MWAIT C8-S0i2 */ }, /* S0i2 is depcreated on Merrifield */
 	{ /* MWAIT C9-S0i3 */
 		.name = "S0i3-ATM",
 		.desc = "MWAIT 0x64",
