@@ -169,6 +169,7 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
 	POWER_SUPPLY_TYPE_USB_HOST,	/* To support OTG devices */
+	POWER_SUPPLY_TYPE_SE1,		/* SE1(Apple) charging port */
 };
 
 enum power_supply_charger_event {

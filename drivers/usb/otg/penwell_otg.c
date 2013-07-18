@@ -216,6 +216,8 @@ static const char *psc_string(enum power_supply_type charger)
 		return "Accessory Charger Adaptor";
 	case POWER_SUPPLY_TYPE_USB_HOST:
 		return "USB Host";
+	case POWER_SUPPLY_TYPE_SE1:
+		return "SE1 Charger";
 	case POWER_SUPPLY_TYPE_BATTERY:
 		return "Unknown";
 	default:
@@ -420,6 +422,7 @@ static enum power_supply_type usb_chrg_to_power_supply_chrg(
 	case CHRG_CDP: return POWER_SUPPLY_TYPE_USB_CDP;
 	case CHRG_DCP: return POWER_SUPPLY_TYPE_USB_DCP;
 	case CHRG_ACA: return POWER_SUPPLY_TYPE_USB_ACA;
+	case CHRG_SE1: return POWER_SUPPLY_TYPE_SE1;
 	default: return POWER_SUPPLY_TYPE_BATTERY;
 	}
 }
@@ -492,6 +495,14 @@ static enum power_supply_charger_event check_psc_event(
 			return POWER_SUPPLY_CHARGER_EVENT_CONNECT;
 		} else
 			dev_dbg(pnw->dev, "CDP: no need to update EM\n");
+		break;
+	case POWER_SUPPLY_TYPE_SE1:
+		if (pnw->charging_cap.mA == CHRG_CURR_DISCONN &&
+		   new.mA == CHRG_CURR_SE1) {
+			/* SE1 event: charger connect */
+			return POWER_SUPPLY_CHARGER_EVENT_CONNECT;
+		} else
+			dev_dbg(pnw->dev, "SE1: no need to update EM\n");
 		break;
 	case POWER_SUPPLY_TYPE_BATTERY:
 		if (new.mA == CHRG_CURR_DISCONN) {
@@ -3307,6 +3318,10 @@ static void penwell_otg_work(struct work_struct *work)
 				if (retval)
 					dev_warn(pnw->dev, "ulpi failed\n");
 				penwell_otg_charger_hwdet(false);
+			} else if (ps_type == POWER_SUPPLY_TYPE_SE1) {
+				/* Notify EM charger remove event */
+				penwell_otg_update_chrg_cap(CHRG_UNKNOWN,
+						CHRG_CURR_DISCONN);
 			}
 		}
 		break;
