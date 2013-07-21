@@ -3441,6 +3441,21 @@ i915_gem_object_pin(struct drm_i915_gem_object *obj,
 		}
 	}
 
+	if (obj->user_fb == 1) {
+		if (obj->pages == NULL && obj->sg_table == NULL) {
+			if (obj->tiling_mode == I915_TILING_X) {
+				/* Tiled(X) Scanout buffers are more suitable
+				   for allocation from stolen area, as its very
+				   unlikely that they will be accessed directly
+				   from the CPU side and any allocation from
+				   stolen area is not directly CPU accessible,
+				   only through the aperture space it can be
+				   accessed */
+				i915_gem_object_move_to_stolen(obj);
+			}
+		}
+	}
+
 	if (obj->gtt_space == NULL) {
 		ret = i915_gem_object_bind_to_gtt(obj, alignment,
 						  map_and_fenceable);

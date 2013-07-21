@@ -438,6 +438,103 @@ i915_gem_object_create_stolen(struct drm_device *dev, u32 size)
 	return NULL;
 }
 
+static void i915_memset_stolen_obj(struct drm_device *dev,
+					struct drm_i915_gem_object *obj)
+{
+	if (obj->gtt_space == NULL) {
+		int ret;
+		char __iomem *base;
+		int size = obj->base.size;
+		struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+		unsigned alignment = 0;
+		bool map_and_fenceable =  true;
+
+		ret = i915_gem_object_pin(obj, alignment, map_and_fenceable);
+		if (ret) {
+			DRM_ERROR("Mapping of User FB to GTT failed\n");
+			return;
+		}
+
+		/* Get the CPU virtual address of the frame buffer */
+		base =
+		   ioremap_wc(dev_priv->mm.gtt_base_addr + obj->gtt_offset,
+			size);
+		if (base == NULL) {
+			DRM_ERROR("Mapping of User FB to CPU failed\n");
+			i915_gem_object_unpin(obj);
+			return;
+		}
+
+		memset_io(base, 0, size);
+
+		iounmap(base);
+		i915_gem_object_unpin(obj);
+
+		DRM_DEBUG_DRIVER(
+		   "UserFB obj ptr=0x%x cleared using CPU address 0x%x\n",
+			(u32)obj, (u32)base);
+	} else
+		BUG_ON(1);
+}
+
+void
+i915_gem_object_move_to_stolen(struct drm_i915_gem_object *obj)
+{
+	struct drm_device *dev = obj->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_mm_node *stolen;
+	u32 size = obj->base.size;
+
+	if (obj->stolen) {
+		BUG_ON(obj->sg_table == NULL);
+		return;
+	}
+
+	if (dev_priv->mm.stolen_base == 0)
+		return;
+
+	if (size == 0)
+		return;
+
+	stolen = drm_mm_search_free(&dev_priv->mm.stolen, size, 4096, 0);
+	if (stolen)
+		stolen = drm_mm_get_block(stolen, size, 4096);
+	if (stolen == NULL) {
+		DRM_DEBUG_DRIVER("ran out of stolen space\n");
+		return;
+	}
+	/* Set up the object to use the stolen memory,
+	 * backing store no longer managed by shmem layer */
+	drm_gem_object_release(&(obj->base));
+	obj->base.filp = NULL;
+	obj->base.driver_private = (void *)&i915_gem_object_stolen_ops;
+
+	obj->sg_table = i915_pages_create_for_stolen(dev,
+						stolen->start, stolen->size);
+	if (obj->sg_table == NULL)
+		goto cleanup;
+
+	obj->stolen = stolen;
+
+	obj->base.write_domain = I915_GEM_DOMAIN_GTT;
+	obj->base.read_domains = I915_GEM_DOMAIN_GTT;
+	obj->cache_level = I915_CACHE_NONE;
+
+	obj->pages = NULL;
+
+	DRM_DEBUG_DRIVER("Obj moved to stolen with ptr=0x%x, size=%x\n",
+					(unsigned int)obj, size);
+
+	/* Any allocation from shmem area is also zeroed out.
+	   Need to do the same for allocations from stolen area */
+	i915_memset_stolen_obj(dev, obj);
+	return;
+
+cleanup:
+	drm_mm_put_block(stolen);
+	return;
+}
+
 struct drm_mm_node *
 i915_reserve_stolen_for_preallocated(struct drm_device *dev,
 					       u32 stolen_offset,
