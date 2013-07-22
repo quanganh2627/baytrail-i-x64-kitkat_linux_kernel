@@ -487,12 +487,6 @@ static int dlp_net_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto out;
 	}
 
-	if (skb->len < ETH_ZLEN) {
-		/* WARNING("Padding received packet (size: %d)", skb->len); */
-		if (skb_padto(skb, ETH_ZLEN))
-			return NETDEV_TX_OK;
-	}
-
 	/* Workaround for the 4Bytes alignment issue */
 	if ((unsigned int)(skb->data) & 3) {
 		struct sk_buff *new_skb;
