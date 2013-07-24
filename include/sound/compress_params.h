@@ -58,6 +58,9 @@
 #define MAX_NUM_CODEC_DESCRIPTORS 32
 #define MAX_NUM_BITRATES 32
 
+/* Maximum allowed size of compressed buffer */
+#define SND_COMPRESSED_BUFFER_SIZE (256*1024)
+
 /* Codecs are listed linearly to allow for extensibility */
 #define SND_AUDIOCODEC_PCM                   ((__u32) 0x00000001)
 #define SND_AUDIOCODEC_MP3                   ((__u32) 0x00000002)
