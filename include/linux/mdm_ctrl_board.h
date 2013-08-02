@@ -27,6 +27,9 @@
 #define __MDM_CTRL_BOARD_H__
 
 #include <asm/intel-mid.h>
+#include <linux/module.h>
+
+#define DEVICE_NAME "modem_control"
 
 /* Supported Modem IDs*/
 #define MODEM_UNSUP	0
@@ -52,25 +55,57 @@ enum {
 #define GPIO_CDUMP	"modem-gpio2"
 #define GPIO_CDUMP_MRFL	"MODEM_CORE_DUMP"
 
-extern void *modem_ctrl_platform_data(void *data) __attribute__((weak));
+/* Retrieve modem parameters on ACPI framework */
+int retrieve_modem_platform_data(struct platform_device *pdev);
 
-/* Modem basical info */
+/* Modem basical info
+ * @modem_name: modem real name
+ * @id: Modem id to retrieve sequences from
+ * @pmic: pmic id
+ * @cpu: cpu id
+ * @cpu_name: cpu real name
+ * @data: pointer to any supplementary data
+ */
 struct modem_base_info {
 	char	modem_name[SFI_NAME_LEN + 1];
 	int	id;
-	int	pmic;
+	void	*pmic;
 	int	cpu;
 	char	cpu_name[SFI_NAME_LEN + 1];
+	void	*data;
 };
 
-#ifdef CONFIG_MDM_CTRL
-extern int mcd_register_mdm_info(struct modem_base_info const *info);
-#else
-static inline int mcd_register_mdm_info(struct modem_base_info const *info)
-{
-	return 0;
-}
-#endif
+/* struct mcd_cpu_data
+ * @gpio_rst_out: Reset out gpio (self reset indicator)
+ * @gpio_pwr_on: Power on gpio (ON1 - Power up pin)
+ * @gpio_rst_bbn: RST_BB_N gpio (Reset pin)
+ * @gpio_cdump: CORE DUMP indicator
+ * @early_pwr_on: call to power_on on probe indicator
+ * @early_pwr_off: call to power_off on probe indicator
+ */
+struct mdm_ctrl_cpu_data {
+	int	gpio_rst_out;
+	int	gpio_pwr_on;
+	int	gpio_rst_bbn;
+	int	gpio_cdump;
+	bool	early_pwr_on;
+	bool	early_pwr_off;
+};
+
+/* struct mcd_pmic_data
+ * @id: PMIC internal Id
+ * @chipctrl: PMIC regsiter
+ * @chipctrlon: Pmic value for Modem ON
+ * @chipctrloff: Pmic value for Power Off
+ * @chipctrl_mask: Mask value for On and Off Pmic register bits.
+ */
+struct mdm_ctrl_pmic_data {
+	int	id;
+	int	chipctrl;
+	int	chipctrlon;
+	int	chipctrloff;
+	int	chipctrl_mask;
+};
 
 /* struct mdm_ctrl_pdata
  * @modem_name: Modem name, used to select correct sequences
@@ -79,30 +114,20 @@ static inline int mcd_register_mdm_info(struct modem_base_info const *info)
  * @chipctrloff: Modem power off PMIC value
  * @pre_pwr_down_delay:Delay before powering down the modem (us)
  * @pwr_down_duration:Powering down duration (us)
- * @gpio_rst_out: Reset out gpio (self reset indicator)
- * @gpio_pwr_on: Power on gpio (ON1 - Power up pin)
- * @gpio_rst_bbn: RST_BB_N gpio (Reset pin)
- * @gpio_cdump: CORE DUMP indicator
  * @device_data: Device related data
  * @archdata: Architecture-dependent device data
  */
 struct mdm_ctrl_pdata {
-	int			modem;
-	int			chipctrl;
-	int			chipctrlon;
-	int			chipctrloff;
-	int			chipctrl_mask;
-	int			pre_pwr_down_delay;
-	int			pwr_down_duration;
-	int			gpio_rst_out;
-	int			gpio_pwr_on;
-	int			gpio_rst_bbn;
-	int			gpio_cdump;
-	bool			early_pwr_on;
-	bool			early_pwr_off;
-	bool			is_mdm_ctrl_disabled;
-	void			*device_data;
-	struct dev_archdata	*archdata;
+	int				modem;
+	int				chipctrl;
+	int				chipctrlon;
+	int				chipctrloff;
+	int				chipctrl_mask;
+	int				pre_pwr_down_delay;
+	int				pwr_down_duration;
+	bool				is_mdm_ctrl_disabled;
+	void				*device_data;
+	struct mdm_ctrl_cpu_data	*cpu_data;
 };
 
 /* struct mdm_ctrl_device_info - Board and modem infos

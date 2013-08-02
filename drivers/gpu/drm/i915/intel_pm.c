@@ -1284,57 +1284,67 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 	struct vlv_MA_component_enabled enable;
 	u32 val;
 
-	/* compute & update drain latency only if plane enabled */
-
 	enable.EnPlane = is_plane_enabled(dev_priv, 0);
-	enable.EnCursor = is_cursor_enabled(dev_priv, 0);
+	enable.EnCursor = false;
 	enable.EnSprite = false;
 
-	/* For plane A, Cursor A */
+	/* For plane A*/
 	if (vlv_compute_drain_latency(dev, 0, &plane_prec_mult,
-		&planea_dl, &cursor_prec_mult, &cursora_dl, NULL,
-		NULL, 0, enable)) {
-		cursora_prec = (cursor_prec_mult ==
-				DRAIN_LATENCY_PRECISION_32) ?
-				DDL_CURSORA_PRECISION_32 :
-				DDL_CURSORA_PRECISION_64;
+		&planea_dl, NULL, NULL, NULL, NULL, 0, enable)) {
+
 		planea_prec = (plane_prec_mult ==
 				DRAIN_LATENCY_PRECISION_32) ?
 				DDL_PLANEA_PRECISION_32 :
 				DDL_PLANEA_PRECISION_64;
 
-		val = I915_READ(VLV_DDL1);
-		I915_WRITE(VLV_DDL1, val | cursora_prec |
-			(cursora_dl << DDL_CURSORA_SHIFT) |
-			planea_prec | planea_dl);
-	} else {
-		I915_WRITE(VLV_DDL1, 0);
-	}
+		I915_WRITE_BITS(VLV_DDL1, planea_prec | planea_dl, 0x000000ff);
+	} else
+		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x000000ff);
 
-	enable.EnPlane = is_plane_enabled(dev_priv, 1);
-	enable.EnCursor = is_cursor_enabled(dev_priv, 1);
-	enable.EnSprite = false;
+	/* Cursor A */
+	enable.EnPlane = false;
+	enable.EnCursor = is_cursor_enabled(dev_priv, 0);
 
-	/* For plane B, Cursor B */
-	if (vlv_compute_drain_latency(dev, 1, &plane_prec_mult,
-		&planeb_dl, &cursor_prec_mult, &cursorb_dl, NULL,
-		NULL, 0, enable)) {
-		cursorb_prec = (cursor_prec_mult ==
+	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, &cursor_prec_mult,
+			&cursora_dl, NULL, NULL, 0, enable)) {
+		cursora_prec = (cursor_prec_mult ==
 				DRAIN_LATENCY_PRECISION_32) ?
-				DDL_CURSORB_PRECISION_32 :
-				DDL_CURSORB_PRECISION_64;
+				DDL_CURSORA_PRECISION_32 :
+				DDL_CURSORA_PRECISION_64;
+
+		I915_WRITE_BITS(VLV_DDL1, cursora_prec |
+			(cursora_dl << DDL_CURSORA_SHIFT), 0xff000000);
+	} else
+		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0xff000000);
+
+	/* For plane B */
+	enable.EnPlane = is_plane_enabled(dev_priv, 1);
+	enable.EnCursor = false;
+	if (vlv_compute_drain_latency(dev, 1, &plane_prec_mult,
+		&planeb_dl, NULL, NULL, NULL, NULL, 0, enable)) {
+
 		planeb_prec = (plane_prec_mult ==
 				DRAIN_LATENCY_PRECISION_32) ?
 				DDL_PLANEB_PRECISION_32 :
 				DDL_PLANEB_PRECISION_64;
+		I915_WRITE_BITS(VLV_DDL2, planeb_prec | planeb_dl, 0x000000ff);
+	} else
+		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0x000000ff);
 
-		val = I915_READ(VLV_DDL2);
-		I915_WRITE(VLV_DDL2, val | cursorb_prec |
-			(cursorb_dl << DDL_CURSORB_SHIFT) |
-			planeb_prec | planeb_dl);
-	} else {
-		I915_WRITE(VLV_DDL1, 0);
-	}
+	/* Cursor B */
+	enable.EnPlane = false;
+	enable.EnCursor = is_cursor_enabled(dev_priv, 1);
+	if (vlv_compute_drain_latency(dev, 1, NULL, NULL, &cursor_prec_mult,
+			&cursorb_dl, NULL, NULL, 0, enable)) {
+		cursorb_prec = (cursor_prec_mult ==
+				DRAIN_LATENCY_PRECISION_32) ?
+				DDL_CURSORB_PRECISION_32 :
+				DDL_CURSORB_PRECISION_64;
+
+		I915_WRITE_BITS(VLV_DDL2, cursorb_prec | (cursorb_dl <<
+				DDL_CURSORB_SHIFT), 0xff000000);
+	} else
+		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0xff000000);
 }
 
 #define single_plane_enabled(mask) is_power_of_2(mask)
@@ -2141,10 +2151,13 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 	struct vlv_MA_component_enabled enable;
 	u32 val;
 
+	enable.EnPlane = false;
+	enable.EnCursor = false;
+
 	/* Sprite A */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 0, 0);
 
-	val = I915_READ(VLV_DDL1);
+	/* For plane A, Cursor A */
 	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
@@ -2152,17 +2165,15 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 				DDL_SPRITEA_PRECISION_32 :
 				DDL_SPRITEA_PRECISION_64;
 
-		I915_WRITE(VLV_DDL1, val |
-			(sprite_prec | (sprite_dl << DDL_SPRITEA_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL1, sprite_prec | (sprite_dl
+				<< DDL_SPRITEA_SHIFT), 0x0000ff00);
 	} else {
-		I915_WRITE(VLV_DDL1, val &
-			(sprite_prec | (sprite_dl << DDL_SPRITEA_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x0000ff00);
 	}
 
 	/* Sprite B */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 0, 1);
 
-	val = I915_READ(VLV_DDL1);
 	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
@@ -2170,17 +2181,15 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 				DDL_SPRITEB_PRECISION_32 :
 				DDL_SPRITEB_PRECISION_64;
 
-		I915_WRITE(VLV_DDL1, val |
-			(sprite_prec | (sprite_dl << DDL_SPRITEB_SHIFT)));
-	}  else {
-		I915_WRITE(VLV_DDL1, val &
-			(sprite_prec | (sprite_dl << DDL_SPRITEB_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL1, sprite_prec | (sprite_dl
+				<< DDL_SPRITEB_SHIFT), 0x00ff0000);
+	} else {
+		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x00ff0000);
 	}
 
 	/* Sprite C */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 1, 0);
 
-	val = I915_READ(VLV_DDL2);
 	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
@@ -2188,17 +2197,15 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 				DDL_SPRITEA_PRECISION_32 :
 				DDL_SPRITEA_PRECISION_64;
 
-		I915_WRITE(VLV_DDL2, val |
-			(sprite_prec | (sprite_dl << DDL_SPRITEA_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL2, sprite_prec | (sprite_dl
+				<< DDL_SPRITEA_SHIFT), 0x0000ff00);
 	} else {
-		I915_WRITE(VLV_DDL2, val &
-		(sprite_prec | (sprite_dl << DDL_SPRITEA_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0x0000ff00);
 	}
 
 	/* Sprite D */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 1, 1);
 
-	val = I915_READ(VLV_DDL2);
 	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
@@ -2206,11 +2213,10 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 				DDL_SPRITEB_PRECISION_32 :
 				DDL_SPRITEB_PRECISION_64;
 
-		I915_WRITE(VLV_DDL2, val |
-			(sprite_prec | (sprite_dl << DDL_SPRITEB_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL2, sprite_prec | (sprite_dl
+				<< DDL_SPRITEB_SHIFT), 0x00ff0000);
 	} else {
-		I915_WRITE(VLV_DDL2, val &
-			(sprite_prec | (sprite_dl << DDL_SPRITEB_SHIFT)));
+		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0x00ff0000);
 	}
 
 	I915_WRITE(DSPFW4, (DSPFW4_SPRITEB_VAL << DSPFW4_SPRITEB_SHIFT) |
@@ -2824,60 +2830,60 @@ void bios_init_rps(struct drm_i915_private *dev_priv)
 
 	I915_WRITE(0xa800, 0x00000000);
 	I915_WRITE(0xa804, 0x00000000);
-	I915_WRITE(0xa808, 0x0000ff0A);
-	I915_WRITE(0xa80c, 0x1D000000);
-	I915_WRITE(0xa810, 0xAC004800);
-	I915_WRITE(0xa814, 0x000F0000);
-	I915_WRITE(0xa818, 0x5A000000);
-	I915_WRITE(0xa81c, 0x2600001F);
+	I915_WRITE(0xa808, 0x0000ff0a);
+	I915_WRITE(0xa80c, 0x1d000000);
+	I915_WRITE(0xa810, 0xac004900);
+	I915_WRITE(0xa814, 0x000f0000);
+	I915_WRITE(0xa818, 0x5a000000);
+	I915_WRITE(0xa81c, 0x2600001f);
 	I915_WRITE(0xa820, 0x00090000);
 	I915_WRITE(0xa824, 0x2000ff00);
-	I915_WRITE(0xa828, 0xff090017);
+	I915_WRITE(0xa828, 0xff090016);
 	I915_WRITE(0xa82c, 0x00000000);
 	I915_WRITE(0xa830, 0x00000100);
-	I915_WRITE(0xa834, 0x009C0F51);
-	I915_WRITE(0xa838, 0x000B0000);
-	I915_WRITE(0xa83c, 0x007D3307);
-	I915_WRITE(0xa840, 0xff3C0000);
-	I915_WRITE(0xa844, 0xffff00ff);
+	I915_WRITE(0xa834, 0x00a00f51);
+	I915_WRITE(0xa838, 0x000b0000);
+	I915_WRITE(0xa83c, 0xcb7d3307);
+	I915_WRITE(0xa840, 0x003C0000);
+	I915_WRITE(0xa844, 0xffff0000);
 	I915_WRITE(0xa848, 0x00220000);
 	I915_WRITE(0xa84c, 0x43000000);
 	I915_WRITE(0xa850, 0x00000800);
-	I915_WRITE(0xa854, 0x00000100);
-	I915_WRITE(0xa858, 0x00000000);
+	I915_WRITE(0xa854, 0x00000f00);
+	I915_WRITE(0xa858, 0x00000021);
 	I915_WRITE(0xa85c, 0x00000000);
-	I915_WRITE(0xa860, 0x00ff0000);
+	I915_WRITE(0xa860, 0x00190000);
 	I915_WRITE(0xa900, 0x00000000);
-	I915_WRITE(0xa904, 0x00001c00);
+	I915_WRITE(0xa904, 0x00000000);
 	I915_WRITE(0xa908, 0x00000000);
-	I915_WRITE(0xa90c, 0x06000000);
-	I915_WRITE(0xa910, 0x09000200);
-	I915_WRITE(0xa914, 0x00000000);
-	I915_WRITE(0xa918, 0x00590000);
-	I915_WRITE(0xa91c, 0x00000000);
-	I915_WRITE(0xa920, 0x04002501);
-	I915_WRITE(0xa924, 0x00000100);
-	I915_WRITE(0xa928, 0x03000410);
+	I915_WRITE(0xa90c, 0x1d000000);
+	I915_WRITE(0xa910, 0xac005000);
+	I915_WRITE(0xa914, 0x000f0000);
+	I915_WRITE(0xa918, 0x5a000000);
+	I915_WRITE(0xa91c, 0x2600001f);
+	I915_WRITE(0xa920, 0x00090000);
+	I915_WRITE(0xa924, 0x2000ff00);
+	I915_WRITE(0xa928, 0xff090016);
 	I915_WRITE(0xa92c, 0x00000000);
-	I915_WRITE(0xa930, 0x00020000);
-	I915_WRITE(0xa934, 0x02070106);
-	I915_WRITE(0xa938, 0x00010100);
-	I915_WRITE(0xa93c, 0x00401c00);
-	I915_WRITE(0xa940, 0x00000000);
-	I915_WRITE(0xa944, 0x00000000);
-	I915_WRITE(0xa948, 0x10000e00);
-	I915_WRITE(0xa94c, 0x02000004);
-	I915_WRITE(0xa950, 0x00000001);
-	I915_WRITE(0xa954, 0x00000004);
-	I915_WRITE(0xa960, 0x00060000);
-	I915_WRITE(0xaa3c, 0x00001c00);
-	I915_WRITE(0xaa54, 0x00000004);
-	I915_WRITE(0xaa60, 0x00060000);
-	I915_WRITE(0xaa80, 0x00B5005A);
+	I915_WRITE(0xa930, 0x00000100);
+	I915_WRITE(0xa934, 0x00a00f51);
+	I915_WRITE(0xa938, 0x000b0000);
+	I915_WRITE(0xa93c, 0xcb7d3307);
+	I915_WRITE(0xa940, 0x003c0000);
+	I915_WRITE(0xa944, 0xffff0000);
+	I915_WRITE(0xa948, 0x00220000);
+	I915_WRITE(0xa94c, 0x43000000);
+	I915_WRITE(0xa950, 0x00000800);
+	I915_WRITE(0xa954, 0x00000000);
+	I915_WRITE(0xa960, 0x00000000);
+	I915_WRITE(0xaa3c, 0x00000000);
+	I915_WRITE(0xaa54, 0x00000000);
+	I915_WRITE(0xaa60, 0x00000000);
+	I915_WRITE(0xaa80, 0x00ff00ff);
 	I915_WRITE(0xaa84, 0x00000000);
 	I915_WRITE(0x1300a4, 0x00000000);
 	I915_WRITE(0xa248, 0x00000058);
-	intel_punit_write32(dev_priv, 0xd2, 0x1EF53);
+	intel_punit_write32(dev_priv, 0xd2, 0xcf08);
 }
 
 /* vlv_rps_timer_work: Set the frequency to Rpe if Gfx clocks are down

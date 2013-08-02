@@ -767,6 +767,8 @@ struct drm_i915_gem_execbuffer2 {
 
 /** Resets the SO write offset registers for transform feedback on gen7. */
 #define I915_EXEC_GEN7_SOL_RESET	(1<<8)
+/* Enable watchdog timer for this batch buffer */
+#define I915_EXEC_ENABLE_WATCHDOG       (1<<9)
 
 #define I915_EXEC_CONTEXT_ID_MASK	(0xffffffff)
 #define i915_execbuffer2_set_context_id(eb2, context) \
@@ -1063,7 +1065,8 @@ struct drm_i915_reserved_reg_bit_2 {
 };
 #define	DPST_DIET_ENTRY_COUNT	33	/* Total number of DIET entries */
 #define DPST_RESET_IE		0x40004000
-#define DPST_MAX_FACTOR		100
+#define DPST_MAX_FACTOR		10000
+#define DEFAULT_GUARDBAND_VAL	30
 struct dpst_ie {
 	enum dpst_diet_alg {
 		i915_DPST_RGB_TRANSLATOR = 0,
@@ -1078,10 +1081,8 @@ struct dpst_ie {
 
 struct dpst_ie_container {
 	struct dpst_ie dpst_ie_st;
-	__u32	dpst_blc_freq;
 	__u32	dpst_blc_factor;
 	__u32	pipe_n;
-	__u32	reset_int;
 };
 
 struct dpst_initialize_data {
@@ -1089,7 +1090,7 @@ struct dpst_initialize_data {
 	__u32 threshold_gb;
 	__u32 gb_delay;
 	__u32 hist_reg_values;
-	__u32 blc_inv_settings;
+	__u32 image_res;
 	__u32 sig_num;
 };
 

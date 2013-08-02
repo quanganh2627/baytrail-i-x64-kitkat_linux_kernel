@@ -163,6 +163,15 @@ int process_send_cmd(struct psh_ia_priv *ia_data,
 			enable_irq(psh_if_info->pshc->irq);
 			psh_if_info->irq_disabled = 0;
 		}
+	} else if (ch == 0 && cmd->cmd_id == CMD_FW_UPDATE) {
+		if (psh_if_info->irq_disabled == 0) {
+			disable_irq(psh_if_info->pshc->irq);
+			psh_if_info->irq_disabled = 1;
+		}
+
+		msleep(1000);
+
+		return 0;
 	}
 
 	ret = i2c_transfer(psh_if_info->pshc->adapter, &i2c_cmd, 1);
@@ -301,7 +310,7 @@ static int psh_probe(struct i2c_client *client,
 
 	pm_runtime_set_active(&client->dev);
 	pm_runtime_use_autosuspend(&client->dev);
-	pm_runtime_set_autosuspend_delay(&client->dev, 10);
+	pm_runtime_set_autosuspend_delay(&client->dev, 0);
 	pm_runtime_enable(&client->dev);
 
 	return 0;

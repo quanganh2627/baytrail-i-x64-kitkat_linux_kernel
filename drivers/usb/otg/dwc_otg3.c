@@ -1861,7 +1861,8 @@ static int dwc_otg_probe(struct pci_dev *pdev,
 	}
 
 	/* gpio request for BYT */
-	if (otg->otg_data->is_byt) {
+	if (otg->otg_data->is_byt && otg->otg_data->gpio_cs
+		&& otg->otg_data->gpio_reset) {
 		retval = gpio_request(otg->otg_data->gpio_reset,
 					"tusb1211_reset");
 		if (retval < 0) {
@@ -2105,6 +2106,8 @@ static int dwc_otg_runtime_resume(struct device *dev)
 
 	pci_set_power_state(pci_dev, PCI_D0);
 
+	if (!otg)
+		return -ENODEV;
 
 	/* This is one WA for silicon BUG.
 	 * Without this WA, the USB2 phy will enter low power
@@ -2129,7 +2132,7 @@ static int dwc_otg_runtime_resume(struct device *dev)
 	}
 	set_sus_phy(otg, 0);
 
-	if (otg && otg->otg_data && otg->otg_data->is_byt) {
+	if (otg->otg_data && otg->otg_data->is_byt) {
 		u32	u1power;
 
 		u1power = otg_read(otg, PHY_U1POWER_STATE);
@@ -2176,6 +2179,9 @@ static int dwc_otg_resume(struct device *dev)
 
 	pci_set_power_state(pci_dev, PCI_D0);
 
+	if (!otg)
+		return -ENODEV;
+
 	/* This is one WA for silicon BUG.
 	 * Without this WA, the USB2 phy will enter low power
 	 * mode during hibernation resume flow. and met
@@ -2199,7 +2205,7 @@ static int dwc_otg_resume(struct device *dev)
 	}
 	set_sus_phy(otg, 0);
 
-	if (otg && otg->otg_data && otg->otg_data->is_byt) {
+	if (otg->otg_data && otg->otg_data->is_byt) {
 		u32	u1power;
 
 		u1power = otg_read(otg, PHY_U1POWER_STATE);

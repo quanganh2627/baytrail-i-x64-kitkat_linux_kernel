@@ -84,12 +84,13 @@ static inline int platform_is(u8 model)
  * put exit_latency = entry+exit latency
  */
 #ifdef CONFIG_X86_MRFLD
-#define CSTATE_EXIT_LATENCY_S0i1 800
+#define CSTATE_EXIT_LATENCY_S0i1 1200
 #define CSTATE_EXIT_LATENCY_S0i2 2000
 #define CSTATE_EXIT_LATENCY_S0i3 10000
 #else
 #define CSTATE_EXIT_LATENCY_LPMP3 1040
 #define CSTATE_EXIT_LATENCY_S0i1 1040
+#define CSTATE_EXIT_LATENCY_S0i2 2000
 #define CSTATE_EXIT_LATENCY_S0i3 2800
 #endif
 #define BYT_S0I1_STATE         0x60

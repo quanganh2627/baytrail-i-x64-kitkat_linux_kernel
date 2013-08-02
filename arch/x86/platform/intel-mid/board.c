@@ -107,7 +107,7 @@
 
 /* WIFI devices */
 #include "device_libs/platform_wl12xx.h"
-#include "device_libs/platform_bcm43xx.h"
+#include "device_libs/platform_wifi.h"
 
 
 static void __init *no_platform_data(void *info)
@@ -119,8 +119,8 @@ struct devs_id __initconst device_ids[] = {
 
 	/* SD devices */
 	{"wl12xx_clk_vmmc", SFI_DEV_TYPE_SD, 0, &wl12xx_platform_data, NULL},
-	{"bcm43xx_clk_vmmc", SFI_DEV_TYPE_SD, 0, &bcm43xx_platform_data, NULL},
-	{"bcm43xx_vmmc", SFI_DEV_TYPE_SD, 0, &bcm43xx_platform_data, NULL},
+	{"bcm43xx_clk_vmmc", SFI_DEV_TYPE_SD, 0, &wifi_platform_data, NULL},
+	{"bcm43xx_vmmc", SFI_DEV_TYPE_SD, 0, &wifi_platform_data, NULL},
 
 	/* SPI devices */
 	{"pmic_gpio", SFI_DEV_TYPE_SPI, 1, &pmic_gpio_platform_data, NULL},
@@ -170,6 +170,8 @@ struct devs_id __initconst device_ids[] = {
 	{"merr_prh_cs42l73", SFI_DEV_TYPE_IPC, 1, &ctp_audio_platform_data,
 						&ipc_device_handler},
 	{"ctp_ht_wm5102", SFI_DEV_TYPE_IPC, 1, &ctp_audio_platform_data,
+						&ipc_device_handler},
+	{"ctp_lt_wm8994", SFI_DEV_TYPE_IPC, 1, &ctp_audio_platform_data,
 						&ipc_device_handler},
 	{"pmic_ccsm", SFI_DEV_TYPE_IPC, 1, &mrfl_pmic_ccsm_platform_data,
 						&ipc_device_handler},
@@ -226,6 +228,7 @@ struct devs_id __initconst device_ids[] = {
 	{"syn_3400_igzo", SFI_DEV_TYPE_I2C, 0, &rmi4_platform_data},
 	{"r69001-ts-i2c", SFI_DEV_TYPE_I2C, 0, &r69001_platform_data, NULL},
 	{"wm5102", SFI_DEV_TYPE_I2C, 0, &wm5102_platform_data, NULL},
+	{"wm8994", SFI_DEV_TYPE_I2C, 0, &wm8994_platform_data, NULL},
 	{"wm8958", SFI_DEV_TYPE_I2C, 0, &wm8994_platform_data, NULL},
 	{"pn544", SFI_DEV_TYPE_I2C, 0, &pn544_platform_data, NULL},
 	{"bq24192", SFI_DEV_TYPE_I2C, 1, &bq24192_platform_data},

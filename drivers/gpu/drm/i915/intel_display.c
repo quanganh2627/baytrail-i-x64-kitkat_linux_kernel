@@ -1310,6 +1310,19 @@ bool is_cursor_enabled(struct drm_i915_private *dev_priv,
 	return ret;
 }
 
+bool is_maxfifo_needed(struct drm_i915_private *dev_priv)
+{
+	if (!(is_plane_enabled(dev_priv, PLANE_A) &&
+		is_plane_enabled(dev_priv, PLANE_B)) &&
+		!(is_sprite_enabled(dev_priv, PIPE_A, PLANE_A) ||
+		is_sprite_enabled(dev_priv, PIPE_A, PLANE_B) ||
+		is_sprite_enabled(dev_priv, PIPE_B, PLANE_A) ||
+		is_sprite_enabled(dev_priv, PIPE_B, PLANE_B)))
+		return true;
+	else
+		return false;
+}
+
 static void assert_planes_disabled(struct drm_i915_private *dev_priv,
 				   enum pipe pipe)
 {
@@ -7265,13 +7278,17 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_framebuffer *intel_fb;
+	struct intel_framebuffer *intel_fb, *intel_new_fb;
 	struct drm_i915_gem_object *obj;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct intel_unpin_work *work;
 	struct drm_framebuffer *active_fb;
 	unsigned long flags;
 	int ret;
+
+
+	if (dev_priv->shut_down_state)
+		return -EINVAL;
 
 	/* Can't change pixel format via MI display flips. */
 	if (fb->pixel_format != crtc->fb->pixel_format) {
@@ -7283,13 +7300,16 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 			return -EINVAL;
 	}
 
+	intel_fb = to_intel_framebuffer(crtc->fb);
+	intel_new_fb = to_intel_framebuffer(fb);
 	/*
 	 * TILEOFF/LINOFF registers can't be changed via MI display flips.
 	 * Note that pitch changes could also affect these register.
 	 */
 	if (INTEL_INFO(dev)->gen > 3 &&
 	    (fb->offsets[0] != crtc->fb->offsets[0] ||
-	     fb->pitches[0] != crtc->fb->pitches[0])) {
+	     fb->pitches[0] != crtc->fb->pitches[0] ||
+	     intel_new_fb->obj->tiling_mode != intel_fb->obj->tiling_mode)) {
 		if (IS_VALLEYVIEW(dev)) {
 			DRM_DEBUG(" crtc fb: pitch = %d offset = %d", \
 			crtc->fb->pitches[0], crtc->fb->offsets[0]);
@@ -7306,7 +7326,6 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 
 	work->event = event;
 	work->dev = crtc->dev;
-	intel_fb = to_intel_framebuffer(crtc->fb);
 	work->old_fb_obj = intel_fb->obj;
 	INIT_WORK(&work->work, intel_unpin_work_fn);
 
@@ -7532,8 +7551,11 @@ ssize_t display_runtime_suspend(struct drm_device *drm_dev)
 	display_save_restore_hotplug(drm_dev, SAVEHPD);
 	display_disable_wq(drm_dev);
 	mutex_lock(&drm_dev->mode_config.mutex);
-	if (dev_priv->is_dpst_enabled)
+	if (dev_priv->is_dpst_enabled) {
+		dev_priv->saveDPSTState = true;
 		i915_dpst_enable_hist_interrupt(drm_dev, false);
+	} else
+		dev_priv->saveDPSTState = false;
 	dev_priv->disp_pm_in_progress = true;
 	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
@@ -7560,8 +7582,6 @@ ssize_t display_runtime_resume(struct drm_device *drm_dev)
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
 
 	i915_rpm_get_disp(drm_dev);
-	drm_kms_helper_poll_enable(drm_dev);
-	display_save_restore_hotplug(drm_dev, RESTOREHPD);
 	mutex_lock(&drm_dev->mode_config.mutex);
 	dev_priv->disp_pm_in_progress = true;
 	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
@@ -7575,9 +7595,11 @@ ssize_t display_runtime_resume(struct drm_device *drm_dev)
 	}
 	mid_hdmi_audio_resume(drm_dev);
 	dev_priv->disp_pm_in_progress = false;
-	if (dev_priv->is_dpst_enabled)
+	if (dev_priv->saveDPSTState)
 		i915_dpst_enable_hist_interrupt(drm_dev, true);
 	mutex_unlock(&drm_dev->mode_config.mutex);
+	display_save_restore_hotplug(drm_dev, RESTOREHPD);
+	drm_kms_helper_poll_enable(drm_dev);
 	return 0;
 }
 

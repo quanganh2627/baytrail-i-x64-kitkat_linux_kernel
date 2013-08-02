@@ -310,6 +310,9 @@ static void __dump_pipe_config(struct atomisp_sub_device *asd,
 			 "pipe_config.default_capture_config.enable_capture_pp=%d.\n",
 			 p_config->default_capture_config.enable_capture_pp);
 		dev_dbg(isp->dev,
+			 "pipe_config.default_capture_config.enable_xnr=%d.\n",
+			 p_config->default_capture_config.enable_xnr);
+		dev_dbg(isp->dev,
 			 "dumping pipe[%d] extra config:\n", pipe_id);
 		dev_dbg(isp->dev,
 			 "pipe_extra_config.enable_raw_binning:%d.\n",
@@ -1386,6 +1389,20 @@ static void __configure_output(struct atomisp_sub_device *asd,
 		asd->stream_env.stream_config.effective_res.height
 							= height;
 	}
+
+	/*
+	 * [WORKAROUND]Currently, when doing low_light mode capture for >8MP
+	 * still capture, CSS2.0 will fail to load binary. Thus disable
+	 * low_light mode when capture resolution >8MP as workaround.
+	 */
+	if (pipe_id == IA_CSS_PIPE_ID_CAPTURE &&
+		(width > 3264 || height > 2448) &&
+		asd->stream_env.pipe_configs[pipe_id]
+		.default_capture_config.mode == CSS_CAPTURE_MODE_LOW_LIGHT) {
+		asd->stream_env.pipe_configs[pipe_id]
+		.default_capture_config.mode = CSS_CAPTURE_MODE_PRIMARY;
+	}
+
 	dev_dbg(isp->dev, "configuring pipe[%d] output info w=%d.h=%d.f=%d.\n",
 		pipe_id, width, height, format);
 }
@@ -1678,21 +1695,10 @@ int atomisp_css_offline_capture_configure(struct atomisp_sub_device *asd,
 int atomisp_css_capture_enable_xnr(struct atomisp_sub_device *asd,
 				   bool enable)
 {
-	struct ia_css_isp_config isp_config;
-	struct atomisp_device *isp = asd->isp;
-
-	if (!asd->stream_env.stream) {
-		dev_err(isp->dev,
-			"%s called after streamoff, skipping.\n", __func__);
-		return -EINVAL;
-	}
-
-	memset(&isp_config, 0, sizeof(struct ia_css_isp_config));
-	isp_config.capture_config = &asd->params.capture_config;
-	ia_css_stream_get_isp_config(asd->stream_env.stream, &isp_config);
-
-	if (asd->params.capture_config.enable_xnr != enable)
-		asd->params.capture_config.enable_xnr = enable;
+	asd->stream_env.pipe_configs[IA_CSS_PIPE_ID_CAPTURE]
+		.default_capture_config.enable_xnr = enable;
+	asd->params.capture_config.enable_xnr = enable;
+	asd->stream_env.update_pipe[IA_CSS_PIPE_ID_CAPTURE] = true;
 
 	return 0;
 }
