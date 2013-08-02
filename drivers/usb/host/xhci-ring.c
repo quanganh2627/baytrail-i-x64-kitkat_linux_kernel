@@ -1659,6 +1659,15 @@ static void handle_port_status(struct xhci_hcd *xhci,
 			goto cleanup;
 		}
 
+#ifdef CONFIG_USB_SUSPEND
+		/* add 5s time-out wakelock for delay system suspend */
+		if (hcd->wake_lock) {
+			wake_lock_timeout(hcd->wake_lock, 5 * HZ);
+			xhci_dbg(xhci,
+				"%s add 5s wake_lock for port connect change\n",
+				__func__);
+		}
+#endif
 		if (DEV_SUPERSPEED(temp)) {
 			xhci_dbg(xhci, "remote wake SS port %d\n", port_id);
 			/* Set a flag to say the port signaled remote wakeup,
