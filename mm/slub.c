@@ -2332,7 +2332,7 @@ redo:
 	barrier();
 
 	object = c->freelist;
-	if (unlikely(!object || !node_match(c, node)))
+	if (unlikely(!object || (!c->page) || !node_match(c, node)))
 
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 
