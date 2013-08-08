@@ -72,6 +72,7 @@
 #include "otm_hdmi.h"
 #include "otm_hdmi_types.h"
 #include "ipil_hdcp_api.h"
+#include "ipil_hdmi.h"
 
 #define OTM_HDCP_DEBUG_MODULE
 
@@ -565,6 +566,9 @@ static void hdcp_reset(void)
 		hdcp_context->force_reset = false;
 	}
 
+	/* blank TV screen */
+	ipil_enable_planes_on_pipe(1, false);
+
 #ifndef OTM_HDMI_HDCP_ALWAYS_ENC
 	/* this flag will be re-enabled by upper layers */
 	hdcp_context->is_required = false;
@@ -673,6 +677,24 @@ static bool hdcp_stage1_authentication(bool *is_repeater)
 	uint8_t retry = 0;
 	uint16_t rx_r0 = 0;
 
+	/* wait for sink to receive TMDS */
+	msleep(500);
+
+	/* Read BSTATUS */
+	if (hdcp_read_bstatus(&bstatus.value) == false)
+		return false;
+
+	/* Wait (up to 2s) for HDMI sink to be in HDMI mode */
+	retry = 40;
+	while (retry--) {
+		if (hdcp_read_bstatus(&bstatus.value) == false)
+			return false;
+		if (bstatus.hdmi_mode)
+			break;
+		msleep(50);
+		pr_debug("hdcp: waiting for sink to be in HDMI mode\n");
+	}
+
 	/* Read BKSV */
 	if (hdcp_read_bksv(bksv, HDCP_KSV_SIZE) == false)
 		return false;
@@ -708,10 +730,6 @@ static bool hdcp_stage1_authentication(bool *is_repeater)
 		return false;
 	pr_debug("hdcp: bcaps: %x\n", bcaps.value);
 
-	/* Read BSTATUS */
-	if (hdcp_read_bstatus(&bstatus.value) == false)
-		return false;
-	pr_debug("hdcp: bstatus: %04x\n", bstatus.value);
 
 	/* Update repeater present status */
 	*is_repeater = bcaps.is_repeater;
@@ -755,8 +773,14 @@ static bool hdcp_stage1_authentication(bool *is_repeater)
 	pr_debug("hdcp: rx_r0 = %04x\n", rx_r0);
 
 	/* Check if R0 Matches */
-	if (ipil_hdcp_does_ri_match(rx_r0) == false)
-		return false;
+	if (ipil_hdcp_does_ri_match(rx_r0) == false) {
+		/* Re-try*/
+		msleep(100);
+		if (hdcp_read_rx_r0(&rx_r0) == false)
+			return false;
+		if (ipil_hdcp_does_ri_match(rx_r0) == false)
+			return false;
+	}
 	pr_debug("hdcp: R0 matched\n");
 
 	/* Enable Encryption & Check status */
@@ -885,6 +909,9 @@ static bool hdcp_start(void)
 	/* Increment Auth Check Counter */
 	hdcp_context->auth_id++;
 
+	/* blank TV screen */
+	ipil_enable_planes_on_pipe(1, false);
+
 	/* Check HDCP Status */
 	if (ipil_hdcp_is_ready() == false)
 		return false;
@@ -892,6 +919,9 @@ static bool hdcp_start(void)
 	/* start 1st stage of hdcp authentication */
 	if (hdcp_stage1_authentication(&is_repeater) == false)
 		return false;
+
+	/* un-blank TV screen */
+	ipil_enable_planes_on_pipe(1, true);
 
 	pr_debug("hdcp: initial authentication completed, repeater:%d\n",
 		is_repeater);

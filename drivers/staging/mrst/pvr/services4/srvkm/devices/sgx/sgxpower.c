@@ -464,7 +464,30 @@ PVRSRV_ERROR SGXPrePowerState (IMG_HANDLE				hDevHandle,
 		SGXPollForClockGating(psDevInfo,
 							  psDevInfo->ui32MasterClkGateStatus2Reg,
 							  psDevInfo->ui32MasterClkGateStatus2Mask,
-							  "Wait for SGX master clock gating (2)", IMG_FALSE);
+							  "Wait for SGX master clock gating (2)", IMG_TRUE);
+
+		#if defined HOST_WORKAROUND_CLOCK_LOCKUP
+		{
+			IMG_UINT32 ui32Status = OSReadHWReg(psDevInfo->pvRegsBaseKM, psDevInfo->ui32MasterClkGateStatus2Reg);
+
+			if ((ui32Status & EUR_CR_MASTER_CLKGATESTATUS2_VDM_CLKS_MASK) != 0)
+			{
+				OSWriteHWReg(psDevInfo->pvRegsBaseKM,
+							 EUR_CR_MASTER_SOFT_RESET,
+							 EUR_CR_MASTER_SOFT_RESET_VDM_RESET_MASK);
+				OSWriteHWReg(psDevInfo->pvRegsBaseKM,
+							 EUR_CR_MASTER_SOFT_RESET,
+							 0);
+
+				/* Wait for SGX clock gating. */
+				SGXPollForClockGating(psDevInfo,
+									  psDevInfo->ui32MasterClkGateStatus2Reg,
+									  psDevInfo->ui32MasterClkGateStatus2Mask,
+									  "Wait for SGX master clock gating (2)",
+									  IMG_FALSE);
+			}
+		}
+		#endif
 		#endif /* SGX_FEATURE_MP */
 
 		if (eNewPowerState == PVRSRV_DEV_POWER_STATE_OFF)

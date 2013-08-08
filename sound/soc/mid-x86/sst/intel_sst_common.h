@@ -57,6 +57,10 @@
 #define MRFLD_FW_FEATURE_BASE_OFFSET 0x4
 #define MRFLD_FW_BSS_RESET_BIT 0
 
+
+/* maximum size of preallocated memory */
+#define SST_MAX_STATIC_BLOCK 128*1024
+
 struct intel_sst_ops {
 	irqreturn_t (*interrupt) (int, void *);
 	irqreturn_t (*irq_thread) (int, void *);

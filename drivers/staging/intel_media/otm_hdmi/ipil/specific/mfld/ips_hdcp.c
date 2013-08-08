@@ -545,6 +545,7 @@ bool ips_hdcp_does_ri_match(uint16_t rx_ri)
 	struct ips_hdcp_status_reg_t status;
 
 	ips_hdcp_write_rx_ri(rx_ri);
+	msleep(20);
 	status.value = ips_hdcp_get_status();
 	if (status.ri_match)
 		return true;

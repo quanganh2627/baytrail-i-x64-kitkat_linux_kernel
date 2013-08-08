@@ -166,10 +166,14 @@ void tty_buffer_flush(struct tty_struct *tty)
 static struct tty_buffer *tty_buffer_find(struct tty_struct *tty, size_t size)
 {
 	struct tty_buffer **tbh = &tty->buf.free;
+	struct tty_buffer *prev = NULL;
 	while ((*tbh) != NULL) {
 		struct tty_buffer *t = *tbh;
 		if (t->size >= size) {
-			*tbh = t->next;
+			if (prev == NULL)
+				*tbh = t->next;
+			else
+				prev->next = t->next;
 			t->next = NULL;
 			t->used = 0;
 			t->commit = 0;
@@ -177,6 +181,7 @@ static struct tty_buffer *tty_buffer_find(struct tty_struct *tty, size_t size)
 			tty->buf.memory_used += t->size;
 			return t;
 		}
+		prev = t;
 		tbh = &((*tbh)->next);
 	}
 	/* Round the buffer size out */
