@@ -140,6 +140,7 @@ static int snd_compr_free(struct inode *inode, struct file *f)
 {
 	struct snd_compr_file *data = f->private_data;
 	data->stream.ops->free(&data->stream);
+	kfree(data->stream.runtime->buffer);
 	kfree(data->stream.runtime);
 	kfree(data);
 	return 0;
@@ -423,16 +424,19 @@ static int snd_compr_allocate_buffer(struct snd_compr_stream *stream,
 		struct snd_compr_params *params)
 {
 	unsigned int buffer_size;
-	static char buffer[SND_COMPRESSED_BUFFER_SIZE];
+	void *buffer;
 
 	buffer_size = params->buffer.fragment_size * params->buffer.fragments;
-
-	/* if copy is defined the driver will be required to copy
-	 * the data from core
-	 */
-	if ((buffer_size > SND_COMPRESSED_BUFFER_SIZE) && (!stream->ops->copy))
-		return -ENOMEM;
-
+	if (stream->ops->copy) {
+		buffer = NULL;
+		/* if copy is defined the driver will be required to copy
+		 * the data from core
+		 */
+	} else {
+		buffer = kmalloc(buffer_size, GFP_KERNEL);
+		if (!buffer)
+			return -ENOMEM;
+	}
 	stream->runtime->fragment_size = params->buffer.fragment_size;
 	stream->runtime->fragments = params->buffer.fragments;
 	stream->runtime->buffer = buffer;

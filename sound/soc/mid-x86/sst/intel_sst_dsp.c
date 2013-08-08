@@ -1147,11 +1147,8 @@ static int sst_download_library(const struct firmware *fw_lib,
 	union config_status_reg csr;
 	struct snd_sst_str_type str_type = {0};
 	int retval = 0;
+	void *codec_fw;
 	struct sst_block *block;
-	static char codec_data[SST_MAX_STATIC_BLOCK];
-
-	if (fw_lib->data > SST_MAX_STATIC_BLOCK)
-		return -ENOMEM;
 
 	pvt_id = sst_assign_pvt_id(sst_drv_ctx);
 	ret_val = sst_create_block_and_ipc_msg(&msg, true, sst_drv_ctx, &block,
@@ -1200,18 +1197,24 @@ static int sst_download_library(const struct firmware *fw_lib,
 	sst_shim_write(sst_drv_ctx->shim, SST_CSR, csr.full);
 	mutex_unlock(&sst_drv_ctx->csr_lock);
 
-	memcpy(codec_data, fw_lib->data, fw_lib->size);
+	codec_fw = kzalloc(fw_lib->size, GFP_KERNEL);
+	if (!codec_fw) {
+		retval = -ENOMEM;
+		goto free_block_unlock;
+	}
+	memcpy(codec_fw, fw_lib->data, fw_lib->size);
 
 	if (sst_drv_ctx->use_dma)
-		retval = sst_parse_fw_dma(codec_data, fw_lib->size,
+		retval = sst_parse_fw_dma(codec_fw, fw_lib->size,
 				 &sst_drv_ctx->library_list);
 	else
-		retval = sst_parse_fw_memcpy(codec_data, fw_lib->size,
+		retval = sst_parse_fw_memcpy(codec_fw, fw_lib->size,
 				 &sst_drv_ctx->libmemcpy_list);
 
-	if (retval)
+	if (retval) {
+		kfree(codec_fw);
 		goto free_block_unlock;
-
+	}
 
 	if (sst_drv_ctx->use_dma) {
 		ret_val = sst_do_dma(&sst_drv_ctx->library_list);
@@ -1282,6 +1285,7 @@ free_resources:
 		sst_drv_ctx->library_list.list_len = 0;
 	}
 
+	kfree(codec_fw);
 free_block_unlock:
 	mutex_unlock(&sst_drv_ctx->sst_lock);
 free_block:
