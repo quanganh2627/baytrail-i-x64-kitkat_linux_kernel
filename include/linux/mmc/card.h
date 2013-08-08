@@ -195,7 +195,7 @@ struct sdio_func_tuple;
  */
 #define MMC_NUM_BOOT_PARTITION	2
 #define MMC_NUM_GP_PARTITION	4
-#define MMC_NUM_PHY_PARTITION	6
+#define MMC_NUM_PHY_PARTITION	7
 #define MAX_MMC_PART_NAME_LEN	20
 
 /*
