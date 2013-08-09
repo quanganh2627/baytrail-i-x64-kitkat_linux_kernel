@@ -603,6 +603,8 @@ typedef struct drm_i915_private {
 	wait_queue_head_t error_queue;
 	struct workqueue_struct *wq;
 
+	struct workqueue_struct *vmap_mn_unregister_wq;
+
 	/* Display functions */
 	struct drm_i915_display_funcs display;
 	bool early_suspended;
@@ -946,6 +948,14 @@ typedef struct drm_i915_private {
 	u8 fmax;
 	u8 fstart;
 
+#ifdef CONFIG_DEBUG_FS
+	/* Variables declaration for DPST */
+	struct {
+		u32 bin_data[DPST_BIN_COUNT];
+		u32 luma_data[DPST_LUMA_COUNT];
+		u32 num_interrupt;
+	} dpst;
+#endif
 	/* Adding this to fallback to normal Turbo logic */
 	bool use_RC0_residency_for_turbo;
 
@@ -1219,7 +1229,7 @@ struct i915_gem_vmap_object {
 	int read_only;
 	struct mm_struct *mm;
 #if defined(CONFIG_MMU_NOTIFIER)
-	struct mmu_notifier mn;
+	struct mmu_notifier *mn;
 #endif
 };
 

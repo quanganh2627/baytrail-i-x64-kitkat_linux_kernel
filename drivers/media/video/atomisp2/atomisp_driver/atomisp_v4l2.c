@@ -283,30 +283,53 @@ static int atomisp_mrfld_pre_power_down(struct atomisp_device *isp)
 {
 	struct pci_dev *dev = isp->pdev;
 	u32 irq;
-	unsigned long timeout;
+	unsigned long flags;
 
-	if (isp->sw_contex.power_state == ATOM_ISP_POWER_DOWN)
+	spin_lock_irqsave(&isp->lock, flags);
+	if (isp->sw_contex.power_state == ATOM_ISP_POWER_DOWN) {
+		spin_unlock_irqrestore(&isp->lock, flags);
+		dev_dbg(isp->dev, "<%s %d.\n", __func__, __LINE__);
 		return 0;
-
+	}
 	/*
 	 * MRFLD HAS requirement: cannot power off i-unit if
 	 * ISP has IRQ not serviced.
 	 * So, here we need to check if there is any pending
 	 * IRQ, if so, waiting for it to be served
 	 */
-	timeout = jiffies + msecs_to_jiffies(500);
-	while (1) {
-		pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-		if (!(irq & (1 << INTR_IIR)))
-			break;
-		if (time_after(jiffies, timeout)) {
-			v4l2_err(&atomisp_dev,
-				"%s: IRQ raised!!!\n", __func__);
-			return -EAGAIN;
-		}
-		usleep_range(1000, 1500);
-	};
+	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
+	irq = irq & 1 << INTR_IIR;
+	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
 
+	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
+	if (!(irq & (1 << INTR_IIR)))
+		goto done;
+
+	atomisp_store_uint32(MRFLD_INTR_CLEAR_REG, 0xFFFFFFFF);
+	atomisp_load_uint32(MRFLD_INTR_STATUS_REG, &irq);
+	if (irq != 0) {
+		dev_err(isp->dev,
+			 "%s: fail to clear isp interrupt status reg=0x%x\n",
+			 __func__, irq);
+		spin_unlock_irqrestore(&isp->lock, flags);
+		return -EAGAIN;
+	} else {
+		pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
+		irq = irq & 1 << INTR_IIR;
+		pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
+
+		pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
+		if (!(irq & (1 << INTR_IIR))) {
+			atomisp_store_uint32(MRFLD_INTR_ENABLE_REG, 0x0);
+			goto done;
+		}
+		dev_err(isp->dev,
+			 "%s: error in iunit interrupt. status reg=0x%x\n",
+			 __func__, irq);
+		spin_unlock_irqrestore(&isp->lock, flags);
+		return -EAGAIN;
+	}
+done:
 	/*
 	* MRFLD WORKAROUND:
 	* before powering off IUNIT, clear the pending interrupts
@@ -315,9 +338,12 @@ static int atomisp_mrfld_pre_power_down(struct atomisp_device *isp)
 	* HW sighting:4568410.
 	*/
 	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-	irq = (irq & ~(1 << INTR_IER)) | (1 << INTR_IIR);
+	irq &= ~(1 << INTR_IER);
 	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
+
+	atomisp_msi_irq_uninit(isp, dev);
 	atomisp_freq_scaling(isp, ATOMISP_DFS_MODE_LOW);
+	spin_unlock_irqrestore(&isp->lock, flags);
 
 	return 0;
 }
@@ -953,6 +979,33 @@ load_firmware(struct atomisp_device *isp)
 	return fw;
 }
 
+/*
+ * Check for flags the driver was compiled with against the PCI
+ * device. Always returns true on other than ISP 2400.
+ */
+static bool is_valid_device(struct pci_dev *dev,
+			    const struct pci_device_id *id)
+{
+	unsigned int a0_max_id;
+
+	switch (id->device & ATOMISP_PCI_DEVICE_SOC_MASK) {
+	case ATOMISP_PCI_DEVICE_SOC_MRFLD:
+		a0_max_id = ATOMISP_PCI_REV_MRFLD_A0_MAX;
+		break;
+	case ATOMISP_PCI_DEVICE_SOC_BYT:
+		a0_max_id = ATOMISP_PCI_REV_BYT_A0_MAX;
+		break;
+	default:
+		return true;
+	}
+
+#ifdef CONFIG_ISP2400
+	return dev->revision <= a0_max_id;
+#else /* CONFIG_ISP2400 */
+	return dev->revision > a0_max_id;
+#endif /* CONFIG_ISP2400 */
+}
+
 /* Declared in hmm.c. */
 extern bool atomisp_hmm_is_2400;
 
@@ -971,6 +1024,9 @@ static int __devinit atomisp_pci_probe(struct pci_dev *dev,
 		dev_err(&dev->dev, "atomisp: error device ptr\n");
 		return -EINVAL;
 	}
+
+	if (!is_valid_device(dev, id))
+		return -ENODEV;
 
 	pdata = atomisp_get_platform_data();
 	if (pdata == NULL) {
@@ -1180,6 +1236,8 @@ static void __devexit atomisp_pci_remove(struct pci_dev *dev)
 }
 
 static DEFINE_PCI_DEVICE_TABLE(atomisp_pci_tbl) = {
+#if defined CONFIG_ISP2300
+	/* Medfield */
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0148)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0149)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x014A)},
@@ -1188,9 +1246,14 @@ static DEFINE_PCI_DEVICE_TABLE(atomisp_pci_tbl) = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x014D)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x014E)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x014F)},
+	/* Clovertrail */
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x08D0)},
+#elif defined CONFIG_ISP2400 || defined CONFIG_ISP2400B0
+	/* Merrifield */
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x1178)},
+	/* Baytrail */
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0f38)},
+#endif
 	{0,}
 };
 
@@ -1213,7 +1276,7 @@ static struct pci_driver atomisp_pci_driver = {
 	.driver = {
 		.pm = DEV_PM_OPS,
 	},
-	.name = "atomisp",
+	.name = "atomisp-" ATOMISP_POSTFIX,
 	.id_table = atomisp_pci_tbl,
 	.probe = atomisp_pci_probe,
 	.remove = atomisp_pci_remove,

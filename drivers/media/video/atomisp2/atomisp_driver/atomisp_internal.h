@@ -52,6 +52,9 @@
 #define ATOMISP_PCI_DEVICE_SOC_MRFLD	0x1178
 #define ATOMISP_PCI_DEVICE_SOC_BYT	0x0f38
 
+#define ATOMISP_PCI_REV_MRFLD_A0_MAX	0
+#define ATOMISP_PCI_REV_BYT_A0_MAX	4
+
 #define ATOMISP_MAJOR		0
 #define ATOMISP_MINOR		5
 #define ATOMISP_PATCHLEVEL	1
@@ -271,6 +274,8 @@ struct atomisp_device {
 	struct workqueue_struct *delayed_init_workq;
 	unsigned int delayed_init;
 	struct work_struct delayed_init_work;
+
+	unsigned int latest_preview_exp_id; /* CSS ZSL raw buffer id */
 };
 
 #define v4l2_dev_to_atomisp_device(dev) \

@@ -193,8 +193,6 @@ static struct atomisp_freq_scaling_rule dfs_rules[] = {
 	},
 };
 
-#define ISP_FREQ_RULE_MAX (ARRAY_SIZE(dfs_rules))
-
 static unsigned short atomisp_get_sensor_fps(struct atomisp_sub_device *asd)
 {
 	struct v4l2_subdev_frame_interval frame_interval;
@@ -313,7 +311,7 @@ int atomisp_freq_scaling(struct atomisp_device *isp, enum atomisp_dfs_mode mode)
 		curr_rules.run_mode = ATOMISP_RUN_MODE_STILL_CAPTURE;
 
 	/* search for the target frequency by looping freq rules*/
-	for (i = 0; i < ISP_FREQ_RULE_MAX; i++) {
+	for (i = 0; i < ARRAY_SIZE(dfs_rules); i++) {
 		if (curr_rules.width != dfs_rules[i].width
 			&& dfs_rules[i].width != ISP_FREQ_RULE_ANY)
 			continue;
@@ -328,7 +326,7 @@ int atomisp_freq_scaling(struct atomisp_device *isp, enum atomisp_dfs_mode mode)
 			continue;
 		break;
 	}
-	if (i == ISP_FREQ_RULE_MAX)
+	if (i == ARRAY_SIZE(dfs_rules))
 		new_freq = ISP_FREQ_320MHZ;
 	else
 		new_freq = dfs_rules[i].isp_freq;
@@ -442,7 +440,7 @@ void atomisp_msi_irq_uninit(struct atomisp_device *isp, struct pci_dev *dev)
 	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, msg32);
 
 	pci_read_config_word(dev, PCI_COMMAND, &msg16);
-	msg16 &= ~(PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE);
+	msg16 &= ~(PCI_COMMAND_MASTER);
 	pci_write_config_word(dev, PCI_COMMAND, msg16);
 }
 
@@ -499,27 +497,40 @@ static void print_csi_rx_errors(struct atomisp_device *isp)
 		dev_err(isp->dev, "  line sync error");
 }
 
+/* Clear irq reg */
+static void clear_irq_reg(struct atomisp_device *isp)
+{
+	u32 msg_ret;
+	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
+	msg_ret |= 1 << INTR_IIR;
+	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+}
+
+
 /* interrupt handling function*/
 irqreturn_t atomisp_isr(int irq, void *dev)
 {
-	u32 msg_ret;
 	struct atomisp_device *isp = (struct atomisp_device *)dev;
 	unsigned int irq_infos = 0;
 	unsigned long flags;
 	int err;
 
+	spin_lock_irqsave(&isp->lock, flags);
+	if (isp->sw_contex.power_state != ATOM_ISP_POWER_UP) {
+		clear_irq_reg(isp);
+		spin_unlock_irqrestore(&isp->lock, flags);
+		return IRQ_HANDLED;
+	}
 	err = atomisp_css_irq_translate(isp, &irq_infos);
-	if (err)
+	if (err) {
+		spin_unlock_irqrestore(&isp->lock, flags);
 		return IRQ_NONE;
+	}
 
 	dev_dbg(isp->dev, "irq:0x%x\n", irq_infos);
 
-	/* Clear irq reg at PENWELL B0 */
-	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
-	msg_ret |= 1 << INTR_IIR;
-	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+	clear_irq_reg(isp);
 
-	spin_lock_irqsave(&isp->lock, flags);
 	if (isp->asd.streaming != ATOMISP_DEVICE_STREAMING_ENABLED &&
 		!isp->acc.pipeline)
 		goto out_nowake;
@@ -788,6 +799,8 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 	unsigned long irqflags;
 	struct atomisp_css_frame *frame = NULL;
 	struct atomisp_device *isp = asd->isp;
+	unsigned int *flash_num_ptr = NULL;
+	unsigned int partial_flash_num = 0;
 
 	if (buf_type != CSS_BUFFER_TYPE_3A_STATISTICS &&
 	    buf_type != CSS_BUFFER_TYPE_DIS_STATISTICS &&
@@ -857,9 +870,14 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 				WARN_ON(1);
 				break;
 			}
+#ifdef CONFIG_VIDEO_ATOMISP_CSS20
+			if (!frame->valid)
+				error = true;
+#endif
 
 			if (asd->params.flash_state ==
-			    ATOMISP_FLASH_ONGOING) {
+			    ATOMISP_FLASH_ONGOING &&
+			    !IS_ISP2400(isp)) {
 				if (frame->flash_state
 				    == CSS_FRAME_FLASH_STATE_PARTIAL)
 					dev_dbg(isp->dev, "%s thumb partially "
@@ -889,6 +907,10 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 				break;
 			}
 
+#ifdef CONFIG_VIDEO_ATOMISP_CSS20
+			if (!frame->valid)
+				error = true;
+#endif
 			vb = atomisp_css_frame_to_vbuf(pipe, frame);
 			if (!vb) {
 				WARN_ON(1);
@@ -896,7 +918,8 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 			}
 
 			if (asd->params.flash_state ==
-			    ATOMISP_FLASH_ONGOING) {
+			    ATOMISP_FLASH_ONGOING &&
+			    !IS_ISP2400(isp)) {
 				if (frame->flash_state
 				    == CSS_FRAME_FLASH_STATE_PARTIAL) {
 					asd->frame_status[vb->i] =
@@ -925,6 +948,48 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 					ATOMISP_FRAME_STATUS_FLASH_EXPOSED)
 					asd->params.flash_state =
 						ATOMISP_FLASH_DONE;
+			} else if (asd->params.flash_state ==
+				  ATOMISP_FLASH_ONGOING &&
+				  IS_ISP2400(isp)) {
+				flash_num_ptr =
+					&asd->params.frame_num_since_flash;
+
+				if (css_pipe_id == CSS_PIPE_ID_PREVIEW) {
+					if (isp->asd.continuous_mode->val)
+						partial_flash_num = 3;
+					else
+						partial_flash_num = 1;
+				} else if (css_pipe_id == CSS_PIPE_ID_CAPTURE) {
+					/*
+					 * capture with flash on always runs
+					 * at online mode
+					 */
+					partial_flash_num = 1;
+				}
+
+				if (*flash_num_ptr < partial_flash_num) {
+					asd->frame_status[vb->i] =
+						ATOMISP_FRAME_STATUS_FLASH_PARTIAL;
+					dev_dbg(isp->dev,
+						 "%s partially flashed\n",
+						 __func__);
+				} else {
+					asd->frame_status[vb->i] =
+						ATOMISP_FRAME_STATUS_FLASH_EXPOSED;
+					asd->params.num_flash_frames--;
+					dev_dbg(isp->dev,
+						 "%s completely flashed\n",
+						 __func__);
+				}
+
+				(*flash_num_ptr)++;
+
+				/* Check if flashing sequence is done */
+				if (asd->frame_status[vb->i] ==
+					ATOMISP_FRAME_STATUS_FLASH_EXPOSED)
+					asd->params.flash_state =
+						ATOMISP_FLASH_DONE;
+
 			} else {
 				asd->frame_status[vb->i] =
 					ATOMISP_FRAME_STATUS_OK;
@@ -933,6 +998,16 @@ static void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 			asd->params.last_frame_status =
 				asd->frame_status[vb->i];
 
+			if (isp->asd.continuous_mode->val) {
+				unsigned int exp_id = frame->exp_id;
+
+				if (css_pipe_id == CSS_PIPE_ID_PREVIEW)
+					isp->latest_preview_exp_id = exp_id;
+				else if (css_pipe_id == CSS_PIPE_ID_CAPTURE)
+					dev_dbg(isp->dev,
+						"ZSL capture raw buffer id: %u\n",
+						exp_id);
+			}
 			break;
 		default:
 			break;
@@ -1137,14 +1212,13 @@ void atomisp_wdt(unsigned long isp_addr)
 void atomisp_setup_flash(struct atomisp_sub_device *asd)
 {
 	struct atomisp_device *isp = asd->isp;
+	struct v4l2_control ctrl;
 
 	if (asd->params.flash_state != ATOMISP_FLASH_REQUESTED &&
 	    asd->params.flash_state != ATOMISP_FLASH_DONE)
 		return;
 
 	if (asd->params.num_flash_frames) {
-		struct v4l2_control ctrl;
-
 		/* make sure the timeout is set before setting flash mode */
 		ctrl.id = V4L2_CID_FLASH_TIMEOUT;
 		ctrl.value = FLASH_TIMEOUT;
@@ -1153,10 +1227,31 @@ void atomisp_setup_flash(struct atomisp_sub_device *asd)
 			dev_err(isp->dev, "flash timeout configure failed\n");
 			return;
 		}
-		atomisp_css_request_flash(asd);
+		if (IS_ISP2400(isp)) {
+			ctrl.id = V4L2_CID_FLASH_STROBE;
+			ctrl.value = 1;
+
+			if (v4l2_subdev_call(isp->flash, core, s_ctrl, &ctrl)) {
+				dev_err(isp->dev, "flash strobe on failed\n");
+				return;
+			}
+		} else {
+			atomisp_css_request_flash(asd);
+		}
+
+		asd->params.frame_num_since_flash = 0;
 		asd->params.flash_state = ATOMISP_FLASH_ONGOING;
 	} else {
 		/* Flashing all frames is done */
+		if (IS_ISP2400(isp)) {
+			ctrl.id = V4L2_CID_FLASH_STROBE;
+			ctrl.value = 0;
+
+			if (v4l2_subdev_call(isp->flash, core, s_ctrl, &ctrl)) {
+				dev_err(isp->dev, "flash strobe off failed\n");
+				return;
+			}
+		}
 		asd->params.flash_state = ATOMISP_FLASH_IDLE;
 	}
 }
@@ -3898,6 +3993,7 @@ out:
 /*Turn off ISP dphy */
 int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 {
+	unsigned long flags;
 	u32 pwr_cnt = 0;
 	int timeout = 100;
 	bool idle;
@@ -3925,6 +4021,9 @@ int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 		/* return -EINVAL; */
 	}
 
+	spin_lock_irqsave(&isp->lock, flags);
+	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
+	spin_unlock_irqrestore(&isp->lock, flags);
 done:
 	if (IS_ISP2400(isp)) {
 		/*
@@ -3944,7 +4043,6 @@ done:
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
 
-	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
 	return 0;
 }
 
@@ -3952,6 +4050,7 @@ done:
 int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 {
 	u32 pwr_cnt = 0;
+	unsigned long flags;
 	dev_dbg(isp->dev, "%s\n", __func__);
 
 	/* MRFLD IUNIT DPHY is located in an always-power-on island */
@@ -3963,8 +4062,9 @@ int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 		intel_mid_msgbus_write32(MFLD_IUNITPHY_PORT,
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
-
+	spin_lock_irqsave(&isp->lock, flags);
 	isp->sw_contex.power_state = ATOM_ISP_POWER_UP;
+	spin_unlock_irqrestore(&isp->lock, flags);
 
 	return 0;
 }

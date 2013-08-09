@@ -348,16 +348,29 @@ static int mfd_emmc_probe_slot(struct sdhci_pci_slot *slot)
 	case PCI_DEVICE_ID_INTEL_BYT_MMC45:
 		slot->host->quirks2 |= SDHCI_QUIRK2_CARD_CD_DELAY |
 			SDHCI_QUIRK2_WAIT_FOR_IDLE;
+		if (!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP1) &&
+			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP2) &&
+			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP3) &&
+			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, ENG, RVP1) &&
+			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, ENG, RVP2) &&
+			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, ENG, RVP3))
+			slot->host->mmc->caps2 |= MMC_CAP2_HS200_1_8V_SDR;
 	case PCI_DEVICE_ID_INTEL_BYT_MMC:
 		sdhci_alloc_panic_host(slot->host);
 		slot->rst_n_gpio = -EINVAL;
 		slot->host->mmc->caps |= MMC_CAP_1_8V_DDR;
 		slot->host->mmc->caps2 |= MMC_CAP2_INIT_CARD_SYNC;
+		slot->host->mmc->qos = kzalloc(sizeof(struct pm_qos_request),
+				GFP_KERNEL);
 		break;
 	}
 
 	slot->host->mmc->caps |= MMC_CAP_8_BIT_DATA | MMC_CAP_NONREMOVABLE;
 	slot->host->mmc->caps2 |= MMC_CAP2_HC_ERASE_SZ | MMC_CAP2_POLL_R1B_BUSY;
+
+	if (slot->host->mmc->qos)
+		pm_qos_add_request(slot->host->mmc->qos, PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
 
 	return 0;
 }
@@ -371,6 +384,11 @@ static void mfd_emmc_remove_slot(struct sdhci_pci_slot *slot, int dead)
 		break;
 	case PCI_DEVICE_ID_INTEL_MFD_EMMC1:
 		break;
+	}
+
+	if (slot->host->mmc->qos) {
+		pm_qos_remove_request(slot->host->mmc->qos);
+		kfree(slot->host->mmc->qos);
 	}
 }
 
@@ -620,6 +638,11 @@ static int byt_sd_probe_slot(struct sdhci_pci_slot *slot)
 		gpio_set_value(slot->host->gpio_1p8_en, 0);
 	}
 
+	/* Bayley Bay board */
+	if (INTEL_MID_BOARD(2, TABLET, BYT, BLB, PRO) ||
+			INTEL_MID_BOARD(2, TABLET, BYT, BLB, ENG))
+		slot->host->quirks2 |= SDHCI_QUIRK2_NO_1_8_V;
+
 	return 0;
 }
 
@@ -658,12 +681,14 @@ static const struct sdhci_pci_fixes sdhci_intel_mfd_emmc = {
 static const struct sdhci_pci_fixes sdhci_intel_byt_emmc = {
 	.allow_runtime_pm = true,
 	.probe_slot	= mfd_emmc_probe_slot,
+	.remove_slot	= mfd_emmc_remove_slot,
 };
 
 static const struct sdhci_pci_fixes sdhci_intel_byt_sd = {
 	.quirks2	= SDHCI_QUIRK2_POWER_PIN_GPIO_MODE,
 	.allow_runtime_pm = true,
 	.probe_slot	= byt_sd_probe_slot,
+	.remove_slot	= byt_sd_remove_slot,
 };
 
 static const struct sdhci_pci_fixes sdhci_intel_byt_sdio = {
@@ -694,24 +719,28 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 		slot->host->mmc->caps |= MMC_CAP_8_BIT_DATA |
 					MMC_CAP_NONREMOVABLE |
 					MMC_CAP_1_8V_DDR;
+		slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
+					MMC_CAP2_INIT_CARD_SYNC;
 		break;
 	case INTEL_MRFL_EMMC0H:
 		if (slot->chip->pdev->revision == 0x1) { /* B0 stepping */
 			slot->host->mmc->caps |= MMC_CAP_8_BIT_DATA |
 						MMC_CAP_NONREMOVABLE |
 						MMC_CAP_1_8V_DDR;
-			slot->host->mmc->caps2 |= MMC_CAP2_HS200_1_8V_SDR;
+			slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
+						MMC_CAP2_INIT_CARD_SYNC |
+						MMC_CAP2_HS200_1_8V_SDR;
 			/* WA for async abort silicon issue */
 			slot->host->quirks2 |= SDHCI_QUIRK2_WAIT_FOR_IDLE;
 		}
+		break;
+	case INTEL_MRFL_SD:
+		slot->host->quirks2 |= SDHCI_QUIRK2_WAIT_FOR_IDLE;
 		break;
 	case INTEL_MRFL_SDIO:
 		slot->host->mmc->caps |= MMC_CAP_NONREMOVABLE;
 		break;
 	}
-
-	slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
-				MMC_CAP2_INIT_CARD_SYNC;
 
 	if (slot->data->platform_quirks & PLFM_QUIRK_NO_HIGH_SPEED) {
 		slot->host->quirks2 |= SDHCI_QUIRK2_DISABLE_HIGH_SPEED;

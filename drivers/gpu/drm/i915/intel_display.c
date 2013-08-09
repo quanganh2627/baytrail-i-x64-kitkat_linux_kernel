@@ -6398,7 +6398,8 @@ static void intel_crtc_gamma_set(struct drm_crtc *crtc, u16 *red, u16 *green,
 /* VESA 640x480x72Hz mode to set on the pipe */
 static struct drm_display_mode load_detect_mode = {
 	DRM_MODE("640x480", DRM_MODE_TYPE_DEFAULT, 31500, 640, 664,
-		 704, 832, 0, 480, 489, 491, 520, 0, DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC),
+		704, 832, 0, 480, 489, 491, 520, 0,
+		DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC, 0),
 };
 
 static struct drm_framebuffer *
@@ -7193,6 +7194,15 @@ static int intel_gen7_queue_flip(struct drm_device *dev,
 	uint32_t plane_bit = 0;
 	int ret;
 
+	/* Make sure the ring is accessible.
+	* mm.suspend alone might be usable for this purpose.
+	* But put additional check until it is confirmed. */
+	if (dev_priv->mm.suspended || (ring->obj == NULL)) {
+		DRM_ERROR("flip attempted while the ring is not ready\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
 	ret = intel_pin_and_fence_fb_obj(dev, obj, ring);
 	if (ret)
 		goto err;
@@ -7545,7 +7555,11 @@ ssize_t display_runtime_suspend(struct drm_device *drm_dev)
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
 	struct drm_crtc *crtc;
 	struct intel_encoder *intel_encoder;
-	int ret = 0;
+	int audiosts = 0;
+
+	audiosts = mid_hdmi_audio_suspend(drm_dev);
+	if (audiosts != true)
+		DRM_DEBUG_DRIVER("Audio active, CRTC will not be suspended\n");
 
 	drm_kms_helper_poll_disable(drm_dev);
 	display_save_restore_hotplug(drm_dev, SAVEHPD);
@@ -7559,15 +7573,12 @@ ssize_t display_runtime_suspend(struct drm_device *drm_dev)
 	dev_priv->disp_pm_in_progress = true;
 	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-		if (intel_crtc->disp_suspend_state == false) {
-			i9xx_crtc_disable(crtc);
-			for_each_encoder_on_crtc(drm_dev, crtc, intel_encoder)
-				intel_encoder_prepare(&intel_encoder->base);
-		}
+		if ((intel_crtc->pipe == PIPE_B) && (audiosts != true))
+			continue;
+		i9xx_crtc_disable(crtc);
+		for_each_encoder_on_crtc(drm_dev, crtc, intel_encoder)
+			intel_encoder_prepare(&intel_encoder->base);
 	}
-	ret = mid_hdmi_audio_suspend(drm_dev);
-	if (ret != true)
-		DRM_ERROR("Error suspending HDMI audio\n");
 	dev_priv->disp_pm_in_progress = false;
 	mutex_unlock(&drm_dev->mode_config.mutex);
 	i915_rpm_put_disp(drm_dev);
@@ -7576,23 +7587,22 @@ ssize_t display_runtime_suspend(struct drm_device *drm_dev)
 
 ssize_t display_runtime_resume(struct drm_device *drm_dev)
 {
-	struct drm_crtc *crtc;
-	struct intel_encoder *intel_encoder;
-	struct intel_crtc *intel_crtc;
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
 
 	i915_rpm_get_disp(drm_dev);
 	mutex_lock(&drm_dev->mode_config.mutex);
 	dev_priv->disp_pm_in_progress = true;
-	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
-		intel_crtc = to_intel_crtc(crtc);
-		if (intel_crtc->disp_suspend_state == true) {
-			i9xx_crtc_enable(crtc);
-			for_each_encoder_on_crtc(drm_dev, crtc, intel_encoder) {
-				intel_encoder_commit(&intel_encoder->base);
-			}
-		}
-	}
+
+	/* No need of separate crct enable and encoder commit calls
+	 * Move the modeset sequence in late resume instead of resume.
+	 * early suspend calls prepare calls to disable crtc and encoder.
+	 * Suspend just power gates the power well and few other PM settings.
+	 * Handle resume flow in same way. resume will ungate power well
+	 * and late resume will do the modeset, thereby enable crtc
+	 * and encoder commit.
+	 */
+	drm_helper_resume_force_mode(drm_dev);
+
 	mid_hdmi_audio_resume(drm_dev);
 	dev_priv->disp_pm_in_progress = false;
 	if (dev_priv->saveDPSTState)
@@ -8446,7 +8456,7 @@ int i915_disp_screen_control(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	 crtc = obj_to_crtc(obj);
+	crtc = obj_to_crtc(obj);
 	DRM_DEBUG_DRIVER("[CRTC:%d]\n", crtc->base.id);
 	intel_crtc = to_intel_crtc(crtc);
 	pipe = intel_crtc->pipe;

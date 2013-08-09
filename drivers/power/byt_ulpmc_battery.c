@@ -48,12 +48,12 @@
 #define ULPMC_FG_REG_TEMP		0x06
 #define ULPMC_FG_REG_VOLT		0x08
 #define ULPMC_FG_REG_FLAGS		0x0A
-#define FG_FLAG_DSC			BIT(0)
-#define FG_FLAG_SOCF			BIT(1) /* SOC threshold final */
-#define FG_FLAG_SOC1			BIT(2) /* SOC threshold 1 */
-#define FG_FLAG_BDET			BIT(3) /* Battery Detect */
-#define FG_FLAG_CHG			BIT(8)
-#define FG_FLAG_FC			BIT(9)
+#define FG_FLAG_DSC			(1 << 0)
+#define FG_FLAG_SOCF			(1 << 1) /* SOC threshold final */
+#define FG_FLAG_SOC1			(1 << 2) /* SOC threshold 1 */
+#define FG_FLAG_BDET			(1 << 3) /* Battery Detect */
+#define FG_FLAG_CHG			(1 << 8)
+#define FG_FLAG_FC			(1 << 9)
 #define ULPMC_FG_REG_NAC		0x0C /* Nominal available capacity */
 #define ULPMC_FG_REG_FAC		0x28 /* Full available capacity */
 #define ULPMC_FG_REG_RMC		0x10 /* Remaining capacity */
@@ -122,6 +122,16 @@
 #define FAULT_NTC_BOTH_HOT			(6 << 0)
 #define FAULT_NTC_ONE_COLD_ONE_HOT		(7 << 0)
 #define FAULT_NTC_MASK				(7 << 0)
+
+/* ULPMC NOT CHARGING REASONS */
+#define ULPMC_REG_NOT_CHG_STAT		0x4A
+#define NOT_CHG_AUX			(1 << 0)
+#define NOT_CHG_INV_BAT		(1 << 1)
+#define NOT_CHG_MAINT_CHG		(1 << 2)
+#define NOT_CHG_DPTF			(1 << 3)
+#define NOT_CHG_UNPLUG			(1 << 4)
+#define NOT_CHG_SDP			(1 << 5)
+#define NOT_CHG_OVP			(1 << 6)
 
 /* ULPMC Battery Manager Registers */
 #define ULPMC_BM_REG_LOWBAT_BTP		0x30
@@ -397,6 +407,49 @@ cc_throttle_fail:
 	return ret;
 }
 
+static int byt_ulpmc_get_temp(int *temp)
+{
+	int ret, val;
+
+	ret = ulpmc_read_reg8(chip_ptr->client, ULPMC_BM_REG_TEMP);
+	if (ret < 0)
+		return ret;
+
+	/* check for sign bit for -ve range */
+	if (ret & 0x80) {
+		val = (~ret) & 0x7F;
+		val++;
+		val *= -1;
+	} else {
+		val = ret;
+	}
+
+	/*
+	 * ULPMC FW reports ULPMC skin temperature
+	 * which is not equal or correlated to battery
+	 * temperature. So the ulpmc skin temperature
+	 * is characterized against the platfrom skin
+	 * temperure and adjusted accordingly.
+	 */
+	if (val < 15)
+		*temp = val - (val * 60)/100;
+	else if (val < 25)
+		*temp = val - (val * 50)/100;
+	else if (val < 30)
+		*temp = val - (val * 40)/100;
+	else if (val < 35)
+		*temp = val - (val * 30)/100;
+	else if (val < 60)
+		*temp = val - (val * 20)/100;
+	else
+		*temp = val - (val * 15)/100;
+
+	dev_info(&chip_ptr->client->dev,
+		"raw temp:%d, scaled temp:%d\n", val, *temp);
+
+	return 0;
+}
+
 static int ulpmc_charger_health(struct ulpmc_chip_info *chip)
 {
 	int stat, fault, health;
@@ -456,10 +509,19 @@ report_chrg_health:
 static int ulpmc_battery_health(struct ulpmc_chip_info *chip)
 {
 	int stat, fault, health, batt_type;
+	int ret, not_chg_stat, temp;
 
 	stat = ulpmc_read_reg8(chip->client, ULPMC_BC_REG_STAT);
 	if (stat < 0) {
 		dev_err(&chip->client->dev, "i2c read error:%d\n", stat);
+		health = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+		goto report_batt_health;
+	}
+
+	not_chg_stat = ulpmc_read_reg8(chip->client, ULPMC_REG_NOT_CHG_STAT);
+	if (not_chg_stat < 0) {
+		dev_err(&chip->client->dev,
+				"i2c read error:%d\n", not_chg_stat);
 		health = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 		goto report_batt_health;
 	}
@@ -490,12 +552,26 @@ static int ulpmc_battery_health(struct ulpmc_chip_info *chip)
 		goto report_batt_health;
 	}
 
-	/*
-	 * TODO: check battery temp  high
-	 * and low thresholds and set health.
-	 * this will be done on PR1.1
-	 */
+	if (not_chg_stat & NOT_CHG_AUX) {
+		dev_info(&chip->client->dev, "battery over temp fault\n");
+		health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		goto report_batt_health;
+	}
 
+	/* check battery temperature */
+	ret = byt_ulpmc_get_temp(&temp);
+	if (ret < 0) {
+		dev_err(&chip->client->dev, "i2c read error:%d\n", ret);
+		health = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+		goto report_batt_health;
+	}
+
+	if (temp > chip->pdata->temp_ul ||
+		temp < chip->pdata->temp_ll) {
+		dev_info(&chip->client->dev, "battery over temp fault\n");
+		health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		goto report_batt_health;
+	}
 
 	/* check battery valid case */
 	if ((batt_type & BATT_PRESENT_DET_MASK) != BATT_PRESENT_DET_2P) {
@@ -516,10 +592,24 @@ report_batt_health:
 	return health;
 }
 
+static bool ulpmc_battery_in_maintenance(struct ulpmc_chip_info *chip)
+{
+	int ret;
+
+	ret = ulpmc_read_reg8(chip->client, ULPMC_REG_NOT_CHG_STAT);
+	if (ret < 0)
+		goto err_maint;
+
+	if (ret & NOT_CHG_MAINT_CHG)
+		return true;
+
+err_maint:
+	return false;
+}
+
 static int ulpmc_battery_status(struct ulpmc_chip_info *chip)
 {
-	int stat, batt_health, chrg_health, ret;
-	bool fault;
+	int stat, ret;
 
 	ret = ulpmc_read_reg8(chip->client, ULPMC_BC_REG_STAT);
 	if (ret < 0) {
@@ -535,24 +625,12 @@ static int ulpmc_battery_status(struct ulpmc_chip_info *chip)
 		goto batt_stat_report;
 	}
 
-	/* check for charger or battery fault */
-	batt_health = ulpmc_battery_health(chip);
-	chrg_health = ulpmc_charger_health(chip);
-
-	if ((batt_health != POWER_SUPPLY_HEALTH_GOOD) &&
-		(batt_health != POWER_SUPPLY_HEALTH_DEAD))
-		fault = true;
-	else if (chrg_health != POWER_SUPPLY_HEALTH_GOOD)
-		fault = true;
-	else
-		fault = false;
-
 	switch (stat & BC_STAT_CHRG_MASK) {
 	case BC_STAT_NOT_CHRG:
-		if (fault)
-			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		else
+		if (ulpmc_battery_in_maintenance(chip))
 			ret = POWER_SUPPLY_STATUS_FULL;
+		else
+			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	case BC_STAT_PRE_CHRG:
 	case BC_STAT_FAST_CHRG:
@@ -583,7 +661,7 @@ static int ulpmc_get_battery_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					union power_supply_propval *val)
 {
-	int ret = 0, batt_volt, cur_avg;
+	int ret = 0, batt_volt, cur_avg, temp;
 	struct ulpmc_chip_info *chip = container_of(psy,
 				struct ulpmc_chip_info, bat);
 	mutex_lock(&chip->lock);
@@ -660,16 +738,10 @@ static int ulpmc_get_battery_property(struct power_supply *psy,
 		val->intval = ret;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		ret = ulpmc_read_reg8(chip->client, ULPMC_BM_REG_TEMP);
+		ret = byt_ulpmc_get_temp(&temp);
 		if (ret < 0)
 			goto i2c_read_err;
-		/* check for sign bit for -ve range */
-		if (ret & 0x80) {
-			ret = (~ret) & 0x7F;
-			ret++;
-			ret *= -1;
-		}
-		val->intval = ret * 10;
+		val->intval = temp * 10;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		ret = ulpmc_read_reg8(chip->client, ULPMC_BM_REG_BATT_PRESENT);

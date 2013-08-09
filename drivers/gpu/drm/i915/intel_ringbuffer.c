@@ -1071,6 +1071,10 @@ static int intel_init_ring_buffer(struct drm_device *dev,
 	INIT_LIST_HEAD(&ring->request_list);
 	ring->size = 32 * PAGE_SIZE;
 
+	/* Reset this variable, so as to avoid using the stale seqno
+	   on resume.*/
+	ring->outstanding_lazy_request = 0;
+
 	init_waitqueue_head(&ring->irq_queue);
 
 	if (I915_NEED_GFX_HWS(dev)) {
@@ -1963,6 +1967,7 @@ int intel_init_render_ring_buffer(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct intel_ring_buffer *ring = &dev_priv->ring[RCS];
+	int ret;
 
 	ring->name = "render ring";
 	ring->id = RCS;
@@ -2029,7 +2034,13 @@ int intel_init_render_ring_buffer(struct drm_device *dev)
 		memset(ring->status_page.page_addr, 0, PAGE_SIZE);
 	}
 
-	return intel_init_ring_buffer(dev, ring);
+	ret = intel_init_ring_buffer(dev, ring);
+	/* Invalidate TLB */
+	if (!ret)
+		I915_WRITE(RING_INSTPM(ring->mmio_base),
+					RCS_RING_TLB_INVALIDATE_VAL);
+
+	return ret;
 }
 
 int intel_render_ring_init_dri(struct drm_device *dev, u64 start, u32 size)
@@ -2040,6 +2051,10 @@ int intel_render_ring_init_dri(struct drm_device *dev, u64 start, u32 size)
 	ring->name = "render ring";
 	ring->id = RCS;
 	ring->mmio_base = RENDER_RING_BASE;
+
+	/* Reset this variable, so as to avoid using the stale seqno
+	   on resume.*/
+	ring->outstanding_lazy_request = 0;
 
 	if (INTEL_INFO(dev)->gen >= 6) {
 		/* non-kms not supported on gen6+ */
@@ -2099,6 +2114,7 @@ int intel_init_bsd_ring_buffer(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct intel_ring_buffer *ring = &dev_priv->ring[VCS];
+	int ret;
 
 	ring->name = "bsd ring";
 	ring->id = VCS;
@@ -2148,13 +2164,21 @@ int intel_init_bsd_ring_buffer(struct drm_device *dev)
 	/* Enable the timeout counter for watchdog reset */
 	I915_WRITE_IMR(ring, ~GEN6_BSD_TIMEOUT_COUNTER_EXPIRED);
 
-	return intel_init_ring_buffer(dev, ring);
+	ret = intel_init_ring_buffer(dev, ring);
+
+	/* Invalidate TLB */
+	if (!ret)
+		I915_WRITE(RING_INSTPM(ring->mmio_base),
+					BSD_RING_TLB_INVALIDATE_VAL);
+
+	return ret;
 }
 
 int intel_init_blt_ring_buffer(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct intel_ring_buffer *ring = &dev_priv->ring[BCS];
+	int ret;
 
 	ring->name = "blitter ring";
 	ring->id = BCS;
@@ -2181,7 +2205,13 @@ int intel_init_blt_ring_buffer(struct drm_device *dev)
 	ring->signal_mbox[1] = GEN6_VBSYNC;
 	ring->init = init_ring_common;
 
-	return intel_init_ring_buffer(dev, ring);
+	ret = intel_init_ring_buffer(dev, ring);
+	/* Invalidate TLB */
+	if (!ret)
+		I915_WRITE(RING_INSTPM(ring->mmio_base),
+					BLT_RING_TLB_INVALIDATE_VAL);
+
+	return ret;
 }
 
 int

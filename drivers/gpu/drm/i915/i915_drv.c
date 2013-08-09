@@ -122,7 +122,7 @@ MODULE_PARM_DESC(enable_hangcheck,
 		"WARNING: Disabling this can cause system wide hangs. "
 		"(default: true)");
 
-unsigned int i915_hangcheck_period __read_mostly = 250;
+unsigned int i915_hangcheck_period __read_mostly = 667;
 
 int hangcheck_period_set(const char *val, const struct kernel_param *kp)
 {
@@ -155,7 +155,7 @@ module_param_cb(i915_hangcheck_period, &hangcheck_ops,
 MODULE_PARM_DESC(i915_hangcheck_period,
 		"The hangcheck timer period in milliseconds. "
 		"The actual time to detect a hang may be 3 - 4 times "
-		"this value (default = 250ms)");
+		"this value (default = 667ms)");
 
 unsigned int i915_ring_reset_min_alive_period __read_mostly;
 module_param_named(i915_ring_reset_min_alive_period,
@@ -560,9 +560,6 @@ int i915_suspend(struct drm_device *dev, pm_message_t state)
 
 	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
 		return 0;
-	/* Added for HDMI Audio */
-	/* TODO: display team to take care of error properly */
-	mid_hdmi_audio_suspend(dev);
 
 	error = dev_priv->pm.drm_freeze(dev);
 	if (error)
@@ -601,8 +598,6 @@ int i915_resume_common(struct drm_device *dev, bool is_hibernate_restore)
 		return ret;
 
 	drm_kms_helper_poll_enable(dev);
-	/* Added for HDMI Audio */
-	mid_hdmi_audio_resume(dev);
 	DRM_DEBUG_DRIVER("Gfx Resumed\n");
 	return 0;
 }
@@ -1053,7 +1048,6 @@ static int i915_mmap(struct file *filp, struct vm_area_struct *vma)
 }
 #endif
 
-#if defined(CONFIG_DRM_VXD_BYT) || defined(CONFIG_PM_RUNTIME)
 static int i915_release(struct inode *inode, struct file *filp)
 {
 	int ret = 0;
@@ -1062,14 +1056,15 @@ static int i915_release(struct inode *inode, struct file *filp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	i915_rpm_get_callback(dev);
+#ifdef CONFIG_DRM_VXD_BYT
 	if (dev_priv->vxd_release)
 		ret = dev_priv->vxd_release(inode, filp);
+#endif
 	drm_release(inode, filp);
 	i915_rpm_put_callback(dev);
 
 	return ret;
 }
-#endif
 
 static long i915_ioctl(struct file *filp,
 	      unsigned int cmd, unsigned long arg)
@@ -1118,9 +1113,6 @@ static int i915_pm_suspend(struct device *dev)
 
 	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
 		return 0;
-	/* Added for HDMI Audio */
-	/* TODO: display team to take care of error properly */
-	mid_hdmi_audio_suspend(drm_dev);
 
 	error = dev_priv->pm.drm_freeze(drm_dev);
 	if (error)
