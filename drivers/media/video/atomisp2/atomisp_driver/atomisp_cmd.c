@@ -1309,6 +1309,7 @@ irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr)
 		case CSS_EVENT_DIS_STATISTICS_DONE:
 #ifdef CONFIG_VIDEO_ATOMISP_CSS20
 		case CSS_EVENT_PORT_EOF:
+		case CSS_EVENT_FRAME_TAGGED:
 #endif /* CONFIG_VIDEO_ATOMISP_CSS20 */
 			break;
 		default:
