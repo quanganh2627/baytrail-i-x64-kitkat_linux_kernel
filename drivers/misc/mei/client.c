@@ -27,11 +27,15 @@
 #include "client.h"
 
 /* BACKPORT: backport from v3.9 */
+#ifdef CONFIG_PM_RUNTIME
 static inline bool pm_runtime_active(struct device *dev)
 {
 	return dev->power.runtime_status == RPM_ACTIVE
 		|| dev->power.disable_depth;
 }
+#else
+static inline bool pm_runtime_active(struct device *dev) { return true; }
+#endif /* CONFIG_PM_RUNTIME */
 
 /**
  * mei_me_cl_by_uuid - locate index of me client
