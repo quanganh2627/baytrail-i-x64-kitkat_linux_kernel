@@ -39,6 +39,32 @@ static int dwc_host_setup(struct usb_hcd *hcd);
 static int xhci_release_host(struct usb_hcd *hcd);
 static struct platform_driver xhci_dwc_driver;
 
+static int if_usb_devices_connected(struct xhci_hcd *xhci)
+{
+	struct usb_device		*usb_dev;
+	int i, connected_devices = 0;
+
+	if (!xhci)
+		return -EINVAL;
+
+	usb_dev = xhci->main_hcd->self.root_hub;
+	for (i = 0; i < usb_dev->maxchild; ++i) {
+		if (usb_dev->children[i])
+			connected_devices++;
+	}
+
+	usb_dev = xhci->shared_hcd->self.root_hub;
+	for (i = 0; i < usb_dev->maxchild; ++i) {
+		if (usb_dev->children[i])
+			connected_devices++;
+	}
+
+	if (connected_devices)
+		return 1;
+
+	return 0;
+}
+
 static int xhci_dwc_bus_suspend(struct usb_hcd *hcd)
 {
 	return xhci_bus_suspend(hcd);
@@ -121,6 +147,18 @@ static void dwc_set_host_mode(struct usb_hcd *hcd)
 	writel(octl, hcd->regs + OCTL);
 
 	msleep(20);
+}
+
+static void dwc_xhci_enable_phy_auto_resume(struct usb_hcd *hcd, bool enable)
+{
+	u32 val;
+
+	val = readl(hcd->regs + GUSB2PHYCFG0);
+	if (enable)
+		val |= GUSB2PHYCFG_ULPI_AUTO_RESUME;
+	else
+		val &= ~GUSB2PHYCFG_ULPI_AUTO_RESUME;
+	writel(val, hcd->regs + GUSB3PIPECTL0);
 }
 
 static void dwc_xhci_enable_phy_suspend(struct usb_hcd *hcd, int enable)
@@ -715,6 +753,15 @@ static int dwc_hcd_suspend_common(struct device *dev)
 			retval = -EINVAL;
 
 		if (!retval) {
+			/* The auto-resume is diabled by default. Need enable it
+			 * if there have valid connection. To ensure that when
+			 * device resumes, host does resume reflect within
+			 * 900 usec as in USB spec.
+			 */
+			if (if_usb_devices_connected(xhci) == 1)
+				dwc_xhci_enable_phy_auto_resume(
+						xhci->main_hcd, true);
+
 			/* Ensure that GUSB3PIPECTL[17] (Suspend SS PHY)
 			 * is set to '1'
 			 **/
@@ -819,6 +866,10 @@ static int dwc_hcd_runtime_suspend(struct device *dev)
 	hcd->rpm_early_resume = 0;
 
 	retval = dwc_hcd_suspend_common(dev);
+
+	if (retval)
+		dwc_xhci_enable_phy_auto_resume(
+			hcd, false);
 
 	dev_dbg(dev, "hcd_pci_runtime_suspend: %d\n", retval);
 	return retval;

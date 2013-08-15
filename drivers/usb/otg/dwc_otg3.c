@@ -284,6 +284,18 @@ static void set_sus_phy(struct dwc_otg2 *otg, int bit)
 #endif
 }
 
+/* Disable auto-resume feature for USB2 PHY. This is one
+ * silicon workaround. It will cause fabric timeout error
+ * for LS case after resume from hibernation */
+static void disable_phy_auto_resume(struct dwc_otg2 *otg)
+{
+	u32 data = 0;
+
+	data = otg_read(otg, GUSB2PHYCFG0);
+	data &= ~GUSB2PHYCFG_ULPI_AUTO_RESUME;
+	otg_write(otg, GUSB2PHYCFG0, data);
+}
+
 static int start_host(struct dwc_otg2 *otg)
 {
 	int ret = 0;
@@ -297,6 +309,7 @@ static int start_host(struct dwc_otg2 *otg)
 	}
 
 	usb2phy_eye_optimization(otg);
+	disable_phy_auto_resume(otg);
 
 	/* Start host driver */
 	hcd = container_of(otg->otg.host, struct usb_hcd, self);
@@ -331,6 +344,8 @@ static void start_peripheral(struct dwc_otg2 *otg)
 	}
 
 	usb2phy_eye_optimization(otg);
+	disable_phy_auto_resume(otg);
+
 	gadget->ops->start_device(gadget);
 }
 
@@ -2167,16 +2182,6 @@ REINIT:
 		}
 	}
 
-	/* This is one WA for silicon BUG.
-	 * Without this WA, the USB2 phy will enter low power
-	 * mode during hibernation resume flow. and met
-	 * fabric error
-	 */
-	if (otg->state == DWC_STATE_A_HOST) {
-		enable_usb_phy(otg, false);
-		enable_usb_phy(otg, true);
-	}
-
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
 	 * for 10ms.
@@ -2188,7 +2193,7 @@ REINIT:
 		stop_main_thread(otg);
 		return -EIO;
 	}
-
+	disable_phy_auto_resume(otg);
 	set_sus_phy(otg, 0);
 
 	if (otg->otg_data && otg->otg_data->is_byt) {
@@ -2241,16 +2246,6 @@ static int dwc_otg_resume(struct device *dev)
 	if (!otg)
 		return -ENODEV;
 
-	/* This is one WA for silicon BUG.
-	 * Without this WA, the USB2 phy will enter low power
-	 * mode during hibernation resume flow. and met
-	 * fabric error
-	 */
-	if (otg->state == DWC_STATE_A_HOST) {
-		enable_usb_phy(otg, false);
-		enable_usb_phy(otg, true);
-	}
-
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
 	 * for 10ms.
@@ -2262,6 +2257,7 @@ static int dwc_otg_resume(struct device *dev)
 		stop_main_thread(otg);
 		return -EIO;
 	}
+	disable_phy_auto_resume(otg);
 	set_sus_phy(otg, 0);
 
 	if (otg->otg_data && otg->otg_data->is_byt) {
