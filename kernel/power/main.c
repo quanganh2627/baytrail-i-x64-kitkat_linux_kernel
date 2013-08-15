@@ -669,6 +669,7 @@ static int __init pm_init(void)
 	hibernate_image_size_init();
 	hibernate_reserved_size_init();
 	power_kobj = kobject_create_and_add("power", NULL);
+	early_suspend_init();
 	power_hal_kobj = kobject_create_and_add("power_HAL_suspend",
 					power_kobj);
 	if (!power_kobj)
