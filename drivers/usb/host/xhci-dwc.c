@@ -320,6 +320,7 @@ static int xhci_start_host(struct usb_hcd *hcd)
 {
 	int ret = -EINVAL;
 	struct xhci_hcd *xhci;
+	struct usb_hcd *xhci_shared_hcd;
 
 
 	if (!hcd) {
@@ -382,8 +383,9 @@ static int xhci_start_host(struct usb_hcd *hcd)
 
 put_usb3_hcd:
 	if (xhci->shared_hcd) {
-		usb_remove_hcd(xhci->shared_hcd);
-		usb_put_hcd(xhci->shared_hcd);
+		xhci_shared_hcd = xhci->shared_hcd;
+		usb_remove_hcd(xhci_shared_hcd);
+		usb_put_hcd(xhci_shared_hcd);
 	}
 
 dealloc_usb2_hcd:
@@ -402,7 +404,7 @@ dealloc_usb2_hcd:
 static int xhci_stop_host(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci;
-
+	struct usb_hcd *xhci_shared_hcd;
 	if (!hcd) {
 		printk(KERN_DEBUG "%s() - NULL pointer returned", __func__);
 		return -EINVAL;
@@ -415,8 +417,9 @@ static int xhci_stop_host(struct usb_hcd *hcd)
 	xhci_dwc_driver.shutdown = NULL;
 
 	if (xhci->shared_hcd) {
-		usb_remove_hcd(xhci->shared_hcd);
-		usb_put_hcd(xhci->shared_hcd);
+		xhci_shared_hcd = xhci->shared_hcd;
+		usb_remove_hcd(xhci_shared_hcd);
+		usb_put_hcd(xhci_shared_hcd);
 	}
 
 	/* Fake an interrupt request in order to give the driver a chance
