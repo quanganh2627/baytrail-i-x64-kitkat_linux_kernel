@@ -440,7 +440,7 @@ void atomisp_msi_irq_uninit(struct atomisp_device *isp, struct pci_dev *dev)
 	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, msg32);
 
 	pci_read_config_word(dev, PCI_COMMAND, &msg16);
-	msg16 &= ~(PCI_COMMAND_MASTER);
+	msg16 &= ~(PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE);
 	pci_write_config_word(dev, PCI_COMMAND, msg16);
 }
 
@@ -497,40 +497,27 @@ static void print_csi_rx_errors(struct atomisp_device *isp)
 		dev_err(isp->dev, "  line sync error");
 }
 
-/* Clear irq reg */
-static void clear_irq_reg(struct atomisp_device *isp)
-{
-	u32 msg_ret;
-	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
-	msg_ret |= 1 << INTR_IIR;
-	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
-}
-
-
 /* interrupt handling function*/
 irqreturn_t atomisp_isr(int irq, void *dev)
 {
+	u32 msg_ret;
 	struct atomisp_device *isp = (struct atomisp_device *)dev;
 	unsigned int irq_infos = 0;
 	unsigned long flags;
 	int err;
 
-	spin_lock_irqsave(&isp->lock, flags);
-	if (isp->sw_contex.power_state != ATOM_ISP_POWER_UP) {
-		clear_irq_reg(isp);
-		spin_unlock_irqrestore(&isp->lock, flags);
-		return IRQ_HANDLED;
-	}
 	err = atomisp_css_irq_translate(isp, &irq_infos);
-	if (err) {
-		spin_unlock_irqrestore(&isp->lock, flags);
+	if (err)
 		return IRQ_NONE;
-	}
 
 	dev_dbg(isp->dev, "irq:0x%x\n", irq_infos);
 
-	clear_irq_reg(isp);
+	/* Clear irq reg at PENWELL B0 */
+	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
+	msg_ret |= 1 << INTR_IIR;
+	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
 
+	spin_lock_irqsave(&isp->lock, flags);
 	if (isp->asd.streaming != ATOMISP_DEVICE_STREAMING_ENABLED &&
 		!isp->acc.pipeline)
 		goto out_nowake;
@@ -3993,7 +3980,6 @@ out:
 /*Turn off ISP dphy */
 int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 {
-	unsigned long flags;
 	u32 pwr_cnt = 0;
 	int timeout = 100;
 	bool idle;
@@ -4021,9 +4007,6 @@ int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 		/* return -EINVAL; */
 	}
 
-	spin_lock_irqsave(&isp->lock, flags);
-	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
-	spin_unlock_irqrestore(&isp->lock, flags);
 done:
 	if (IS_ISP2400(isp)) {
 		/*
@@ -4043,6 +4026,7 @@ done:
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
 
+	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
 	return 0;
 }
 
@@ -4050,7 +4034,6 @@ done:
 int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 {
 	u32 pwr_cnt = 0;
-	unsigned long flags;
 	dev_dbg(isp->dev, "%s\n", __func__);
 
 	/* MRFLD IUNIT DPHY is located in an always-power-on island */
@@ -4062,9 +4045,8 @@ int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 		intel_mid_msgbus_write32(MFLD_IUNITPHY_PORT,
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
-	spin_lock_irqsave(&isp->lock, flags);
+
 	isp->sw_contex.power_state = ATOM_ISP_POWER_UP;
-	spin_unlock_irqrestore(&isp->lock, flags);
 
 	return 0;
 }

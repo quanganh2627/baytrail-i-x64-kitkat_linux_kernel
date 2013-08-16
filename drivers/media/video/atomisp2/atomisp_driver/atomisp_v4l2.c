@@ -283,53 +283,30 @@ static int atomisp_mrfld_pre_power_down(struct atomisp_device *isp)
 {
 	struct pci_dev *dev = isp->pdev;
 	u32 irq;
-	unsigned long flags;
+	unsigned long timeout;
 
-	spin_lock_irqsave(&isp->lock, flags);
-	if (isp->sw_contex.power_state == ATOM_ISP_POWER_DOWN) {
-		spin_unlock_irqrestore(&isp->lock, flags);
-		dev_dbg(isp->dev, "<%s %d.\n", __func__, __LINE__);
+	if (isp->sw_contex.power_state == ATOM_ISP_POWER_DOWN)
 		return 0;
-	}
+
 	/*
 	 * MRFLD HAS requirement: cannot power off i-unit if
 	 * ISP has IRQ not serviced.
 	 * So, here we need to check if there is any pending
 	 * IRQ, if so, waiting for it to be served
 	 */
-	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-	irq = irq & 1 << INTR_IIR;
-	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
-
-	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-	if (!(irq & (1 << INTR_IIR)))
-		goto done;
-
-	atomisp_store_uint32(MRFLD_INTR_CLEAR_REG, 0xFFFFFFFF);
-	atomisp_load_uint32(MRFLD_INTR_STATUS_REG, &irq);
-	if (irq != 0) {
-		dev_err(isp->dev,
-			 "%s: fail to clear isp interrupt status reg=0x%x\n",
-			 __func__, irq);
-		spin_unlock_irqrestore(&isp->lock, flags);
-		return -EAGAIN;
-	} else {
+	timeout = jiffies + msecs_to_jiffies(500);
+	while (1) {
 		pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-		irq = irq & 1 << INTR_IIR;
-		pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
-
-		pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-		if (!(irq & (1 << INTR_IIR))) {
-			atomisp_store_uint32(MRFLD_INTR_ENABLE_REG, 0x0);
-			goto done;
+		if (!(irq & (1 << INTR_IIR)))
+			break;
+		if (time_after(jiffies, timeout)) {
+			v4l2_err(&atomisp_dev,
+				"%s: IRQ raised!!!\n", __func__);
+			return -EAGAIN;
 		}
-		dev_err(isp->dev,
-			 "%s: error in iunit interrupt. status reg=0x%x\n",
-			 __func__, irq);
-		spin_unlock_irqrestore(&isp->lock, flags);
-		return -EAGAIN;
-	}
-done:
+		usleep_range(1000, 1500);
+	};
+
 	/*
 	* MRFLD WORKAROUND:
 	* before powering off IUNIT, clear the pending interrupts
@@ -338,12 +315,9 @@ done:
 	* HW sighting:4568410.
 	*/
 	pci_read_config_dword(dev, PCI_INTERRUPT_CTRL, &irq);
-	irq &= ~(1 << INTR_IER);
+	irq = (irq & ~(1 << INTR_IER)) | (1 << INTR_IIR);
 	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, irq);
-
-	atomisp_msi_irq_uninit(isp, dev);
 	atomisp_freq_scaling(isp, ATOMISP_DFS_MODE_LOW);
-	spin_unlock_irqrestore(&isp->lock, flags);
 
 	return 0;
 }

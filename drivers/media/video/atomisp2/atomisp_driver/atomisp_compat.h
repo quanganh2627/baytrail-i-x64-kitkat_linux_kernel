@@ -121,7 +121,6 @@ struct atomisp_sub_device;
 struct video_device;
 
 void atomisp_store_uint32(hrt_address addr, uint32_t data);
-void atomisp_load_uint32(hrt_address addr, uint32_t *data);
 
 void atomisp_set_css_env(struct atomisp_device *isp);
 
