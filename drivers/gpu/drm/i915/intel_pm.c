@@ -1242,6 +1242,9 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
 		*plane_dl = (64 * (*plane_prec_mult) * 4) / ((clock / 1000) *
 						     pixel_size);
+		/* Temp hack - Try raising priority to high to w/a
+		latency problems */
+		*plane_dl = 0;
 		latencyprogrammed = true;
 	}
 
@@ -1251,6 +1254,9 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
 		*cursor_dl = (64 * (*cursor_prec_mult) * 4) / ((clock / 1000) *
 							4);
+		/* Temp hack - Try raising priority to high to w/a
+		latency problems */
+		*cursor_dl = 0;
 		latencyprogrammed = true;
 	}
 
@@ -1260,6 +1266,9 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
 		*sprite_dl = (64 * (*sprite_prec_mult) * 4) / ((clock / 1000) *
 						sprite_pixel_size);
+		/* Temp hack - Try raising priority to high to w/a
+		latency problems */
+		*sprite_dl = 0;
 		latencyprogrammed = true;
 	}
 
@@ -4440,12 +4449,14 @@ static void display_early_suspend(struct early_suspend *h)
 {
 	struct drm_device *drm_dev = gdev;
 	struct drm_i915_private *dev_priv = gdev->dev_private;
-	int ret = display_runtime_suspend(drm_dev);
+	int ret;
+	DRM_DEBUG_PM("Early suspend called\n");
+	ret = display_runtime_suspend(drm_dev);
 	if (ret)
-		DRM_ERROR("Display suspend failure\n");
+		DRM_ERROR("Early suspend failure\n");
 	else {
 		dev_priv->early_suspended = true;
-		DRM_DEBUG_DRIVER("Display suspend Success\n");
+		DRM_DEBUG_PM("Early suspend finished\n");
 	}
 }
 
@@ -4453,12 +4464,14 @@ static void display_late_resume(struct early_suspend *h)
 {
 	struct drm_device *drm_dev = gdev;
 	struct drm_i915_private *dev_priv = gdev->dev_private;
-	int ret = display_runtime_resume(drm_dev);
+	int ret;
+	DRM_DEBUG_PM("Late Resume called\n");
+	ret = display_runtime_resume(drm_dev);
 	if (ret)
-		DRM_ERROR("Display Resume failure\n");
+		DRM_ERROR("Late Resume failure\n");
 	else {
 		dev_priv->early_suspended = false;
-		DRM_DEBUG_DRIVER("Display Resume Success\n");
+		DRM_DEBUG_PM("Late Resume finished\n");
 	}
 }
 

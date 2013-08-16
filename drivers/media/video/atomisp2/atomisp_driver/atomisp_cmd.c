@@ -440,7 +440,7 @@ void atomisp_msi_irq_uninit(struct atomisp_device *isp, struct pci_dev *dev)
 	pci_write_config_dword(dev, PCI_INTERRUPT_CTRL, msg32);
 
 	pci_read_config_word(dev, PCI_COMMAND, &msg16);
-	msg16 &= ~(PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE);
+	msg16 &= ~(PCI_COMMAND_MASTER);
 	pci_write_config_word(dev, PCI_COMMAND, msg16);
 }
 
@@ -497,27 +497,40 @@ static void print_csi_rx_errors(struct atomisp_device *isp)
 		dev_err(isp->dev, "  line sync error");
 }
 
+/* Clear irq reg */
+static void clear_irq_reg(struct atomisp_device *isp)
+{
+	u32 msg_ret;
+	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
+	msg_ret |= 1 << INTR_IIR;
+	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+}
+
+
 /* interrupt handling function*/
 irqreturn_t atomisp_isr(int irq, void *dev)
 {
-	u32 msg_ret;
 	struct atomisp_device *isp = (struct atomisp_device *)dev;
 	unsigned int irq_infos = 0;
 	unsigned long flags;
 	int err;
 
+	spin_lock_irqsave(&isp->lock, flags);
+	if (isp->sw_contex.power_state != ATOM_ISP_POWER_UP) {
+		clear_irq_reg(isp);
+		spin_unlock_irqrestore(&isp->lock, flags);
+		return IRQ_HANDLED;
+	}
 	err = atomisp_css_irq_translate(isp, &irq_infos);
-	if (err)
+	if (err) {
+		spin_unlock_irqrestore(&isp->lock, flags);
 		return IRQ_NONE;
+	}
 
 	dev_dbg(isp->dev, "irq:0x%x\n", irq_infos);
 
-	/* Clear irq reg at PENWELL B0 */
-	pci_read_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, &msg_ret);
-	msg_ret |= 1 << INTR_IIR;
-	pci_write_config_dword(isp->pdev, PCI_INTERRUPT_CTRL, msg_ret);
+	clear_irq_reg(isp);
 
-	spin_lock_irqsave(&isp->lock, flags);
 	if (isp->asd.streaming != ATOMISP_DEVICE_STREAMING_ENABLED &&
 		!isp->acc.pipeline)
 		goto out_nowake;
@@ -2085,7 +2098,8 @@ static int __atomisp_set_general_isp_parameters(
 					struct atomisp_sub_device *asd,
 					struct atomisp_parameters *arg)
 {
-	/* TODO: add cnr_config and ctc_config when they're ready */
+
+	/* TODO: add cnr_config when it's ready */
 	if (arg->wb_config) {
 		if (copy_from_user(&asd->params.wb_config, arg->wb_config,
 				   sizeof(struct atomisp_css_wb_config)))
@@ -2188,6 +2202,13 @@ static int __atomisp_set_general_isp_parameters(
 	}
 
 #ifdef CONFIG_VIDEO_ATOMISP_CSS20
+	if (arg->ctc_config) {
+		if (copy_from_user(&asd->params.ctc_config, arg->ctc_config,
+					sizeof(struct atomisp_css_ctc_config)))
+			return -EFAULT;
+		atomisp_css_set_ctc_config(asd, &asd->params.ctc_config);
+	}
+
 	if (arg->ecd_config) {
 		if (copy_from_user(&asd->params.ecd_config, arg->ecd_config,
 				   sizeof(struct atomisp_css_ecd_config)))
@@ -3416,6 +3437,13 @@ static int atomisp_set_fmt_to_isp(struct video_device *vdev,
 			atomisp_css_enable_dz(asd, false);
 		}
 
+		/* CSS doesn't support low light mode on SOC cameras, so disable
+		 * it. FIXME: if this is done elsewhere, it gives corrupted
+		 * colors into thumbnail image.
+		 */
+		if (isp->inputs[asd->input_curr].type == SOC_CAMERA)
+			asd->params.low_light = false;
+
 		if (!isp->asd.continuous_mode->val)
 			/* in case of ANR, force capture pipe to offline mode */
 			atomisp_css_capture_enable_online(asd,
@@ -3980,6 +4008,7 @@ out:
 /*Turn off ISP dphy */
 int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 {
+	unsigned long flags;
 	u32 pwr_cnt = 0;
 	int timeout = 100;
 	bool idle;
@@ -4007,6 +4036,9 @@ int atomisp_ospm_dphy_down(struct atomisp_device *isp)
 		/* return -EINVAL; */
 	}
 
+	spin_lock_irqsave(&isp->lock, flags);
+	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
+	spin_unlock_irqrestore(&isp->lock, flags);
 done:
 	if (IS_ISP2400(isp)) {
 		/*
@@ -4026,7 +4058,6 @@ done:
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
 
-	isp->sw_contex.power_state = ATOM_ISP_POWER_DOWN;
 	return 0;
 }
 
@@ -4034,6 +4065,7 @@ done:
 int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 {
 	u32 pwr_cnt = 0;
+	unsigned long flags;
 	dev_dbg(isp->dev, "%s\n", __func__);
 
 	/* MRFLD IUNIT DPHY is located in an always-power-on island */
@@ -4045,8 +4077,9 @@ int atomisp_ospm_dphy_up(struct atomisp_device *isp)
 		intel_mid_msgbus_write32(MFLD_IUNITPHY_PORT,
 						MFLD_CSI_CONTROL, pwr_cnt);
 	}
-
+	spin_lock_irqsave(&isp->lock, flags);
 	isp->sw_contex.power_state = ATOM_ISP_POWER_UP;
+	spin_unlock_irqrestore(&isp->lock, flags);
 
 	return 0;
 }

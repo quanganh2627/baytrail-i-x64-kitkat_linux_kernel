@@ -581,6 +581,7 @@ typedef struct drm_i915_private {
 	bool is_edp;
 	bool is_mipi;
 	bool is_hdmi;
+	bool csc_enabled;
 
 	bool no_aux_handshake;
 
@@ -941,6 +942,18 @@ typedef struct drm_i915_private {
 		u32 media_down_EI_C0;
 
 	} rps;
+
+	/* Runtime power management related */
+	struct {
+		/* To track (num of get calls - num of put calls)
+		 * made by procfs
+		 */
+		atomic_t procfs_count;
+		/* To make sure ring get/put are in pair */
+		bool ring_active;
+		struct proc_dir_entry *i915_proc_file;
+		struct proc_dir_entry *local_proc_file;
+	} rpm;
 
 	u8 cur_delay;
 	u8 min_delay;
@@ -1397,6 +1410,7 @@ extern int i915_panel_use_ssc __read_mostly;
 extern int i915_vbt_sdvo_panel_type __read_mostly;
 extern int i915_mipi_panel_id __read_mostly;
 extern int i915_enable_rc6 __read_mostly;
+extern int i915_rotation __read_mostly;
 extern int i915_enable_fbc __read_mostly;
 extern bool i915_enable_hangcheck __read_mostly;
 extern unsigned int i915_hangcheck_period __read_mostly;
@@ -1798,6 +1812,8 @@ extern bool valleyview_update_cur_delay(struct drm_device *dev);
 extern void intel_detect_pch(struct drm_device *dev);
 extern int intel_trans_dp_port_sel(struct drm_crtc *crtc);
 extern int intel_enable_rc6(const struct drm_device *dev);
+extern int i915_rotation_ffrd(const struct drm_device *dev,
+			const struct drm_crtc *crtc);
 extern void valleyview_enable_rps(struct drm_device *dev);
 extern void valleyview_disable_rps(struct drm_device *dev);
 
@@ -1925,9 +1941,18 @@ __i915_write_bits(64, q)
 #define POSTING_READ(reg)	(void)I915_READ_NOTRACE(reg)
 #define POSTING_READ16(reg)	(void)I915_READ16_NOTRACE(reg)
 
-/* runtime power management related */
+/* Runtime power management related */
+#define RPM_AUTOSUSPEND		0x1
+#define RPM_SYNC		0x2
+#define RPM_SYNC_STRICT		0X4
+#define RPM_NOIDLE		0X8
+#define RPM_NORESUME		0x10
+
 int i915_rpm_init(struct drm_device *dev);
 int i915_rpm_deinit(struct drm_device *dev);
+
+int i915_rpm_get(struct drm_device *drm_dev, u32 flags);
+int i915_rpm_put(struct drm_device *drm_dev, u32 flags);
 
 int i915_rpm_get_ring(struct intel_ring_buffer *ring);
 int i915_rpm_put_ring(struct intel_ring_buffer *ring);
@@ -1940,6 +1965,10 @@ int i915_rpm_put_ioctl(struct drm_device *dev);
 
 int i915_rpm_get_disp(struct drm_device *dev);
 int i915_rpm_put_disp(struct drm_device *dev);
+
+/* Runtime Power Management related */
+int i915_rpm_get_procfs(struct inode *inode, struct file *file);
+int i915_rpm_put_procfs(struct inode *inode, struct file *file);
 
 #ifdef CONFIG_DRM_VXD_BYT
 int i915_rpm_get_vxd(struct drm_device *dev);
