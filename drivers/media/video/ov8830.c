@@ -811,7 +811,11 @@ static int __ov8830_s_power(struct v4l2_subdev *sd, int on)
 		ret = power_up(sd);
 		if (ret)
 			return ret;
-		drv201_power_up(sd);
+		ret = drv201_power_up(sd);
+		if (ret) {
+			power_down(sd);
+			return ret;
+		}
 
 		dev->power = 1;
 
