@@ -1739,7 +1739,8 @@ pipe_start(struct sh_css_pipe *pipe)
 		return;
 	pipe->pipeline.current_stage = stage;
 
-	start_binary(pipe, stage->binary);
+	if (stage->binary)
+		start_binary(pipe, stage->binary);
 }
 
 static void start_pipe(
