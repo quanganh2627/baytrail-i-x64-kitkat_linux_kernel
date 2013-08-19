@@ -5879,7 +5879,7 @@ static enum sh_css_err sh_css_params_write_to_ddr_internal(
 		if (morph_table_changed || buff_realloced) {
 			const struct sh_css_morph_table *table = morph_table;
 			struct sh_css_morph_table *id_table = NULL;
-
+#if 0
 			if ((table != NULL) &&
 			    (table->width < binary->morph_tbl_width ||
 			     table->height < binary->morph_tbl_height)) {
@@ -5890,6 +5890,21 @@ static enum sh_css_err sh_css_params_write_to_ddr_internal(
 								  binary);
 				table = id_table;
 			}
+#else
+			/* 
+			 * @GC: We expect to receive a morph table with the
+			 * size that the binary expects
+			 */
+				
+			if (table != NULL) {
+				assert(table->width == binary->morph_tbl_width &&
+					table->height == binary->morph_tbl_height);
+			} else {
+				sh_css_params_default_morph_table(&id_table,
+								  binary);
+				table = id_table;
+			}
+#endif
 
 			for (i = 0; i < SH_CSS_MORPH_TABLE_NUM_PLANES; i++) {
 				write_morph_plane(table->coordinates_x[i],
