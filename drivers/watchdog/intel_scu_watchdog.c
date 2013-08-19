@@ -216,6 +216,10 @@ static void dump_softlock_debug(unsigned long data)
 
 	if (reboot) {
 		panic_timeout = 10;
+		/* Let's shut up the registered consoles to avoid deadlock */
+		pr_warn("Consoles shut up in %s !\n", __func__);
+		console_silent();
+
 		trigger_all_cpu_backtrace();
 		panic("Soft lock on CPUs\n");
 	}
@@ -381,6 +385,13 @@ static irqreturn_t watchdog_timer_interrupt(int irq, void *dev_id)
 static irqreturn_t watchdog_warning_interrupt(int irq, void *dev_id)
 {
 	pr_warn("[SHTDWN] %s, WATCHDOG TIMEOUT!\n", __func__);
+
+	/* Let's shut up the registered consoles to avoid deadlock
+	 * in NMI context when printing.
+	 * Only the consoles with IGNORE_LOGLEVEL flag
+	 * will go on outputing logs */
+	pr_warn("Consoles shut up in %s !\n", __func__);
+	console_silent();
 
 	/* Let's reset the platform after dumping some data */
 	trigger_all_cpu_backtrace();
