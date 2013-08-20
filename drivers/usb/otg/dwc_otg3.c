@@ -236,6 +236,7 @@ static int sleep_until_event(struct dwc_otg2 *otg,
 {
 	int rc = 0;
 
+	pm_runtime_mark_last_busy(otg->dev);
 	pm_runtime_put_autosuspend(otg->dev);
 	/* Wait until it occurs, or timeout, or interrupt. */
 	if (timeout) {
@@ -1602,6 +1603,7 @@ int otg_main_thread(void *data)
 		otg->state = next;
 	}
 
+	pm_runtime_mark_last_busy(otg->dev);
 	pm_runtime_put_autosuspend(otg->dev);
 	otg->main_thread = NULL;
 	otg_dbg(otg, "OTG main thread exiting....\n");
@@ -2055,7 +2057,9 @@ static int dwc_otg_probe(struct pci_dev *pdev,
 	}
 
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
+	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_allow(&pdev->dev);
+	pm_runtime_mark_last_busy(otg->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
 	return 0;
