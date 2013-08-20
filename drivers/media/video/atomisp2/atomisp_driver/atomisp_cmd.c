@@ -382,7 +382,7 @@ int atomisp_reset(struct atomisp_device *isp)
 		}
 		ret = pm_runtime_get_sync(isp->dev);
 		if (ret < 0)
-			v4l2_err(&atomisp_dev, "can not enable ISP power\n");
+			dev_err(isp->dev, "can not enable ISP power\n");
 	}
 	atomisp_css_resume(isp);
 	return ret;
