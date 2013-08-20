@@ -53,8 +53,10 @@ static struct mid_vibra_pdata *get_vibra_platform_data(struct pci_dev *pdev)
 			pdata = &bb_vibra_pci_data;
 		else if SPID_PRODUCT(INTEL, MRFL, PHONE, SB)
 			pdata = &mrfld_vibra_pci_data;
-		pdata->gpio_en = get_gpio_by_name("haptics_en");
-		pdata->gpio_pwm = get_gpio_by_name("haptics_pwm");
+		if (pdata != NULL) {
+			pdata->gpio_en = get_gpio_by_name("haptics_en");
+			pdata->gpio_pwm = get_gpio_by_name("haptics_pwm");
+		}
 		break;
 	default:
 		break;
