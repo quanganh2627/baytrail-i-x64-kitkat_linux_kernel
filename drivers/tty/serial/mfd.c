@@ -2454,9 +2454,10 @@ static int serial_hsu_dma_probe(struct pci_dev *pdev,
 		dchan++;
 	}
 
-	/* TNG chip from B0 stepping */
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER &&
-		pdev->revision >= 0x1) {
+	/* ANN all and TNG chip from B0 stepping */
+	if ((intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER &&
+		pdev->revision >= 0x1) ||
+		intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE) {
 		phsu->irq_port_and_dma = 1;
 	} else {
 		phsu->dma_irq = pdev->irq;
