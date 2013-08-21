@@ -1206,15 +1206,33 @@ void atomisp_css_capture_set_mode(struct atomisp_sub_device *asd,
 void atomisp_css_input_set_mode(struct atomisp_sub_device *asd,
 				enum atomisp_css_input_mode mode)
 {
-	asd->stream_env.stream_config.mode = mode;
+	struct ia_css_stream_config *s_config = &asd->stream_env.stream_config;
+	unsigned int size_mem_words;
 
+	s_config->mode = mode;
 	if (mode != IA_CSS_INPUT_MODE_BUFFERED_SENSOR)
 		return;
 
-	ia_css_mipi_frame_specify(
-		intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER
-		? CSS_MIPI_FRAME_BUFFER_SIZE_2 : CSS_MIPI_FRAME_BUFFER_SIZE_1,
-		false);
+	/*
+	 * TODO: sensor needs to export the embedded_data_size_words
+	 * information to atomisp for each setting.
+	 * Here using a large safe value.
+	 */
+	if (ia_css_mipi_frame_calculate_size(s_config->input_res.width,
+					s_config->input_res.height,
+					s_config->format,
+					true,
+					0x13000,
+					&size_mem_words) != IA_CSS_SUCCESS) {
+		if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER)
+			size_mem_words = CSS_MIPI_FRAME_BUFFER_SIZE_2;
+		else
+			size_mem_words = CSS_MIPI_FRAME_BUFFER_SIZE_1;
+		dev_warn(asd->isp->dev,
+			"ia_css_mipi_frame_calculate_size failed, applying pre-defined MIPI buffer size %u.\n",
+			size_mem_words);
+	}
+	ia_css_mipi_frame_specify(size_mem_words, false);
 }
 
 void atomisp_css_capture_enable_online(struct atomisp_sub_device *asd,
