@@ -2279,6 +2279,8 @@ struct usb_hcd *usb_create_shared_hcd(const struct hc_driver *driver,
 	hcd->rh_timer.data = (unsigned long) hcd;
 #ifdef CONFIG_USB_SUSPEND
 	INIT_WORK(&hcd->wakeup_work, hcd_resume_work);
+	wake_lock_init(&hcd->wake_lock,
+		       WAKE_LOCK_SUSPEND, "hcd_wake_lock");
 #endif
 
 	hcd->driver = driver;
@@ -2327,6 +2329,11 @@ static void hcd_release (struct kref *kref)
 		kfree(hcd->bandwidth_mutex);
 	else
 		hcd->shared_hcd->shared_hcd = NULL;
+
+#ifdef CONFIG_USB_SUSPEND
+	wake_lock_destroy(&hcd->wake_lock);
+#endif
+
 	kfree(hcd);
 }
 
