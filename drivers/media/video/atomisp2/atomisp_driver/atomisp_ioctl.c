@@ -290,19 +290,22 @@ const struct atomisp_format_bridge atomisp_output_fmts[] = {
 		.depth = 12,
 		.mbus_code = 0x8001,
 		.sh_fmt = CSS_FRAME_FORMAT_YUV420,
-		.description = "YUV420, planner"
+		.description = "YUV420, planar",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_YVU420,
 		.depth = 12,
 		.mbus_code = 0x8002,
 		.sh_fmt = CSS_FRAME_FORMAT_YV12,
-		.description = "YVU420, planner"
+		.description = "YVU420, planar",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_YUV422P,
 		.depth = 16,
 		.mbus_code = 0x8003,
 		.sh_fmt = CSS_FRAME_FORMAT_YUV422,
-		.description = "YUV422, planner"
+		.description = "YUV422, planar",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_YUV444,
 		.depth = 24,
@@ -314,19 +317,22 @@ const struct atomisp_format_bridge atomisp_output_fmts[] = {
 		.depth = 12,
 		.mbus_code = 0x8005,
 		.sh_fmt = CSS_FRAME_FORMAT_NV12,
-		.description = "NV12, interleaved"
+		.description = "NV12, Y-plane, CbCr interleaved",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_NV21,
 		.depth = 12,
 		.mbus_code = 0x8006,
 		.sh_fmt = CSS_FRAME_FORMAT_NV21,
-		.description = "NV21, interleaved"
+		.description = "NV21, Y-plane, CbCr interleaved",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_NV16,
 		.depth = 16,
 		.mbus_code = 0x8007,
 		.sh_fmt = CSS_FRAME_FORMAT_NV16,
-		.description = "NV16, interleaved"
+		.description = "NV16, Y-plane, CbCr interleaved",
+		.planar = true
 	}, {
 		.pixelformat = V4L2_PIX_FMT_YUYV,
 		.depth = 16,

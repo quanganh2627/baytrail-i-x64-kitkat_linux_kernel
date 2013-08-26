@@ -3866,11 +3866,19 @@ done:
 	pipe->pix.width = f->fmt.pix.width;
 	pipe->pix.height = f->fmt.pix.height;
 	pipe->pix.pixelformat = f->fmt.pix.pixelformat;
-	pipe->pix.bytesperline =
-		DIV_ROUND_UP(format_bridge->depth * output_info.padded_width,
-			     8);
-	pipe->pix.sizeimage =
-	    PAGE_ALIGN(f->fmt.pix.height * pipe->pix.bytesperline);
+	if (format_bridge->planar) {
+		pipe->pix.bytesperline = output_info.padded_width;
+		pipe->pix.sizeimage = PAGE_ALIGN(f->fmt.pix.height *
+			DIV_ROUND_UP(format_bridge->depth *
+				     output_info.padded_width, 8));
+	} else {
+		pipe->pix.bytesperline =
+			DIV_ROUND_UP(format_bridge->depth *
+				     output_info.padded_width, 8);
+		pipe->pix.sizeimage =
+			PAGE_ALIGN(f->fmt.pix.height * pipe->pix.bytesperline);
+
+	}
 	if (f->fmt.pix.field == V4L2_FIELD_ANY)
 		f->fmt.pix.field = V4L2_FIELD_NONE;
 	pipe->pix.field = f->fmt.pix.field;
