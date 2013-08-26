@@ -2906,6 +2906,7 @@ CONFIG_INTEL_PSH_IPC=y
 #
 # Altera FPGA firmware download module
 #
+
 CONFIG_DRM_INTEL_HANDSET=y
 CONFIG_DRM_HANDSET_RELEASE=y
 # CONFIG_DRM_HANDSET_DEBUG is not set
@@ -2916,6 +2917,7 @@ CONFIG_SUPPORT_VSP=y
 CONFIG_MID_DSI_DSR=y
 # CONFIG_MID_DSI_DPU is not set
 # CONFIG_GFX_RTPM is not set
+CONFIG_PVR_PROC=y
 
 #
 # Hardware Spinlock drivers
