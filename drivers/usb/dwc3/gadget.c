@@ -1833,8 +1833,6 @@ static int dwc3_stop_peripheral(struct usb_gadget *g)
 
 	dwc3_gadget_keep_conn(dwc, 0);
 
-	dwc->pm_state = PM_DISCONNECTED;
-
 	for (epnum = 0; epnum < 2; epnum++) {
 		struct dwc3_ep  *dep;
 
@@ -1874,11 +1872,13 @@ static int dwc3_stop_peripheral(struct usb_gadget *g)
 	reg |= DWC3_GUCTL_USB_HST_IN_AUTO_RETRY_EN;
 	dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
 
+	if (dwc->pm_state != PM_SUSPENDED)
+		pm_runtime_put(dwc->dev);
+
+	dwc->pm_state = PM_DISCONNECTED;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	free_irq(dwc->irq, dwc);
-
-	pm_runtime_put(dwc->dev);
 	wake_unlock(&dwc->wake_lock);
 	mutex_unlock(&dwc->mutex);
 
@@ -2840,13 +2840,17 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 	int				i;
 	irqreturn_t			ret = IRQ_NONE;
 
-	if (dwc->pm_state == PM_SUSPENDED) {
-		dev_info(dwc->dev, "the first resume interrupt from u3/u2pmu is received");
-		pm_runtime_get(dwc->dev);
-		return IRQ_HANDLED;
-	}
-
 	spin_lock(&dwc->lock);
+	if (dwc->pm_state != PM_ACTIVE) {
+
+		if (dwc->pm_state == PM_SUSPENDED) {
+			dev_info(dwc->dev, "u3/u2 pmu is received\n");
+			pm_runtime_get(dwc->dev);
+			dwc->pm_state = PM_RESUMING;
+			ret = IRQ_HANDLED;
+		}
+		goto out;
+	}
 
 	for (i = 0; i < dwc->num_event_buffers; i++) {
 		irqreturn_t status;
@@ -2856,6 +2860,7 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 			ret = status;
 	}
 
+out:
 	spin_unlock(&dwc->lock);
 
 	return ret;
@@ -3286,7 +3291,8 @@ int dwc3_runtime_resume(struct device *device)
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
-	if (dwc->pm_state != PM_SUSPENDED) {
+	if (dwc->pm_state == PM_ACTIVE ||
+		dwc->pm_state == PM_DISCONNECTED) {
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return 0;
 	}

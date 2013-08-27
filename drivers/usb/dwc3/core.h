@@ -602,6 +602,7 @@ enum dwc3_pm_state {
 	PM_DISCONNECTED = 0,
 	PM_ACTIVE,
 	PM_SUSPENDED,
+	PM_RESUMING,
 };
 
 /**
