@@ -115,6 +115,8 @@
 
 #define BQ24261_TE_MASK			(0x01 << 2)
 #define BQ24261_TE_ENABLE		(0x01 << 2)
+#define BQ24261_STAT_ENABLE_MASK	(0x01 << 3)
+#define BQ24261_STAT_ENABLE		(0x01 << 3)
 
 #define BQ24261_VENDOR_MASK		(0x07 << 5)
 #define BQ24261_VENDOR			(0x02 << 5)
@@ -637,8 +639,11 @@ static inline int bq24261_enable_charging(
 		reg_val = BQ24261_CE_DISABLE;
 	}
 
+	reg_val |=  BQ24261_STAT_ENABLE;
+
 	ret = bq24261_read_modify_reg(chip->client, BQ24261_CTRL_ADDR,
-		       BQ24261_RESET_MASK|BQ24261_CE_MASK|BQ24261_TE_MASK,
+		       BQ24261_STAT_ENABLE_MASK|BQ24261_RESET_MASK|
+				BQ24261_CE_MASK|BQ24261_TE_MASK,
 					reg_val);
 	if (ret || !val)
 		return ret;
@@ -1371,6 +1376,7 @@ static int bq24261_handle_irq(struct bq24261_charger *chip, u8 stat_reg)
 		chip->chrgr_health = POWER_SUPPLY_HEALTH_GOOD;
 		chip->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 		dev_info(&client->dev, "Charger Status: Charge Progress\n");
+		bq24261_dump_regs(false);
 		break;
 	case BQ24261_STAT_CHRG_DONE:
 		chip->chrgr_health = POWER_SUPPLY_HEALTH_GOOD;

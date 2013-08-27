@@ -128,7 +128,7 @@ MODULE_PARM_DESC(enable_hangcheck,
 		"WARNING: Disabling this can cause system wide hangs. "
 		"(default: true)");
 
-unsigned int i915_hangcheck_period __read_mostly = 667;
+unsigned int i915_hangcheck_period __read_mostly = 1000;
 
 int hangcheck_period_set(const char *val, const struct kernel_param *kp)
 {
@@ -161,7 +161,7 @@ module_param_cb(i915_hangcheck_period, &hangcheck_ops,
 MODULE_PARM_DESC(i915_hangcheck_period,
 		"The hangcheck timer period in milliseconds. "
 		"The actual time to detect a hang may be 3 - 4 times "
-		"this value (default = 667ms)");
+		"this value (default = 1000ms)");
 
 unsigned int i915_ring_reset_min_alive_period __read_mostly;
 module_param_named(i915_ring_reset_min_alive_period,
@@ -865,7 +865,7 @@ int i915_handle_hung_ring(struct drm_device *dev, uint32_t ringid)
 	/* Correct driver state */
 	intel_ring_resample(ring);
 
-	DRM_ERROR("Reset ring %d\n", ringid);
+	DRM_ERROR("Reset ring %d (GPU Hang)\n", ringid);
 
 	ret = intel_ring_enable(ring);
 
@@ -930,7 +930,7 @@ int i915_reset(struct drm_device *dev)
 
 	mutex_lock(&dev->struct_mutex);
 
-	DRM_ERROR("Reset GPU\n");
+	DRM_ERROR("Reset GPU (GPU Hang)\n");
 	i915_gem_reset(dev);
 
 	ret = -ENODEV;
@@ -1060,15 +1060,17 @@ static int i915_release(struct inode *inode, struct file *filp)
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-
+#ifdef CONFIG_PM_RUNTIME
 	i915_rpm_get_callback(dev);
+#endif
 #ifdef CONFIG_DRM_VXD_BYT
 	if (dev_priv->vxd_release)
 		ret = dev_priv->vxd_release(inode, filp);
 #endif
 	drm_release(inode, filp);
+#ifdef CONFIG_PM_RUNTIME
 	i915_rpm_put_callback(dev);
-
+#endif
 	return ret;
 }
 
@@ -1092,9 +1094,13 @@ static long i915_ioctl(struct file *filp,
 #endif
 	{
 		int ret;
+#ifdef CONFIG_PM_RUNTIME
 		i915_rpm_get_ioctl(dev);
+#endif
 		ret = drm_ioctl(filp, cmd, arg);
+#ifdef CONFIG_PM_RUNTIME
 		i915_rpm_put_ioctl(dev);
+#endif
 		return ret;
 	}
 }
@@ -1267,17 +1273,8 @@ static const struct vm_operations_struct i915_gem_vm_ops = {
 static const struct file_operations i915_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
-#if defined(CONFIG_DRM_VXD_BYT) || defined(CONFIG_PM_RUNTIME)
 	.release = i915_release,
-#else
-	.release = drm_release,
-#endif
-
-#if defined(CONFIG_DRM_VXD_BYT) || defined(CONFIG_PM_RUNTIME)
 	.unlocked_ioctl = i915_ioctl,
-#else
-	.unlocked_ioctl = drm_ioctl,
-#endif
 
 #ifdef CONFIG_DRM_VXD_BYT
 	.mmap = i915_mmap,

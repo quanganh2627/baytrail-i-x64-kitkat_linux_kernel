@@ -1632,7 +1632,10 @@ static void intel_disable_pll(struct drm_i915_private *dev_priv, enum pipe pipe)
 
 	reg = DPLL(pipe);
 	val = I915_READ(reg);
-	val &= ~DPLL_VCO_ENABLE;
+	val &= ~(DPLL_VCO_ENABLE | DPLL_EXT_BUFFER_ENABLE_VLV |
+		DPLL_VGA_MODE_DIS | DPLL_INTEGRATED_CLOCK_VLV);
+	if (pipe)
+		val &= ~DPLL_REFA_CLK_ENABLE_VLV;
 	I915_WRITE(reg, val);
 	POSTING_READ(reg);
 }
@@ -4017,6 +4020,7 @@ static void i9xx_crtc_prepare(struct drm_crtc *crtc)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	int pipe = intel_crtc->pipe;
+	u32 data = 0;
 
 	i9xx_crtc_disable(crtc);
 
@@ -4035,6 +4039,15 @@ static void i9xx_crtc_prepare(struct drm_crtc *crtc)
 
 		I915_WRITE_BITS(0x61230, 0, 0x80000000);
 		I915_WRITE_BITS(0x6014, 0, 0x80000000);
+	}
+
+	intel_punit_read32(dev_priv, VLV_IOSFSB_PWRGT_STATUS, &data);
+
+	/* Power gate DPIO RX Lanes */
+	if ((VLV_PWRGT_DPIO_RX_LANES_MASK & data) !=
+		VLV_PWRGT_DPIO_RX_LANES_MASK) {
+		intel_punit_write32_bits(dev_priv, VLV_IOSFSB_PWRGT_CNT_CTRL,
+		VLV_PWRGT_DPIO_RX_LANES_MASK, VLV_PWRGT_DPIO_RX_LANES_MASK);
 	}
 }
 

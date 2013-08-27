@@ -45,6 +45,7 @@ struct dwc_device_par {
 #define OTG_USB3_150MA				0xfff2
 #define OTG_USB2_500MA				0xfff3
 #define OTG_USB3_900MA				0xfff4
+#define OTG_DEVICE_RESET			0xfffd
 #define OTG_DEVICE_SUSPEND			0xfffe
 #define OTG_DEVICE_RESUME			0xffff
 
@@ -118,6 +119,7 @@ struct dwc_device_par {
 #define GUSB2PHYCFG0				0xc200
 #define GUSB2PHYCFG_SUS_PHY                     0x40
 #define GUSB2PHYCFG_PHYSOFTRST (1 << 31)
+#define GUSB2PHYCFG_ULPI_AUTO_RESUME (1 << 15)
 
 #define EXTEND_ULPI_REGISTER_ACCESS_MASK	0xC0
 #define GUSB2PHYACC0	0xc280
@@ -412,8 +414,12 @@ struct dwc_otg2 {
 	/* Charger detection */
 	struct power_supply_cable_props charging_cap;
 	struct notifier_block nb;
+	struct delayed_work suspend_discon_work;
 	struct intel_dwc_otg_pdata *otg_data;
 };
+
+/* timeout for disconnect from a suspended host */
+#define SUSPEND_DISCONNECT_TIMEOUT	(HZ * 300)
 
 /* Invalid SDP checking timeout */
 #define INVALID_SDP_TIMEOUT	(HZ * 15)

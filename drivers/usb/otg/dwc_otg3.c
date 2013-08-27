@@ -284,6 +284,18 @@ static void set_sus_phy(struct dwc_otg2 *otg, int bit)
 #endif
 }
 
+/* Disable auto-resume feature for USB2 PHY. This is one
+ * silicon workaround. It will cause fabric timeout error
+ * for LS case after resume from hibernation */
+static void disable_phy_auto_resume(struct dwc_otg2 *otg)
+{
+	u32 data = 0;
+
+	data = otg_read(otg, GUSB2PHYCFG0);
+	data &= ~GUSB2PHYCFG_ULPI_AUTO_RESUME;
+	otg_write(otg, GUSB2PHYCFG0, data);
+}
+
 static int start_host(struct dwc_otg2 *otg)
 {
 	int ret = 0;
@@ -297,6 +309,7 @@ static int start_host(struct dwc_otg2 *otg)
 	}
 
 	usb2phy_eye_optimization(otg);
+	disable_phy_auto_resume(otg);
 
 	/* Start host driver */
 	hcd = container_of(otg->otg.host, struct usb_hcd, self);
@@ -331,6 +344,8 @@ static void start_peripheral(struct dwc_otg2 *otg)
 	}
 
 	usb2phy_eye_optimization(otg);
+	disable_phy_auto_resume(otg);
+
 	gadget->ops->start_device(gadget);
 }
 
@@ -454,6 +469,20 @@ static int dwc_otg_get_chr_status(struct usb_phy *x, void *data)
 	spin_unlock_irqrestore(&otg->lock, flags);
 
 	return 0;
+}
+
+static void dwc_otg_suspend_discon_work(struct work_struct *work)
+{
+	struct dwc_otg2	*otg = the_transceiver;
+	unsigned long flags;
+
+	otg_dbg(otg, "start suspend_disconn work\n");
+
+	spin_lock_irqsave(&otg->lock, flags);
+	otg->otg_events |= OEVT_A_DEV_SESS_END_DET_EVNT;
+	otg->otg_events &= ~OEVT_B_DEV_SES_VLD_DET_EVNT;
+	wakeup_main_thread(otg);
+	spin_unlock_irqrestore(&otg->lock, flags);
 }
 
 static int ulpi_read(struct usb_phy *phy, u32 reg)
@@ -845,7 +874,9 @@ static int dwc_otg_set_power(struct usb_phy *_otg,
 	struct dwc_otg2 *otg = the_transceiver;
 	struct power_supply_cable_props cap;
 
-	if (otg->charging_cap.chrg_type ==
+	if (otg->otg_data->is_byt)
+		otg_dbg(otg, "BYT: no need to conside charger type\n");
+	else if (otg->charging_cap.chrg_type ==
 			POWER_SUPPLY_CHARGER_TYPE_USB_CDP)
 		return 0;
 	else if (otg->charging_cap.chrg_type !=
@@ -861,6 +892,12 @@ static int dwc_otg_set_power(struct usb_phy *_otg,
 		cap.mA = otg->charging_cap.mA;
 		cap.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_SUSPEND;
 		spin_unlock_irqrestore(&otg->lock, flags);
+
+		if (otg->otg_data->is_byt) {
+			otg_dbg(otg, "schedule discon work\n");
+			schedule_delayed_work(&otg->suspend_discon_work,
+				SUSPEND_DISCONNECT_TIMEOUT);
+		}
 
 		/* mA is zero mean D+/D- opened cable.
 		 * If SMIP set, then notify 500mA.
@@ -893,9 +930,18 @@ static int dwc_otg_set_power(struct usb_phy *_otg,
 		dwc_otg_notify_charger_type(otg,
 				POWER_SUPPLY_CHARGER_EVENT_CONNECT);
 
+		if (otg->otg_data->is_byt) {
+			otg_dbg(otg, "cancel discon work\n");
+			cancel_delayed_work(&otg->suspend_discon_work);
+		}
+		return 0;
+	} else if (mA == OTG_DEVICE_RESET) {
+		if (otg->otg_data->is_byt) {
+			otg_dbg(otg, "cancel discon work\n");
+			cancel_delayed_work(&otg->suspend_discon_work);
+		}
 		return 0;
 	}
-
 
 	/* For SMIP set case, only need to report 500/900mA */
 	if (otg->otg_data->charging_compliance) {
@@ -1379,6 +1425,11 @@ static int do_b_peripheral(struct dwc_otg2 *otg)
 		otg_dbg(otg, "OEVT_A_DEV_SESS_END_DET_EVNT\n");
 		dwc_otg_notify_charger_type(otg, \
 				POWER_SUPPLY_CHARGER_EVENT_DISCONNECT);
+
+		if (otg->otg_data->is_byt) {
+			otg_dbg(otg, "cancel discon work\n");
+			cancel_delayed_work(&otg->suspend_discon_work);
+		}
 		return DWC_STATE_INIT;
 	}
 #ifdef SUPPORT_USER_ID_CHANGE_EVENTS
@@ -1847,7 +1898,8 @@ static int dwc_otg_probe(struct pci_dev *pdev,
 	otg->otg.set_host	= dwc_otg2_set_host;
 	otg->otg.set_peripheral	= dwc_otg2_set_peripheral;
 	ATOMIC_INIT_NOTIFIER_HEAD(&otg->phy.notifier);
-
+	INIT_DELAYED_WORK(&otg->suspend_discon_work,
+					dwc_otg_suspend_discon_work);
 	otg->state = DWC_STATE_INIT;
 	spin_lock_init(&otg->lock);
 	init_waitqueue_head(&otg->main_wq);
@@ -2130,16 +2182,6 @@ REINIT:
 		}
 	}
 
-	/* This is one WA for silicon BUG.
-	 * Without this WA, the USB2 phy will enter low power
-	 * mode during hibernation resume flow. and met
-	 * fabric error
-	 */
-	if (otg->state == DWC_STATE_A_HOST) {
-		enable_usb_phy(otg, false);
-		enable_usb_phy(otg, true);
-	}
-
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
 	 * for 10ms.
@@ -2151,7 +2193,7 @@ REINIT:
 		stop_main_thread(otg);
 		return -EIO;
 	}
-
+	disable_phy_auto_resume(otg);
 	set_sus_phy(otg, 0);
 
 	if (otg->otg_data && otg->otg_data->is_byt) {
@@ -2204,16 +2246,6 @@ static int dwc_otg_resume(struct device *dev)
 	if (!otg)
 		return -ENODEV;
 
-	/* This is one WA for silicon BUG.
-	 * Without this WA, the USB2 phy will enter low power
-	 * mode during hibernation resume flow. and met
-	 * fabric error
-	 */
-	if (otg->state == DWC_STATE_A_HOST) {
-		enable_usb_phy(otg, false);
-		enable_usb_phy(otg, true);
-	}
-
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
 	 * for 10ms.
@@ -2225,6 +2257,7 @@ static int dwc_otg_resume(struct device *dev)
 		stop_main_thread(otg);
 		return -EIO;
 	}
+	disable_phy_auto_resume(otg);
 	set_sus_phy(otg, 0);
 
 	if (otg->otg_data && otg->otg_data->is_byt) {

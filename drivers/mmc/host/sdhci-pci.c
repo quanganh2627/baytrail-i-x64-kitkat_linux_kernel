@@ -714,6 +714,17 @@ static const struct sdhci_pci_fixes sdhci_intel_pch_sdio = {
 	.probe_slot	= pch_hc_probe_slot,
 };
 
+#define TNG_IOAPIC_IDX	0xfec00000
+static void mrfl_ioapic_rte_reg_addr_map(struct sdhci_pci_slot *slot)
+{
+	slot->host->rte_addr = ioremap_nocache(TNG_IOAPIC_IDX, 256);
+	if (!slot->host->rte_addr)
+		dev_err(&slot->chip->pdev->dev, "rte_addr ioremap fail!\n");
+	else
+		dev_info(&slot->chip->pdev->dev, "rte_addr mapped addr: %p\n",
+			slot->host->rte_addr);
+}
+
 /* Define Host controllers for Intel Merrifield platform */
 #define INTEL_MRFL_EMMC_0	0
 #define INTEL_MRFL_EMMC0H	1
@@ -732,6 +743,7 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 					MMC_CAP_1_8V_DDR;
 		slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
 					MMC_CAP2_INIT_CARD_SYNC;
+		mrfl_ioapic_rte_reg_addr_map(slot);
 		break;
 	case INTEL_MRFL_EMMC0H:
 		if (slot->chip->pdev->revision == 0x1) { /* B0 stepping */
@@ -747,6 +759,7 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 		break;
 	case INTEL_MRFL_SD:
 		slot->host->quirks2 |= SDHCI_QUIRK2_WAIT_FOR_IDLE;
+		slot->host->mmc->caps2 |= MMC_CAP2_FIXED_NCRC;
 		break;
 	case INTEL_MRFL_SDIO:
 		slot->host->mmc->caps |= MMC_CAP_NONREMOVABLE;
@@ -772,6 +785,9 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 
 static void intel_mrfl_mmc_remove_slot(struct sdhci_pci_slot *slot, int dead)
 {
+	if (PCI_FUNC(slot->chip->pdev->devfn) == INTEL_MRFL_EMMC_0)
+		if (slot->host->rte_addr)
+			iounmap(slot->host->rte_addr);
 }
 
 static const struct sdhci_pci_fixes sdhci_intel_mrfl_mmc = {
@@ -795,14 +811,15 @@ static int intel_moor_emmc_probe_slot(struct sdhci_pci_slot *slot)
 
 	slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
 				MMC_CAP2_INIT_CARD_SYNC;
+	if (slot->data)
+		if (slot->data->platform_quirks & PLFM_QUIRK_NO_HIGH_SPEED) {
+			slot->host->quirks2 |= SDHCI_QUIRK2_DISABLE_HIGH_SPEED;
+			slot->host->mmc->caps &= ~MMC_CAP_1_8V_DDR;
+		}
 
-	if (slot->data->platform_quirks & PLFM_QUIRK_NO_HIGH_SPEED) {
-		slot->host->quirks2 |= SDHCI_QUIRK2_DISABLE_HIGH_SPEED;
-		slot->host->mmc->caps &= ~MMC_CAP_1_8V_DDR;
-	}
-
-	if (slot->data->platform_quirks & PLFM_QUIRK_NO_EMMC_BOOT_PART)
-		slot->host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
+	if (slot->data)
+		if (slot->data->platform_quirks & PLFM_QUIRK_NO_EMMC_BOOT_PART)
+			slot->host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
 
 	return ret;
 }
@@ -815,8 +832,9 @@ static int intel_moor_sd_probe_slot(struct sdhci_pci_slot *slot)
 {
 	int ret = 0;
 
-	if (slot->data->platform_quirks & PLFM_QUIRK_NO_HOST_CTRL_HW)
-		ret = -ENODEV;
+	if (slot->data)
+		if (slot->data->platform_quirks & PLFM_QUIRK_NO_HOST_CTRL_HW)
+			ret = -ENODEV;
 
 	return ret;
 }
@@ -831,8 +849,9 @@ static int intel_moor_sdio_probe_slot(struct sdhci_pci_slot *slot)
 
 	slot->host->mmc->caps |= MMC_CAP_NONREMOVABLE;
 
-	if (slot->data->platform_quirks & PLFM_QUIRK_NO_HOST_CTRL_HW)
-		ret = -ENODEV;
+	if (slot->data)
+		if (slot->data->platform_quirks & PLFM_QUIRK_NO_HOST_CTRL_HW)
+			ret = -ENODEV;
 
 	return ret;
 }

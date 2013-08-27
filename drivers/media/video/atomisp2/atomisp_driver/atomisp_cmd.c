@@ -517,7 +517,6 @@ irqreturn_t atomisp_isr(int irq, void *dev)
 
 	spin_lock_irqsave(&isp->lock, flags);
 	if (isp->sw_contex.power_state != ATOM_ISP_POWER_UP) {
-		clear_irq_reg(isp);
 		spin_unlock_irqrestore(&isp->lock, flags);
 		return IRQ_HANDLED;
 	}

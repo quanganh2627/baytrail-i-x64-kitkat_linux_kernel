@@ -2164,7 +2164,6 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 	/* Sprite A */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 0, 0);
 
-	/* For plane A, Cursor A */
 	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
@@ -2197,7 +2196,7 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 	/* Sprite C */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 1, 0);
 
-	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
+	if (vlv_compute_drain_latency(dev, 1, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
 				DRAIN_LATENCY_PRECISION_32) ?
@@ -2213,7 +2212,7 @@ static void valleyview_update_sprite_wm(struct drm_device *dev, int pipe,
 	/* Sprite D */
 	enable.EnSprite = is_sprite_enabled(dev_priv, 1, 1);
 
-	if (vlv_compute_drain_latency(dev, 0, NULL, NULL, NULL, NULL,
+	if (vlv_compute_drain_latency(dev, 1, NULL, NULL, NULL, NULL,
 		&sprite_prec_mult, &sprite_dl, pixel_size, enable)) {
 		sprite_prec = (sprite_prec_mult ==
 				DRAIN_LATENCY_PRECISION_32) ?
@@ -3130,7 +3129,7 @@ void valleyview_enable_rps(struct drm_device *dev)
 	/* Setup Gfx Turbo */
 	if (i915_enable_turbo > 0) {
 		vlv_turbo_initialize(dev);
-		if (dev_priv->max_frequency_mode) {
+		if (dev_priv->max_freq_enable_count) {
 			vlv_turbo_disable(dev);
 			valleyview_set_rps(dev, dev_priv->rps.max_delay);
 		}
