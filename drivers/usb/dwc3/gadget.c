@@ -1483,6 +1483,16 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
 
+	/*
+	 * FIXME If pm_state is PM_RESUMING, we should wait for it to
+	 * become PM_ACTIVE before continue.
+	 *
+	 * If some gadget reaches here in atomic context,
+	 * pm_runtime_get_sync will cause a sleep problem.
+	 */
+	if (dwc->pm_state == PM_SUSPENDED)
+		pm_runtime_get_sync(dwc->dev);
+
 #ifdef CONFIG_USB_DWC_OTG_XCEIV
 	mutex_lock(&dwc->mutex);
 #endif
