@@ -106,6 +106,8 @@ enum atomisp_flash_state {
 };
 
 struct atomisp_css_params {
+	/* FIXME: Determines whether raw capture buffer are being passed to
+	 * user space. Unimplemented for now. */
 	int online_process;
 	int yuv_ds_en;
 	unsigned int color_effect;

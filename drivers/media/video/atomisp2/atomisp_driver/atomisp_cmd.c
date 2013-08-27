@@ -3032,7 +3032,6 @@ int atomisp_get_sensor_mode_data(struct atomisp_sub_device *asd,
 int atomisp_get_fmt(struct video_device *vdev, struct v4l2_format *f)
 {
 	struct atomisp_video_pipe *pipe = atomisp_to_video_pipe(vdev);
-	struct atomisp_device *isp = video_get_drvdata(vdev);
 
 	f->fmt.pix = pipe->pix;
 
@@ -3701,12 +3700,6 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 			dev_warn(isp->dev,
 				 "Main Resolution config smaller then Vf Resolution. Force to be equal with Vf Resolution.");
 	}
-
-	/* V4L2_BUF_TYPE_PRIVATE will set offline processing */
-	if (f->type == V4L2_BUF_TYPE_PRIVATE)
-		asd->params.online_process = 0;
-	else
-		asd->params.online_process = 1;
 
 	/* Pipeline configuration done through subdevs. Bail out now. */
 	if (!isp->asd.fmt_auto->val)
