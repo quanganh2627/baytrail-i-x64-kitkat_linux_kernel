@@ -1775,6 +1775,8 @@ static int dwc3_start_peripheral(struct usb_gadget *g)
 		dwc3_dev_init(dwc);
 		dwc3_gadget_enable_irq(dwc);
 		dwc3_gadget_run_stop(dwc, 1);
+		if (dwc->hibernation.enabled)
+			dwc3_gadget_keep_conn(dwc, 1);
 	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
@@ -2545,9 +2547,6 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 	dev_vdbg(dwc->dev, "%s\n", __func__);
 
-	if (dwc->hibernation.enabled)
-		dwc3_gadget_keep_conn(dwc, 1);
-
 	memset(&params, 0x00, sizeof(params));
 
 	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
@@ -2712,8 +2711,7 @@ static void dwc3_gadget_hibernation_interrupt(struct dwc3 *dwc)
 {
 	dev_vdbg(dwc->dev, "%s\n", __func__);
 
-	if (dwc->hibernation.enabled &&
-	    dwc->dev_state == DWC3_CONFIGURED_STATE)
+	if (dwc->hibernation.enabled)
 		pm_runtime_put(dwc->dev);
 }
 
