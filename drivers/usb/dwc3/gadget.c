@@ -1509,6 +1509,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		dwc3_gadget_run_stop(dwc, 1);
 	} else {
 		u8 epnum;
+		int n;
 
 		for (epnum = 0; epnum < 2; epnum++) {
 			struct dwc3_ep  *dep;
@@ -1520,7 +1521,13 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		}
 
 		dwc3_stop_active_transfers(dwc);
+		dwc3_gadget_keep_conn(dwc, 0);
 		dwc3_gadget_run_stop(dwc, 0);
+
+		dwc3_writel(dwc->regs, DWC3_DEVTEN, 0x00);
+		for (n = 0; n < DWC3_EVENT_BUFFERS_NUM; n++)
+			dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(n),
+				dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(n)));
 		spin_unlock_irqrestore(&dwc->lock, flags);
 	}
 
