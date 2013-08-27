@@ -3034,12 +3034,6 @@ int atomisp_get_fmt(struct video_device *vdev, struct v4l2_format *f)
 	struct atomisp_video_pipe *pipe = atomisp_to_video_pipe(vdev);
 	struct atomisp_device *isp = video_get_drvdata(vdev);
 
-	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		dev_err(isp->dev, "unsupported v4l2 buf type\n");
-		return -EINVAL;
-	}
-
-	f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	f->fmt.pix = pipe->pix;
 
 	return 0;
@@ -3058,11 +3052,6 @@ int atomisp_try_fmt(struct video_device *vdev, struct v4l2_format *f,
 #ifdef CONFIG_VIDEO_ATOMISP_CSS20
 	uint16_t source_pad = atomisp_subdev_source_pad(vdev);
 #endif
-
-	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		dev_err(isp->dev, "Wrong v4l2 buf type\n");
-		return -EINVAL;
-	}
 
 	if (isp->inputs[asd->input_curr].camera == NULL)
 		return -EINVAL;
@@ -3161,11 +3150,6 @@ atomisp_try_fmt_file(struct atomisp_device *isp, struct v4l2_format *f)
 	u32 pixelformat = f->fmt.pix.pixelformat;
 	enum v4l2_field field = f->fmt.pix.field;
 	u32 depth;
-
-	if (f->type != V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		dev_err(isp->dev, "Wrong v4l2 buf type\n");
-		return -EINVAL;
-	}
 
 	if (!atomisp_get_format_bridge(pixelformat)) {
 		dev_err(isp->dev, "Wrong output pixelformat\n");
@@ -3643,12 +3627,6 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 
 	dev_dbg(isp->dev, "setting resolution %ux%u on pad %u\n",
 		f->fmt.pix.width, f->fmt.pix.height, source_pad);
-
-	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
-	    f->type != V4L2_BUF_TYPE_PRIVATE) {
-		dev_err(isp->dev, "Wrong v4l2 buf type\n");
-		return -EINVAL;
-	}
 
 	format_bridge = atomisp_get_format_bridge(f->fmt.pix.pixelformat);
 	if (format_bridge == NULL)
