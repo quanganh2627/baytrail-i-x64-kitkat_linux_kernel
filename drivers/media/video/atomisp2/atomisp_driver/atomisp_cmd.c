@@ -1584,6 +1584,8 @@ static void atomisp_update_capture_mode(struct atomisp_sub_device *asd)
 		atomisp_css_capture_set_mode(asd, CSS_CAPTURE_MODE_ADVANCED);
 	else if (asd->params.low_light)
 		atomisp_css_capture_set_mode(asd, CSS_CAPTURE_MODE_LOW_LIGHT);
+	else if (asd->video_out_capture.sh_fmt == CSS_FRAME_FORMAT_RAW)
+		atomisp_css_capture_set_mode(asd, CSS_CAPTURE_MODE_RAW);
 	else
 		atomisp_css_capture_set_mode(asd, CSS_CAPTURE_MODE_PRIMARY);
 }
