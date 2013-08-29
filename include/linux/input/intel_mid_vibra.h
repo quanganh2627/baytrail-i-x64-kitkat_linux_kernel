@@ -40,6 +40,7 @@ struct mid_vibra_pdata {
 	u8 ext_drv;
 	int gpio_en;
 	int gpio_pwm;
+	const char *name;
 };
 
 #endif /* __INTEL_MID_VIBRA_H */
