@@ -27,6 +27,7 @@ struct wm8994_ldo_pdata {
 
 #define WM8994_CONFIGURE_GPIO 0x10000
 
+#define WM8994_NUM_AIF	2
 #define WM8994_DRC_REGS 5
 #define WM8994_EQ_REGS  21
 #define WM8958_MBC_CUTOFF_REGS 20
@@ -216,6 +217,11 @@ struct wm8994_pdata {
 	 * system.
 	 */
 	bool spkmode_pu;
+
+	/**
+	 * Override the params for an AIF
+	 */
+	int override_rates[WM8994_NUM_AIF];
 };
 
 #endif
