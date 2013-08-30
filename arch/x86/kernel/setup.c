@@ -1134,7 +1134,9 @@ void __init setup_arch(char **cmdline_p)
 	io_delay_init();
 
 	if (boot_params.secure_boot) {
+#ifdef CONFIG_EFI
 		set_bit(EFI_SECURE_BOOT, &x86_efi_facility);
+#endif
 		secureboot_enable();
 	}
 
