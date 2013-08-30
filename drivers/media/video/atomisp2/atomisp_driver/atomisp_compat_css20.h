@@ -116,6 +116,7 @@ typedef struct ia_css_isp_3a_statistics atomisp_css_3a_data;
 #define CSS_FORMAT(val)	(IA_CSS_STREAM_FORMAT_ ## val)
 
 #define CSS_EVENT_PORT_EOF	CSS_EVENT(PORT_EOF)
+#define CSS_EVENT_FRAME_TAGGED	CSS_EVENT(FRAME_TAGGED)
 
 #define CSS_MIPI_FRAME_BUFFER_SIZE_1	0x60000
 #define CSS_MIPI_FRAME_BUFFER_SIZE_2	0x80000

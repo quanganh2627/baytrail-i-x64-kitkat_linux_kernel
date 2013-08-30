@@ -531,7 +531,7 @@ static void gen6_pm_rps_work(struct work_struct *work)
 	if ((pm_iir & (GEN6_PM_DEFERRED_EVENTS | VLV_PM_DEFERRED_EVENTS)) == 0)
 		return;
 
-	mutex_lock(&dev_priv->dev->struct_mutex);
+	mutex_lock(&dev_priv->rps.rps_mutex);
 
 	/* Make sure we have current freq updated properly. Doing this
 	 * here becuase, on VLV, P-Unit doesnt garauntee that last requested
@@ -593,7 +593,7 @@ static void gen6_pm_rps_work(struct work_struct *work)
 	else
 		gen6_set_rps(dev_priv->dev, new_delay);
 
-	mutex_unlock(&dev_priv->dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 }
 
 
@@ -2144,7 +2144,7 @@ void i915_hangcheck_sample(unsigned long data)
 	uint32_t cur_seqno = 0;
 	uint32_t last_seqno = 0;
 	struct intel_ring_buffer *ring;
-	bool err = false, idle;
+	bool idle;
 	int instdone_cmp;
 	int pending_work = 1;
 	int resched_timer = 1;

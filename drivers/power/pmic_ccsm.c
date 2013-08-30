@@ -1244,8 +1244,8 @@ static inline void print_ps_pse_mod_prof(struct ps_pse_mod_prof *bcprof)
 	dev_info(chc.dev, "ChrgProf: voltage_max:%u\n", bcprof->voltage_max);
 	dev_info(chc.dev, "ChrgProf: chrg_term_mA:%u\n", bcprof->chrg_term_mA);
 	dev_info(chc.dev, "ChrgProf: low_batt_mV:%u\n", bcprof->low_batt_mV);
-	dev_info(chc.dev, "ChrgProf: disch_tmp_ul:%u\n", bcprof->disch_tmp_ul);
-	dev_info(chc.dev, "ChrgProf: disch_tmp_ll:%u\n", bcprof->disch_tmp_ll);
+	dev_info(chc.dev, "ChrgProf: disch_tmp_ul:%d\n", bcprof->disch_tmp_ul);
+	dev_info(chc.dev, "ChrgProf: disch_tmp_ll:%d\n", bcprof->disch_tmp_ll);
 	dev_info(chc.dev, "ChrgProf: temp_mon_ranges:%u\n",
 			bcprof->temp_mon_ranges);
 	temp_mon_ranges = min_t(u16, bcprof->temp_mon_ranges,

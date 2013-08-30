@@ -94,6 +94,315 @@ static const char *cache_level_str(int type)
 	}
 }
 
+ssize_t i915_gamma_adjust_read(struct file *filp,
+		 char __user *ubuf,
+		 size_t max,
+		 loff_t *ppos)
+{
+	/* To do: Not implemented yet */
+	DRM_ERROR("Gamma adjust: Not implemented\n");
+	return -EINVAL;
+}
+
+ssize_t i915_gamma_adjust_write(struct file *filp,
+		  const char __user *ubuf,
+		  size_t count,
+		  loff_t *ppos)
+{
+	int ret = 0;
+	char *buf = NULL;
+
+	/* Validate input */
+	if (!count) {
+		DRM_ERROR("Gamma adjust: insufficient data\n");
+		return -EINVAL;
+	}
+
+	buf = kzalloc(count, GFP_KERNEL);
+	if (!buf) {
+		DRM_ERROR("Gamma adjust: insufficient memory\n");
+		return -ENOMEM;
+	}
+
+	/* Get the data */
+	if (copy_from_user(buf, ubuf, count)) {
+		DRM_ERROR("Gamma adjust: copy failed\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+
+	/* Parse data and load the gamma  table */
+	ret = parse_clrmgr_input(gammaSoftlut, buf,
+		GAMMA_CORRECT_MAX_COUNT, count);
+	if (ret < 0)
+		DRM_ERROR("Gamma table loading failed\n");
+	else
+		DRM_DEBUG("Gamma table loading done\n");
+EXIT:
+	kfree(buf);
+	/* If error, return error*/
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+ssize_t i915_gamma_enable_read(struct file *filp,
+		 char __user *ubuf,
+		 size_t max,
+		 loff_t *ppos)
+{
+	int len = 0;
+	char buf[10] = {0,};
+	struct drm_device *dev = filp->private_data;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+
+	len = sprintf(buf, "%s\n",
+		dev_priv->gamma_enabled ? "Enabled" : "Disabled");
+	return simple_read_from_buffer(ubuf, max, ppos,
+	(const void *) buf, 10);
+}
+
+ssize_t i915_gamma_enable_write(struct file *filp,
+		  const char __user *ubuf,
+		  size_t count,
+		  loff_t *ppos)
+{
+	int ret = 0;
+	unsigned int status = 0;
+	struct drm_crtc *crtc = NULL;
+	struct drm_device *dev = filp->private_data;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	char *buf = NULL;
+
+	/* Validate input */
+	if (!count) {
+		DRM_ERROR("Gamma adjust: insufficient data\n");
+		return -EINVAL;
+	}
+
+	buf = kzalloc(count, GFP_KERNEL);
+	if (!buf) {
+		DRM_ERROR("Gamma enable: Out of mem\n");
+		return  -ENOMEM;
+	}
+
+	/* Get the data */
+	if (copy_from_user(buf, ubuf, count)) {
+		DRM_ERROR("Gamma adjust: copy failed\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+
+	/* Finally, get the status */
+	if (kstrtoul((const char *)buf, 10,
+		&status)) {
+		DRM_ERROR("Gamma enable: Invalid limit\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+	dev_priv->gamma_enabled = status;
+
+	/* Search for a CRTC,
+	Assumption: Either MIPI or EDP is fix panel */
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (intel_pipe_has_type(crtc, dev_priv->is_mipi ?
+			INTEL_OUTPUT_DSI : INTEL_OUTPUT_EDP))
+			break;
+	}
+
+	/* No CRTC */
+	if (!crtc) {
+		DRM_ERROR("Gamma adjust: No local panel found\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+
+	/* if gamma enabled, apply gamma correction on PIPE */
+	if (dev_priv->gamma_enabled) {
+		if (intel_crtc_enable_gamma(crtc, PIPEA)) {
+			DRM_ERROR("Apply gamma correction failed\n");
+			ret = -EINVAL;
+		} else
+			ret = count;
+	} else {
+		/* Disable gamma on this plane */
+		intel_crtc_disable_gamma(crtc, PIPEA);
+		ret = count;
+	}
+
+EXIT:
+	kfree(buf);
+	return ret;
+}
+
+const struct file_operations i915_gamma_adjust_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_gamma_adjust_read,
+	.write = i915_gamma_adjust_write,
+	.llseek = default_llseek,
+};
+
+const struct file_operations i915_gamma_enable_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_gamma_enable_read,
+	.write = i915_gamma_enable_write,
+	.llseek = default_llseek,
+};
+
+ssize_t i915_cb_adjust_read(struct file *filp,
+		 char __user *ubuf,
+		 size_t max,
+		 loff_t *ppos)
+{
+	/* To do: Not implemented yet */
+	DRM_ERROR("Contrast Brightness adjust: Read Not implemented\n");
+	return -EINVAL;
+}
+
+ssize_t i915_cb_adjust_write(struct file *filp,
+		  const char __user *ubuf,
+		  size_t count,
+		  loff_t *ppos)
+{
+	int ret = count;
+	u32 val = 0;
+	struct drm_device *dev = filp->private_data;
+	struct ContBrightlut *cb_ptr = NULL;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	char *buf = NULL;
+
+	/* Validate input */
+	if (!count) {
+		DRM_ERROR("Contrast Brightness: insufficient data\n");
+		return -EINVAL;
+	}
+
+	buf = kzalloc(count, GFP_KERNEL);
+	if (!buf) {
+		DRM_ERROR("Contrast Brightness adjust: insufficient memory\n");
+		return -ENOMEM;
+	}
+
+	cb_ptr = kzalloc(sizeof(struct ContBrightlut), GFP_KERNEL);
+	if (!cb_ptr) {
+		DRM_ERROR("Contrast Brightness adjust: insufficient memory\n");
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	/* Get the data */
+	if (copy_from_user(buf, ubuf, count)) {
+		DRM_ERROR("Contrast Brightness: copy failed\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+
+	/* Parse input data */
+	ret = parse_clrmgr_input(cb_ptr, buf, 2, count);
+	if (ret < 0)
+		DRM_ERROR("Contrast Brightness loading failed\n");
+	else
+		DRM_DEBUG("Contrast Brightness loading done\n");
+
+	if (cb_ptr->sprite_no < SPRITEA || cb_ptr->sprite_no > SPRITED ||
+			cb_ptr->sprite_no == PLANEB) {
+		DRM_ERROR("Sprite value out of range. Enter 2,3, 5 or 6\n");
+		goto EXIT;
+	}
+
+	DRM_DEBUG("sprite = %d Val=0x%x,\n", cb_ptr->sprite_no, cb_ptr->val);
+
+	if (intel_sprite_cb_adjust(dev_priv, cb_ptr))
+		DRM_ERROR("Contrast Brightness update failed\n");
+
+EXIT:
+	kfree(cb_ptr);
+	kfree(buf);
+	/* If cant read the full buffer, read from last left */
+	if (ret < count-1)
+		return ret;
+
+	return count;
+}
+
+ssize_t i915_hs_adjust_read(struct file *filp,
+		 char __user *ubuf,
+		 size_t max,
+		 loff_t *ppos)
+{
+	/* To do: Not implemented yet */
+	DRM_ERROR("Hue Saturation adjust: Read Not implemented\n");
+	return -EINVAL;
+}
+ssize_t i915_hs_adjust_write(struct file *filp,
+		  const char __user *ubuf,
+		  size_t count,
+		  loff_t *ppos)
+{
+	int ret = count;
+	struct drm_device *dev = filp->private_data;
+	struct HueSaturationlut *hs_ptr = NULL;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	char *buf = NULL;
+
+	/* Validate input */
+	if (!count) {
+		DRM_ERROR("Hue Saturation: insufficient data\n");
+		return -EINVAL;
+	}
+
+	buf = kzalloc(count, GFP_KERNEL);
+	if (!buf) {
+		DRM_ERROR("Hue Saturation adjust: insufficient memory\n");
+		return -ENOMEM;
+	}
+
+	hs_ptr = kzalloc(sizeof(struct HueSaturationlut), GFP_KERNEL);
+	if (!hs_ptr) {
+		DRM_ERROR("Hue Saturation adjust: insufficient memory\n");
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	/* Get the data */
+	if (copy_from_user(buf, ubuf, count)) {
+		DRM_ERROR("Hue Saturation: copy failed\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
+
+	/* Parse input data */
+	ret = parse_clrmgr_input(hs_ptr, buf, 2, count);
+	if (ret < 0)
+		DRM_ERROR("Hue Saturation loading failed\n");
+	else
+		DRM_DEBUG("Hue Saturation loading done\n");
+
+	if (hs_ptr->sprite_no < SPRITEA || hs_ptr->sprite_no > SPRITED ||
+			hs_ptr->sprite_no == PLANEB) {
+		DRM_ERROR("sprite = %d Val=0x%x,\n", hs_ptr->sprite_no,
+					hs_ptr->val);
+		goto EXIT;
+	}
+
+	DRM_DEBUG("sprite = %d Val=0x%x,\n", hs_ptr->sprite_no, hs_ptr->val);
+
+	if (intel_sprite_hs_adjust(dev_priv, hs_ptr))
+		DRM_ERROR("Hue Saturation update failed\n");
+
+EXIT:
+	kfree(hs_ptr);
+	kfree(buf);
+	/* If cant read the full buffer, read from last left */
+	if (ret < count-1)
+		return ret;
+
+	return count;
+}
+
 ssize_t i915_csc_adjust_read(struct file *filp,
 		 char __user *ubuf,
 		 size_t max,
@@ -113,17 +422,15 @@ ssize_t i915_csc_adjust_write(struct file *filp,
 	char *buf  = NULL;
 
 	/* Validate input */
-	if (count <= 0) {
+	if (!count) {
 		DRM_ERROR("CSC adjust: insufficient data\n");
-		ret = -EINVAL;
-		goto EXIT;
+		return -EINVAL;
 	}
 
 	buf = kzalloc(count, GFP_KERNEL);
 	if (!buf) {
 		DRM_ERROR("CSC adjust: insufficient memory\n");
-		ret = -ENOMEM;
-		goto EXIT;
+		return -ENOMEM;
 	}
 
 	/* Get the data */
@@ -134,8 +441,8 @@ ssize_t i915_csc_adjust_write(struct file *filp,
 	}
 
 	/* Parse data and load the csc  table */
-	ret = parse_clrmgr_input(CSCSoftlut,
-		buf, CSC_MAX_COEFF_COUNT, count);
+	ret = parse_clrmgr_input(CSCSoftlut, buf,
+		CSC_MAX_COEFF_COUNT, count);
 	if (ret < 0)
 		DRM_ERROR("CSC table loading failed\n");
 	else
@@ -143,7 +450,7 @@ ssize_t i915_csc_adjust_write(struct file *filp,
 EXIT:
 	kfree(buf);
 	/* If cant read the full buffer, read from last left */
-	if (ret < count-1)
+	if (ret < 0)
 		return ret;
 
 	return count;
@@ -172,24 +479,22 @@ ssize_t i915_csc_enable_write(struct file *filp,
 		  loff_t *ppos)
 {
 	int ret = 0;
-	int status = 0;
+	unsigned int status = 0;
 	char *buf = NULL;
 	struct drm_crtc *crtc = NULL;
 	struct drm_device *dev = filp->private_data;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
 	/* Validate input */
-	if (count <= 0) {
+	if (!count) {
 		DRM_ERROR("CSC enable: insufficient data\n");
-		ret = -EINVAL;
-		goto EXIT;
+		return -EINVAL;
 	}
 
 	buf = kzalloc(count, GFP_KERNEL);
 	if (!buf) {
 		DRM_ERROR("CSC enable: Out of mem\n");
-		ret = -ENOMEM;
-		goto EXIT;
+		return -ENOMEM;
 	}
 
 	/* Get the data */
@@ -200,13 +505,14 @@ ssize_t i915_csc_enable_write(struct file *filp,
 	}
 
 	/* Finally, get the status */
-	kstrtoul((const char *)buf, 10,
-		(unsigned long *)&status);
+	if (kstrtoul((const char *)buf, 10,
+		&status)) {
+		DRM_ERROR("CSC enable: Invalid limit\n");
+		ret = -EINVAL;
+		goto EXIT;
+	}
 
-	if (status)
-		dev_priv->csc_enabled = 1;
-	else
-		dev_priv->csc_enabled = 0;
+	dev_priv->csc_enabled = status;
 
 	/* Search for a CRTC,
 	Assumption: Either MIPI or EDP is fix panel */
@@ -241,6 +547,22 @@ EXIT:
 	kfree(buf);
 	return ret;
 }
+
+static const struct file_operations i915_cb_adjust_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_cb_adjust_read,
+	.write = i915_cb_adjust_write,
+	.llseek = default_llseek,
+};
+
+static const struct file_operations i915_hs_adjust_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_hs_adjust_read,
+	.write = i915_hs_adjust_write,
+	.llseek = default_llseek,
+};
 
 static const struct file_operations i915_csc_adjust_fops = {
 	.owner = THIS_MODULE,
@@ -1080,7 +1402,7 @@ static int i915_cur_delayinfo(struct seq_file *m, void *unused)
 		int max_freq;
 
 		/* RPSTAT1 is in the GT power well */
-		ret = mutex_lock_interruptible(&dev->struct_mutex);
+		ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 		if (ret)
 			return ret;
 
@@ -1097,7 +1419,7 @@ static int i915_cur_delayinfo(struct seq_file *m, void *unused)
 
 		/* TBD: Wake up relevant engine for VLV rather all */
 		gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
-		mutex_unlock(&dev->struct_mutex);
+		mutex_unlock(&dev_priv->rps.rps_mutex);
 
 		seq_printf(m, "GT_PERF_STATUS: 0x%08x\n", gt_perf_status);
 		seq_printf(m, "RPSTAT1: 0x%08x\n", rpstat);
@@ -1199,7 +1521,7 @@ static int ironlake_drpc_info(struct seq_file *m)
 	u16 crstandvid;
 	int ret;
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -1207,7 +1529,7 @@ static int ironlake_drpc_info(struct seq_file *m)
 	rstdbyctl = I915_READ(RSTDBYCTL);
 	crstandvid = I915_READ16(CRSTANDVID);
 
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 
 	seq_printf(m, "HD boost: %s\n", (rgvmodectl & MEMMODE_BOOST_EN) ?
 		   "yes" : "no");
@@ -1268,7 +1590,7 @@ static int gen6_drpc_info(struct seq_file *m)
 	int count=0, ret;
 
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -1291,7 +1613,7 @@ static int gen6_drpc_info(struct seq_file *m)
 
 	rpmodectl1 = I915_READ(GEN6_RP_CONTROL);
 	rcctl1 = I915_READ(GEN6_RC_CONTROL);
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 
 	seq_printf(m, "Video Turbo Mode: %s\n",
 		   yesno(rpmodectl1 & GEN6_RP_MEDIA_TURBO));
@@ -1468,7 +1790,7 @@ static int i915_ring_freq_table(struct seq_file *m, void *unused)
 		return 0;
 	}
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -1489,7 +1811,7 @@ static int i915_ring_freq_table(struct seq_file *m, void *unused)
 		seq_printf(m, "%d\t\t%d\n", gpu_freq * 50, ia_freq * 100);
 	}
 
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 
 	return 0;
 }
@@ -1965,13 +2287,13 @@ i915_set_max_freq(struct drm_device *dev, int val)
 
 	DRM_DEBUG_DRIVER("Manually setting max freq to %d\n", val);
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
-	if (ret)
-		return ret;
-
 	/*
 	 * Turbo will still be enabled, but won't go above the set value.
 	 */
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
+	if (ret)
+		return ret;
+
 	if (IS_VALLEYVIEW(dev)) {
 		dev_priv->rps.max_delay = val;
 		valleyview_set_rps(dev, val);
@@ -1980,8 +2302,7 @@ i915_set_max_freq(struct drm_device *dev, int val)
 		gen6_set_rps(dev, val / 50);
 	}
 
-	mutex_unlock(&dev->struct_mutex);
-
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 	return 0;
 }
 
@@ -1992,7 +2313,7 @@ i915_get_max_freq(struct drm_device *dev, int *val)
 	int ret;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -2001,8 +2322,7 @@ i915_get_max_freq(struct drm_device *dev, int *val)
 	else
 		*val = dev_priv->rps.max_delay * 50;
 
-	mutex_unlock(&dev->struct_mutex);
-
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 	return 0;
 }
 
@@ -2025,7 +2345,6 @@ i915_max_freq_read(struct file *filp,
 
 	len = snprintf(buf, sizeof(buf),
 		       "max freq: %d\n", val);
-	mutex_unlock(&dev->struct_mutex);
 
 	if (len > sizeof(buf))
 		len = sizeof(buf);
@@ -2082,13 +2401,13 @@ i915_set_min_freq(struct drm_device *dev, int val)
 
 	DRM_DEBUG_DRIVER("Manually setting min freq to %d\n", val);
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
-	if (ret)
-		return ret;
-
 	/*
 	 * Turbo will still be enabled, but won't go below the set value.
 	 */
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
+	if (ret)
+		return ret;
+
 	if (IS_VALLEYVIEW(dev)) {
 		dev_priv->rps.min_delay = val;
 		valleyview_set_rps(dev, val);
@@ -2097,8 +2416,7 @@ i915_set_min_freq(struct drm_device *dev, int val)
 		gen6_set_rps(dev, val / 50);
 	}
 
-	mutex_unlock(&dev->struct_mutex);
-
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 	return 0;
 }
 
@@ -2109,7 +2427,7 @@ i915_get_min_freq(struct drm_device *dev, int *val)
 	int ret;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -2118,8 +2436,7 @@ i915_get_min_freq(struct drm_device *dev, int *val)
 	else
 		*val = dev_priv->rps.min_delay * 50;
 
-	mutex_unlock(&dev->struct_mutex);
-
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 	return 0;
 }
 
@@ -2189,11 +2506,12 @@ static int
 i915_rps_enable_disable(struct drm_device *dev, long unsigned int val)
 {
 	int ret;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 
 	if (!(IS_VALLEYVIEW(dev)))
 		return -ENODEV;
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
@@ -2204,7 +2522,7 @@ i915_rps_enable_disable(struct drm_device *dev, long unsigned int val)
 	else
 		vlv_turbo_disable(dev);
 
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 
 	return 0;
 }
@@ -2607,16 +2925,21 @@ static const struct file_operations i915_forcewake_fops = {
 
 /* Debugfs rc6 apis implementation */
 
-static int
-rc6_status(struct drm_device *dev, char *buf, int *len)
+static inline bool is_rc6_enabled(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
+	return I915_READ(VLV_RENDER_C_STATE_CONTROL_1_REG)
+			& (VLV_EVAL_METHOD_ENABLE_BIT
+			| VLV_TIMEOUT_METHOD_ENABLE_BIT);
+}
+
+static int
+rc6_status(struct drm_device *dev, char *buf, int *len)
+{
 	*len = snprintf(buf, MAX_BUFFER_STR_LEN,
 			"RC6 ENABLED: %s\n",
-			yesno(I915_READ(VLV_RENDER_C_STATE_CONTROL_1_REG)
-					& (VLV_EVAL_METHOD_ENABLE_BIT
-					| VLV_TIMEOUT_METHOD_ENABLE_BIT)));
+			yesno(is_rc6_enabled(dev)));
 	return 0;
 }
 
@@ -2624,16 +2947,23 @@ static int
 rc6_enable_disable(struct drm_device *dev, long unsigned int val)
 {
 	int ret;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 
 	if (!(IS_VALLEYVIEW(dev)))
 		return -ENODEV;
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	if (is_rc6_enabled(dev)) {
+		if (val > 0)
+			return 0;
+	} else if (val == 0)
+		return 0;
+
+	ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 	if (ret)
 		return ret;
 
 	vlv_rs_setstate(dev, (val > 0 ? true : false));
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 	DRM_DEBUG_DRIVER("RC6 feature status is %ld\n", val);
 
 	return 0;
@@ -2705,6 +3035,9 @@ i915_read_rc6_api(struct file *filp,
 		len = snprintf(buf, sizeof(buf),
 				"RENDER WELL C0 COUNTER: 0x%x & ",
 				(unsigned int) I915_READ(GEN6_GT_GFX_RC6));
+		if (len < 0)
+			return len;
+
 		len += snprintf(&buf[len], (sizeof(buf) - len),
 				"MEDIA WELL C1 COUNTER: 0x%x\n",
 				(unsigned int) I915_READ(GEN6_GT_GFX_RC6p));
@@ -2713,6 +3046,10 @@ i915_read_rc6_api(struct file *filp,
 		len = snprintf(buf, sizeof(buf),
 				"RENDER WELL C1 COUNTER: 0x%x & ",
 				(unsigned int)I915_READ(GEN6_GT_GFX_RC6pp));
+
+		if (len < 0)
+			return len;
+
 		len += snprintf(&buf[len], (sizeof(buf) - len),
 				"MEDIA WELL C1 COUNTER: 0x%x\n",
 				(unsigned int)
@@ -2723,6 +3060,10 @@ i915_read_rc6_api(struct file *filp,
 				"RENDER WELL C6 COUNTER: 0x%x & ",
 				(unsigned int)
 					I915_READ(VLV_RENDER_C0_COUNT_REG));
+
+		if (len < 0)
+			return len;
+
 		len += snprintf(&buf[len], (sizeof(buf) - len),
 				"MEDIA WELL C6 COUNTER: 0x%x\n",
 				(unsigned int)
@@ -2814,7 +3155,7 @@ i915_read_turbo_api(struct file *filp,
 	len = sizeof(i915_debugfs_vars.turbo.turbo_vars);
 
 	if (strcmp(operation, DETAILS_TOKEN) == 0) {
-		ret = mutex_lock_interruptible(&dev->struct_mutex);
+		ret = mutex_lock_interruptible(&dev_priv->rps.rps_mutex);
 		if (ret)
 			return ret;
 
@@ -2822,6 +3163,9 @@ i915_read_turbo_api(struct file *filp,
 		len = snprintf(buf, sizeof(buf),
 				"Turbo Enabled: %s\n",
 				yesno(pval & GEN6_RP_ENABLE));
+
+		if (len < 0)
+			return len;
 
 		len += snprintf(&buf[len], (sizeof(buf) - len),
 				"Max Gpu Freq _max_delay_: %d\n",
@@ -2844,7 +3188,7 @@ i915_read_turbo_api(struct file *filp,
 				dev_priv->rps.rp_up_masked,
 				dev_priv->rps.rp_down_masked);
 
-		mutex_unlock(&dev->struct_mutex);
+		mutex_unlock(&dev_priv->rps.rps_mutex);
 
 	} else if (strcmp(operation, ENABLE_TOKEN) == 0) {
 
@@ -3138,6 +3482,10 @@ i915_read_dpst_api(struct file *filp,
 		len = snprintf(buf, sizeof(buf),
 				"DPST Current User Level: 0x%x\n",
 				(dev_priv->backlight_level));
+
+		if (len < 0)
+			return len;
+
 		len += snprintf(&buf[len], (sizeof(buf) - len),
 				"DPST Current Backlight Level: 0x%x\n",
 				dpst_set_level);
@@ -3207,10 +3555,10 @@ i915_read_rc6_status(struct file *filp,
 
 	len = snprintf(buf, sizeof(buf),
 		"RC6 is %s\n",
-		(I915_READ(VLV_RENDER_C_STATE_CONTROL_1_REG)
-			& (VLV_EVAL_METHOD_ENABLE_BIT
-			| VLV_TIMEOUT_METHOD_ENABLE_BIT)) ?
+		(is_rc6_enabled(dev)) ?
 				"enabled" : "disabled");
+	if (len < 0)
+		return len;
 
 	len += snprintf(&buf[len], (sizeof(buf) - len),
 		"Render well is %s & Media well is %s\n",
@@ -3504,6 +3852,18 @@ int i915_debugfs_init(struct drm_minor *minor)
 		return ret;
 
 	ret = i915_debugfs_create(minor->debugfs_root, minor,
+					"cb_adjust",
+					&i915_cb_adjust_fops);
+	if (ret)
+		return ret;
+
+	ret = i915_debugfs_create(minor->debugfs_root, minor,
+					"hs_adjust",
+					&i915_hs_adjust_fops);
+	if (ret)
+		return ret;
+
+	ret = i915_debugfs_create(minor->debugfs_root, minor,
 					"csc_adjust",
 					&i915_csc_adjust_fops);
 	if (ret)
@@ -3512,6 +3872,19 @@ int i915_debugfs_init(struct drm_minor *minor)
 	ret = i915_debugfs_create(minor->debugfs_root, minor,
 					"csc_enable",
 					&i915_csc_enable_fops);
+
+	if (ret)
+		return ret;
+
+	ret = i915_debugfs_create(minor->debugfs_root, minor,
+					"gamma_adjust",
+					&i915_gamma_adjust_fops);
+	if (ret)
+		return ret;
+
+	ret = i915_debugfs_create(minor->debugfs_root, minor,
+					"gamma_enable",
+					&i915_gamma_enable_fops);
 	if (ret)
 		return ret;
 
@@ -3554,6 +3927,10 @@ void i915_debugfs_cleanup(struct drm_minor *minor)
 	drm_debugfs_remove_files((struct drm_info_list *) &i915_error_state_fops,
 				 1, minor);
 	drm_debugfs_remove_files((struct drm_info_list *) &i915_rc6_status_fops,
+				 1, minor);
+	drm_debugfs_remove_files((struct drm_info_list *) &i915_cb_adjust_fops,
+				 1, minor);
+	drm_debugfs_remove_files((struct drm_info_list *) &i915_hs_adjust_fops,
 				 1, minor);
 }
 

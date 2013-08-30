@@ -509,7 +509,7 @@ static int atomisp_g_chip_ident(struct file *file, void *fh,
 			       core, g_chip_ident, chip);
 
 	if (ret)
-		v4l2_err(&atomisp_dev, "failed to g_chip_ident for sensor\n");
+		dev_err(isp->dev, "failed to g_chip_ident for sensor\n");
 	return ret;
 }
 
@@ -594,22 +594,20 @@ static int atomisp_s_input(struct file *file, void *fh, unsigned int input)
 
 	mutex_lock(&isp->mutex);
 	if (input >= ATOM_ISP_MAX_INPUTS || input > isp->input_cnt) {
-		v4l2_dbg(3, dbg_level, &atomisp_dev,
-			 "input_cnt: %d\n",isp->input_cnt);
+		dev_dbg(isp->dev, "input_cnt: %d\n", isp->input_cnt);
 		ret = -EINVAL;
 		goto error;
 	}
 
 	camera = isp->inputs[input].camera;
 	if (!camera) {
-		v4l2_err(&atomisp_dev, "%s, no camera\n",__func__);
+		dev_err(isp->dev, "%s, no camera\n", __func__);
 		ret = -EINVAL;
 		goto error;
 	}
 
 	if (atomisp_streaming_count(isp)) {
-		v4l2_err(&atomisp_dev,
-			 "ISP is still streaming, stop first\n");
+		dev_err(isp->dev, "ISP is still streaming, stop first\n");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -619,14 +617,13 @@ static int atomisp_s_input(struct file *file, void *fh, unsigned int input)
 		ret = v4l2_subdev_call(isp->inputs[asd->input_curr].camera,
 				       core, s_power, 0);
 		if (ret)
-			v4l2_warn(&atomisp_dev,
-				    "Failed to power-off sensor\n");
+			dev_warn(isp->dev, "Failed to power-off sensor\n");
 	}
 
 	/* powe on the new sensor */
 	ret = v4l2_subdev_call(isp->inputs[input].camera, core, s_power, 1);
 	if (ret) {
-		v4l2_err(&atomisp_dev, "Failed to power-on sensor\n");
+		dev_err(isp->dev, "Failed to power-on sensor\n");
 		goto error;
 	}
 
@@ -648,15 +645,53 @@ error:
 static int atomisp_enum_fmt_cap(struct file *file, void *fh,
 	struct v4l2_fmtdesc *f)
 {
-	if (f->index >= ARRAY_SIZE(atomisp_output_fmts))
-		return -EINVAL;
+	struct video_device *vdev = video_devdata(file);
+	struct atomisp_device *isp = video_get_drvdata(vdev);
+	struct atomisp_sub_device *asd = atomisp_to_video_pipe(vdev)->asd;
+	struct v4l2_subdev_mbus_code_enum code = { 0 };
+	unsigned int i, fi = 0;
+	int rval;
 
-	f->pixelformat = atomisp_output_fmts[f->index].pixelformat;
-	memset(f->description, 0, sizeof(f->description));
-	strncpy(f->description, atomisp_output_fmts[f->index].description,
-		strlen(atomisp_output_fmts[f->index].description));
+	mutex_lock(&isp->mutex);
+	rval = v4l2_subdev_call(isp->inputs[asd->input_curr].camera, pad,
+				enum_mbus_code, NULL, &code);
+	if (rval == -ENOIOCTLCMD) {
+		dev_warn(isp->dev, "enum_mbus_code pad op not supported. Please fix your sensor driver!\n");
+		rval = v4l2_subdev_call(isp->inputs[asd->input_curr].camera,
+					video, enum_mbus_fmt, 0, &code.code);
+	}
+	mutex_unlock(&isp->mutex);
 
-	return 0;
+	if (rval)
+		return rval;
+
+	for (i = 0; i < ARRAY_SIZE(atomisp_output_fmts); i++) {
+		const struct atomisp_format_bridge *format =
+			&atomisp_output_fmts[i];
+
+		/*
+		 * Is the atomisp-supported format is valid for the
+		 * sensor (configuration)? If not, skip it.
+		 */
+		if (format->sh_fmt == CSS_FRAME_FORMAT_RAW
+		    && format->mbus_code != code.code)
+			continue;
+
+		/* Found a match. Now let's pick f->index'th one. */
+		if (fi < f->index) {
+			fi++;
+			continue;
+		}
+
+		f->flags = 0;
+		memset(f->description, 0, sizeof(f->description));
+		strlcpy(f->description, format->description,
+			sizeof(f->description));
+		f->pixelformat = format->pixelformat;
+		return 0;
+	}
+
+	return -EINVAL;
 }
 
 static int atomisp_g_fmt_cap(struct file *file, void *fh,
@@ -1015,14 +1050,14 @@ static int atomisp_qbuf(struct file *file, void *fh, struct v4l2_buffer *buf)
 	}
 
 	if (asd->streaming == ATOMISP_DEVICE_STREAMING_STOPPING) {
-		v4l2_err(&atomisp_dev, "ISP ERROR\n");
+		dev_err(isp->dev, "ISP ERROR\n");
 		ret = -EIO;
 		goto error;
 	}
 
 	if (!buf || buf->index >= VIDEO_MAX_FRAME ||
 		!pipe->capq.bufs[buf->index]) {
-		v4l2_err(&atomisp_dev, "Invalid index for qbuf.\n");
+		dev_err(isp->dev, "Invalid index for qbuf.\n");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -1129,19 +1164,19 @@ static int atomisp_qbuf_file(struct file *file, void *fh,
 
 	if (!buf || buf->index >= VIDEO_MAX_FRAME ||
 		!pipe->outq.bufs[buf->index]) {
-		v4l2_err(&atomisp_dev, "Invalid index for qbuf.\n");
+		dev_err(isp->dev, "Invalid index for qbuf.\n");
 		ret = -EINVAL;
 		goto error;
 	}
 
 	if (buf->memory != V4L2_MEMORY_MMAP) {
-		v4l2_err(&atomisp_dev, "Unsupported memory method\n");
+		dev_err(isp->dev, "Unsupported memory method\n");
 		ret = -EINVAL;
 		goto error;
 	}
 
 	if (buf->type != V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		v4l2_err(&atomisp_dev, "Unsupported buffer type\n");
+		dev_err(isp->dev, "Unsupported buffer type\n");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -1176,7 +1211,7 @@ static int atomisp_dqbuf(struct file *file, void *fh, struct v4l2_buffer *buf)
 
 	if (asd->streaming == ATOMISP_DEVICE_STREAMING_STOPPING) {
 		mutex_unlock(&isp->mutex);
-		v4l2_err(&atomisp_dev, "ISP ERROR\n");
+		dev_err(isp->dev, "ISP ERROR\n");
 		return -EIO;
 	}
 
@@ -1184,8 +1219,7 @@ static int atomisp_dqbuf(struct file *file, void *fh, struct v4l2_buffer *buf)
 
 	ret = videobuf_dqbuf(&pipe->capq, buf, file->f_flags & O_NONBLOCK);
 	if (ret) {
-		v4l2_dbg(3, dbg_level, &atomisp_dev,
-				"<%s: %d\n", __func__, ret);
+		dev_dbg(isp->dev, "<%s: %d\n", __func__, ret);
 		return ret;
 	}
 	mutex_lock(&isp->mutex);
@@ -1593,7 +1627,7 @@ stopsensor:
 #endif
 
 	if (IS_ISP2400(isp) && atomisp_freq_scaling(isp, ATOMISP_DFS_MODE_LOW))
-		v4l2_warn(&atomisp_dev, "DFS failed.\n");
+		dev_warn(isp->dev, "DFS failed.\n");
 	/*
 	 * ISP work around, need to reset isp
 	 * Is it correct time to reset ISP when first node does streamoff?
@@ -2014,7 +2048,7 @@ static int atomisp_g_parm(struct file *file, void *fh,
 	struct atomisp_device *isp = video_get_drvdata(vdev);
 
 	if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		v4l2_err(&atomisp_dev, "unsupport v4l2 buf type\n");
+		dev_err(isp->dev, "unsupport v4l2 buf type\n");
 		return -EINVAL;
 	}
 
@@ -2035,7 +2069,7 @@ static int atomisp_s_parm(struct file *file, void *fh,
 	int rval;
 
 	if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		v4l2_err(&atomisp_dev, "unsupport v4l2 buf type\n");
+		dev_err(isp->dev, "unsupport v4l2 buf type\n");
 		return -EINVAL;
 	}
 
@@ -2085,8 +2119,7 @@ static int atomisp_s_parm_file(struct file *file, void *fh,
 	struct atomisp_device *isp = video_get_drvdata(vdev);
 
 	if (parm->type != V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		v4l2_err(&atomisp_dev,
-			    "unsupport v4l2 buf type for output\n");
+		dev_err(isp->dev, "unsupport v4l2 buf type for output\n");
 		return -EINVAL;
 	}
 

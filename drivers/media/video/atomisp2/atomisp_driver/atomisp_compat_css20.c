@@ -30,10 +30,12 @@
 #include "atomisp_compat.h"
 #include "atomisp_internal.h"
 #include "atomisp_cmd.h"
+#include "atomisp-regs.h"
 
 #include "hrt/hive_isp_css_mm_hrt.h"
 
 #include <asm/intel-mid.h>
+#include <linux/intel_mid_pm.h>
 
 #include "ia_css_accelerate.h"
 #include "sh_css_debug.h"
@@ -225,7 +227,7 @@ void atomisp_load_uint32(hrt_address addr, uint32_t *data)
 static int hmm_get_mmu_base_addr(unsigned int *mmu_base_addr)
 {
 	if (sh_mmu_mrfld.get_pd_base == NULL) {
-		v4l2_err(&atomisp_dev, "get mmu base address failed.\n");
+		dev_err(atomisp_dev, "get mmu base address failed.\n");
 		return -EINVAL;
 	}
 
@@ -471,8 +473,10 @@ static void __apply_additional_pipe_config(
 	case IA_CSS_PIPE_ID_CAPTURE:
 		/* enable capture pp manually or digital zoom would
 		 * fail*/
-		asd->stream_env.pipe_configs[pipe_id]
-		    .default_capture_config.enable_capture_pp = true;
+		if (asd->stream_env.pipe_configs[pipe_id].
+			default_capture_config.mode != CSS_CAPTURE_MODE_RAW)
+			asd->stream_env.pipe_configs[pipe_id]
+			    .default_capture_config.enable_capture_pp = true;
 		break;
 	case IA_CSS_PIPE_ID_VIDEO:
 		/* enable reduced pipe to have binary
@@ -1204,15 +1208,33 @@ void atomisp_css_capture_set_mode(struct atomisp_sub_device *asd,
 void atomisp_css_input_set_mode(struct atomisp_sub_device *asd,
 				enum atomisp_css_input_mode mode)
 {
-	asd->stream_env.stream_config.mode = mode;
+	struct ia_css_stream_config *s_config = &asd->stream_env.stream_config;
+	unsigned int size_mem_words;
 
+	s_config->mode = mode;
 	if (mode != IA_CSS_INPUT_MODE_BUFFERED_SENSOR)
 		return;
 
-	ia_css_mipi_frame_specify(
-		intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER
-		? CSS_MIPI_FRAME_BUFFER_SIZE_2 : CSS_MIPI_FRAME_BUFFER_SIZE_1,
-		false);
+	/*
+	 * TODO: sensor needs to export the embedded_data_size_words
+	 * information to atomisp for each setting.
+	 * Here using a large safe value.
+	 */
+	if (ia_css_mipi_frame_calculate_size(s_config->input_res.width,
+					s_config->input_res.height,
+					s_config->format,
+					true,
+					0x13000,
+					&size_mem_words) != IA_CSS_SUCCESS) {
+		if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER)
+			size_mem_words = CSS_MIPI_FRAME_BUFFER_SIZE_2;
+		else
+			size_mem_words = CSS_MIPI_FRAME_BUFFER_SIZE_1;
+		dev_warn(asd->isp->dev,
+			"ia_css_mipi_frame_calculate_size failed, applying pre-defined MIPI buffer size %u.\n",
+			size_mem_words);
+	}
+	ia_css_mipi_frame_specify(size_mem_words, false);
 }
 
 void atomisp_css_capture_enable_online(struct atomisp_sub_device *asd,
@@ -1315,13 +1337,18 @@ int atomisp_css_set_black_frame(struct atomisp_sub_device *asd,
 	return 0;
 }
 
-int atomisp_css_allocate_continuous_frames(bool init_time)
+int atomisp_css_allocate_continuous_frames(bool init_time,
+				struct atomisp_sub_device *asd)
 {
+	if (ia_css_alloc_continuous_frame_remain(asd->stream_env.stream)
+			!= IA_CSS_SUCCESS)
+		return -EINVAL;
 	return 0;
 }
 
-void atomisp_css_update_continuous_frames(void)
+void atomisp_css_update_continuous_frames(struct atomisp_sub_device *asd)
 {
+	ia_css_update_continuous_frames(asd->stream_env.stream);
 }
 
 int atomisp_css_stop(struct atomisp_sub_device *asd,
@@ -2549,6 +2576,23 @@ void atomisp_css_destroy_acc_pipe(struct atomisp_sub_device *asd)
 	ia_css_suspend();
 	if (pm_runtime_put_sync(asd->isp->dev) < 0)
 		dev_err(asd->isp->dev, "can not disable ISP power\n");
+	else if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_VALLEYVIEW2) {
+		/*
+		 * For BYT, to avoid ISP pci config register being accessed
+		 * by PCI runtime driver when ISP is power down, the hw
+		 * power down operation is done after runtime suspend,
+		 * and the hw power up operation is done before runtime
+		 * resume
+		 */
+		if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
+				OSPM_ISLAND_DOWN, MRFLD_ISPSSPM0))
+			dev_err(asd->isp->dev, "Failed to power off device\n");
+		else if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
+					OSPM_ISLAND_UP, MRFLD_ISPSSPM0))
+			dev_err(asd->isp->dev, "Failed to power on device\n");
+		else if (pm_runtime_get_sync(asd->isp->dev) < 0)
+			dev_err(asd->isp->dev, "can not enable ISP power\n");
+	}
 	else if (pm_runtime_get_sync(asd->isp->dev) < 0)
 		dev_err(asd->isp->dev, "can not enable ISP power\n");
 	ia_css_resume();

@@ -1933,11 +1933,9 @@ static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 	struct sdhci_host *host = mmc_priv(mmc);
 	unsigned long flags;
 
-	sdhci_runtime_pm_get(host);
 	spin_lock_irqsave(&host->lock, flags);
 	sdhci_enable_sdio_irq_nolock(host, enable);
 	spin_unlock_irqrestore(&host->lock, flags);
-	sdhci_runtime_pm_put(host);
 }
 
 static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
@@ -2352,6 +2350,16 @@ static int sdhci_get_cd(struct mmc_host *mmc)
 	return present;
 }
 
+static void sdhci_init_card(struct mmc_host *mmc, struct mmc_card *card)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->quirks2 & SDHCI_QUIRK2_NON_STD_CIS) {
+		card->quirks |= MMC_QUIRK_NON_STD_CIS;
+	}
+}
+
+
 static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.set_ios	= sdhci_set_ios,
@@ -2362,6 +2370,7 @@ static const struct mmc_host_ops sdhci_ops = {
 	.execute_tuning			= sdhci_execute_tuning,
 	.enable_preset_value		= sdhci_enable_preset_value,
 	.get_cd		= sdhci_get_cd,
+	.init_card = sdhci_init_card,
 };
 
 /*****************************************************************************\
@@ -4214,6 +4223,8 @@ int sdhci_add_host(struct sdhci_host *host)
 
 	if (host->quirks2 & SDHCI_QUIRK2_ADVERTISE_2V0_FORCE_1V8)
 		ocr_avail |= MMC_VDD_20_21;
+	if (host->quirks2 & SDHCI_QUIRK2_ADVERTISE_3V0_FORCE_1V8)
+		ocr_avail |= MMC_VDD_32_33;
 
 	mmc->ocr_avail = ocr_avail;
 	mmc->ocr_avail_sdio = ocr_avail;

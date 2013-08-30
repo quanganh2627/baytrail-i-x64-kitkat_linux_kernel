@@ -192,6 +192,8 @@
 #define   MI_WAIT_FOR_PLANE_B_FLIP      (1<<6)
 #define   MI_WAIT_FOR_PLANE_A_FLIP      (1<<2)
 #define   MI_WAIT_FOR_PLANE_A_SCANLINES (1<<1)
+#define   GEN6_MI_WAIT_FOR_PLANE_B_FLIP      (1<<9)
+#define   GEN6_MI_WAIT_FOR_PLANE_A_FLIP      (1<<1)
 #define MI_FLUSH		MI_INSTR(0x04, 0)
 #define   MI_READ_FLUSH		(1 << 0)
 #define   MI_EXE_FLUSH		(1 << 1)
@@ -3308,6 +3310,18 @@ EDP_PSR_SW_TIMER
 #define _DSPBTILEOFF		0x711A4
 #define _VLV_DSPBADDR		0x7117C
 #define _DSPBSURFLIVE		0x711AC
+
+/* Sprite Contrast and Brightness Registers */
+#define SPRITEA_CB_REG		0x721d0
+#define SPRITEB_CB_REG		0x722d0
+#define SPRITEC_CB_REG		0x723d0
+#define SPRITED_CB_REG		0x724d0
+
+/* Sprite Hue and Saturation Registers */
+#define SPRITEA_HS_REG         0x721d4
+#define SPRITEB_HS_REG         0x721d4
+#define SPRITEC_HS_REG         0x723d4
+#define SPRITED_HS_REG         0x724d4
 
 /* Sprite A control */
 #define _DVSACNTR		0x72180

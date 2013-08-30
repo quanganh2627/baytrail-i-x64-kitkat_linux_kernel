@@ -886,7 +886,7 @@ static int mt9m114_g_2a_status(struct v4l2_subdev *sd, s32 *val)
 static int mt9m114_g_exposure(struct v4l2_subdev *sd, s32 *value)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	u16 coarse;
+	u32 coarse;
 	int ret;
 
 	/* the fine integration time is currently not calculated */

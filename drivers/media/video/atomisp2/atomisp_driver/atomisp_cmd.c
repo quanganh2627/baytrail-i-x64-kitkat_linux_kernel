@@ -29,7 +29,7 @@
 #include <linux/timer.h>
 
 #include <asm/intel-mid.h>
-
+#include <linux/intel_mid_pm.h>
 #include <media/v4l2-event.h>
 #include <media/videobuf-vmalloc.h>
 
@@ -362,9 +362,27 @@ int atomisp_reset(struct atomisp_device *isp)
 	if (ret < 0) {
 		dev_err(isp->dev, "can not disable ISP power\n");
 	} else {
+		/*
+		 * For BYT, to avoid ISP pci config register being accessed
+		 * by PCI runtime driver when ISP is power down, the hw
+		 * power down operation is done after runtime suspend,
+		 * and the hw power up operation is done before runtime
+		 * resume
+		 */
+		if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_VALLEYVIEW2) {
+			if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
+					OSPM_ISLAND_DOWN, MRFLD_ISPSSPM0)) {
+					dev_err(isp->dev, "Failed to power off device\n");
+					return ret;
+			} else if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
+						OSPM_ISLAND_UP, MRFLD_ISPSSPM0)) {
+				dev_err(isp->dev, "Failed to power on device\n");
+				return ret;
+			}
+		}
 		ret = pm_runtime_get_sync(isp->dev);
 		if (ret < 0)
-			v4l2_err(&atomisp_dev, "can not enable ISP power\n");
+			dev_err(isp->dev, "can not enable ISP power\n");
 	}
 	atomisp_css_resume(isp);
 	return ret;
@@ -1047,8 +1065,9 @@ void atomisp_delayed_init_work(struct work_struct *work)
 {
 	struct atomisp_device *isp = container_of(work, struct atomisp_device,
 						  delayed_init_work);
-	atomisp_css_allocate_continuous_frames(false);
-	atomisp_css_update_continuous_frames();
+	struct atomisp_sub_device *asd = &isp->asd;
+	atomisp_css_allocate_continuous_frames(false, asd);
+	atomisp_css_update_continuous_frames(asd);
 	isp->delayed_init = ATOMISP_DELAYED_INIT_WORK_DONE;
 }
 
@@ -1291,6 +1310,7 @@ irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr)
 		case CSS_EVENT_DIS_STATISTICS_DONE:
 #ifdef CONFIG_VIDEO_ATOMISP_CSS20
 		case CSS_EVENT_PORT_EOF:
+		case CSS_EVENT_FRAME_TAGGED:
 #endif /* CONFIG_VIDEO_ATOMISP_CSS20 */
 			break;
 		default:
@@ -3088,14 +3108,6 @@ int atomisp_try_fmt(struct video_device *vdev, struct v4l2_format *f,
 						 f->fmt.pix.width,
 						 f->fmt.pix.height);
 			}
-			/*WORKAROUND: for qvga offline still capture, isp
-			 * would timeout for 8MP output from sensor.
-			 * but won't timeout for 720p sensor output*/
-			if (f->fmt.pix.width == 320
-				&& f->fmt.pix.height == 240) {
-				snr_mbus_fmt.width = 1280;
-				snr_mbus_fmt.height = 720;
-			}
 		}
 	}
 #endif
@@ -3582,14 +3594,6 @@ static int atomisp_set_fmt_to_snr(struct atomisp_sub_device *asd,
 				    DIV_ROUND_UP(2448 *
 						 f->fmt.pix.width,
 						 f->fmt.pix.height);
-			}
-			/*WORKAROUND: for qvga offline still capture, isp
-			 * would timeout for 8MP output from sensor.
-			 * but won't timeout for 720p sensor output*/
-			if (f->fmt.pix.width == 320
-				&& f->fmt.pix.height == 240) {
-				ffmt.width = 1280;
-				ffmt.height = 720;
 			}
 		}
 	}

@@ -29,6 +29,9 @@
 #ifndef _I915_DEBUGFS_H_
 #define _I915_DEBUGFS_H_
 
+/* Header file for Color management through debugfs */
+#include "intel_clrmgr.h"
+
 #define to_drm_encoder(n) container_of(n, struct drm_encoder, dev)
 
 /* Operations supported
@@ -108,14 +111,5 @@ enum {
 	INACTIVE_LIST,
 	PINNED_LIST,
 };
-
-extern u32 CSCSoftlut[CSC_MAX_COEFF_COUNT];
-
-extern int parse_clrmgr_input(uint *dest, char *src, int max, int read);
-extern int do_intel_enable_CSC(struct drm_device *dev, void *data,
-						struct drm_crtc *crtc);
-extern bool intel_pipe_has_type(struct drm_crtc *crtc, int type);
-extern void do_intel_disable_CSC(struct drm_device *dev,
-						struct drm_crtc *crtc);
 
 #endif /* _I915_DEBUGFS_H_ */

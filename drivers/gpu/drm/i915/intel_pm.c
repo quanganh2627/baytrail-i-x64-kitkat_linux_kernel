@@ -2497,7 +2497,7 @@ void gen6_set_rps(struct drm_device *dev, u8 val)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 limits = gen6_rps_limits(dev_priv, &val);
 
-	WARN_ON(!mutex_is_locked(&dev->struct_mutex));
+	WARN_ON(!mutex_is_locked(&dev_priv->rps.rps_mutex));
 
 	if (val == dev_priv->rps.cur_delay)
 		return;
@@ -2605,7 +2605,7 @@ static void gen6_enable_rps(struct drm_device *dev)
 	int rc6_mode;
 	int i;
 
-	WARN_ON(!mutex_is_locked(&dev->struct_mutex));
+	WARN_ON(!mutex_is_locked(&dev_priv->rps.rps_mutex));
 
 	/* Here begins a magic sequence of register writes to enable
 	 * auto-downclocking.
@@ -2909,7 +2909,7 @@ static void vlv_rps_timer_work(struct work_struct *work)
 	drm_i915_private_t *dev_priv = container_of(work, drm_i915_private_t,
 							rps.rps_timer_work);
 
-	mutex_lock(&dev_priv->dev->struct_mutex);
+	mutex_lock(&dev_priv->rps.rps_mutex);
 
 	if (I915_READ(VLV_GTLC_SURVIVABILITY_REG) & VLV_GFX_CLK_STATUS_BIT) {
 		/* GT is not power gated. Cancel any pending ones
@@ -2931,7 +2931,7 @@ static void vlv_rps_timer_work(struct work_struct *work)
 		if (wait_for(((VLV_GFX_CLK_STATUS_BIT &
 		     I915_READ(VLV_GTLC_SURVIVABILITY_REG)) != 0), 500)) {
 			DRM_ERROR("GFX_CLK_ON request timed out\n");
-			mutex_unlock(&dev_priv->dev->struct_mutex);
+			mutex_unlock(&dev_priv->rps.rps_mutex);
 			return;
 		}
 
@@ -2956,7 +2956,7 @@ static void vlv_rps_timer_work(struct work_struct *work)
 			I915_WRITE(GEN6_PMINTRMSK, ~GEN6_PM_DEFERRED_EVENTS);
 	}
 
-	mutex_unlock(&dev_priv->dev->struct_mutex);
+	mutex_unlock(&dev_priv->rps.rps_mutex);
 }
 
 bool vlv_turbo_initialize(struct drm_device *dev)
@@ -3202,7 +3202,7 @@ static void ironlake_enable_rc6(struct drm_device *dev)
 	if (!intel_enable_rc6(dev))
 		return;
 
-	WARN_ON(!mutex_is_locked(&dev->struct_mutex));
+	WARN_ON(!mutex_is_locked(&dev_priv->rps.rps_mutex));
 
 	ret = ironlake_setup_rc6(dev);
 	if (ret)
@@ -4490,7 +4490,7 @@ void intel_display_pm_init(struct drm_device *dev)
  * Will be updated once S0iX code is integrated */
 bool ospm_power_using_hw_begin(int hw_island, UHBUsage usage)
 {
-	struct drm_dev *drm_dev = gdev;
+	struct drm_device *drm_dev = gdev;
 	i915_rpm_get_disp(drm_dev);
 	return i915_is_device_active(drm_dev);
 }
@@ -4498,7 +4498,7 @@ EXPORT_SYMBOL(ospm_power_using_hw_begin);
 
 void ospm_power_using_hw_end(int hw_island)
 {
-	struct drm_dev *drm_dev = gdev;
+	struct drm_device *drm_dev = gdev;
 	i915_rpm_put_disp(drm_dev);
 }
 EXPORT_SYMBOL(ospm_power_using_hw_end);
@@ -4896,7 +4896,6 @@ void intel_gt_init(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	spin_lock_init(&dev_priv->gt_lock);
 
 	if (IS_VALLEYVIEW(dev)) {
 		dev_priv->gt.force_wake_get = __vlv_force_wake_get;
@@ -4916,11 +4915,11 @@ void intel_gt_init(struct drm_device *dev)
 			 * (correctly) interpreted by the test below as MT
 			 * forcewake being disabled.
 			 */
-			mutex_lock(&dev->struct_mutex);
+			mutex_lock(&dev_priv->rps.rps_mutex);
 			__gen6_gt_force_wake_mt_get(dev_priv, FORCEWAKE_ALL);
 			ecobus = I915_READ_NOTRACE(ECOBUS);
 			__gen6_gt_force_wake_mt_put(dev_priv, FORCEWAKE_ALL);
-			mutex_unlock(&dev->struct_mutex);
+			mutex_unlock(&dev_priv->rps.rps_mutex);
 
 			if (ecobus & FORCEWAKE_MT_ENABLE) {
 				DRM_DEBUG_KMS("Using MT version of forcewake\n");
@@ -4966,11 +4965,13 @@ void vlv_force_wake_put(struct drm_i915_private *dev_priv,
 	spin_lock_irqsave(&dev_priv->gt_lock, irqflags);
 
 	if (FORCEWAKE_RENDER & fw_engine) {
+		WARN_ON(dev_priv->fw_rendercount == 0);
 		if (--dev_priv->fw_rendercount == 0)
 			dev_priv->gt.force_wake_put(dev_priv, FORCEWAKE_RENDER);
 	}
 
 	if (FORCEWAKE_MEDIA & fw_engine) {
+		WARN_ON(dev_priv->fw_mediacount == 0);
 		if (--dev_priv->fw_mediacount == 0)
 			dev_priv->gt.force_wake_put(dev_priv, FORCEWAKE_MEDIA);
 	}
@@ -5011,6 +5012,7 @@ void vlv_rs_sleepstateinit(struct drm_device *dev,
 	u32 rs_powerwell_status = 0;
 	u32 regdata = 0;
 	u32 isRenderWellFWreq = 0, isMediaWellFWreq = 0;
+	unsigned long irqflags = 0;
 
 	if ((I915_READ(VLV_POWER_CONTEXT_BASE_REG) >> 20) == 0) {
 
@@ -5082,7 +5084,9 @@ void vlv_rs_sleepstateinit(struct drm_device *dev,
 	 * Render and Media engines are awake at this point. Update the
 	 * FW counters to reflect the same
 	 */
+	spin_lock_irqsave(&dev_priv->gt_lock, irqflags);
 	dev_priv->fw_rendercount = dev_priv->fw_mediacount = 1;
+	spin_unlock_irqrestore(&dev_priv->gt_lock, irqflags);
 
 	/*
 	 * Disable HW RC if requested. Will be requested during boot as
@@ -5184,7 +5188,7 @@ void vlv_rs_setstate(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 regdata = 0;
-
+	unsigned long irqflags = 0;
 	regdata = I915_READ(VLV_RENDER_C_STATE_CONTROL_1_REG);
 
 	if (enable) {
@@ -5204,7 +5208,9 @@ void vlv_rs_setstate(struct drm_device *dev,
 		/* Forcewake all engines first */
 		vlv_force_wake_get(dev_priv, FORCEWAKE_ALL);
 
+		spin_lock_irqsave(&dev_priv->gt_lock, irqflags);
 		dev_priv->fw_rendercount = dev_priv->fw_mediacount = 1;
+		spin_unlock_irqrestore(&dev_priv->gt_lock, irqflags);
 
 		regdata &= ~(1 << 28);
 		regdata &= ~(1 << 24);
