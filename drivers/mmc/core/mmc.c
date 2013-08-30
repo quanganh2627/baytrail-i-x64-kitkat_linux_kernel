@@ -1204,6 +1204,9 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
 	}
 
+	pr_err("%s: mmc_init_card Line: %d, card version: %d\n",
+		mmc_hostname(card->host), __LINE__, card->ext_csd.rev);
+
 	/*
 	 * Activate high speed (if supported)
 	 */
@@ -1249,6 +1252,9 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	} else if (max_dtr > card->csd.max_dtr) {
 		max_dtr = card->csd.max_dtr;
 	}
+
+	pr_err("%s: mmc_init_card Line: %d, max_dtr: %d\n",
+		mmc_hostname(card->host), __LINE__, max_dtr);
 
 	mmc_set_clock(host, max_dtr);
 
