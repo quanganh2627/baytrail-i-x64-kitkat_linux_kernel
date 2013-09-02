@@ -811,9 +811,6 @@ static unsigned int align_to_gfx(int width)
 	 */
 	unsigned int align;
 
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER)
-		return width;
-
 	if (width <= 512)
 		align = 512;
 	else
