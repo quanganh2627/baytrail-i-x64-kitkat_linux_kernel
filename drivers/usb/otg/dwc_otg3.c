@@ -1498,23 +1498,25 @@ static int dwc_otg_handle_notification(struct notifier_block *nb,
 /* This function will control VUSBPHY to power gate/ungate USBPHY */
 static int enable_usb_phy(struct dwc_otg2 *otg, bool on_off)
 {
+	struct intel_dwc_otg_pdata *otg_data = otg->otg_data;
 	int ret;
 
-	if (otg->otg_data->is_byt && otg->otg_data->gpio_cs
-		&& otg->otg_data->gpio_reset) {
-		if (on_off) {
-			/* Turn ON phy via CS pin */
-			gpio_direction_output(otg->otg_data->gpio_cs, 1);
-			usleep_range(200, 300);
+	if (otg_data->is_byt) {
+		if (otg_data->gpio_cs && otg_data->gpio_reset) {
+			if (on_off) {
+				/* Turn ON phy via CS pin */
+				gpio_direction_output(otg_data->gpio_cs, 1);
+				usleep_range(200, 300);
 
-			/* Do PHY reset after enable the PHY */
-			gpio_direction_output(otg->otg_data->gpio_reset, 0);
-			usleep_range(200, 500);
-			gpio_set_value(otg->otg_data->gpio_reset, 1);
-			msleep(30);
-		} else {
-			/* Turn OFF phy via CS pin */
-			gpio_direction_output(otg->otg_data->gpio_cs, 0);
+				/* Do PHY reset after enable the PHY */
+				gpio_direction_output(otg_data->gpio_reset, 0);
+				usleep_range(200, 500);
+				gpio_set_value(otg_data->gpio_reset, 1);
+				msleep(30);
+			} else {
+				/* Turn OFF phy via CS pin */
+				gpio_direction_output(otg_data->gpio_cs, 0);
+			}
 		}
 		return 0;
 	}
