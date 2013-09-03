@@ -64,7 +64,7 @@ KERNEL_MODULES_ROOT := $(PRODUCT_OUT)/root/lib/modules
 KERNEL_CONFIG := $(KERNEL_OUT_DIR)/.config
 KERNEL_CONFIG_KDUMP := $(KERNEL_OUT_DIR_KDUMP)/.config
 KERNEL_BLD_FLAGS := \
-    A="../modules/drivers ../modules/intel_media" \
+    A="../modules/drivers ../modules/intel_media ../modules/camera" \
     ARCH=$(KERNEL_ARCH) \
     $(KERNEL_EXTRA_FLAGS)
 
