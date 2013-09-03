@@ -149,6 +149,64 @@
 
 #define STATUS_UPDATE_INTERVAL			(HZ * 60)	/*60 sec */
 
+#define SMB_FCC_1000				(0<<4)
+#define SMB_FCC_1200				(1<<4)
+#define SMB_FCC_1400				(2<<4)
+#define SMB_FCC_1600				(3<<4)
+#define SMB_FCC_1800				(4<<4)
+#define SMB_FCC_2000				(5<<4)
+#define SMB_FCC_MASK				(0xf<<4)
+
+#define CC_1800					1800
+#define CC_1600					1600
+#define CC_1400					1400
+#define CC_1200					1200
+#define CC_1000					1000
+
+#define SMB_INLMT_500				0
+#define SMB_INLMT_900				1
+#define SMB_INLMT_1000				2
+#define SMB_INLMT_1100				3
+#define SMB_INLMT_1200				4
+#define SMB_INLMT_1300				5
+#define SMB_INLMT_1500				6
+#define SMB_INLMT_1600				7
+#define SMB_INLMT_1700				8
+#define SMB_INLMT_1800				9
+#define SMB_INLMT_2000				0xa
+#define SMB_INLMT_MASK				0xf
+
+#define ILIM_1800				1800
+#define ILIM_1500				1500
+#define ILIM_1000				1000
+#define ILIM_500				500
+
+#define SMB_FVLTG_4350				0x2D
+#define SMB_FVLTG_4200				0x25
+#define SMB_FVLTG_4100				0x20
+#define SMB_FVLTG_4000				0x1B
+#define SMB_FVLTG_MASK				0x3F
+
+#define CV_4350					4350
+#define CV_4200					4200
+#define CV_4100					4100
+#define CV_4000					4000
+
+#define ITERM_400				400
+#define ITERM_300				300
+#define ITERM_200				200
+#define ITERM_100				100
+
+#define SMB_ITERM_200				(0<<2)
+#define SMB_ITERM_300				(1<<2)
+#define SMB_ITERM_400				(2<<2)
+#define SMB_ITERM_500				(3<<2)
+#define SMB_ITERM_600				(4<<2)
+#define SMB_ITERM_700				(5<<2)
+#define SMB_ITERM_100				(6<<2)
+
+#define SMB_ITERM_MASK				(7<<2)
+
 struct smb347_otg_event {
 	struct list_head	node;
 	bool			param;
@@ -197,17 +255,22 @@ struct smb347_charger {
 	bool			otg_battery_uv;
 	bool			is_disabled;
 	const struct smb347_charger_platform_data	*pdata;
-	struct extcon_dev	*edev;
-	struct notifier_block	ext_nb;
+	/* power supply properties */
+	enum power_supply_charger_cable_type cable_type;
+	int			inlmt;
+	int			cc;
+	int			cv;
+	int			max_cc;
+	int			max_cv;
+	int			max_temp;
+	int			min_temp;
+	int			iterm;
+	int			cntl_state;
+	int			online;
+	int			present;
 };
 
 static struct smb347_charger *smb347_dev;
-static char *smb347_power_supplied_to[] = {
-			"max170xx_battery",
-			"max17042_battery",
-			"max17047_battery",
-			"max17050_battery",
-};
 
 static int smb347_read(struct smb347_charger *smb, u8 reg)
 {
@@ -911,10 +974,12 @@ static irqreturn_t smb347_interrupt(int irq, void *data)
 			 * For smb349 uevent notification will be sent upon
 			 * Power Ok interrupt.
 			 */
+#ifndef CONFIG_POWER_SUPPLY_CHARGER
 			if (smb->pdata->use_mains && !smb->is_smb349)
 				power_supply_changed(&smb->mains);
 			if (smb->pdata->use_usb && !smb->is_smb349)
 				power_supply_changed(&smb->usb);
+#endif
 		}
 
 		if (smb->mains_online || smb->usb_online)
@@ -1098,6 +1163,276 @@ static enum power_supply_property smb347_mains_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
 
+#ifdef CONFIG_POWER_SUPPLY_CHARGER
+static enum power_supply_type power_supply_cable_type(
+		enum power_supply_charger_cable_type cable)
+{
+
+	switch (cable) {
+
+	case POWER_SUPPLY_CHARGER_TYPE_USB_DCP:
+		return POWER_SUPPLY_TYPE_USB_DCP;
+	case POWER_SUPPLY_CHARGER_TYPE_USB_CDP:
+		return POWER_SUPPLY_TYPE_USB_CDP;
+	case POWER_SUPPLY_CHARGER_TYPE_USB_ACA:
+		return POWER_SUPPLY_TYPE_USB_ACA;
+	case POWER_SUPPLY_CHARGER_TYPE_AC:
+		return POWER_SUPPLY_TYPE_MAINS;
+	case POWER_SUPPLY_CHARGER_TYPE_NONE:
+	case POWER_SUPPLY_CHARGER_TYPE_USB_SDP:
+	default:
+		return POWER_SUPPLY_TYPE_USB;
+	}
+
+	return POWER_SUPPLY_TYPE_USB;
+}
+#endif
+
+static int smb347_set_cc(struct smb347_charger *smb, int cc)
+{
+	int ret;
+	int smb_cc;
+
+	ret = smb347_set_writable(smb, true);
+	if (ret < 0)
+		goto err_cc;
+
+	if (cc >= CC_1800)
+		smb_cc = SMB_FCC_1800;
+	else if (cc >= CC_1600)
+		smb_cc = SMB_FCC_1600;
+	else if (cc >= CC_1400)
+		smb_cc = SMB_FCC_1400;
+	else if (cc >= CC_1200)
+		smb_cc = SMB_FCC_1200;
+	else
+		smb_cc = SMB_FCC_1000;
+
+	ret = smb347_read(smb, CFG_CHARGE_CURRENT);
+	if (ret < 0)
+		goto err_cc;
+
+	ret &= ~SMB_FCC_MASK;
+	smb_cc |= ret;
+	ret = smb347_write(smb, CFG_CHARGE_CURRENT, smb_cc);
+	if (ret < 0)
+		goto err_cc;
+
+	ret = smb347_set_writable(smb, false);
+	return 0;
+
+err_cc:
+	ret = smb347_set_writable(smb, false);
+	dev_info(&smb->client->dev, "%s:error writing to i2c", __func__);
+	return ret;
+}
+
+static int smb347_set_inlmt(struct smb347_charger *smb, int inlmt)
+{
+	int ret;
+	int smb_inlmt;
+
+	ret = smb347_set_writable(smb, true);
+	if (ret < 0)
+		goto err_inlmt;
+
+	if (inlmt >= ILIM_1800)
+		smb_inlmt = SMB_INLMT_1800;
+	else if (inlmt >= ILIM_1500)
+		smb_inlmt = SMB_INLMT_1500;
+	else if (inlmt >= ILIM_1000)
+		smb_inlmt = SMB_INLMT_1000;
+	else
+		smb_inlmt = SMB_INLMT_500;
+
+
+	ret = smb347_read(smb, CFG_CHARGE_CURRENT);
+	if (ret < 0)
+		goto err_inlmt;
+
+	ret &= ~SMB_INLMT_MASK;
+	smb_inlmt |= ret;
+
+	ret = smb347_write(smb, CFG_CHARGE_CURRENT, smb_inlmt);
+	if (ret < 0)
+		goto err_inlmt;
+
+	ret = smb347_set_writable(smb, false);
+	return 0;
+
+err_inlmt:
+	ret = smb347_set_writable(smb, false);
+	dev_info(&smb->client->dev, "%s:error writing to i2c", __func__);
+	return ret;
+}
+
+static int smb347_set_cv(struct smb347_charger *smb, int cv)
+{
+	int ret;
+	int smb_cv;
+
+	ret = smb347_set_writable(smb, true);
+	if (ret < 0)
+		goto err_cv;
+
+	if (cv >= CV_4350)
+		smb_cv = SMB_FVLTG_4350;
+	else if (cv >= CV_4200)
+		smb_cv = SMB_FVLTG_4200;
+	else if (cv >= CV_4100)
+		smb_cv = SMB_FVLTG_4100;
+	else
+		smb_cv = SMB_FVLTG_4000;
+
+	ret = smb347_read(smb, CFG_FLOAT_VOLTAGE);
+	if (ret < 0)
+		goto err_cv;
+
+	ret &= ~SMB_FVLTG_MASK;
+	smb_cv |= ret;
+
+	ret = smb347_write(smb, CFG_FLOAT_VOLTAGE, smb_cv);
+	if (ret < 0)
+		goto err_cv;
+
+	ret = smb347_set_writable(smb, false);
+	return 0;
+
+err_cv:
+	ret = smb347_set_writable(smb, false);
+	dev_info(&smb->client->dev, "%s:error writing to i2c", __func__);
+	return ret;
+}
+
+static int smb347_set_iterm(struct smb347_charger *smb, int iterm)
+{
+	int ret;
+	int smb_iterm;
+
+	ret = smb347_set_writable(smb, true);
+	if (ret < 0)
+		goto err_iterm;
+
+	if (iterm >= ITERM_400)
+		smb_iterm = SMB_ITERM_400;
+	else if (iterm >= ITERM_300)
+		smb_iterm = SMB_ITERM_300;
+	else if (iterm >= ITERM_200)
+		smb_iterm = SMB_ITERM_200;
+	else
+		smb_iterm = SMB_ITERM_100;
+
+	ret = smb347_read(smb, CFG_CURRENT_LIMIT);
+	if (ret < 0)
+		goto err_iterm;
+
+	ret &= ~SMB_ITERM_MASK;
+	smb_iterm |= ret;
+
+	ret = smb347_write(smb, CFG_CURRENT_LIMIT, smb_iterm);
+	if (ret < 0)
+		goto err_iterm;
+
+	ret = smb347_set_writable(smb, false);
+	return 0;
+
+err_iterm:
+	ret = smb347_set_writable(smb, false);
+	dev_info(&smb->client->dev, "%s:error writing to i2c", __func__);
+	return ret;
+}
+
+static int smb347_usb_set_property(struct power_supply *psy,
+					enum power_supply_property psp,
+					const union power_supply_propval *val)
+{
+	struct smb347_charger *smb =
+		container_of(psy, struct smb347_charger, usb);
+	int ret = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+		smb->present = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		smb->online = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
+		ret = smb347_charging_set(smb, (bool)val->intval);
+		if (ret < 0)
+			dev_err(&smb->client->dev,
+				"Error %d in %s charging", ret,
+				(val->intval ? "enable" : "disable"));
+		break;
+	case POWER_SUPPLY_PROP_ENABLE_CHARGER:
+		if (val->intval)
+			ret = smb347_enable_charger();
+		else
+			ret = smb347_disable_charger();
+		if (ret < 0)
+			dev_err(&smb->client->dev,
+				"Error %d in %s charger", ret,
+				(val->intval ? "enable" : "disable"));
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CURRENT:
+		ret = smb347_set_cc(smb, val->intval);
+		if (!ret) {
+			mutex_lock(&smb->lock);
+			smb->cc = val->intval;
+			mutex_unlock(&smb->lock);
+		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_VOLTAGE:
+		ret = smb347_set_cv(smb, val->intval);
+		if (!ret) {
+			mutex_lock(&smb->lock);
+			smb->cv = val->intval;
+			mutex_unlock(&smb->lock);
+		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CUR:
+		ret = smb347_set_iterm(smb, val->intval);
+		if (!ret) {
+			mutex_lock(&smb->lock);
+			smb->iterm = val->intval;
+			mutex_unlock(&smb->lock);
+		}
+		break;
+#ifdef CONFIG_POWER_SUPPLY_CHARGER
+	case POWER_SUPPLY_PROP_CABLE_TYPE:
+		mutex_lock(&smb->lock);
+		smb->cable_type = val->intval;
+		smb->usb.type = power_supply_cable_type(smb->cable_type);
+		mutex_unlock(&smb->lock);
+		break;
+#endif
+	case POWER_SUPPLY_PROP_INLMT:
+		ret = smb347_set_inlmt(smb, val->intval);
+		if (!ret) {
+			mutex_lock(&smb->lock);
+			smb->inlmt = val->intval;
+			mutex_unlock(&smb->lock);
+		}
+		break;
+	case POWER_SUPPLY_PROP_MAX_TEMP:
+		mutex_lock(&smb->lock);
+		smb->max_temp = val->intval;
+		mutex_unlock(&smb->lock);
+		break;
+	case POWER_SUPPLY_PROP_MIN_TEMP:
+		mutex_lock(&smb->lock);
+		smb->min_temp = val->intval;
+		mutex_unlock(&smb->lock);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		smb->cntl_state = val->intval;
+		break;
+	default:
+		ret = -ENODATA;
+	}
+	return ret;
+}
+
 static int smb347_usb_get_property(struct power_supply *psy,
 				   enum power_supply_property prop,
 				   union power_supply_propval *val)
@@ -1106,6 +1441,7 @@ static int smb347_usb_get_property(struct power_supply *psy,
 		container_of(psy, struct smb347_charger, usb);
 	int ret = 0;
 
+	mutex_lock(&smb->lock);
 	switch (prop) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		val->intval = smb->usb_online;
@@ -1116,9 +1452,49 @@ static int smb347_usb_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = smb34x_get_health(smb);
 		break;
+	case POWER_SUPPLY_PROP_MAX_CHARGE_CURRENT:
+		val->intval = smb->max_cc;
+		break;
+	case POWER_SUPPLY_PROP_MAX_CHARGE_VOLTAGE:
+		val->intval = smb->max_cv;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CURRENT:
+		val->intval = smb->cc;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_VOLTAGE:
+		val->intval = smb->cv;
+		break;
+	case POWER_SUPPLY_PROP_INLMT:
+		val->intval = smb->inlmt;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CUR:
+		val->intval = smb->iterm;
+		break;
+	case POWER_SUPPLY_PROP_CABLE_TYPE:
+		val->intval = smb->cable_type;
+		break;
+	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
+		val->intval = smb->charging_enabled;
+		break;
+	case POWER_SUPPLY_PROP_ENABLE_CHARGER:
+		val->intval = !smb->is_disabled;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = smb->cntl_state;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = smb->pdata->num_throttle_states;
+		break;
+	case POWER_SUPPLY_PROP_MAX_TEMP:
+		val->intval = smb->max_temp;
+		break;
+	case POWER_SUPPLY_PROP_MIN_TEMP:
+		val->intval = smb->min_temp;
+		break;
 	default:
 		return -EINVAL;
 	}
+	mutex_unlock(&smb->lock);
 	return ret;
 }
 
@@ -1171,6 +1547,21 @@ static enum power_supply_property smb347_usb_properties[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_MAX_CHARGE_CURRENT,
+	POWER_SUPPLY_PROP_MAX_CHARGE_VOLTAGE,
+	POWER_SUPPLY_PROP_CHARGE_CURRENT,
+	POWER_SUPPLY_PROP_CHARGE_VOLTAGE,
+	POWER_SUPPLY_PROP_INLMT,
+	POWER_SUPPLY_PROP_ENABLE_CHARGING,
+	POWER_SUPPLY_PROP_ENABLE_CHARGER,
+	POWER_SUPPLY_PROP_CHARGE_TERM_CUR,
+#ifdef CONFIG_POWER_SUPPLY_CHARGER
+	POWER_SUPPLY_PROP_CABLE_TYPE,
+#endif
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
+	POWER_SUPPLY_PROP_MAX_TEMP,
+	POWER_SUPPLY_PROP_MIN_TEMP
 };
 
 static int smb347_battery_get_property(struct power_supply *psy,
@@ -1299,95 +1690,6 @@ static int smb347_debugfs_open(struct inode *inode, struct file *file)
 	return single_open(file, smb347_debugfs_show, inode->i_private);
 }
 
-static void smb_handle_extcon_events(struct smb347_charger *smb)
-{
-	int chrg_type, idx, ret;
-	u32 event;
-
-	/* current extcon cable status */
-	event = smb->edev->state;
-	dev_info(&smb->client->dev, "extcon cur state:%d\n", event);
-
-	if (!event) {
-		chrg_type = POWER_SUPPLY_TYPE_USB;
-		goto extcon_evt_ret;
-	}
-	/* get the edev index from extcon event */
-	for (idx = 0; idx < smb->edev->max_supported; idx++) {
-		if ((event >> idx) & 0x1)
-			break;
-	}
-	/* get extcon cable type */
-	ret = extcon_find_cable_type(smb->edev, idx);
-	if (ret < 0) {
-		dev_warn(&smb->client->dev,
-			"extcon_find_cable_type failed\n");
-		chrg_type = POWER_SUPPLY_TYPE_USB;
-		goto extcon_evt_ret;
-	}
-
-	switch (ret) {
-	case EXTCON_SDP:
-		chrg_type = POWER_SUPPLY_TYPE_USB;
-		break;
-	case EXTCON_CDP:
-		chrg_type = POWER_SUPPLY_TYPE_USB_CDP;
-		break;
-	case EXTCON_DCP:
-		chrg_type = POWER_SUPPLY_TYPE_USB_DCP;
-		break;
-	case EXTCON_ACA:
-		chrg_type = POWER_SUPPLY_TYPE_USB_ACA;
-		break;
-	default:
-		chrg_type = POWER_SUPPLY_TYPE_USB;
-		dev_warn(&smb->client->dev, "unknown extcon cable\n");
-	}
-
-extcon_evt_ret:
-	if (smb->pdata->use_usb)
-		smb->usb.type = chrg_type;
-}
-
-static int smb_extcon_cb(struct notifier_block *nb,
-				unsigned long old_state, void *data)
-{
-	struct smb347_charger *smb = container_of(nb,
-					struct smb347_charger, ext_nb);
-
-	smb_handle_extcon_events(smb);
-	if (smb->pdata->use_mains)
-		power_supply_changed(&smb->mains);
-	if (smb->pdata->use_usb)
-		power_supply_changed(&smb->usb);
-	return NOTIFY_OK;
-}
-
-static int smb_extcon_dev_reg_callback(struct notifier_block *nb,
-					unsigned long event, void *data)
-{
-	struct smb347_charger *chip = container_of(nb,
-					struct smb347_charger, ext_nb);
-	int ret;
-
-
-	/* TODO: Add extcon name in platform data */
-	chip->edev = extcon_get_extcon_dev("fsa9285");
-	if (!chip->edev) {
-		dev_err(&chip->client->dev, "failed to get extcon device\n");
-		return NOTIFY_OK;
-	} else {
-		extcon_dev_unregister_notify(&chip->ext_nb);
-		chip->ext_nb.notifier_call = &smb_extcon_cb;
-		ret = extcon_register_notifier(chip->edev, &chip->ext_nb);
-		if (ret)
-			dev_err(&chip->client->dev,
-				"failed to register extcon notifier:%d\n", ret);
-	}
-
-	return NOTIFY_OK;
-}
-
 static const struct file_operations smb347_debugfs_fops = {
 	.open		= smb347_debugfs_open,
 	.read		= seq_read,
@@ -1428,15 +1730,28 @@ static int smb347_probe(struct i2c_client *client,
 	if (ret < 0)
 		return ret;
 
+	/*
+	 * Interrupt pin is optional. If it is connected, we setup the
+	 * interrupt support here.
+	 */
+	if (pdata->irq_gpio >= 0) {
+		ret = smb347_irq_init(smb);
+		if (ret < 0) {
+			dev_warn(dev, "failed to initialize IRQ: %d\n", ret);
+			dev_warn(dev, "disabling IRQ support\n");
+		}
+	}
+
+	smb347_dev = smb;
+
 	if (smb->pdata->use_mains) {
 		smb->mains.name = "smb347-mains";
 		smb->mains.type = POWER_SUPPLY_TYPE_MAINS;
 		smb->mains.get_property = smb347_mains_get_property;
 		smb->mains.properties = smb347_mains_properties;
 		smb->mains.num_properties = ARRAY_SIZE(smb347_mains_properties);
-		smb->mains.supplied_to = smb347_power_supplied_to;
-		smb->mains.num_supplicants =
-				ARRAY_SIZE(smb347_power_supplied_to);
+		smb->mains.supplied_to = pdata->supplied_to;
+		smb->mains.num_supplicants = pdata->num_supplicants;
 		ret = power_supply_register(dev, &smb->mains);
 		if (ret < 0)
 			return ret;
@@ -1448,8 +1763,14 @@ static int smb347_probe(struct i2c_client *client,
 		smb->usb.get_property = smb347_usb_get_property;
 		smb->usb.properties = smb347_usb_properties;
 		smb->usb.num_properties = ARRAY_SIZE(smb347_usb_properties);
-		smb->usb.supplied_to = smb347_power_supplied_to;
-		smb->usb.num_supplicants = ARRAY_SIZE(smb347_power_supplied_to);
+		smb->usb.supplied_to = pdata->supplied_to;
+		smb->usb.num_supplicants = pdata->num_supplicants;
+		smb->usb.throttle_states = pdata->throttle_states;
+		smb->usb.num_throttle_states = pdata->num_throttle_states;
+		smb->usb.supported_cables = pdata->supported_cables;
+		smb->usb.set_property = smb347_usb_set_property;
+		smb->max_cc = 2000;
+		smb->max_cv = 4350;
 		ret = power_supply_register(dev, &smb->usb);
 		if (ret < 0) {
 			if (smb->pdata->use_mains)
@@ -1475,41 +1796,9 @@ static int smb347_probe(struct i2c_client *client,
 		}
 	}
 
-	/*
-	 * Interrupt pin is optional. If it is connected, we setup the
-	 * interrupt support here.
-	 */
-	if (pdata->irq_gpio >= 0) {
-		ret = smb347_irq_init(smb);
-		if (ret < 0) {
-			dev_warn(dev, "failed to initialize IRQ: %d\n", ret);
-			dev_warn(dev, "disabling IRQ support\n");
-		}
-	}
-
 	smb->running = true;
 	smb->dentry = debugfs_create_file("smb347-regs", S_IRUSR, NULL, smb,
 					  &smb347_debugfs_fops);
-
-
-	/* TODO: populate the name in plf. data */
-	smb->edev = extcon_get_extcon_dev("fsa9285");
-
-	if (!smb->edev) {
-		dev_err(dev, "failed extcon");
-		smb->ext_nb.notifier_call = &smb_extcon_dev_reg_callback;
-		extcon_dev_register_notify(&smb->ext_nb);
-	} else {
-		smb->ext_nb.notifier_call = &smb_extcon_cb;
-		ret = extcon_register_notifier(smb->edev, &smb->ext_nb);
-		if (ret)
-			dev_err(dev, "failed to register extcon ntf");
-	}
-
-	if (smb->edev)
-		smb_handle_extcon_events(smb);
-
-	smb347_dev = smb;
 
 	return 0;
 }
@@ -1528,9 +1817,6 @@ static int smb347_remove(struct i2c_client *client)
 		free_irq(client->irq, smb);
 		gpio_free(smb->pdata->irq_gpio);
 	}
-
-	if (smb->edev)
-		extcon_unregister_notifier(smb->edev, &smb->ext_nb);
 
 	if (smb->otg) {
 		struct smb347_otg_event *evt, *tmp;
@@ -1573,7 +1859,6 @@ static struct i2c_driver smb347_driver = {
 
 static int __init smb347_init(void)
 {
-	printk(KERN_DEBUG "Inside smb347_init\n");
 	return i2c_add_driver(&smb347_driver);
 }
 module_init(smb347_init);
