@@ -46,6 +46,10 @@ KERNEL_ARCH := i386
 KERNEL_EXTRA_FLAGS := ANDROID_TOOLCHAIN_FLAGS=-mno-android
 endif
 
+ifneq (,$(wildcard $(ANDROID_BUILD_TOP)/linux/modules/PRIVATE/debug))
+KERNEL_PRIVATE_MODS := ../modules/PRIVATE/debug
+endif
+
 KERNEL_CROSS_COMP := $(notdir $(TARGET_TOOLS_PREFIX))
 KERNEL_CCACHE :=$(firstword $(TARGET_CC))
 KERNEL_PATH := $(ANDROID_BUILD_TOP)/vendor/intel/support
@@ -64,7 +68,7 @@ KERNEL_MODULES_ROOT := $(PRODUCT_OUT)/root/lib/modules
 KERNEL_CONFIG := $(KERNEL_OUT_DIR)/.config
 KERNEL_CONFIG_KDUMP := $(KERNEL_OUT_DIR_KDUMP)/.config
 KERNEL_BLD_FLAGS := \
-    A="../modules/drivers ../modules/intel_media ../modules/camera" \
+    A="../modules/drivers ../modules/intel_media ../modules/camera $(KERNEL_PRIVATE_MODS)" \
     ARCH=$(KERNEL_ARCH) \
     $(KERNEL_EXTRA_FLAGS)
 
