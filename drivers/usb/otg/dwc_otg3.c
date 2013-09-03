@@ -2158,33 +2158,15 @@ static int dwc_otg_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static bool is_dwc_otg_on(struct dwc_otg2 *otg)
-{
-	u32 data = 0;
-	data = otg_read(otg, GUSB2PHYCFG0);
-	if (data & GUSB2PHYCFG_SUS_PHY) {
-		printk(KERN_ERR "%s:err\n", __func__);
-		return false;
-	} else
-		return true;
-}
-
 static int dwc_otg_runtime_resume(struct device *dev)
 {
 	struct dwc_otg2 *otg = the_transceiver;
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 
-REINIT:
 	pci_set_power_state(pci_dev, PCI_D0);
 
 	if (!otg)
 		return -ENODEV;
-	if (otg->otg_data && otg->otg_data->is_byt) {
-		if (!is_dwc_otg_on(otg)) {
-			pci_set_power_state(pci_dev, PCI_D3hot);
-			goto REINIT;
-		}
-	}
 
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
