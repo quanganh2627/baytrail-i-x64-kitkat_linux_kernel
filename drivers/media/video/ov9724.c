@@ -1119,6 +1119,15 @@ ov9724_s_config(struct v4l2_subdev *sd, int irq, void *platform_data)
 	    (struct camera_sensor_platform_data *)platform_data;
 
 	mutex_lock(&dev->input_lock);
+	if (dev->platform_data->platform_init) {
+		ret = dev->platform_data->platform_init(client);
+		if (ret) {
+			mutex_unlock(&dev->input_lock);
+			dev_err(&client->dev, "imx platform init err\n");
+			return ret;
+		}
+	}
+
 	ret = __ov9724_s_power(sd, 1);
 	if (ret) {
 		mutex_unlock(&dev->input_lock);
@@ -1152,6 +1161,10 @@ fail_csi_cfg:
 	dev->platform_data->csi_cfg(sd, 0);
 fail_detect:
 	__ov9724_s_power(sd, 0);
+
+	if (dev->platform_data->platform_deinit)
+		dev->platform_data->platform_deinit();
+
 	mutex_unlock(&dev->input_lock);
 	dev_err(&client->dev, "sensor power-gating failed\n");
 	return ret;
@@ -1492,6 +1505,9 @@ static int ov9724_remove(struct i2c_client *client)
 	struct ov9724_device *dev = to_ov9724_sensor(sd);
 
 	dev->platform_data->csi_cfg(sd, 0);
+	if (dev->platform_data->platform_deinit)
+		dev->platform_data->platform_deinit();
+
 	v4l2_device_unregister_subdev(sd);
 	kfree(dev);
 
