@@ -331,9 +331,6 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	byt_set_bias_level(card, dapm, SND_SOC_BIAS_OFF);
 	card->dapm.idle_bias_off = true;
 
-	/* FFRD8 uses codec's JD1 for jack detection */
-	snd_soc_update_bits(codec, RT5640_JD_CTRL,
-			    RT5640_JD_MASK, RT5640_JD_JD1_IN4P);
 	ret = snd_soc_jack_new(codec, "Intel MID Audio Jack",
 			       SND_JACK_HEADSET | SND_JACK_HEADPHONE | SND_JACK_BTN_0,
 			       &ctx->jack);
