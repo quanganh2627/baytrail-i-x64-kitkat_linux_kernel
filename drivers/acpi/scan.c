@@ -38,9 +38,14 @@ static const struct acpi_device_id acpi_platform_device_ids[] = {
 	{ "BCM2E1A" },
 	{ "BCM43241" },
 	{ "BCM4752" },
+
+	/* Baytrail Audio devices */
+	{ "HAD0F28", 0 },
 	{ "LPE0F28", 0 },
 	{ "LPE0F281", 0 },
 	{ "AMCR0F28", 0 },
+	{ "DMA0F28", 0 },
+	{ "VIB8601", 0 },
 
 	/* Modem Controller Device */
 	{ "MCD0001", 0 },
@@ -54,8 +59,6 @@ static const struct acpi_device_id acpi_platform_device_ids[] = {
 	{ "INT33C5", 0 },
 	{ "INT33C6", 0 },
 	{ "INT33C7", 0 },
-	{ "DMA0F28", 0 },
-	{ "VIB8601", 0 },
 
 	{ }
 };
