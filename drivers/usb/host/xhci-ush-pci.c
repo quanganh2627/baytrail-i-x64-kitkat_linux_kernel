@@ -372,6 +372,13 @@ void hsic_notify(struct usb_device *udev, unsigned action)
 			usb_disable_autosuspend(hsic.rh_dev);
 		}
 		break;
+	case MODEM_WORK_FLUSH:
+		if (udev == hsic.modem_dev) {
+			pr_debug("Notify MODEM work flush\n");
+			synchronize_irq(gpio_to_irq(hsic.aux_gpio));
+			flush_work(&hsic.hsic_aux);
+		}
+		break;
 	default:
 		pr_debug("Notify action not supported\n");
 		break ;
