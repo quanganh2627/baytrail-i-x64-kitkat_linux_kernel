@@ -26,6 +26,8 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/xhci-ush-hsic-pci.h>
 #include "xhci.h"
+#include <linux/wakelock.h>
+#include <linux/jiffies.h>
 
 static struct pci_dev	*pci_dev;
 
@@ -100,6 +102,10 @@ static irqreturn_t hsic_wakeup_gpio_irq(int irq, void *data)
 			"%s---->Wakeup IRQ is disabled\n", __func__);
 		return IRQ_HANDLED;
 	}
+
+	/* take a wake lock during 25ms, because resume lasts 20ms, after that
+	USB framework will prevent to go in low power if there is traffic */
+	wake_lock_timeout(&hsic.resume_wake_lock, msecs_to_jiffies(25));
 
 	queue_work(hsic.work_queue, &hsic.wakeup_work);
 	dev_dbg(dev,
@@ -1059,6 +1065,9 @@ static int xhci_ush_pci_probe(struct pci_dev *dev,
 		retval = -ENODEV;
 	}
 
+	wake_lock_init(&hsic.resume_wake_lock,
+		WAKE_LOCK_SUSPEND, "hsic_aux2_wlock");
+
 	/* Register the USB 2.0 roothub.
 	 * FIXME: USB core must know to register the USB 2.0 roothub first.
 	 * This is sort of silly, because we could just set the HCD driver flags
@@ -1135,6 +1144,7 @@ put_usb3_hcd:
 	usb_put_hcd(xhci->shared_hcd);
 dealloc_usb2_hcd:
 	usb_hcd_pci_remove(dev);
+	wake_lock_destroy(&(hsic.resume_wake_lock));
 	return retval;
 }
 
@@ -1163,6 +1173,7 @@ static void xhci_ush_pci_remove(struct pci_dev *dev)
 
 	hsic.hsic_stopped = 1;
 	hsic_enable = 0;
+	wake_lock_destroy(&(hsic.resume_wake_lock));
 
 	kfree(xhci);
 }

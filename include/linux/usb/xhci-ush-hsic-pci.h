@@ -40,6 +40,7 @@ struct ush_hsic_priv {
 	unsigned             bus_inactivityDuration;
 	unsigned             reenumeration_delay;
 	spinlock_t           hsic_lock;
+	struct	wake_lock    resume_wake_lock;
 	/* Root hub device */
 	struct usb_device           *rh_dev;
 	struct usb_device           *modem_dev;
