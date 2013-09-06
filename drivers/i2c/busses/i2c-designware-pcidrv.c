@@ -476,7 +476,8 @@ static int i2c_dw_find_slaves(struct acpi_resource *ares, void *data)
 
 			i2c_dw_init(i2c);
 
-			dev_info(dev, "I2C speed get from acpi is %dKHz\n", connection_speed/1000);
+			dev_info(dev, "I2C speed get from acpi is %dKHz\n",
+				connection_speed/1000);
 
 			dwinfo->info.addr = sb->slave_address;
 			if (sb->access_mode == ACPI_I2C_10BIT_MODE)
@@ -668,7 +669,7 @@ static ssize_t store_mode(struct device *dev,
 	} else if (!strncmp("fast", mode, MODE_NAME_SIZE)) {
 		i2c->master_cfg &= ~DW_IC_SPEED_MASK;
 		i2c->master_cfg |= DW_IC_CON_SPEED_FAST;
-	} else if (!strncmp("high", mode, MODE_NAME_SIZE))
+	} else if (!strncmp("high", mode, MODE_NAME_SIZE)) {
 		i2c->master_cfg &= ~DW_IC_SPEED_MASK;
 		i2c->master_cfg |= DW_IC_CON_SPEED_HIGH;
 	} else {
@@ -864,8 +865,10 @@ const struct pci_device_id *id)
 
 	return 0;
 
+#ifdef CONFIG_I2C_DW_SPEED_MODE_DEBUG
 err_del_adap:
 	i2c_del_adapter(&dev->adapter);
+#endif
 err_free_irq:
 	free_irq(pdev->irq, dev);
 err_kfree:

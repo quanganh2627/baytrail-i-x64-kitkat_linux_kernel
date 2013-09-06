@@ -20,14 +20,14 @@ void *apds990x_platform_data(void *info)
 {
 	static struct apds990x_platform_data platform_data = {
 		.cf = {
-			.cf1    = 7782,
-			.irf1   = 2456,
-			.cf2    = 1228,
-			.irf2   = 1638,
+			.cf1    = 37404,
+			.irf1   = 82558,
+			.cf2    = 19756,
+			.irf2   = 35753,
 			.df     = 52,
-			.ga     = 15728,
-			.incan  = 1638,
-			.min_ir = 8,
+			.ga     = 5348,
+			.incan  = 1545,
+			.min_ir = 0,
 		},
 		.pdrive         = 0,
 		.ppcount        = 1,

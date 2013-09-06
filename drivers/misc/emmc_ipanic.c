@@ -51,7 +51,7 @@ static char *block_name = "";
 module_param(block_name, charp, 0);
 MODULE_PARM_DESC(block_name, "IPanic dump block device name (mmcblk0)");
 
-static int ipanic_part_number = -1;
+static unsigned int ipanic_part_number;
 module_param(ipanic_part_number, int, 0);
 MODULE_PARM_DESC(ipanic_part_number, "IPanic dump partition on defined block device");
 
@@ -1180,7 +1180,7 @@ int __init emmc_ipanic_init(void)
 	/*initialization of drv_ctx */
 	memset(&drv_ctx, 0, sizeof(drv_ctx));
 	drv_ctx.emmc = &emmc_info;
-	if (ipanic_part_number >= 0)
+	if (ipanic_part_number)
 		emmc_info.part_number = ipanic_part_number;
 	if (*block_name)
 		strcpy(emmc_info.emmc_disk_name, block_name);

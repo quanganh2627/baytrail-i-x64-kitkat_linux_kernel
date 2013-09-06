@@ -31,6 +31,8 @@
 #include "atomisp_internal.h"
 #include "atomisp_cmd.h"
 #include "atomisp-regs.h"
+#include "atomisp_fops.h"
+#include "atomisp_ioctl.h"
 
 #include "hrt/hive_isp_css_mm_hrt.h"
 
@@ -457,17 +459,9 @@ static void __apply_additional_pipe_config(
 		return;
 	}
 
-	/*
-	 * Current ISP2.2 Firmware has issues with online still capture.
-	 * So still uses ISP1.5 firmware for online still capture cases
-	 */
-	if (asd->run_mode->val == ATOMISP_RUN_MODE_STILL_CAPTURE)
-		asd->stream_env.pipe_configs[pipe_id].
-		    isp_pipe_version = 1;
-	else
-		asd->stream_env.pipe_configs[pipe_id].
-		    isp_pipe_version = 2;
-
+	/* apply default pipe config */
+	asd->stream_env.pipe_configs[pipe_id].
+				isp_pipe_version = 2;
 	/* apply isp 2.2 specific config for baytrail*/
 	switch (pipe_id) {
 	case IA_CSS_PIPE_ID_CAPTURE:
@@ -644,11 +638,14 @@ void atomisp_css_unload_firmware(struct atomisp_device *isp)
 
 void atomisp_css_uninit(struct atomisp_device *isp)
 {
-	/* FIXME: only has one subdev at resent */
-	struct atomisp_sub_device *asd = &isp->asd;
+	struct atomisp_sub_device *asd;
+	unsigned int i;
 
-	atomisp_isp_parameters_clean_up(&asd->params.config);
-	asd->params.css_update_params_needed = false;
+	for (i = 0; i < isp->num_of_streams; i++) {
+		asd = &isp->asd[i];
+		atomisp_isp_parameters_clean_up(&asd->params.config);
+		asd->params.css_update_params_needed = false;
+	}
 
 	ia_css_uninit();
 }
@@ -826,7 +823,15 @@ int atomisp_css_start(struct atomisp_sub_device *asd,
 		}
 	}
 
-	if (ia_css_start_sp() != IA_CSS_SUCCESS) {
+	/*
+	 * SP can only be started one time
+	 * if atomisp_subdev_streaming_count() tell there already has some
+	 * subdev at streamming, then SP should already be started previously,
+	 * so need to skip start sp procedure
+	 */
+	if (atomisp_streaming_count(isp)) {
+		dev_dbg(isp->dev, "skip start sp\n");
+	} else if (ia_css_start_sp() != IA_CSS_SUCCESS) {
 		dev_err(isp->dev, "start sp error.\n");
 		ret = -EINVAL;
 		goto start_err;
@@ -849,7 +854,13 @@ stream_err:
 	/* css 2.0 API limitation: ia_css_stop_sp() could be only called after
 	 * destroy all pipes
 	 */
-	if (ia_css_isp_has_started() && (ia_css_stop_sp() != IA_CSS_SUCCESS))
+	/*
+	 * SP can not be stop if other streams are in use
+	 */
+	if (atomisp_streaming_count(isp))
+		dev_dbg(isp->dev, "skip stop sp\n");
+	else if (ia_css_isp_has_started() &&
+		 ia_css_stop_sp() != IA_CSS_SUCCESS)
 		dev_err(isp->dev, "stop sp failed.\n");
 
 	return ret;
@@ -1362,8 +1373,13 @@ int atomisp_css_stop(struct atomisp_sub_device *asd,
 	/* if is called in atomisp_reset(), force destroy all pipes */
 	if (__destroy_pipes(asd, true))
 		dev_err(isp->dev, "destroy pipes failed.\n");
-
-	if (ia_css_isp_has_started() && (ia_css_stop_sp() != IA_CSS_SUCCESS)) {
+	/*
+	 * SP can not be stop if other streams are in use
+	 */
+	if (atomisp_streaming_count(isp)) {
+		dev_dbg(isp->dev, "skip stop sp\n");
+	} else if (ia_css_isp_has_started() &&
+		   (ia_css_stop_sp() != IA_CSS_SUCCESS)) {
 		dev_err(isp->dev, "stop sp failed. stop css fatal error.\n");
 		return -EINVAL;
 	}
@@ -2614,5 +2630,85 @@ int atomisp_css_load_acc_binary(struct atomisp_sub_device *asd,
 	pipe_config->acc_stages[index] = fw;
 	pipe_config->num_acc_stages = index + 1;
 
+	return 0;
+}
+
+static struct atomisp_sub_device *__get_atomisp_subdev(
+					struct ia_css_pipe *css_pipe,
+					struct atomisp_device *isp) {
+	int i, j;
+	struct atomisp_sub_device *asd;
+
+	for (i = 0; i < isp->num_of_streams; i++) {
+		asd = &isp->asd[i];
+		if (asd->streaming == ATOMISP_DEVICE_STREAMING_DISABLED)
+			continue;
+		for (j = 0; j < IA_CSS_PIPE_ID_NUM; j++)
+			if (asd->stream_env.pipes[j] &&
+			    asd->stream_env.pipes[j] == css_pipe)
+				return asd;
+	}
+
+	return NULL;
+}
+
+int atomisp_css_isr_thread(struct atomisp_device *isp,
+			   bool *frame_done_found,
+			   bool *css_pipe_done,
+			   bool *reset_wdt_timer)
+{
+	struct atomisp_css_event current_event;
+	struct atomisp_sub_device *asd = &isp->asd[0];
+
+	while (!atomisp_css_dequeue_event(&current_event)) {
+		atomisp_css_temp_pipe_to_pipe_id(&current_event);
+		asd = __get_atomisp_subdev(current_event.event.pipe,
+						  isp);
+		if (!asd) {
+			/* EOF Event does not have the css_pipe returned */
+			if (current_event.event.type !=
+			    IA_CSS_EVENT_TYPE_PORT_EOF) {
+				dev_err(isp->dev, "%s:no subdev. event:%d",
+					 __func__, current_event.event.type);
+				return -EINVAL;
+			}
+		}
+
+		switch (current_event.event.type) {
+		case CSS_EVENT_OUTPUT_FRAME_DONE:
+			frame_done_found[asd->index] = true;
+			atomisp_buf_done(asd, 0, CSS_BUFFER_TYPE_OUTPUT_FRAME,
+					 current_event.pipe, true);
+			*reset_wdt_timer = true; /* ISP running */
+			break;
+		case CSS_EVENT_3A_STATISTICS_DONE:
+			atomisp_buf_done(asd, 0,
+					 CSS_BUFFER_TYPE_3A_STATISTICS,
+					 current_event.pipe,
+					 css_pipe_done[asd->index]);
+			break;
+		case CSS_EVENT_VF_OUTPUT_FRAME_DONE:
+			atomisp_buf_done(asd, 0,
+					 CSS_BUFFER_TYPE_VF_OUTPUT_FRAME,
+					 current_event.pipe, true);
+			*reset_wdt_timer = true; /* ISP running */
+			break;
+		case CSS_EVENT_DIS_STATISTICS_DONE:
+			atomisp_buf_done(asd, 0,
+					 CSS_BUFFER_TYPE_DIS_STATISTICS,
+					 current_event.pipe,
+					 css_pipe_done[asd->index]);
+			break;
+		case CSS_EVENT_PIPELINE_DONE:
+			css_pipe_done[asd->index] = true;
+			break;
+		case CSS_EVENT_PORT_EOF:
+			break;
+		default:
+			dev_err(isp->dev, "unhandled css stored event: 0x%x\n",
+					current_event.event.type);
+			break;
+		}
+	}
 	return 0;
 }

@@ -727,7 +727,7 @@ static void mrfl_ioapic_rte_reg_addr_map(struct sdhci_pci_slot *slot)
 
 /* Define Host controllers for Intel Merrifield platform */
 #define INTEL_MRFL_EMMC_0	0
-#define INTEL_MRFL_EMMC0H	1
+#define INTEL_MRFL_EMMC_1	1
 #define INTEL_MRFL_SD		2
 #define INTEL_MRFL_SDIO		3
 
@@ -743,19 +743,13 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 					MMC_CAP_1_8V_DDR;
 		slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
 					MMC_CAP2_INIT_CARD_SYNC;
-		mrfl_ioapic_rte_reg_addr_map(slot);
-		break;
-	case INTEL_MRFL_EMMC0H:
 		if (slot->chip->pdev->revision == 0x1) { /* B0 stepping */
-			slot->host->mmc->caps |= MMC_CAP_8_BIT_DATA |
-						MMC_CAP_NONREMOVABLE |
-						MMC_CAP_1_8V_DDR;
-			slot->host->mmc->caps2 |= MMC_CAP2_POLL_R1B_BUSY |
-						MMC_CAP2_INIT_CARD_SYNC |
-						MMC_CAP2_HS200_1_8V_SDR;
+			slot->host->mmc->caps2 |= MMC_CAP2_HS200_1_8V_SDR;
 			/* WA for async abort silicon issue */
-			slot->host->quirks2 |= SDHCI_QUIRK2_WAIT_FOR_IDLE;
+			slot->host->quirks2 |= SDHCI_QUIRK2_CARD_CD_DELAY |
+					SDHCI_QUIRK2_WAIT_FOR_IDLE;
 		}
+		mrfl_ioapic_rte_reg_addr_map(slot);
 		break;
 	case INTEL_MRFL_SD:
 		slot->host->quirks2 |= SDHCI_QUIRK2_WAIT_FOR_IDLE;
@@ -1815,6 +1809,17 @@ static void  sdhci_platform_reset_exit(struct sdhci_host *host, u8 mask)
 	}
 }
 
+static int sdhci_gpio_buf_check(struct sdhci_host *host, unsigned int clk)
+{
+	int ret = -ENOSYS;
+	struct sdhci_pci_slot *slot = sdhci_priv(host);
+
+	if (slot->data && slot->data->flis_check)
+		ret = slot->data->flis_check(host, clk);
+
+	return ret;
+}
+
 static struct sdhci_ops sdhci_pci_ops = {
 	.enable_dma	= sdhci_pci_enable_dma,
 	.platform_8bit_width	= sdhci_pci_8bit_width,
@@ -1823,6 +1828,7 @@ static struct sdhci_ops sdhci_pci_ops = {
 	.get_cd		= sdhci_pci_get_cd,
 	.get_tuning_count = sdhci_pci_get_tuning_count,
 	.platform_reset_exit = sdhci_platform_reset_exit,
+	.gpio_buf_check = sdhci_gpio_buf_check,
 };
 
 /*****************************************************************************\

@@ -39,6 +39,7 @@ static const struct acpi_device_id acpi_platform_device_ids[] = {
 	{ "BCM43241" },
 	{ "BCM4752" },
 	{ "LPE0F28", 0 },
+	{ "LPE0F281", 0 },
 	/* Modem Controller Device */
 	{ "MCD0001", 0 },
 	/* Haswell LPSS devices */

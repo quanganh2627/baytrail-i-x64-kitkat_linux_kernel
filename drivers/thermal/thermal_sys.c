@@ -486,6 +486,15 @@ thermal_cooling_device_force_state_override_store(struct device *dev,
 }
 
 static ssize_t
+thermal_cooling_device_available_states_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct thermal_cooling_device *cdev = to_cooling_device(dev);
+
+	return cdev->ops->get_available_states(cdev, buf);
+}
+
+static ssize_t
 thermal_cooling_device_cur_state_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
@@ -530,6 +539,8 @@ static DEVICE_ATTR(cur_state, 0644,
 static DEVICE_ATTR(force_state_override, 0644,
 		thermal_cooling_device_force_state_override_show,
 		thermal_cooling_device_force_state_override_store);
+static DEVICE_ATTR(available_states, 0444,
+		thermal_cooling_device_available_states_show, NULL);
 
 static ssize_t
 thermal_cooling_device_trip_point_show(struct device *dev,
@@ -1084,17 +1095,24 @@ thermal_cooling_device_register(char *type, void *devdata,
 
 	result = device_create_file(&cdev->device, &dev_attr_max_state);
 	if (result)
-		goto unregister;
+		goto remove_type;
 
 	result = device_create_file(&cdev->device, &dev_attr_cur_state);
 	if (result)
-		goto unregister;
+		goto remove_max_state;
 
 	if (ops->get_force_state_override) {
 		result = device_create_file(&cdev->device,
 					&dev_attr_force_state_override);
 		if (result)
-			goto unregister;
+			goto remove_cur_state;
+	}
+
+	if (ops->get_available_states) {
+		result = device_create_file(&cdev->device,
+						&dev_attr_available_states);
+		if (result)
+			goto remove_force_override;
 	}
 
 	mutex_lock(&thermal_list_lock);
@@ -1112,6 +1130,16 @@ thermal_cooling_device_register(char *type, void *devdata,
 	if (!result)
 		return cdev;
 
+remove_force_override:
+	if (cdev->ops->get_force_state_override)
+		device_remove_file(&cdev->device,
+				&dev_attr_force_state_override);
+remove_cur_state:
+	device_remove_file(&cdev->device, &dev_attr_cur_state);
+remove_max_state:
+	device_remove_file(&cdev->device, &dev_attr_max_state);
+remove_type:
+	device_remove_file(&cdev->device, &dev_attr_cdev_type);
 unregister:
 	release_idr(&thermal_cdev_idr, &thermal_idr_lock, cdev->id);
 	device_unregister(&cdev->device);
@@ -1158,6 +1186,9 @@ void thermal_cooling_device_unregister(struct
 	if (cdev->ops->get_force_state_override)
 		device_remove_file(&cdev->device,
 					&dev_attr_force_state_override);
+	if (cdev->ops->get_available_states)
+		device_remove_file(&cdev->device,
+					&dev_attr_available_states);
 	release_idr(&thermal_cdev_idr, &thermal_idr_lock, cdev->id);
 	device_unregister(&cdev->device);
 	kfree(cdev);

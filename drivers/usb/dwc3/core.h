@@ -427,6 +427,7 @@ struct dwc3_ep {
 #define DWC3_EP_BUSY		(1 << 4)
 #define DWC3_EP_PENDING_REQUEST	(1 << 5)
 #define DWC3_EP_MISSED_ISOC	(1 << 6)
+#define DWC3_EP_HIBERNATION	(1 << 7)
 
 	/* This last one is specific to EP0 */
 #define DWC3_EP0_DIR_IN		(1 << 31)
@@ -601,6 +602,7 @@ enum dwc3_pm_state {
 	PM_DISCONNECTED = 0,
 	PM_ACTIVE,
 	PM_SUSPENDED,
+	PM_RESUMING,
 };
 
 /**

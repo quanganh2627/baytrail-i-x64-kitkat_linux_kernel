@@ -85,6 +85,28 @@ config USB_HCD_HSIC
 
 	  If unsure, say N.
 
+config USB_USH_HSIC
+	bool "USH HSIC support"
+	depends on USB_XHCI_HCD
+	default n
+	---help---
+	  Say 'Y' to turn on USH HSIC support for the xHCI host controller driver.
+	  HSIC is used for AP and BP IPC. In AP side, it will work as a xHCI host.
+	  Some functionalities like AUX signal and LPM will be supported.
+
+	  If unsure, say N.
+
+config USB_HSIC_NOTIFY
+	bool "USB HSIC NOTIFY support"
+	depends on USB_USH_HSIC || USB_HCD_HSIC
+	default n
+	---help---
+	  Say 'Y' to turn on USB HSIC NOTIFY support for the HSIC driver.
+	  HSIC is used for AP and BP IPC. In AP side, it will work as a xHCI host.
+	  Some functionalities like AUX signal and LPM will be supported.
+
+	  If unsure, say N.
+
 config USB_EHCI_ROOT_HUB_TT
 	bool "Root Hub Transaction Translators"
 	depends on USB_EHCI_HCD

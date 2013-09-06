@@ -1215,27 +1215,6 @@ static int ov8830_s_mbus_fmt(struct v4l2_subdev *sd,
 	/* Get the current resolution setting */
 	res = &dev->curr_res_table[dev->fmt_idx];
 
-	/*
-	 * Work around for OV8835 used in Merrifield PRH(ISP2400A0), select
-	 * the lowest fps setting due to low ISP firmware performance.
-	 */
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER &&
-		intel_mid_soc_stepping() < 1)
-	{
-		unsigned int i, low_fps;
-
-		low_fps = res->fps_options[0].fps;
-		for (i = 1; i < MAX_FPS_OPTIONS_SUPPORTED; i++) {
-			if (res->fps_options[i].fps != 0 &&
-				res->fps_options[i].fps < low_fps) {
-				low_fps = res->fps_options[i].fps;
-				dev->fps_index = i;
-			}
-		}
-		dev_warn(&client->dev, "use the lowest fps[%d] setting\n",
-			low_fps);
-	}
-
 	/* Write the selected resolution table values to the registers */
 	ret = ov8830_write_reg_array(client, res->regs);
 	if (ret)
@@ -1323,18 +1302,6 @@ static int ov8830_detect(struct i2c_client *client, u16 *id, u8 *revision)
 	/* OTP BANK0 read will return 0x35 for OV8835 else 0*/
 	if (id35 == 0x35)
 		*id = OV8835_CHIP_ID;
-
-	/*
-	 * Workaround: for PRH project (using ISP2400A0), HW team already
-	 * mixed up the ov8830 and ov8835, but ov8835 is the POR sensor of
-	 * PRH. To save RD effort on debugging ov8830 setting issues, force
-	 * apply ov8835 settings for ov8830 sensor.
-	 */
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER &&
-		intel_mid_soc_stepping() < 1 && id35 != 0x35) {
-		dev_warn(&client->dev, "[PRH]Force apply OV8835 settings\n");
-		*id = OV8835_CHIP_ID;
-	}
 
 	dev_info(&client->dev, "sensor is ov%4.4x\n", *id);
 

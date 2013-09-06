@@ -285,6 +285,7 @@ struct sdhci_ops {
 	int	(*power_up_host)(struct sdhci_host *host);
 	int    (*get_cd)(struct sdhci_host *host);
 	int    (*get_tuning_count)(struct sdhci_host *host);
+	int	(*gpio_buf_check)(struct sdhci_host *host, unsigned int clk);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS

@@ -683,7 +683,8 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	dep = to_dwc3_ep(ep);
 	dwc = dep->dwc;
 
-	if (!(dep->flags & DWC3_EP_ENABLED)) {
+	if (!(dep->flags & DWC3_EP_ENABLED) &&
+		dep->flags != DWC3_EP_HIBERNATION) {
 		dev_dbg(dwc->dev, "%s is already disabled\n",
 				dep->name);
 		return 0;
@@ -1482,6 +1483,16 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
 
+	/*
+	 * FIXME If pm_state is PM_RESUMING, we should wait for it to
+	 * become PM_ACTIVE before continue.
+	 *
+	 * If some gadget reaches here in atomic context,
+	 * pm_runtime_get_sync will cause a sleep problem.
+	 */
+	if (dwc->pm_state == PM_SUSPENDED)
+		pm_runtime_get_sync(dwc->dev);
+
 #ifdef CONFIG_USB_DWC_OTG_XCEIV
 	mutex_lock(&dwc->mutex);
 #endif
@@ -1508,6 +1519,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		dwc3_gadget_run_stop(dwc, 1);
 	} else {
 		u8 epnum;
+		int n;
 
 		for (epnum = 0; epnum < 2; epnum++) {
 			struct dwc3_ep  *dep;
@@ -1519,7 +1531,13 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		}
 
 		dwc3_stop_active_transfers(dwc);
+		dwc3_gadget_keep_conn(dwc, 0);
 		dwc3_gadget_run_stop(dwc, 0);
+
+		dwc3_writel(dwc->regs, DWC3_DEVTEN, 0x00);
+		for (n = 0; n < DWC3_EVENT_BUFFERS_NUM; n++)
+			dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(n),
+				dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(n)));
 		spin_unlock_irqrestore(&dwc->lock, flags);
 	}
 
@@ -1775,6 +1793,8 @@ static int dwc3_start_peripheral(struct usb_gadget *g)
 		dwc3_dev_init(dwc);
 		dwc3_gadget_enable_irq(dwc);
 		dwc3_gadget_run_stop(dwc, 1);
+		if (dwc->hibernation.enabled)
+			dwc3_gadget_keep_conn(dwc, 1);
 	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
@@ -1823,8 +1843,6 @@ static int dwc3_stop_peripheral(struct usb_gadget *g)
 
 	dwc3_gadget_keep_conn(dwc, 0);
 
-	dwc->pm_state = PM_DISCONNECTED;
-
 	for (epnum = 0; epnum < 2; epnum++) {
 		struct dwc3_ep  *dep;
 
@@ -1864,11 +1882,13 @@ static int dwc3_stop_peripheral(struct usb_gadget *g)
 	reg |= DWC3_GUCTL_USB_HST_IN_AUTO_RETRY_EN;
 	dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
 
+	if (dwc->pm_state != PM_SUSPENDED)
+		pm_runtime_put(dwc->dev);
+
+	dwc->pm_state = PM_DISCONNECTED;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	free_irq(dwc->irq, dwc);
-
-	pm_runtime_put(dwc->dev);
 	wake_unlock(&dwc->wake_lock);
 	mutex_unlock(&dwc->mutex);
 
@@ -2545,9 +2565,6 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 	dev_vdbg(dwc->dev, "%s\n", __func__);
 
-	if (dwc->hibernation.enabled)
-		dwc3_gadget_keep_conn(dwc, 1);
-
 	memset(&params, 0x00, sizeof(params));
 
 	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
@@ -2637,8 +2654,7 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc)
 	if (!dwc->hibernation.enabled) {
 		dev_info(dwc->dev, "device resumed; notify OTG\n");
 		__dwc3_vbus_draw(dwc, OTG_DEVICE_RESUME);
-	} else
-		pm_runtime_get(dwc->dev);
+	}
 
 	/*
 	 * TODO take core out of low power mode when that's
@@ -2712,8 +2728,7 @@ static void dwc3_gadget_hibernation_interrupt(struct dwc3 *dwc)
 {
 	dev_vdbg(dwc->dev, "%s\n", __func__);
 
-	if (dwc->hibernation.enabled &&
-	    dwc->dev_state == DWC3_CONFIGURED_STATE)
+	if (dwc->hibernation.enabled)
 		pm_runtime_put(dwc->dev);
 }
 
@@ -2835,13 +2850,17 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 	int				i;
 	irqreturn_t			ret = IRQ_NONE;
 
-	if (dwc->pm_state == PM_SUSPENDED) {
-		dev_info(dwc->dev, "the first resume interrupt from u3/u2pmu is received");
-		pm_runtime_get(dwc->dev);
-		return IRQ_HANDLED;
-	}
-
 	spin_lock(&dwc->lock);
+	if (dwc->pm_state != PM_ACTIVE) {
+
+		if (dwc->pm_state == PM_SUSPENDED) {
+			dev_info(dwc->dev, "u3/u2 pmu is received\n");
+			pm_runtime_get(dwc->dev);
+			dwc->pm_state = PM_RESUMING;
+			ret = IRQ_HANDLED;
+		}
+		goto out;
+	}
 
 	for (i = 0; i < dwc->num_event_buffers; i++) {
 		irqreturn_t status;
@@ -2851,6 +2870,7 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 			ret = status;
 	}
 
+out:
 	spin_unlock(&dwc->lock);
 
 	return ret;
@@ -3224,7 +3244,7 @@ int dwc3_runtime_suspend(struct device *device)
 		dwc3_gadget_get_ep_state(dwc, dep);
 
 		dep->flags_backup = dep->flags;
-		dep->flags = 0;
+		dep->flags = DWC3_EP_HIBERNATION;
 	}
 
 	dwc3_gadget_keep_conn(dwc, 1);
@@ -3281,7 +3301,8 @@ int dwc3_runtime_resume(struct device *device)
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
-	if (dwc->pm_state != PM_SUSPENDED) {
+	if (dwc->pm_state == PM_ACTIVE ||
+		dwc->pm_state == PM_DISCONNECTED) {
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return 0;
 	}

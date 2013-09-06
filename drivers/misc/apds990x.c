@@ -519,7 +519,11 @@ static int apds990x_get_lux(struct apds990x_chip *chip, int clear, int ir)
 	}
 
 	iac = (cf * clear - irf * ir) / APDS_PARAM_SCALE;
-	iac = max(iac, 0);
+	if (iac < 0) {
+		dev_warn(&chip->client->dev, "%s: negative value! clear: %d infrared: %d\n",
+			 __func__, clear, ir);
+		iac = 0;
+	}
 	lpc = (chip->cf.df * chip->cf.ga) /
 		(u32)(again[chip->again_meas] * (u32)chip->atime);
 	ret = (iac * lpc) / APDS_PARAM_SCALE;

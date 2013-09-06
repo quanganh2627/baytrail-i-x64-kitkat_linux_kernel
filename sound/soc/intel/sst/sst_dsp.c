@@ -1241,7 +1241,6 @@ static int sst_download_library(const struct firmware *fw_lib,
 				 &sst_drv_ctx->libmemcpy_list);
 
 	if (retval) {
-		kfree(codec_fw);
 		memset(lib, 0, sizeof(*lib));
 		goto send_ipc;
 	}
@@ -1539,7 +1538,8 @@ wake:
 struct sst_module_info sst_modules_mrfld[] = {
 	{"mp3_dec", SST_CODEC_TYPE_MP3, 0, SST_LIB_NOT_FOUND},
 	{"aac_dec", SST_CODEC_TYPE_AAC, 0, SST_LIB_NOT_FOUND},
-	{"audclass_lib", SST_CODEC_AUDCLASSIFIER, 0, SST_LIB_NOT_FOUND},
+	{"audclass_lib", SST_ALGO_AUDCLASSIFIER, 0, SST_LIB_NOT_FOUND},
+	{"vtsv_lib", SST_ALGO_VTSV, 0, SST_LIB_NOT_FOUND},
 };
 
 /* In relocatable elf file, there can be  relocatable variables and functions.
@@ -1647,7 +1647,7 @@ static void sst_init_lib_mem_mgr(struct sst_mem_mgr *mgr)
 
 #define ALIGN_256 0x100
 
-static int sst_get_next_lib_mem(struct sst_mem_mgr *mgr, int size,
+int sst_get_next_lib_mem(struct sst_mem_mgr *mgr, int size,
 			u32 *lib_base)
 {
 	int retval = 0;
@@ -1770,14 +1770,13 @@ int sst_load_all_modules_elf(struct intel_sst_drv *ctx)
 	int i;
 	const struct firmware *fw_lib;
 	struct sst_module_info *mod = NULL;
-	struct sst_mem_mgr lib_mem_mgr;
 	char *out_elf;
 	unsigned int lib_size = 0;
 	u32 lib_base;
 
 	pr_debug("In %s", __func__);
 
-	sst_init_lib_mem_mgr(&lib_mem_mgr);
+	sst_init_lib_mem_mgr(&ctx->lib_mem_mgr);
 
 	for (i = 0; i < ARRAY_SIZE(sst_modules_mrfld); i++) {
 		mod = &sst_modules_mrfld[i];
@@ -1796,7 +1795,7 @@ int sst_load_all_modules_elf(struct intel_sst_drv *ctx)
 		}
 		pr_debug("elf validated\n");
 		retval = sst_allocate_lib_mem(fw_lib, lib_size,
-				&lib_mem_mgr, &out_elf, &lib_base);
+				&ctx->lib_mem_mgr, &out_elf, &lib_base);
 		if (retval < 0) {
 			pr_err("lib mem allocation failed: %d\n", retval);
 			continue;

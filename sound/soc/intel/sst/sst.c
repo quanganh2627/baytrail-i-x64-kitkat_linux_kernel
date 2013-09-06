@@ -559,6 +559,11 @@ static int __devinit intel_sst_probe(struct pci_dev *pci,
 
 	sst_drv_ctx->stream_cnt = 0;
 	sst_drv_ctx->fw_in_mem = NULL;
+	sst_drv_ctx->vcache.file1_in_mem = NULL;
+	sst_drv_ctx->vcache.file2_in_mem = NULL;
+	sst_drv_ctx->vcache.size1 = 0;
+	sst_drv_ctx->vcache.size2 = 0;
+
 	/* we use dma, so set to 1*/
 	sst_drv_ctx->use_dma = 1;
 	sst_drv_ctx->use_lli = 1;
@@ -1243,6 +1248,7 @@ const struct sst_probe_info intel_byt_info = {
 
 static const struct acpi_device_id sst_acpi_ids[] = {
 	{ "LPE0F28", (kernel_ulong_t) &intel_byt_info },
+	{ "LPE0F281", (kernel_ulong_t) &intel_byt_info },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, sst_acpi_ids);

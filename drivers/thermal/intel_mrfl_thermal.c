@@ -82,8 +82,8 @@
 #define PMIC_DIE_ADC_MAX	661
 #define PMIC_DIE_TEMP_MIN	-40
 #define PMIC_DIE_TEMP_MAX	125
-#define ADC_VAL_27C		503
-#define ADC_COEFFICIENT		619
+#define ADC_VAL_27C		470
+#define ADC_COEFFICIENT		675
 #define TEMP_OFFSET		27000
 
 /* 'enum' of Thermal sensors */

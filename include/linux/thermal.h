@@ -77,6 +77,8 @@ struct thermal_cooling_device_ops {
 								char *);
 	int (*set_force_state_override) (struct thermal_cooling_device *,
 								char *);
+	int (*get_available_states) (struct thermal_cooling_device *,
+								char *);
 };
 
 #define THERMAL_TRIPS_NONE -1
