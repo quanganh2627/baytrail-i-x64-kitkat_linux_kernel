@@ -2449,8 +2449,9 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		I915_MODIFY_DISPBASE(DSPSURF(plane),
 				     obj->gtt_offset + intel_crtc->dspaddr_offset);
 		if (rotate) {
-			I915_WRITE(DSPTILEOFF(plane), ((intel_fb->base.height
-				<< 16) | (intel_fb->base.width)));
+			I915_WRITE(DSPTILEOFF(plane),
+				   (((y + fb->height - 1) << 16) |
+				    (x + fb->width - 1)));
 			I915_WRITE(DSPLINOFF(plane), (intel_fb->base.width *
 				intel_fb->base.height * pixel_size));
 		} else {
