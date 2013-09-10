@@ -1029,7 +1029,7 @@ static unsigned int lnw_get_conf_reg(struct gpio_debug *debug, unsigned gpio)
 {
 	struct lnw_gpio *lnw = debug->private_data;
 	u32 __iomem *mem;
-	u32 offset, value;
+	u32 offset, value = 0;
 
 	if (platform == INTEL_MID_CPU_CHIP_TANGIER) {
 		offset = lnw->get_flis_offset(gpio);
@@ -1272,6 +1272,37 @@ static int __devinit lnw_gpio_probe(struct pci_dev *pdev,
 		goto err5;
 	}
 
+	lnw->irq_base = irq_alloc_descs(-1, lnw->irq_base, lnw->chip.ngpio,
+					NUMA_NO_NODE);
+	if (lnw->irq_base < 0) {
+		dev_err(&pdev->dev, "langwell irq_alloc_desc failed %d\n",
+			lnw->irq_base);
+		goto err5;
+	}
+	irq_set_handler_data(pdev->irq, lnw);
+	irq_set_chained_handler(pdev->irq, lnw_irq_handler);
+	for (i = 0; i < lnw->chip.ngpio; i++) {
+		irq_set_chip_and_handler_name(i + lnw->irq_base, &lnw_irqchip,
+					      handle_edge_irq, "demux");
+		irq_set_chip_data(i + lnw->irq_base, lnw);
+	}
+
+	if (ddata->flis_base) {
+		lnw->flis_base = ioremap_nocache(ddata->flis_base,
+					ddata->flis_len);
+		if (!lnw->flis_base) {
+			dev_err(&pdev->dev, "error mapping flis base\n");
+			retval = -EFAULT;
+			goto err6;
+		}
+	}
+
+	spin_lock_init(&lnw->lock);
+
+	pm_runtime_put_noidle(&pdev->dev);
+	pm_runtime_allow(&pdev->dev);
+
+	/* add for gpiodebug */
 	debug = gpio_debug_alloc();
 	if (debug) {
 		__set_bit(TYPE_OVERRIDE_OUTDIR, debug->typebit);
@@ -1299,41 +1330,9 @@ static int __devinit lnw_gpio_probe(struct pci_dev *pdev,
 		}
 	}
 
-	lnw->irq_base = irq_alloc_descs(-1, lnw->irq_base, lnw->chip.ngpio,
-					NUMA_NO_NODE);
-	if (lnw->irq_base < 0) {
-		dev_err(&pdev->dev, "langwell irq_alloc_desc failed %d\n",
-			lnw->irq_base);
-		goto err6;
-	}
-	irq_set_handler_data(pdev->irq, lnw);
-	irq_set_chained_handler(pdev->irq, lnw_irq_handler);
-	for (i = 0; i < lnw->chip.ngpio; i++) {
-		irq_set_chip_and_handler_name(i + lnw->irq_base, &lnw_irqchip,
-					      handle_edge_irq, "demux");
-		irq_set_chip_data(i + lnw->irq_base, lnw);
-	}
-
-	if (ddata->flis_base) {
-		lnw->flis_base = ioremap_nocache(ddata->flis_base,
-					ddata->flis_len);
-		if (!lnw->flis_base) {
-			dev_err(&pdev->dev, "error mapping flis base\n");
-			retval = -EFAULT;
-			goto err7;
-		}
-	}
-
-	spin_lock_init(&lnw->lock);
-
-	pm_runtime_put_noidle(&pdev->dev);
-	pm_runtime_allow(&pdev->dev);
-
 	goto done;
-err7:
-	irq_free_descs(lnw->irq_base, lnw->chip.ngpio);
 err6:
-	gpio_debug_remove(debug);
+	irq_free_descs(lnw->irq_base, lnw->chip.ngpio);
 err5:
 	kfree(lnw);
 err4:
