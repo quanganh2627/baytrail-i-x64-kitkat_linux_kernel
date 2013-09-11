@@ -160,9 +160,7 @@ static int sst_get_stream_mapping(int dev, int sdev, int dir,
 	const struct sst_lowlatency_deepbuff *ll_db)
 {
 	int index;
-	unsigned long pt = ll_db->period_time;
-	unsigned long ll = *(ll_db->low_latency);
-	unsigned long db = *(ll_db->deep_buffer);
+	unsigned long pt = 0, ll = 0, db = 0;
 
 	if (map == NULL)
 		return -EINVAL;
@@ -184,6 +182,13 @@ static int sst_get_stream_mapping(int dev, int sdev, int dir,
 					map[index].device_id = pipe_id;
 
 				} else if (map[index].dev_num == MERR_SALTBAY_AUDIO) {
+
+					if (!ll_db->low_latency || !ll_db->deep_buffer)
+						return -EINVAL;
+
+					pt = ll_db->period_time;
+					ll = *(ll_db->low_latency);
+					db = *(ll_db->deep_buffer);
 
 					pr_debug("PT %lu LL %lu DB %lu\n", pt, ll, db);
 
