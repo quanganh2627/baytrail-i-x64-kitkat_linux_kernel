@@ -792,7 +792,6 @@ void power_supply_trigger_charging_handler(struct power_supply *psy)
 	if (!psy_chrgr.is_cable_evt_reg || !is_cable_connected())
 		return;
 
-	pr_info("RK: B4 wakeup in %s\n", __func__);
 	wake_up(&psy_chrgr.wait_chrg_enable);
 
 	if (psy)
