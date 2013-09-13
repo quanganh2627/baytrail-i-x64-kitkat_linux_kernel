@@ -494,7 +494,8 @@ static int lnw_irq_type(struct irq_data *d, unsigned type)
 			gpip = gpio_reg(&lnw->chip, gpio, GLPR);
 			break;
 		default:
-			break;
+			ret = -EINVAL;
+			goto out;
 		}
 
 		spin_lock_irqsave(&lnw->lock, flags);
@@ -550,6 +551,7 @@ static int lnw_irq_type(struct irq_data *d, unsigned type)
 		}
 	}
 
+out:
 	if (lnw->pdev)
 		pm_runtime_put(&lnw->pdev->dev);
 

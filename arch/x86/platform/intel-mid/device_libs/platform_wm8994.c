@@ -175,6 +175,7 @@ static struct wm8994_pdata wm8994_pdata = {
 
 	.mic_id_delay = 300, /*300ms delay*/
 	.micdet_delay = 500,
+	.override_rates[0] = 48000,
 };
 
 static int wm8994_get_irq_data(struct wm8994_pdata *pdata,

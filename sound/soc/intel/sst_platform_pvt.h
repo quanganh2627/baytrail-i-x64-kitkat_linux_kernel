@@ -171,6 +171,13 @@ struct sst_algo_int_control_v2 {
 	unsigned int value; /* Value received is stored here */
 };
 
+struct sst_lowlatency_deepbuff {
+	/* Thresholds for low latency & deep buffer */
+	unsigned long	*low_latency;
+	unsigned long	*deep_buffer;
+	unsigned long	period_time;
+};
+
 struct sst_data {
 	struct platform_device *pdev;
 	struct sst_platform_data *pdata;
@@ -182,5 +189,6 @@ struct sst_data {
 	/* Pipe_id for probe_stream to be saved in stream map */
 	u8 pipe_id;
 	bool vtsv_enroll;
+	struct sst_lowlatency_deepbuff ll_db;
 };
 #endif

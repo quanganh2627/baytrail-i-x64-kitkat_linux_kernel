@@ -1749,7 +1749,7 @@ static int pmu_devices_state_show(struct seq_file *s, void *unused)
 	up(&mid_pmu_cxt->scu_ready_sem);
 
 	pmu_stat_seq_printf(s, SYS_STATE_S0I1, "s0i1");
-	pmu_stat_seq_printf(s, SYS_STATE_S0I2, "S0i2");
+	pmu_stat_seq_printf(s, SYS_STATE_S0I2, "s0i2");
 	pmu_stat_seq_printf(s, SYS_STATE_S0I3, "s0i3");
 	pmu_stat_seq_printf(s, SYS_STATE_S3, "s3");
 

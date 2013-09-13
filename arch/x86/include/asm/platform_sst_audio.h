@@ -108,6 +108,8 @@ enum sst_audio_device_id_mrfld {
 	PIPE_PROBE6_IN = 0x98,
 	PIPE_PROBE7_IN = 0x99,
 	PIPE_PROBE8_IN = 0x9A,
+	PIPE_MEDIA3_IN = 0x9C,
+	PIPE_LOW_PCM0_IN = 0x9D,
 	PIPE_RSVD = 0xFF,
 };
 
@@ -128,7 +130,6 @@ struct sst_dev_stream_map {
 struct sst_platform_data {
 	/* Intel software platform id*/
 	const struct soft_platform_id *spid;
-	bool use_strm_map;
 	struct sst_dev_stream_map *pdev_strm_map;
 	unsigned int strm_map_size;
 };

@@ -50,15 +50,17 @@ static struct sst_dev_stream_map merr_bb_strm_map[] = {
 };
 
 static struct sst_dev_stream_map byt_bl_strm_map[] = {
-	{0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, /* Reserved, not in use */
-	{BYT_AUD_AIF1, 0, SNDRV_PCM_STREAM_PLAYBACK, SST_PCM_OUT0, SST_DEV_MAP_IN_USE},
-	{BYT_AUD_AIF1, 1, SNDRV_PCM_STREAM_PLAYBACK, SST_PCM_OUT1, SST_DEV_MAP_IN_USE},
-	{BYT_AUD_AIF1, 0, SNDRV_PCM_STREAM_CAPTURE, SST_CAPTURE_IN, SST_DEV_MAP_IN_USE},
+	{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, /* Reserved, not in use */
+	{BYT_AUD_AIF1, 0, SNDRV_PCM_STREAM_PLAYBACK, SST_PCM_OUT0, SST_TASK_ID_NONE, SST_DEV_MAP_IN_USE},
+	{BYT_AUD_AIF1, 1, SNDRV_PCM_STREAM_PLAYBACK, SST_PCM_OUT1, SST_TASK_ID_NONE, SST_DEV_MAP_IN_USE},
+	{BYT_AUD_AIF1, 0, SNDRV_PCM_STREAM_CAPTURE, SST_CAPTURE_IN, SST_TASK_ID_NONE, SST_DEV_MAP_IN_USE},
 };
 
 static struct sst_dev_stream_map mrfld_strm_map[] = {
 	{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, /* Reserved, not in use */
-	{MERR_SALTBAY_AUDIO, 0, SNDRV_PCM_STREAM_PLAYBACK, PIPE_MEDIA1_IN, SST_TASK_ID_MEDIA, SST_DEV_MAP_IN_USE},
+	{MERR_SALTBAY_AUDIO, 0, SNDRV_PCM_STREAM_PLAYBACK, PIPE_RSVD, SST_TASK_ID_MEDIA, SST_DEV_MAP_FREE},
+	{MERR_SALTBAY_AUDIO, 1, SNDRV_PCM_STREAM_PLAYBACK, PIPE_RSVD, SST_TASK_ID_MEDIA, SST_DEV_MAP_FREE},
+	{MERR_SALTBAY_AUDIO, 2, SNDRV_PCM_STREAM_PLAYBACK, PIPE_RSVD, SST_TASK_ID_MEDIA, SST_DEV_MAP_FREE},
 	{MERR_SALTBAY_COMPR, 0, SNDRV_PCM_STREAM_PLAYBACK, PIPE_MEDIA0_IN, SST_TASK_ID_MEDIA, SST_DEV_MAP_IN_USE},
 	{MERR_SALTBAY_VOIP, 0, SNDRV_PCM_STREAM_PLAYBACK, PIPE_VOIP_IN, SST_TASK_ID_MEDIA, SST_DEV_MAP_IN_USE},
 	{MERR_SALTBAY_PROBE, 0, SNDRV_PCM_STREAM_PLAYBACK, PIPE_RSVD, SST_TASK_ID_MEDIA, SST_DEV_MAP_FREE},
@@ -85,8 +87,6 @@ static struct sst_dev_stream_map mrfld_strm_map[] = {
 
 static void set_ctp_platform_config(void)
 {
-	sst_platform_pdata.use_strm_map = true;
-
 	/* FIX ME: SPID for PRh is not yet available */
 #ifdef CONFIG_PRH_TEMP_WA_FOR_SPID
 	sst_platform_pdata.pdev_strm_map = merr_bb_strm_map;
@@ -112,14 +112,12 @@ static void set_ctp_platform_config(void)
 
 static void set_byt_platform_config(void)
 {
-	sst_platform_pdata.use_strm_map = true;
 	sst_platform_pdata.pdev_strm_map = byt_bl_strm_map;
 	sst_platform_pdata.strm_map_size =  ARRAY_SIZE(byt_bl_strm_map);
 }
 
 static void set_mrfld_platform_config(void)
 {
-	sst_platform_pdata.use_strm_map = true;
 	sst_platform_pdata.pdev_strm_map = mrfld_strm_map;
 	sst_platform_pdata.strm_map_size = ARRAY_SIZE(mrfld_strm_map);
 }

@@ -35,6 +35,7 @@
 #include <sound/soc.h>
 #include <sound/intel_sst_ioctl.h>
 #include <asm/platform_sst_audio.h>
+#include <asm/intel_sst_mrfld.h>
 #include <asm/intel-mid.h>
 #include "platform_ipc_v2.h"
 #include "sst_platform.h"
@@ -150,13 +151,21 @@ static void sst_fill_pcm_params(struct snd_pcm_substream *substream,
 
 }
 
+#define ASSIGN_PIPE_ID(periodtime, lowlatency, deepbuffer) \
+	((periodtime) <= (lowlatency) ? PIPE_LOW_PCM0_IN : \
+	((periodtime) >= (deepbuffer) ? PIPE_MEDIA3_IN : PIPE_MEDIA1_IN))
+
 static int sst_get_stream_mapping(int dev, int sdev, int dir,
-	struct sst_dev_stream_map *map, int size, u8 pipe_id)
+	struct sst_dev_stream_map *map, int size, u8 pipe_id,
+	const struct sst_lowlatency_deepbuff *ll_db)
 {
 	int index;
+	unsigned long pt = 0, ll = 0, db = 0;
 
 	if (map == NULL)
 		return -EINVAL;
+
+	pr_debug("dev %d sdev %d dir %d\n", dev, sdev, dir);
 
 	/* index 0 is not used in stream map */
 	for (index = 1; index < size; index++) {
@@ -168,8 +177,26 @@ static int sst_get_stream_mapping(int dev, int sdev, int dir,
 				return index;
 			} else if (map[index].status == SST_DEV_MAP_FREE) {
 				map[index].status = SST_DEV_MAP_IN_USE;
-				map[index].device_id = pipe_id;
-				pr_debug("%s: pipe_id %d index %d", __func__, pipe_id, index);
+
+				if (map[index].dev_num == MERR_SALTBAY_PROBE) {
+					map[index].device_id = pipe_id;
+
+				} else if (map[index].dev_num == MERR_SALTBAY_AUDIO) {
+
+					if (!ll_db->low_latency || !ll_db->deep_buffer)
+						return -EINVAL;
+
+					pt = ll_db->period_time;
+					ll = *(ll_db->low_latency);
+					db = *(ll_db->deep_buffer);
+
+					pr_debug("PT %lu LL %lu DB %lu\n", pt, ll, db);
+
+					map[index].device_id = ASSIGN_PIPE_ID(pt,
+								ll, db);
+				}
+				pr_debug("%s: pipe_id 0%x index %d", __func__,
+						map[index].device_id, index);
 
 				return index;
 			}
@@ -181,14 +208,12 @@ static int sst_get_stream_mapping(int dev, int sdev, int dir,
 int sst_fill_stream_params(void *substream,
 	const struct sst_data *ctx, struct snd_sst_params *str_params, bool is_compress)
 {
-	bool use_strm_map;
 	int map_size;
 	int index;
 	struct sst_dev_stream_map *map;
 	struct snd_pcm_substream *pstream = NULL;
 	struct snd_compr_stream *cstream = NULL;
 
-	use_strm_map = ctx->pdata->use_strm_map;
 	map = ctx->pdata->pdev_strm_map;
 	map_size = ctx->pdata->strm_map_size;
 
@@ -201,58 +226,47 @@ int sst_fill_stream_params(void *substream,
 
 	/* For pcm streams */
 	if (pstream) {
-		if (use_strm_map) {
-			index = sst_get_stream_mapping(pstream->pcm->device,
-						  pstream->number, pstream->stream,
-						  map, map_size, ctx->pipe_id);
-			if (index <= 0)
-				return -EINVAL;
+		index = sst_get_stream_mapping(pstream->pcm->device,
+					  pstream->number, pstream->stream,
+					  map, map_size, ctx->pipe_id, &ctx->ll_db);
+		if (index <= 0)
+			return -EINVAL;
 
-			str_params->stream_id = index;
-			str_params->device_type = map[index].device_id;
-			str_params->task = map[index].task_id;
+		str_params->stream_id = index;
+		str_params->device_type = map[index].device_id;
+		str_params->task = map[index].task_id;
 
-			if (str_params->device_type == SST_PROBE_IN)
-				str_params->stream_type = SST_STREAM_TYPE_PROBE;
+		if (str_params->device_type == SST_PROBE_IN)
+			str_params->stream_type = SST_STREAM_TYPE_PROBE;
 
-			pr_debug("str_id = %d, device_type = %d, task = %d",
-				 str_params->stream_id, str_params->device_type,
-				 str_params->task);
-		} else {
-			if (pstream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-				str_params->device_type = pstream->pcm->device + 1;
-				pr_debug("Playback stream, Device %d\n",
-						pstream->pcm->device);
-			} else {
-				str_params->device_type = SND_SST_DEVICE_CAPTURE;
-				pr_debug("Capture stream, Device %d\n",
-						pstream->pcm->device);
-			}
-		}
+		pr_debug("str_id = %d, device_type = 0x%x, task = %d",
+			 str_params->stream_id, str_params->device_type,
+			 str_params->task);
+
 		str_params->ops = (u8)pstream->stream;
 	}
 
 	if (cstream) {
-		if (use_strm_map) {
-			/* FIXME: Add support for subdevice number in
-			 * snd_compr_stream */
-			index = sst_get_stream_mapping(cstream->device->device,
-						       0, cstream->direction,
-						       map, map_size, ctx->pipe_id);
-			if (index <= 0)
-				return -EINVAL;
-			str_params->stream_id = index;
-			str_params->device_type = map[index].device_id;
-			str_params->task = map[index].task_id;
-			pr_debug("compress str_id = %d, device_type = %d, task = %d",
-				 str_params->stream_id, str_params->device_type,
-				 str_params->task);
+		/* FIXME: Add support for subdevice number in
+		 * snd_compr_stream */
+		index = sst_get_stream_mapping(cstream->device->device,
+					       0, cstream->direction,
+					       map, map_size, ctx->pipe_id, &ctx->ll_db);
+		if (index <= 0)
+			return -EINVAL;
+		str_params->stream_id = index;
+		str_params->device_type = map[index].device_id;
+		str_params->task = map[index].task_id;
+		pr_debug("compress str_id = %d, device_type = 0x%x, task = %d",
+			 str_params->stream_id, str_params->device_type,
+			 str_params->task);
 
-		}
 		str_params->ops = (u8)cstream->direction;
 	}
 	return 0;
 }
+
+#define CALC_PERIODTIME(period_size, rate) (((period_size) * 1000) / (rate))
 
 static int sst_platform_alloc_stream(struct snd_pcm_substream *substream,
 		struct snd_soc_platform *platform)
@@ -272,17 +286,23 @@ static int sst_platform_alloc_stream(struct snd_pcm_substream *substream,
 	str_params.sparams = param;
 	str_params.aparams = alloc_params;
 	str_params.codec = SST_CODEC_TYPE_PCM;
+
+	ctx->ll_db.period_time = CALC_PERIODTIME(substream->runtime->period_size,
+					substream->runtime->rate);
+
 	/* fill the device type and stream id to pass to SST driver */
 	ret_val = sst_fill_stream_params(substream, ctx, &str_params, false);
 	pr_debug("platform prepare: fill stream params ret_val = 0x%x\n", ret_val);
 	if (ret_val < 0)
 		return ret_val;
 
+	stream->stream_info.str_id = str_params.stream_id;
+
 	ret_val = stream->ops->open(&str_params);
 	pr_debug("platform prepare: stream open ret_val = 0x%x\n", ret_val);
 	if (ret_val <= 0)
 		return ret_val;
-	stream->stream_info.str_id = ret_val;
+
 	pr_debug("platform allocated strid:  %d\n", stream->stream_info.str_id);
 
 	return ret_val;
@@ -405,15 +425,19 @@ static void sst_media_close(struct snd_pcm_substream *substream,
 	if (str_id)
 		ret_val = stream->ops->close(str_id);
 
-	if (strstr(dai->name, SST_PROBE_DAI)) {
+	if ((map[str_id].dev_num == MERR_SALTBAY_AUDIO) || (map[str_id].dev_num == MERR_SALTBAY_PROBE)) {
+
+		/* Do nothing in capture for audio device */
+		if ((map[str_id].dev_num == MERR_SALTBAY_AUDIO) && (map[str_id].direction == SNDRV_PCM_STREAM_CAPTURE))
+			goto exit;
 		if ((map[str_id].task_id == SST_TASK_ID_MEDIA) &&
 			(map[str_id].status == SST_DEV_MAP_IN_USE)) {
-				pr_debug("str_id %d deviced_id %d\n", str_id, map[str_id].device_id);
+				pr_debug("str_id %d device_id 0x%x\n", str_id, map[str_id].device_id);
 				map[str_id].status = SST_DEV_MAP_FREE;
 				map[str_id].device_id = PIPE_RSVD;
 		}
 	}
-
+exit:
 	module_put(sst_dsp->dev->driver->owner);
 	kfree(stream);
 	pr_debug("%s: %d\n", __func__, ret_val);

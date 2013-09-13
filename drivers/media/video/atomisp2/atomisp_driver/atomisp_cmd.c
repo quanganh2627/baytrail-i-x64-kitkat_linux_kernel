@@ -29,7 +29,7 @@
 #include <linux/timer.h>
 
 #include <asm/intel-mid.h>
-#include <linux/intel_mid_pm.h>
+
 #include <media/v4l2-event.h>
 #include <media/videobuf-vmalloc.h>
 
@@ -363,24 +363,6 @@ int atomisp_reset(struct atomisp_device *isp)
 	if (ret < 0) {
 		dev_err(isp->dev, "can not disable ISP power\n");
 	} else {
-		/*
-		 * For BYT, to avoid ISP pci config register being accessed
-		 * by PCI runtime driver when ISP is power down, the hw
-		 * power down operation is done after runtime suspend,
-		 * and the hw power up operation is done before runtime
-		 * resume
-		 */
-		if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_VALLEYVIEW2) {
-			if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
-					OSPM_ISLAND_DOWN, MRFLD_ISPSSPM0)) {
-					dev_err(isp->dev, "Failed to power off device\n");
-					return ret;
-			} else if (pmu_nc_set_power_state(TNG_ISP_ISLAND,
-						OSPM_ISLAND_UP, MRFLD_ISPSSPM0)) {
-				dev_err(isp->dev, "Failed to power on device\n");
-				return ret;
-			}
-		}
 		ret = pm_runtime_get_sync(isp->dev);
 		if (ret < 0)
 			dev_err(isp->dev, "can not enable ISP power\n");
@@ -3088,9 +3070,6 @@ int atomisp_try_fmt(struct video_device *vdev, struct v4l2_format *f,
 	struct v4l2_mbus_framefmt snr_mbus_fmt;
 	const struct atomisp_format_bridge *fmt;
 	int ret;
-#ifdef CONFIG_VIDEO_ATOMISP_CSS20
-	uint16_t source_pad = atomisp_subdev_source_pad(vdev);
-#endif
 
 	if (isp->inputs[asd->input_curr].camera == NULL)
 		return -EINVAL;
@@ -3119,26 +3098,6 @@ int atomisp_try_fmt(struct video_device *vdev, struct v4l2_format *f,
 	snr_mbus_fmt.width = f->fmt.pix.width;
 	snr_mbus_fmt.height = f->fmt.pix.height;
 
-#ifdef CONFIG_VIDEO_ATOMISP_CSS20
-	if (asd->continuous_mode->val &&
-	    source_pad != ATOMISP_SUBDEV_PAD_SOURCE_PREVIEW) {
-		if (f->fmt.pix.width != 0 && f->fmt.pix.height != 0
-		    && f->fmt.pix.width * f->fmt.pix.height <
-		    3264 * 2448) {
-			snr_mbus_fmt.width = 3264;
-			snr_mbus_fmt.height =
-			    DIV_ROUND_UP(3264 * f->fmt.pix.height,
-					 f->fmt.pix.width);
-			if (snr_mbus_fmt.height > 2448) {
-				snr_mbus_fmt.height = 2448;
-				snr_mbus_fmt.width =
-				    DIV_ROUND_UP(2448 *
-						 f->fmt.pix.width,
-						 f->fmt.pix.height);
-			}
-		}
-	}
-#endif
 	dev_dbg(isp->dev, "try_mbus_fmt: asking for %ux%u\n",
 		snr_mbus_fmt.width, snr_mbus_fmt.height);
 
@@ -3590,8 +3549,7 @@ static void atomisp_get_dis_envelop(struct atomisp_sub_device *asd,
 static int atomisp_set_fmt_to_snr(struct atomisp_sub_device *asd,
 			  struct v4l2_format *f, unsigned int pixelformat,
 			  unsigned int padding_w, unsigned int padding_h,
-			  unsigned int dvs_env_w, unsigned int dvs_env_h,
-			  uint16_t source_pad)
+			  unsigned int dvs_env_w, unsigned int dvs_env_h)
 {
 	const struct atomisp_format_bridge *format;
 	struct v4l2_mbus_framefmt ffmt;
@@ -3603,25 +3561,6 @@ static int atomisp_set_fmt_to_snr(struct atomisp_sub_device *asd,
 		return -EINVAL;
 
 	v4l2_fill_mbus_format(&ffmt, &f->fmt.pix, format->mbus_code);
-#ifdef CONFIG_VIDEO_ATOMISP_CSS20
-	if (asd->continuous_mode->val &&
-	    source_pad != ATOMISP_SUBDEV_PAD_SOURCE_PREVIEW) {
-		if (f->fmt.pix.width * f->fmt.pix.height <
-		    2448 * 3264) {
-			ffmt.width = 3264;
-			ffmt.height =
-			    DIV_ROUND_UP(3264 * f->fmt.pix.height,
-					 f->fmt.pix.width);
-			if (ffmt.height > 2448) {
-				ffmt.height = 2448;
-				ffmt.width =
-				    DIV_ROUND_UP(2448 *
-						 f->fmt.pix.width,
-						 f->fmt.pix.height);
-			}
-		}
-	}
-#endif
 	ffmt.height += padding_h + dvs_env_h;
 	ffmt.width += padding_w + dvs_env_w;
 
@@ -3658,7 +3597,7 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 	struct v4l2_format snr_fmt = *f;
 	unsigned int dvs_env_w = 0, dvs_env_h = 0;
 	unsigned int padding_w = pad_w, padding_h = pad_h;
-	bool res_overflow = false;
+	bool res_overflow = false, crop_needs_override = false;
 	struct v4l2_mbus_framefmt isp_sink_fmt;
 	struct v4l2_mbus_framefmt isp_source_fmt = {0};
 	struct v4l2_rect isp_sink_crop;
@@ -3803,15 +3742,16 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 	 */
 	if (!asd->continuous_mode->val ||
 	    asd->run_mode->val == ATOMISP_RUN_MODE_VIDEO ||
-	    (isp_sink_fmt.width < (f->fmt.pix.width + padding_w + dvs_env_w) &&
+	    isp_sink_fmt.width < (f->fmt.pix.width + padding_w + dvs_env_w) ||
 	     isp_sink_fmt.height < (f->fmt.pix.height + padding_h +
-				    dvs_env_h))) {
+				    dvs_env_h)) {
 		ret = atomisp_set_fmt_to_snr(asd, f, f->fmt.pix.pixelformat,
 					     padding_w, padding_h,
-					     dvs_env_w, dvs_env_h,
-					     source_pad);
+					     dvs_env_w, dvs_env_h);
 		if (ret)
 			return -EINVAL;
+
+		crop_needs_override = true;
 	}
 
 	isp_sink_crop = *atomisp_subdev_get_rect(&asd->subdev, NULL,
@@ -3826,8 +3766,25 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 	    (atomisp_subdev_format_conversion(asd, source_pad) &&
 	     (asd->run_mode->val == ATOMISP_RUN_MODE_VIDEO ||
 	      asd->vfpp->val == ATOMISP_VFPP_DISABLE_SCALER))) {
-		isp_sink_crop.width = f->fmt.pix.width;
-		isp_sink_crop.height = f->fmt.pix.height;
+		/* for continuous mode, preview size might be smaller than
+		 * still capture size. if preview size still needs crop,
+		 * pick the larger one between crop size of preview and
+		 * still capture.
+		 */
+		if (asd->continuous_mode->val
+		    && source_pad == ATOMISP_SUBDEV_PAD_SOURCE_PREVIEW
+		    && !crop_needs_override) {
+			isp_sink_crop.width =
+				max_t(unsigned int, f->fmt.pix.width,
+				      isp_sink_crop.width);
+			isp_sink_crop.height =
+				max_t(unsigned int, f->fmt.pix.height,
+				      isp_sink_crop.height);
+		} else {
+			isp_sink_crop.width = f->fmt.pix.width;
+			isp_sink_crop.height = f->fmt.pix.height;
+		}
+
 		atomisp_subdev_set_selection(&asd->subdev, NULL,
 					     V4L2_SUBDEV_FORMAT_ACTIVE,
 					     ATOMISP_SUBDEV_PAD_SINK,

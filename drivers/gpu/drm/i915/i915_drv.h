@@ -438,8 +438,14 @@ struct intel_hangcheck {
 	unsigned long last_reset;
 
 	/* Number of times this ring has been
-	* reset since boot*/
+	* reset since boot (TDR and watchdog)*/
 	uint32_t total;
+
+	/* Number of TDR hang detections for this ring */
+	uint32_t tdr_count;
+
+	/* Number of watchdog hang detections for this ring */
+	uint32_t watchdog_count;
 };
 
 
@@ -1047,6 +1053,8 @@ typedef struct drm_i915_private {
 	uint32_t watchdog_threshold[I915_NUM_RINGS];
 
 	int shut_down_state;
+	bool is_resuming;
+	bool is_turbo_enabled;
 } drm_i915_private_t;
 
 /* Iterate over initialised rings */

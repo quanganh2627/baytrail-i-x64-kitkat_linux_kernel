@@ -1236,7 +1236,7 @@ struct ov9724_resolution ov9724_res_preview[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 2,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "ov9724_736_496_30fps",
@@ -1249,7 +1249,7 @@ struct ov9724_resolution ov9724_res_preview[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 2,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "ov9724_720p_30fps",
@@ -1262,7 +1262,7 @@ struct ov9724_resolution ov9724_res_preview[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 2,
+		.skip_frames = 0,
 	},
 
 };
@@ -1323,7 +1323,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 1,
 		.bin_factor_y = 1,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "VGA_strong_dvs_30fps",
@@ -1336,7 +1336,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "VGA_strong_dvs_30fps",
@@ -1349,7 +1349,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "VGA_strong_dvs_30fps",
@@ -1362,7 +1362,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "VGA_strong_dvs_30fps",
@@ -1375,7 +1375,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 	{
 		.desc = "ov9724_720p_30fps",
@@ -1388,7 +1388,7 @@ struct ov9724_resolution ov9724_res_video[] = {
 		.bin_factor_x = 0,
 		.bin_factor_y = 0,
 		.used = 0,
-		.skip_frames = 3,
+		.skip_frames = 0,
 	},
 };
 #define N_RES_VIDEO (ARRAY_SIZE(ov9724_res_video))

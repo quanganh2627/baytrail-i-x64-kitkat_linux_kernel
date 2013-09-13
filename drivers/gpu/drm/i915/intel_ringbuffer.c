@@ -216,7 +216,7 @@ gen6_render_ring_flush(struct intel_ring_buffer *ring,
 	u32 flags = 0;
 	struct pipe_control *pc = ring->private;
 	u32 scratch_addr = pc->gtt_offset + 128;
-	int ret, i;
+	int ret;
 
 	/* Just flush everything.  Experiments have shown that reducing the
 	 * number of bits based on the write domains has little performance
@@ -379,6 +379,10 @@ static int init_ring_common(struct intel_ring_buffer *ring)
 		ring->last_retired_head = -1;
 	}
 
+	/* invalidate TLB */
+	if (ring->invalidate_tlb)
+		ring->invalidate_tlb(ring);
+
 out:
 	/* TBD: Wake up relevant engine based on ring type */
 	if (HAS_FORCE_WAKE(dev))
@@ -506,7 +510,7 @@ static int init_render_ring(struct intel_ring_buffer *ring)
 			!!(I915_READ(GFX_MODE) & GFX_TLB_INVALIDATE_ALWAYS);
 	}
 
-	if ((INTEL_INFO(dev)->gen >= 6) && !(IS_VALLEYVIEW(dev)))
+	if (INTEL_INFO(dev)->gen >= 6)
 		I915_WRITE(INSTPM, _MASKED_BIT_ENABLE(INSTPM_FORCE_ORDERING));
 
 	imr = ~0;
@@ -1081,6 +1085,41 @@ err:
 	return ret;
 }
 
+/* gen6_ring_invalidate_tlb
+ * GFX soft resets do not invalidate TLBs, it is up to
+ * GFX driver to explicitly invalidate TLBs post reset.
+ */
+static int gen6_ring_invalidate_tlb(struct intel_ring_buffer *ring)
+{
+	struct drm_device *dev = ring->dev;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	u32 reg;
+	int ret;
+
+	if ((INTEL_INFO(dev)->gen < 6) || (!ring->stop) || (!ring->start))
+		return -EINVAL;
+
+	/* stop the ring before sync_flush */
+	ret = ring->stop(ring);
+	if ((ret) && (ret != -EALREADY))
+		DRM_ERROR("%s: unable to stop the ring\n", ring->name);
+
+	/* Invalidate TLB */
+	reg = RING_INSTPM(ring->mmio_base);
+	I915_WRITE(reg, _MASKED_BIT_ENABLE(INSTPM_TLB_INVALIDATE |
+				INSTPM_SYNC_FLUSH));
+	if (wait_for((I915_READ(reg) & INSTPM_SYNC_FLUSH) == 0, 1000))
+		DRM_ERROR("%s: wait for SyncFlush to complete timed out\n",
+				ring->name);
+
+	/* only start if stop was sucessfull */
+	if (!ret)
+		ring->start(ring);
+
+	return 0;
+}
+
+
 static int intel_init_ring_buffer(struct drm_device *dev,
 				  struct intel_ring_buffer *ring)
 {
@@ -1561,6 +1600,42 @@ static int blt_ring_flush(struct intel_ring_buffer *ring,
 	return 0;
 }
 
+static int
+gen6_ring_stop(struct intel_ring_buffer *ring)
+{
+	struct drm_device *dev = ring->dev;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	uint32_t mi_mode;
+
+	/* check if ring is already stopped */
+	if (I915_READ_MODE(ring) & MODE_STOP)
+		return -EALREADY;
+
+	/* Request the ring to go idle */
+	I915_WRITE_MODE(ring, _MASKED_BIT_ENABLE(MODE_STOP));
+
+	/* Wait for idle */
+	if (wait_for_atomic((I915_READ_MODE(ring) & MODE_IDLE) != 0, 1000)) {
+		DRM_ERROR("%s :timed out trying to stop ring", ring->name);
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int
+gen6_ring_start(struct intel_ring_buffer *ring)
+{
+	struct drm_device *dev = ring->dev;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	uint32_t mode;
+
+	/* Clear the MI_MODE stop bit */
+	I915_WRITE_MODE(ring, _MASKED_BIT_DISABLE(MODE_STOP));
+	mode = I915_READ_MODE(ring);    /* Barrier read */
+
+	return 0;
+}
 
 int intel_ring_disable(struct intel_ring_buffer *ring)
 {
@@ -1571,7 +1646,6 @@ int intel_ring_disable(struct intel_ring_buffer *ring)
 		return -EINVAL;
 	}
 }
-
 
 static int
 gen6_ring_disable(struct intel_ring_buffer *ring)
@@ -1640,8 +1714,16 @@ gen6_ring_enable(struct intel_ring_buffer *ring)
 
 int intel_ring_reset(struct intel_ring_buffer *ring)
 {
-	if (ring && ring->reset)
-		return ring->reset(ring);
+	if (ring && ring->reset) {
+		int ret = ring->reset(ring);
+		/* invalidate TLB, if we got reset due to TLB giving
+		 * stale addr (after soft reset) for HW status page,
+		 * resulting in seqno not getting updated.
+		 */
+		if (ring->invalidate_tlb)
+			ring->invalidate_tlb(ring);
+		return ret;
+	}
 	else {
 		DRM_ERROR("ring reset not supported\n");
 		return -EINVAL;
@@ -1984,8 +2066,6 @@ gen6_ring_restore(struct intel_ring_buffer *ring, uint32_t *data,
 	return 0;
 }
 
-
-
 int intel_init_render_ring_buffer(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
@@ -2008,9 +2088,12 @@ int intel_init_render_ring_buffer(struct drm_device *dev)
 		ring->sync_to = gen6_ring_sync;
 		ring->enable = gen6_ring_enable;
 		ring->disable = gen6_ring_disable;
+		ring->start = gen6_ring_start;
+		ring->stop = gen6_ring_stop;
 		ring->reset = gen6_ring_reset;
 		ring->save = gen6_ring_save;
 		ring->restore = gen6_ring_restore;
+		ring->invalidate_tlb = gen6_ring_invalidate_tlb;
 		ring->semaphore_register[0] = MI_SEMAPHORE_SYNC_INVALID;
 		ring->semaphore_register[1] = MI_SEMAPHORE_SYNC_RV;
 		ring->semaphore_register[2] = MI_SEMAPHORE_SYNC_RB;
@@ -2058,10 +2141,6 @@ int intel_init_render_ring_buffer(struct drm_device *dev)
 	}
 
 	ret = intel_init_ring_buffer(dev, ring);
-	/* Invalidate TLB */
-	if (!ret)
-		I915_WRITE(RING_INSTPM(ring->mmio_base),
-					RCS_RING_TLB_INVALIDATE_VAL);
 
 	return ret;
 }
@@ -2158,9 +2237,12 @@ int intel_init_bsd_ring_buffer(struct drm_device *dev)
 		ring->sync_to = gen6_ring_sync;
 		ring->enable = gen6_ring_enable;
 		ring->disable = gen6_ring_disable;
+		ring->start = gen6_ring_start;
+		ring->stop = gen6_ring_stop;
 		ring->reset = gen6_ring_reset;
 		ring->save = gen6_ring_save;
 		ring->restore = gen6_ring_restore;
+		ring->invalidate_tlb = gen6_ring_invalidate_tlb;
 		ring->semaphore_register[0] = MI_SEMAPHORE_SYNC_VR;
 		ring->semaphore_register[1] = MI_SEMAPHORE_SYNC_INVALID;
 		ring->semaphore_register[2] = MI_SEMAPHORE_SYNC_VB;
@@ -2189,11 +2271,6 @@ int intel_init_bsd_ring_buffer(struct drm_device *dev)
 
 	ret = intel_init_ring_buffer(dev, ring);
 
-	/* Invalidate TLB */
-	if (!ret)
-		I915_WRITE(RING_INSTPM(ring->mmio_base),
-					BSD_RING_TLB_INVALIDATE_VAL);
-
 	return ret;
 }
 
@@ -2218,9 +2295,12 @@ int intel_init_blt_ring_buffer(struct drm_device *dev)
 	ring->sync_to = gen6_ring_sync;
 	ring->enable = gen6_ring_enable;
 	ring->disable = gen6_ring_disable;
+	ring->start = gen6_ring_start;
+	ring->stop = gen6_ring_stop;
 	ring->reset = gen6_ring_reset;
 	ring->save = gen6_ring_save;
 	ring->restore = gen6_ring_restore;
+	ring->invalidate_tlb = gen6_ring_invalidate_tlb;
 	ring->semaphore_register[0] = MI_SEMAPHORE_SYNC_BR;
 	ring->semaphore_register[1] = MI_SEMAPHORE_SYNC_BV;
 	ring->semaphore_register[2] = MI_SEMAPHORE_SYNC_INVALID;
@@ -2229,10 +2309,6 @@ int intel_init_blt_ring_buffer(struct drm_device *dev)
 	ring->init = init_ring_common;
 
 	ret = intel_init_ring_buffer(dev, ring);
-	/* Invalidate TLB */
-	if (!ret)
-		I915_WRITE(RING_INSTPM(ring->mmio_base),
-					BLT_RING_TLB_INVALIDATE_VAL);
 
 	return ret;
 }

@@ -956,6 +956,9 @@ static int i915_drm_thaw(struct drm_device *dev, bool is_hibernate_restore)
 		dev_priv->mm.suspended = 0;
 
 		error = i915_gem_init_hw(dev);
+		if (error)
+			DRM_ERROR("get_init_hw failed with error %x\n", error);
+
 		mutex_unlock(&dev->struct_mutex);
 
 		intel_modeset_init_hw(dev);
@@ -1145,7 +1148,6 @@ static void valleyview_power_ungate_disp(struct drm_i915_private *dev_priv)
 			OSPM_ISLAND_UP, VLV_IOSFSB_PWRGT_CNT_CTRL);
 }
 
-
 static void display_cancel_works(struct drm_device *drm_dev)
 {
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
@@ -1294,6 +1296,7 @@ static int valleyview_thaw(struct drm_device *dev, bool is_hibernate_restore)
 	int error = 0;
 	u32 reg;
 
+	dev_priv->is_resuming = true;
 	/* Only restore if it is resuming from hibernate */
 	if (is_hibernate_restore) {
 		if (drm_core_check_feature(dev, DRIVER_MODESET)) {
@@ -1348,6 +1351,9 @@ static int valleyview_thaw(struct drm_device *dev, bool is_hibernate_restore)
 		dev_priv->mm.suspended = 0;
 
 		error = i915_gem_init_hw(dev);
+		if (error)
+			DRM_ERROR("get_init_hw failed with error %x\n", error);
+
 		mutex_unlock(&dev->struct_mutex);
 
 		intel_modeset_init_hw(dev);

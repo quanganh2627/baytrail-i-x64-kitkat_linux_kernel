@@ -316,12 +316,35 @@ show_disable_pm(struct device *_dev, struct device_attribute *attr, char *buf)
 static DEVICE_ATTR(disable_pm, S_IRUGO|S_IWUSR|S_IWGRP,\
 			show_disable_pm, store_disable_pm);
 
+/* Read USB2 PHY internal register as one WA.
+ * Without it, USB2 PHY is sucks. and cause
+ * xHCI can't detect anything.
+ */
+static void tng_b0_workaround(struct usb_hcd *hcd)
+{
+	struct usb_phy		*phy;
+	u32 val = 0;
+	phy = usb_get_transceiver();
+
+	if (!phy) {
+		printk(KERN_ERR "usb_get_transceiver return NULL!\n");
+		return;
+	} else {
+		val = usb_phy_io_read(phy, TUSB1211_VENDOR_ID_LO);
+		if (val < 0)
+			printk(KERN_ERR "ulpi read error!\n");
+		else
+			printk(KERN_ERR "%s: USB2 PHY Vendor ID low = 0x%x",
+					__func__, val);
+	}
+	usb_put_transceiver(phy);
+}
+
 static int xhci_start_host(struct usb_hcd *hcd)
 {
 	int ret = -EINVAL;
 	struct xhci_hcd *xhci;
 	struct usb_hcd *xhci_shared_hcd;
-
 
 	if (!hcd) {
 		printk(KERN_DEBUG "%s() - NULL pointer returned", __func__);
@@ -338,6 +361,7 @@ static int xhci_start_host(struct usb_hcd *hcd)
 	dwc_core_reset(hcd);
 	dwc_set_host_mode(hcd);
 	dwc_disable_ssphy_p3(hcd);
+	tng_b0_workaround(hcd);
 
 	ret = usb_add_hcd(hcd, otg_irqnum, IRQF_DISABLED | IRQF_SHARED);
 	if (ret)

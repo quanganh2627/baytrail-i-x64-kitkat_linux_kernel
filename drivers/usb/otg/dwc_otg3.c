@@ -898,6 +898,7 @@ static int dwc_otg_set_power(struct usb_phy *_otg,
 			otg_dbg(otg, "schedule discon work\n");
 			schedule_delayed_work(&otg->suspend_discon_work,
 				SUSPEND_DISCONNECT_TIMEOUT);
+			return 0;
 		}
 
 		/* mA is zero mean D+/D- opened cable.
@@ -933,14 +934,19 @@ static int dwc_otg_set_power(struct usb_phy *_otg,
 
 		if (otg->otg_data->is_byt) {
 			otg_dbg(otg, "cancel discon work\n");
-			cancel_delayed_work(&otg->suspend_discon_work);
+			__cancel_delayed_work(&otg->suspend_discon_work);
 		}
 		return 0;
 	} else if (mA == OTG_DEVICE_RESET) {
 		if (otg->otg_data->is_byt) {
 			otg_dbg(otg, "cancel discon work\n");
-			cancel_delayed_work(&otg->suspend_discon_work);
+			__cancel_delayed_work(&otg->suspend_discon_work);
 		}
+		return 0;
+	}
+
+	if (otg->otg_data->is_byt) {
+		otg_dbg(otg, "BYT: don't do notification to EM\n");
 		return 0;
 	}
 
@@ -1429,7 +1435,7 @@ static int do_b_peripheral(struct dwc_otg2 *otg)
 
 		if (otg->otg_data->is_byt) {
 			otg_dbg(otg, "cancel discon work\n");
-			cancel_delayed_work(&otg->suspend_discon_work);
+			__cancel_delayed_work(&otg->suspend_discon_work);
 		}
 		return DWC_STATE_INIT;
 	}
@@ -1492,23 +1498,25 @@ static int dwc_otg_handle_notification(struct notifier_block *nb,
 /* This function will control VUSBPHY to power gate/ungate USBPHY */
 static int enable_usb_phy(struct dwc_otg2 *otg, bool on_off)
 {
+	struct intel_dwc_otg_pdata *otg_data = otg->otg_data;
 	int ret;
 
-	if (otg->otg_data->is_byt && otg->otg_data->gpio_cs
-		&& otg->otg_data->gpio_reset) {
-		if (on_off) {
-			/* Turn ON phy via CS pin */
-			gpio_direction_output(otg->otg_data->gpio_cs, 1);
-			usleep_range(200, 300);
+	if (otg_data->is_byt) {
+		if (otg_data->gpio_cs && otg_data->gpio_reset) {
+			if (on_off) {
+				/* Turn ON phy via CS pin */
+				gpio_direction_output(otg_data->gpio_cs, 1);
+				usleep_range(200, 300);
 
-			/* Do PHY reset after enable the PHY */
-			gpio_direction_output(otg->otg_data->gpio_reset, 0);
-			usleep_range(200, 500);
-			gpio_set_value(otg->otg_data->gpio_reset, 1);
-			msleep(30);
-		} else {
-			/* Turn OFF phy via CS pin */
-			gpio_direction_output(otg->otg_data->gpio_cs, 0);
+				/* Do PHY reset after enable the PHY */
+				gpio_direction_output(otg_data->gpio_reset, 0);
+				usleep_range(200, 500);
+				gpio_set_value(otg_data->gpio_reset, 1);
+				msleep(30);
+			} else {
+				/* Turn OFF phy via CS pin */
+				gpio_direction_output(otg_data->gpio_cs, 0);
+			}
 		}
 		return 0;
 	}
@@ -2158,33 +2166,15 @@ static int dwc_otg_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static bool is_dwc_otg_on(struct dwc_otg2 *otg)
-{
-	u32 data = 0;
-	data = otg_read(otg, GUSB2PHYCFG0);
-	if (data & GUSB2PHYCFG_SUS_PHY) {
-		printk(KERN_ERR "%s:err\n", __func__);
-		return false;
-	} else
-		return true;
-}
-
 static int dwc_otg_runtime_resume(struct device *dev)
 {
 	struct dwc_otg2 *otg = the_transceiver;
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 
-REINIT:
 	pci_set_power_state(pci_dev, PCI_D0);
 
 	if (!otg)
 		return -ENODEV;
-	if (otg->otg_data && otg->otg_data->is_byt) {
-		if (!is_dwc_otg_on(otg)) {
-			pci_set_power_state(pci_dev, PCI_D3hot);
-			goto REINIT;
-		}
-	}
 
 	/* From synopsys spec 12.2.11.
 	 * Software cannot access memory-mapped I/O space
@@ -2244,8 +2234,6 @@ static int dwc_otg_resume(struct device *dev)
 {
 	struct dwc_otg2 *otg = the_transceiver;
 	struct pci_dev *pci_dev = to_pci_dev(dev);
-
-	pci_set_power_state(pci_dev, PCI_D0);
 
 	if (!otg)
 		return -ENODEV;

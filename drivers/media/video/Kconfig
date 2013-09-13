@@ -342,6 +342,16 @@ config VIDEO_KS0127
 	  To compile this driver as a module, choose M here: the
 	  module will be called ks0127.
 
+config EXTERNAL_CAMERA
+	bool "External camera driver support"
+	---help---
+	  Enable to build camera drivers outside kernel tree.
+
+if EXTERNAL_CAMERA
+source "../modules/camera/Kconfig"
+endif
+
+if !EXTERNAL_CAMERA
 source "drivers/media/video/mt9e013/Kconfig"
 
 config VIDEO_ATOMISP
@@ -447,6 +457,8 @@ config VIDEO_OV5640
 	  ov5640 is video camrea sensor.
 
 	  It currently only works with the atomisp driver.
+
+endif
 
 config VIDEO_SAA7110
 	tristate "Philips SAA7110 video decoder"
@@ -1299,10 +1311,15 @@ config VIDEO_S5P_MIPI_CSIS
 	  module will be called s5p-csis.
 
 source "drivers/media/video/s5p-tv/Kconfig"
+
+if !EXTERNAL_CAMERA
+
 source "drivers/media/video/atomisp2/Kconfig"
 source "drivers/media/video/atomisp3/Kconfig"
 source "drivers/media/video/imx/Kconfig"
 source "drivers/media/video/imx135VB/Kconfig"
+
+endif
 
 endif # V4L_PLATFORM_DRIVERS
 endif # VIDEO_CAPTURE_DRIVERS

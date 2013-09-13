@@ -716,6 +716,13 @@ static void intel_hdmi_dpms(struct drm_encoder *encoder, int mode)
 		int pipe = crtc ? to_intel_crtc(crtc)->pipe : -1;
 
 		if (mode != DRM_MODE_DPMS_ON) {
+			/* If device is resuming, no need of dpms off.
+			 * ALready the pipe is off and inactive
+			 */
+			if (dev_priv->is_resuming == true) {
+				DRM_DEBUG("device is resuming.Returning\n");
+				goto exit;
+			}
 			if (temp & SDVO_PIPE_B_SELECT) {
 				temp &= ~SDVO_PIPE_B_SELECT;
 				I915_WRITE(intel_hdmi->sdvox_reg, temp);
@@ -739,6 +746,7 @@ static void intel_hdmi_dpms(struct drm_encoder *encoder, int mode)
 		}
 	}
 
+exit:
 	/* HW workaround, need to toggle enable bit off and on for 12bpc, but
 	 * we do this anyway which shows more stable in testing.
 	 */
@@ -833,7 +841,7 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 	struct drm_device *dev = connector->dev;
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
 	struct drm_i915_private *dev_priv = connector->dev->dev_private;
-	struct edid *edid;
+	struct edid *edid = NULL;
 	enum drm_connector_status status = connector_status_disconnected;
 
 	i915_rpm_get_callback(dev);
@@ -866,9 +874,13 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 	intel_hdmi->has_hdmi_sink = false;
 	intel_hdmi->has_audio = false;
 
-	edid = drm_get_edid(connector,
-			    intel_gmbus_get_adapter(dev_priv,
-						    intel_hdmi->ddc_bus));
+	/* Read live status, get EDID if connected */
+	if (g4x_hdmi_connected(intel_hdmi)) {
+		edid = drm_get_edid(connector,
+			intel_gmbus_get_adapter(dev_priv,
+					intel_hdmi->ddc_bus));
+
+	}
 
 	if (edid) {
 		if (edid->input & DRM_EDID_INPUT_DIGITAL) {
@@ -876,10 +888,10 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 			dev_priv->is_hdmi = true;
 			if (intel_hdmi->force_audio != HDMI_AUDIO_OFF_DVI)
 				intel_hdmi->has_hdmi_sink =
-						drm_detect_hdmi_monitor(edid);
-			intel_hdmi->has_audio = drm_detect_monitor_audio(edid);
+					drm_detect_hdmi_monitor(edid);
+			intel_hdmi->has_audio =
+				drm_detect_monitor_audio(edid);
 		}
-
 		/* Free previously saved EDID and save new one */
 		kfree(intel_hdmi->edid);
 		intel_hdmi->edid = edid;
