@@ -344,13 +344,12 @@ void hsic_notify(struct usb_device *udev, unsigned action)
 					(&hsic.rh_dev->dev, 0);
 			}
 
-			usb_disable_autosuspend(hsic.modem_dev);
-			usb_disable_autosuspend(hsic.rh_dev);
-#if 0
+			hsic.autosuspend_enable = HSIC_AUTOSUSPEND;
 			if (hsic.autosuspend_enable) {
 				pr_debug("%s----> enable autosuspend\n",
 					 __func__);
-				usb_enable_autosuspend(udev->parent);
+				usb_enable_autosuspend(hsic.modem_dev);
+				usb_enable_autosuspend(hsic.rh_dev);
 				hsic_wakeup_irq_init();
 			}
 
@@ -358,8 +357,8 @@ void hsic_notify(struct usb_device *udev, unsigned action)
 				pr_debug("%s Modem dev autosuspend disable\n",
 						 __func__);
 				usb_disable_autosuspend(hsic.modem_dev);
+				usb_disable_autosuspend(hsic.rh_dev);
 			}
-#endif
 		}
 		break;
 	case USB_DEVICE_REMOVE:
