@@ -93,6 +93,9 @@ struct ec_battery_info {
 static enum power_supply_property ec_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
@@ -294,6 +297,24 @@ static int ec_get_battery_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		else
 			val->intval =   POWER_SUPPLY_HEALTH_UNKNOWN;
+		break;
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		ret = byt_ec_read_byte(EC_BAT0_STAT_REG, &val8);
+		if (ret < 0)
+			goto ec_read_err;
+		if (val8 & BAT0_STAT_BATT_PRESENT)
+			val->strval = "INBYTM";
+		else
+			val->strval = "Unknown";
+		break;
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		ret = byt_ec_read_byte(EC_BAT0_STAT_REG, &val8);
+		if (ret < 0)
+			goto ec_read_err;
+		if (val8 & BAT0_STAT_BATT_PRESENT)
+			val->strval = "Intel";
+		else
+			val->strval = "Unknown";
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		ret = byt_ec_read_word(EC_BAT0_REM_CAP_REG, &val16);
