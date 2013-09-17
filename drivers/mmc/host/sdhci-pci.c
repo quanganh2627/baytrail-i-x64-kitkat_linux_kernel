@@ -405,10 +405,24 @@ static int mfd_sdio_probe_slot(struct sdhci_pci_slot *slot)
 		slot->chip->pdev->d3_delay = 10;
 		/* reduce the auto suspend delay for SDIO to be 500ms */
 		slot->chip->autosuspend_delay = 500;
+		slot->host->mmc->qos = kzalloc(sizeof(struct pm_qos_request),
+				GFP_KERNEL);
 		break;
 	}
 
+	if (slot->host->mmc->qos)
+		pm_qos_add_request(slot->host->mmc->qos, PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
+
 	return 0;
+}
+
+static void mfd_sdio_remove_slot(struct sdhci_pci_slot *slot, int dead)
+{
+	if (slot->host->mmc->qos) {
+		pm_qos_remove_request(slot->host->mmc->qos);
+		kfree(slot->host->mmc->qos);
+	}
 }
 
 static const struct sdhci_pci_fixes sdhci_intel_mrst_hc0 = {
@@ -704,6 +718,7 @@ static const struct sdhci_pci_fixes sdhci_intel_mfd_sdio = {
 	.quirks2	= SDHCI_QUIRK2_HOST_OFF_CARD_ON,
 	.allow_runtime_pm = true,
 	.probe_slot	= mfd_sdio_probe_slot,
+	.remove_slot	= mfd_sdio_remove_slot,
 };
 
 static const struct sdhci_pci_fixes sdhci_intel_mfd_emmc = {
@@ -730,6 +745,7 @@ static const struct sdhci_pci_fixes sdhci_intel_byt_sdio = {
 	.quirks2	= SDHCI_QUIRK2_HOST_OFF_CARD_ON |
 		SDHCI_QUIRK2_CAN_VDD_300 | SDHCI_QUIRK2_CAN_VDD_330,
 	.probe_slot	= mfd_sdio_probe_slot,
+	.remove_slot	= mfd_sdio_remove_slot,
 	.allow_runtime_pm = true,
 };
 
