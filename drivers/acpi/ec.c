@@ -910,7 +910,6 @@ int __init acpi_boot_ec_enable(void)
 }
 
 static const struct acpi_device_id ec_device_ids[] = {
-	{"PNP0C09", 0},
 	{"", 0},
 };
 
