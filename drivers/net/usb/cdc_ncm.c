@@ -626,10 +626,9 @@ error:
 
 static int cdc_ncm_bind_alt(struct usbnet *dev, struct usb_interface *intf)
 {
-	dev_info(&dev->udev->dev, "Use of alternate settings\n",
-			dev->net->dev_addr);
+	dev_info(&dev->udev->dev, "Use of alternate settings\n");
 	dev->net->addr_len = 1;
-	cdc_ncm_bind(dev, intf);
+	return cdc_ncm_bind(dev, intf);
 }
 
 static void cdc_ncm_unbind(struct usbnet *dev, struct usb_interface *intf)
