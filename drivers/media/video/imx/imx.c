@@ -1698,8 +1698,6 @@ fail_detect:
 	dev->platform_data->csi_cfg(sd, 0);
 fail_csi_cfg:
 	__imx_s_power(sd, 0);
-	if (dev->platform_data->platform_deinit)
-		dev->platform_data->platform_deinit();
 	mutex_unlock(&dev->input_lock);
 	dev_err(&client->dev, "sensor power-gating failed\n");
 	return ret;
