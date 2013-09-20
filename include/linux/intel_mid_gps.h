@@ -20,17 +20,13 @@
 
 /**
  * struct intel_mid_gps_platform_data - Intel MID GPS platform data
- * @has_reset:		GPS reset GPIO availability
- * @has_enable:		GPS enable GPIO availability
- * @gpio_reset:		GPS reset GPIO number
- * @gpio_enable:	GPS enable GPIO number
+ * @gpio_reset:		GPS reset GPIO
+ * @gpio_enable:	GPS enable GPIO
  * @reset:		GPS reset GPIO current value
  * @enable:		GPS enable GPIO current value
  */
 
 struct intel_mid_gps_platform_data {
-	unsigned int has_reset;
-	unsigned int has_enable;
 	int gpio_reset;
 	int gpio_enable;
 	unsigned int reset;
