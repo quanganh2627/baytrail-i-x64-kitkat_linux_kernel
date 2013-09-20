@@ -541,13 +541,6 @@ config MID_I2S_DEV
 	  It uses the Intel MID I2S driver ; it creates a device
 	  (/dev/mid_i2s_ssp) that receives ioctls.
 
-config EMMC_IPANIC
-	bool "Intel kernel panic diagnostics driver FOR EMMC"
-	default n
-	---help---
-	 Driver which handles kernel panics and attempts to write
-	 critical debugging data to EMMC.
-
 config VLV2_PLAT_CLK
 	tristate "Vlv2 platform clock control driver"
 	---help---

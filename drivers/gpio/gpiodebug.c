@@ -132,7 +132,7 @@ static const char readme_msg[] =
 	"nopull	pullup	pulldown\n\n"
 	"# cat /sys/kernel/debug/gpio_debug/gpio0/current_pullmode\n"
 	"nopull\n"
-	"# echo pullup > /sys/kernel/debug/tracing/current_pullmode\n"
+	"# echo pullup > /sys/kernel/debug/gpio_debug/gpio0/current_pullmode\n"
 	"# cat /sys/kernel/debug/gpio_debug/gpio0/current_pullmode\n"
 	"pullup\n\n"
 	"# cat conf_reg\n"
@@ -147,8 +147,6 @@ static ssize_t show_gpio_readme(struct file *filp, char __user *ubuf,
 		size_t cnt, loff_t *ppos)
 {
 	ssize_t ret = 0;
-	struct gpio_debug *debug = filp->private_data;
-	char *buf;
 
 	if (*ppos < 0 || !cnt)
 		return -EINVAL;
@@ -177,10 +175,10 @@ static ssize_t show_gpio_reginfo(struct file *filp, char __user *ubuf,
 	if (*ppos < 0 || !cnt)
 		return -EINVAL;
 
-	if (debug->ops->get_register_msg)
+	if (debug->ops->get_register_msg) {
 		debug->ops->get_register_msg(&buf, &size);
-
-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, size);
+		ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, size);
+	}
 
 	return ret;
 }
@@ -201,7 +199,7 @@ static ssize_t gpio_conf_read(struct file *filp, char __user *ubuf,
 	struct gpio_debug *debug = data->debug;
 	int gpio = data->gpio;
 	char *buf;
-	unsigned int value;
+	unsigned int value = 0;
 
 	if (*ppos < 0 || !cnt)
 		return -EINVAL;
@@ -280,7 +278,7 @@ static ssize_t gpiodebug_show_read(struct file *filp, char __user *ubuf,
 	struct gpiodebug_data *data = filp->private_data;
 	struct gpio_debug *debug = data->debug;
 	unsigned int type = data->type;
-	int i, num;
+	int i, num = 0;
 	int gpio = data->gpio;
 	char *buf, **avl_buf = NULL;
 
@@ -292,11 +290,12 @@ static ssize_t gpiodebug_show_read(struct file *filp, char __user *ubuf,
 		return -ENOMEM;
 
 	/* debug->ops->get_avl_info */
-	if (debug->ops->get_avl_pininfo)
+	if (debug->ops->get_avl_pininfo) {
 		avl_buf = debug->ops->get_avl_pininfo(debug, gpio, type, &num);
 
-	for (i = 0; i < num; i++)
-		sprintf(buf, "%s%s\t", buf, *(avl_buf+i));
+		for (i = 0; i < num; i++)
+			sprintf(buf, "%s%s\t", buf, *(avl_buf+i));
+	}
 
 	ret = sprintf(buf, "%s\n", buf);
 
@@ -395,7 +394,7 @@ static ssize_t show_count_read(struct file *filp, char __user *ubuf,
 	struct gpiodebug_data *data = filp->private_data;
 	struct gpio_debug *debug = data->debug;
 	unsigned int type = data->type;
-	unsigned long count;
+	unsigned long count = 0;
 	int gpio = data->gpio;
 	char *buf;
 
@@ -458,7 +457,7 @@ int gpio_debug_register(struct gpio_debug *debug)
 	unsigned ngpio = chip->ngpio;
 	struct dentry *gpio_root;
 	int i, j;
-	char gpioname[10];
+	char gpioname[32];
 
 	/* readme */
 	gpiodebug_create_file("readme", 0444, gpiodebug_debugfs_root,

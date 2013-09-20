@@ -220,6 +220,12 @@ union power_supply_propval {
 	const char *strval;
 };
 
+enum power_supply_notifier_events {
+	POWER_SUPPLY_PROP_CHANGED,
+	POWER_SUPPLY_CABLE_EVENT,
+};
+
+
 enum psy_throttle_action {
 
 	PSY_THROTTLE_DISABLE_CHARGER = 0,
@@ -303,6 +309,9 @@ struct power_supply_info {
 	int use_for_apm;
 };
 
+extern struct atomic_notifier_head    power_supply_notifier;
+extern int power_supply_reg_notifier(struct notifier_block *nb);
+extern void power_supply_unreg_notifier(struct notifier_block *nb);
 extern struct power_supply *power_supply_get_by_name(char *name);
 extern void power_supply_changed(struct power_supply *psy);
 extern int power_supply_am_i_supplied(struct power_supply *psy);

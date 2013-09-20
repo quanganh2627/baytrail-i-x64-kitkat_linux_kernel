@@ -278,6 +278,9 @@ int kexec_crash_reset_timeouts(int reset_timeout)
 	if (disable_kernel_watchdog != 1)
 		return watchdog_set_timeouts(timer_timeout,
 			pre_timeout, reset_timeout);
+
+	pr_warn(PFX "Kernel watchdog disabled. No timeout reset\n");
+	return 0;
 }
 #endif
 
@@ -784,7 +787,7 @@ static ssize_t kwd_reset_type_read(struct file *file, char __user *buff,
 	if (ret)
 		return -EINVAL;
 	else {
-		for (len = 0 ; len < STRING_RESET_TYPE_MAX_LEN
+		for (len = 0 ; len < (STRING_RESET_TYPE_MAX_LEN - 1)
 			     && str[len] != '\0'; len++)
 			;
 		str[len++] = '\n';

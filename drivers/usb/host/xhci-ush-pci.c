@@ -369,6 +369,14 @@ void hsic_notify(struct usb_device *udev, unsigned action)
 			/* Modem devices */
 			pr_debug("%s----> modem dev deleted\n", __func__);
 			hsic.modem_dev = NULL;
+			usb_disable_autosuspend(hsic.rh_dev);
+		}
+		break;
+	case MODEM_WORK_FLUSH:
+		if (udev == hsic.modem_dev) {
+			pr_debug("Notify MODEM work flush\n");
+			synchronize_irq(gpio_to_irq(hsic.aux_gpio));
+			flush_work(&hsic.hsic_aux);
 		}
 		break;
 	default:
@@ -402,8 +410,8 @@ static void ush_hsic_port_disable(struct pci_dev *pdev)
 		dev_dbg(&pci_dev->dev,
 			"%s----> disconnect modem\n", __func__);
 		hdev = hsic.modem_dev->parent;
-		pm_runtime_get_sync(&hsic.modem_dev->dev);
-		pm_runtime_put_noidle(&hsic.modem_dev->dev);
+		usb_disable_autosuspend(hsic.modem_dev);
+		usb_disable_autosuspend(hsic.rh_dev);
 		if (hdev->children[HSIC_USH_PORT - 1] == hsic.modem_dev) {
 			printk(KERN_ERR "%s----> usb disconnect\n", __func__);
 			usb_disconnect(&hsic.modem_dev);
@@ -826,12 +834,19 @@ static ssize_t hsic_autosuspend_enable_store(struct device *dev,
 		if (hsic.autosuspend_enable == 0) {
 			dev_dbg(dev, "Modem dev autosuspend disable\n");
 			usb_disable_autosuspend(hsic.modem_dev);
-			usb_disable_autosuspend(hsic.rh_dev);
 		} else {
 			dev_dbg(dev, "Enable auto suspend\n");
 			usb_enable_autosuspend(hsic.modem_dev);
-			usb_enable_autosuspend(hsic.rh_dev);
 			hsic_wakeup_irq_init();
+		}
+	}
+	if (hsic.rh_dev != NULL) {
+		if (hsic.autosuspend_enable == 0) {
+			dev_dbg(dev, "port autosuspend disable\n");
+			usb_disable_autosuspend(hsic.rh_dev);
+		} else {
+			dev_dbg(dev, "port Enable auto suspend\n");
+			usb_enable_autosuspend(hsic.rh_dev);
 		}
 	}
 

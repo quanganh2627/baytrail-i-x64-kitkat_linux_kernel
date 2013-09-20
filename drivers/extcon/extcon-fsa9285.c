@@ -34,6 +34,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/acpi.h>
 #include <linux/acpi_gpio.h>
+#include <linux/power_supply.h>
 #include <linux/extcon/extcon-fsa9285.h>
 
 /* FSA9285 I2C registers */
@@ -113,6 +114,11 @@
 #define CHGCTRL_MIC_OVP_EN		(1 << 3)
 #define CHGCTRL_ASSERT_DP		(1 << 2)
 
+#define FSA_CHARGE_CUR_DCP		2000
+#define FSA_CHARGE_CUR_ACA		2000
+#define FSA_CHARGE_CUR_CDP		1500
+#define FSA_CHARGE_CUR_SDP		500
+
 #define FSA9285_EXTCON_SDP		"CHARGER_USB_SDP"
 #define FSA9285_EXTCON_DCP		"CHARGER_USB_DCP"
 #define FSA9285_EXTCON_CDP		"CHARGER_USB_CDP"
@@ -172,6 +178,7 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 	struct i2c_client *client = chip->client;
 	static bool notify_otg, notify_charger;
 	static char *cable;
+	static struct power_supply_cable_props cable_props;
 	int stat, devtype, ohm_code, cntl, ret;
 	u8 w_man_sw, w_man_chg_cntl;
 	bool discon_evt = false, drive_vbus = false;
@@ -227,6 +234,11 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 				"ACA device connecetd\n");
 			notify_charger = true;
 			cable = FSA9285_EXTCON_ACA;
+			cable_props.chrg_evt =
+					POWER_SUPPLY_CHARGER_EVENT_CONNECT;
+			cable_props.chrg_type =
+					POWER_SUPPLY_CHARGER_TYPE_USB_ACA;
+			cable_props.mA = FSA_CHARGE_CUR_ACA;
 		} else {
 			/* unknown device */
 			dev_warn(&chip->client->dev, "unknown ID detceted\n");
@@ -248,16 +260,25 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 		vbus_mask = 1;
 		notify_charger = true;
 		cable = FSA9285_EXTCON_CDP;
+		cable_props.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_CONNECT;
+		cable_props.chrg_type = POWER_SUPPLY_CHARGER_TYPE_USB_CDP;
+		cable_props.mA = FSA_CHARGE_CUR_CDP;
 	} else if (devtype & DEVTYPE_DCP) {
 		dev_info(&chip->client->dev,
 				"DCP cable connecetd\n");
 		notify_charger = true;
 		cable = FSA9285_EXTCON_DCP;
+		cable_props.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_CONNECT;
+		cable_props.chrg_type = POWER_SUPPLY_CHARGER_TYPE_USB_DCP;
+		cable_props.mA = FSA_CHARGE_CUR_DCP;
 	} else if (devtype & DEVTYPE_DOCK) {
 		dev_info(&chip->client->dev,
 				"Dock connecetd\n");
 		notify_charger = true;
 		cable = FSA9285_EXTCON_DOCK;
+		cable_props.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_CONNECT;
+		cable_props.chrg_type = POWER_SUPPLY_CHARGER_TYPE_ACA_DOCK;
+		cable_props.mA = FSA_CHARGE_CUR_ACA;
 	} else {
 		dev_warn(&chip->client->dev,
 			"ID or VBUS change event\n");
@@ -273,6 +294,8 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 		discon_evt = true;
 		/* usb switch off per nothing attached */
 		usb_switch = 0;
+		cable_props.mA = 0;
+		cable_props.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_DISCONNECT;
 	}
 
 	/* VBUS control */
@@ -326,7 +349,8 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 			notify_otg = false;
 		}
 		if (notify_charger) {
-			extcon_set_cable_state(chip->edev, cable, false);
+			atomic_notifier_call_chain(&power_supply_notifier,
+					POWER_SUPPLY_CABLE_EVENT, &cable_props);
 			notify_charger = false;
 			cable = NULL;
 		}
@@ -334,8 +358,10 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 		if (notify_otg)
 			atomic_notifier_call_chain(&chip->otg->notifier,
 						USB_EVENT_VBUS, &vbus_mask);
-		if (notify_charger)
-			extcon_set_cable_state(chip->edev, cable, true);
+		if (notify_charger) {
+			atomic_notifier_call_chain(&power_supply_notifier,
+					POWER_SUPPLY_CABLE_EVENT, &cable_props);
+		}
 	}
 
 	return 0;
