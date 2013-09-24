@@ -422,15 +422,23 @@ static void ush_hsic_port_disable(void)
 static void ush_hsic_port_enable(void)
 {
 	printk(KERN_ERR "%s---->\n", __func__);
+	hsic.hsic_stopped = 0;
+	hsic_enable = 1;
+	if (hsic.modem_dev) {
+		dev_dbg(&pci_dev->dev,
+			"Disable auto suspend in port enable\n");
+		usb_disable_autosuspend(hsic.modem_dev);
+		usb_disable_autosuspend(hsic.rh_dev);
+	}
+
 	if (hsic.rh_dev) {
 		dev_dbg(&pci_dev->dev,
 			"%s----> enable port\n", __func__);
 		printk(KERN_ERR "%s----> Enable PP\n", __func__);
+		usb_disable_autosuspend(hsic.rh_dev);
 		set_port_feature(hsic.rh_dev, HSIC_USH_PORT,
 				USB_PORT_FEAT_POWER);
 	}
-	hsic.hsic_stopped = 0;
-	hsic_enable = 1;
 }
 
 static void hsic_port_logical_disconnect(struct usb_device *hdev,
@@ -1174,15 +1182,7 @@ static int xhci_ush_hcd_pci_suspend_noirq(struct device *dev)
 	int	retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	mutex_lock(&hsic.hsic_mutex);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		mutex_unlock(&hsic.hsic_mutex);
-		return 0;
-	}
-
 	retval = usb_hcd_pci_pm_ops.suspend_noirq(dev);
-	mutex_unlock(&hsic.hsic_mutex);
 	dev_dbg(dev, "%s <--- retval = %d\n", __func__, retval);
 	return retval;
 }
@@ -1192,14 +1192,6 @@ static int xhci_ush_hcd_pci_suspend(struct device *dev)
 	int     retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	mutex_lock(&hsic.hsic_mutex);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		mutex_unlock(&hsic.hsic_mutex);
-		return 0;
-	}
-	mutex_unlock(&hsic.hsic_mutex);
-
 	retval = usb_hcd_pci_pm_ops.suspend(dev);
 	dev_dbg(dev, "%s <--- retval = %d\n", __func__, retval);
 	return retval;
@@ -1211,15 +1203,7 @@ static int xhci_ush_hcd_pci_resume_noirq(struct device *dev)
 	int                     retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	mutex_lock(&hsic.hsic_mutex);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		mutex_unlock(&hsic.hsic_mutex);
-		return 0;
-	}
-
 	retval = usb_hcd_pci_pm_ops.resume_noirq(dev);
-	mutex_unlock(&hsic.hsic_mutex);
 	dev_dbg(dev, "%s <--- retval = %d\n", __func__, retval);
 	return retval;
 }
@@ -1230,14 +1214,6 @@ static int xhci_ush_hcd_pci_resume(struct device *dev)
 	int     retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	mutex_lock(&hsic.hsic_mutex);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		mutex_unlock(&hsic.hsic_mutex);
-		return 0;
-	}
-	mutex_unlock(&hsic.hsic_mutex);
-
 	retval = usb_hcd_pci_pm_ops.resume(dev);
 	dev_dbg(dev, "%s <--- retval = %d\n", __func__, retval);
 	return retval;
@@ -1257,11 +1233,6 @@ static int xhci_ush_hcd_pci_runtime_suspend(struct device *dev)
 	int     retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		return 0;
-	}
-
 	retval = usb_hcd_pci_pm_ops.runtime_suspend(dev);
 	dev_dbg(dev, "%s <--- retval = %d\n", __func__, retval);
 	return retval;
@@ -1274,11 +1245,6 @@ static int xhci_ush_hcd_pci_runtime_resume(struct device *dev)
 	int                     retval;
 
 	dev_dbg(dev, "%s --->\n", __func__);
-	if (hsic.hsic_stopped == 1) {
-		dev_dbg(dev, "hsic stopped return\n");
-		return 0;
-	}
-
 	retval = usb_hcd_pci_pm_ops.runtime_resume(dev);
 	if (hcd->rpm_control) {
 		if (hcd->rpm_resume) {
