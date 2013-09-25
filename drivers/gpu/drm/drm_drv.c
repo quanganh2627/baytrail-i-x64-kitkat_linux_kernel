@@ -437,7 +437,7 @@ long drm_ioctl(struct file *filp,
 			  (!(ioctl->flags & DRM_CONTROL_ALLOW) &&
 			   (file_priv->minor->type == DRM_MINOR_CONTROL))) {
 		retcode = -EACCES;
-		DRM_ERROR("Ioctl check failed for ioctl nr 0x%x"\
+		pr_debug("Ioctl check failed for ioctl nr 0x%x"\
 				  "for process %s with pid=%d & is root=%d\n",
 				  nr, current->comm,
 				  task_pid_nr(current), capable(CAP_SYS_ADMIN));
