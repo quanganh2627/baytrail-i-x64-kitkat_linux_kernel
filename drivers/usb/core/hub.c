@@ -3583,9 +3583,6 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 
 	/* Disconnect any existing devices under this port */
 	if (udev)
-		hsic_notify(hdev->children[port1-1], MODEM_WORK_FLUSH);
-
-	if (hdev->children[port1-1])
 		usb_disconnect(&hdev->children[port1-1]);
 	clear_bit(port1, hub->change_bits);
 
