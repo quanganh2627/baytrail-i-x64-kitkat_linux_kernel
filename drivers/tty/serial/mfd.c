@@ -920,15 +920,22 @@ static irqreturn_t hsu_port_irq(int irq, void *dev_id)
 			return IRQ_NONE;
 		}
 	} else {
-		if (likely(!test_bit(flag_suspend, &up->flags))) {
-			/* On BYT, this IRQ may be shared with other HW */
-			up->iir = serial_in(up, UART_IIR);
-			if (up->iir & 0x1)
-				return IRQ_NONE;
-			if (up->iir == 0x7)
-				return IRQ_HANDLED;
-		} else
+		if (unlikely(test_bit(flag_suspend, &up->flags)))
 			return IRQ_NONE;
+
+		/* On BYT, this IRQ may be shared with other HW */
+		up->iir = serial_in(up, UART_IIR);
+		if (unlikely(up->iir & 0x1)) {
+			/*
+			 * Read  UART_BYTE_COUNT and UART_OVERFLOW
+			 * registers to clear the overrun error on
+			 * Tx. This is a HW issue on VLV2 B0.
+			 * more information on HSD 4683358.
+			 */
+			serial_in(up, 0x818 / 4);
+			serial_in(up, 0x820 / 4);
+			return IRQ_NONE;
+		}
 	}
 
 	if (unlikely(!test_bit(flag_startup, &up->flags))) {
@@ -1200,6 +1207,8 @@ static void serial_hsu_shutdown(struct uart_port *port)
 	/* Disable interrupts from this port */
 	up->ier = 0;
 	serial_out(up, UART_IER, 0);
+
+	clear_bit(flag_tx_on, &up->flags);
 
 	up->port.mctrl &= ~TIOCM_OUT2;
 	set_mctrl(up, up->port.mctrl);
@@ -1822,11 +1831,19 @@ static int serial_hsu_do_suspend(struct pci_dev *pdev)
 	struct uart_hsu_port *up = pci_get_drvdata(pdev);
 	struct hsu_port_cfg *cfg = phsu->configs[up->index];
 	struct uart_port *uport = &up->port;
-	struct tty_port *port = &uport->state->port;
-	struct tty_struct *tty = port->tty;
+	struct tty_port *tport = &uport->state->port;
+	struct tty_struct *tty = NULL;
 	struct circ_buf *xmit = &up->port.state->xmit;
 	char cmd;
 	unsigned long flags;
+
+	mutex_lock(&tport->mutex);
+
+	/*
+	 * The tty may be NULL or not, depends on whether the tty
+	 * port is opened when this suspend hook get called
+	 */
+	tty = tty_port_tty_get(tport);
 
 	if (up->use_dma) {
 		if (test_bit(flag_startup, &up->flags)
@@ -1867,13 +1884,23 @@ static int serial_hsu_do_suspend(struct pci_dev *pdev)
 		goto err;
 	}
 
-	if (!uart_circ_empty(xmit) && !uart_tx_stopped(&up->port)) {
-		dev_info(up->dev, "ignore suspend for xmit\n");
-		dev_info(up->dev,
-			"xmit pending:%d, stopped:%d, hw_stopped:%d, MSR:%x\n",
-			(int)uart_circ_chars_pending(xmit), tty->stopped,
-			tty->hw_stopped, serial_in(up, UART_MSR));
-		goto err;
+	/*
+	 * In some case, the HSU itself or the DMA HW may stalls during the
+	 * xfer, and this suspend hook may get called after the tty port has
+	 * been closed by user space app. So we need to check if the tty
+	 * exist before accessing that tty structure's data.
+	 */
+	if (tty) {
+		if (!uart_circ_empty(xmit) && !uart_tx_stopped(&up->port)) {
+			dev_info(up->dev, "ignore suspend for xmit\n");
+			dev_info(up->dev,
+				"xmit pending:%d, stopped:%d, hw_stopped:%d, MSR:%x\n",
+				(int)uart_circ_chars_pending(xmit),
+				tty->stopped,
+				tty->hw_stopped,
+				serial_in(up, UART_MSR));
+			goto err;
+		}
 	}
 
 	if (up->use_dma) {
@@ -1891,6 +1918,10 @@ static int serial_hsu_do_suspend(struct pci_dev *pdev)
 		enable_irq(phsu->dma_irq);
 	if (up->hw_type == hsu_dw)
 		enable_irq(up->port.irq);
+
+	if (tty)
+		tty_kref_put(tty);
+	mutex_unlock(&tport->mutex);
 	return 0;
 err:
 	if (cfg->hw_set_rts)
@@ -1908,6 +1939,9 @@ err:
 	serial_sched_sync(up);
 busy:
 	pm_schedule_suspend(up->dev, cfg->idle);
+	if (tty)
+		tty_kref_put(tty);
+	mutex_unlock(&tport->mutex);
 	return -EBUSY;
 }
 

@@ -2449,10 +2449,13 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		I915_MODIFY_DISPBASE(DSPSURF(plane),
 				     obj->gtt_offset + intel_crtc->dspaddr_offset);
 		if (rotate) {
-			I915_WRITE(DSPTILEOFF(plane), ((intel_fb->base.height
-				<< 16) | (intel_fb->base.width)));
-			I915_WRITE(DSPLINOFF(plane), (intel_fb->base.width *
-				intel_fb->base.height * pixel_size));
+			I915_WRITE(DSPTILEOFF(plane),
+				   (((y + fb->height - 1) << 16) |
+				    (x + fb->width - 1)));
+			I915_WRITE(DSPLINOFF(plane),
+				   linear_offset +
+				   (fb->height - 1) * fb->pitches[0] +
+				   fb->width * pixel_size);
 		} else {
 			I915_WRITE(DSPTILEOFF(plane), (y << 16) | x);
 			I915_WRITE(DSPLINOFF(plane), linear_offset);
@@ -3926,6 +3929,14 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 
 	if (!dev_priv->is_mipi)
 		intel_disable_pll(dev_priv, pipe);
+	else {
+		for_each_encoder_on_crtc(dev, crtc, encoder) {
+			if (encoder->type == INTEL_OUTPUT_DSI) {
+				intel_dsi_clear_device_ready(encoder);
+				break;
+			}
+		}
+	}
 
 	intel_crtc->active = false;
 	if (dev_priv->disp_pm_in_progress == true)
@@ -7724,8 +7735,15 @@ ssize_t display_runtime_resume(struct drm_device *drm_dev)
 
 	mid_hdmi_audio_resume(drm_dev);
 	dev_priv->disp_pm_in_progress = false;
-	if (dev_priv->saveDPSTState)
-		i915_dpst_enable_hist_interrupt(drm_dev, true);
+	/* Fix for the issue of display blankout during the resume
+	 * Reset the luma back to default value */
+	i915_dpst_set_default_luma(drm_dev);
+	if (dev_priv->bpp18_video_dpst)
+		dev_priv->is_video_playing = false;
+	else {
+		if (dev_priv->saveDPSTState)
+			i915_dpst_enable_hist_interrupt(drm_dev, true);
+	}
 	mutex_unlock(&drm_dev->mode_config.mutex);
 	display_save_restore_hotplug(drm_dev, RESTOREHPD);
 	drm_kms_helper_poll_enable(drm_dev);

@@ -386,6 +386,9 @@ struct atomisp_gamma_table {
  */
 #define ATOMISP_MORPH_TABLE_NUM_PLANES  6
 struct atomisp_morph_table {
+#ifdef CONFIG_VIDEO_ATOMISP_CSS20
+	unsigned int enabled;
+#endif
 	unsigned int height;
 	unsigned int width;	/* number of valid elements per line */
 	unsigned short __user *coordinates_x[ATOMISP_MORPH_TABLE_NUM_PLANES];
@@ -951,8 +954,6 @@ struct v4l2_private_int_data {
 #define V4L2_CID_VCM_SLEW                  (V4L2_CID_CAMERA_LASTP1 + 11)
 /* VCM step time */
 #define V4L2_CID_VCM_TIMEING               (V4L2_CID_CAMERA_LASTP1 + 12)
-/* sensor test pattern */
-#define V4L2_CID_TEST_PATTERN              (V4L2_CID_CAMERA_LASTP1 + 13)
 
 /* Query Focus Status */
 #define V4L2_CID_FOCUS_STATUS              (V4L2_CID_CAMERA_LASTP1 + 14)

@@ -403,6 +403,11 @@ static int xhci_start_host(struct usb_hcd *hcd)
 
 	xhci_dwc_driver.shutdown = usb_hcd_platform_shutdown;
 
+	/* Enable wakeup capability for roothubs and controller */
+	device_init_wakeup(hcd->self.controller, true);
+	device_init_wakeup(&hcd->self.root_hub->dev, true);
+	device_init_wakeup(&xhci->shared_hcd->self.root_hub->dev, true);
+
 	return ret;
 
 put_usb3_hcd:
