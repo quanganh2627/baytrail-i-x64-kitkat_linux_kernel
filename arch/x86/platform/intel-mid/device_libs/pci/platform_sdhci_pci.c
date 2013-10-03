@@ -746,7 +746,7 @@ static void __devinit mmc_sdhci_pci_early_quirks(struct pci_dev *pci_dev)
 	pci_dev->dev.platform_data = get_sdhci_platform_data(pci_dev);
 }
 
-int sdhci_pdata_set_quirks(const unsigned int quirks)
+int sdhci_pdata_set_quirks(unsigned int quirks)
 {
 	/*Should not be set more than once*/
 	WARN_ON(sdhci_pdata_quirks);
