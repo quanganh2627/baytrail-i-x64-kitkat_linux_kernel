@@ -28,9 +28,15 @@
 #include <asm/intel_mid_rpmsg.h>
 #include <asm/intel_scu_ipc.h>
 
+#define NVRAM_MAX_SIZE	240	/* NVRAM maximum size (in bytes) for MRFLD. */
+
 /* NVRAM access */
 static u32 nvram_size;
 static u32 nvram_addr;
+
+static int platform_type;	/* Identifies the platform. */
+
+static u32 *nvram_ptr;
 
 static struct rpmsg_instance *modem_nvram_instance;
 
@@ -49,12 +55,19 @@ static ssize_t dump_show(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	static u32 __iomem *nv_base;
 
-	nv_base = ioremap_nocache(nvram_addr, nvram_size);
-	if (nv_base != NULL) {
-		memcpy(buf, nv_base, nvram_size);
-		iounmap(nv_base);
-	} else
-		pr_err("%s : ioremap error\n", __func__);
+	if ((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE)) {
+		memcpy(buf, nvram_ptr, nvram_size);
+	} else {
+		nv_base = ioremap_nocache(nvram_addr, nvram_size);
+		if (nv_base != NULL) {
+			memcpy(buf, nv_base, nvram_size);
+			iounmap(nv_base);
+		} else
+			pr_err("%s : ioremap error\n", __func__);
+	}
+
+	pr_debug("%s: %d NVRAM bytes dumped\n", __func__, nvram_size);
 
 	return nvram_size;
 }
@@ -68,18 +81,26 @@ static ssize_t dump_store(struct kobject *kobj, struct kobj_attribute *attr,
 	if(count == 0)
 		return 0;
 
-	nv_base = ioremap_nocache(nvram_addr, nvram_size);
-	if (nv_base != NULL) {
+	if ((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE)) {
 		count = min(nvram_size, count);
-		memcpy(nv_base, buf, count);
-		ret = rpmsg_send_simple_command(modem_nvram_instance,
+		memcpy(nvram_ptr, buf, count);
+	} else {
+		nv_base = ioremap_nocache(nvram_addr, nvram_size);
+		if (nv_base != NULL) {
+			count = min(nvram_size, count);
+			memcpy(nv_base, buf, count);
+			ret = rpmsg_send_simple_command(modem_nvram_instance,
 						IPCMSG_STORE_NV_DATA, 0);
-		if (ret)
-			pr_err("%s : rpmsg_send_simple_command failed (%d)\n",
-						__func__, ret);
-		iounmap(nv_base);
-	} else
-		pr_err("%s : ioremap error\n", __func__);
+			if (ret)
+				pr_err("%s : rpmsg_send_simple_command failed (%d)\n",
+							__func__, ret);
+			iounmap(nv_base);
+		} else
+			pr_err("%s : ioremap error\n", __func__);
+	}
+
+	pr_debug("%s: %d bytes stored in NVRAM\n", __func__, count);
 
 	return count;
 }
@@ -89,17 +110,24 @@ static ssize_t dump_clear(void)
 	static u32 __iomem *nv_base;
 	static int ret;
 
-	nv_base = ioremap_nocache(nvram_addr, nvram_size);
-	if (nv_base != NULL) {
-		memset(nv_base, 0, nvram_size);
-		ret = rpmsg_send_simple_command(modem_nvram_instance,
+	if ((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE)) {
+		memset(nvram_ptr, 0, nvram_size);
+	} else {
+		nv_base = ioremap_nocache(nvram_addr, nvram_size);
+		if (nv_base != NULL) {
+			memset(nv_base, 0, nvram_size);
+			ret = rpmsg_send_simple_command(modem_nvram_instance,
 						IPCMSG_STORE_NV_DATA, 0);
-		if (ret)
-			pr_err("%s : rpmsg_send_simple_command failed (%d)\n",
-						__func__, ret);
-		iounmap(nv_base);
-	} else
-		pr_err("%s : ioremap error\n", __func__);
+			if (ret)
+				pr_err("%s : rpmsg_send_simple_command failed (%d)\n",
+							__func__, ret);
+			iounmap(nv_base);
+		} else
+			pr_err("%s : ioremap error\n", __func__);
+	}
+
+	pr_debug("%s: NVRAM cleared\n", __func__);
 
 	return 0;
 }
@@ -231,12 +259,32 @@ static int __init modem_nvram_init(void)
 	}
 
 	/* get NVRAM parameters */
-	nvram_size = intel_scu_ipc_get_nvram_size();
-	nvram_addr = intel_scu_ipc_get_nvram_addr();
-	pr_info("NVRAM: ADDR: 0x%x\n", nvram_addr);
+	platform_type = intel_mid_identify_cpu();
+
+	if ((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE)) {
+		pr_info("%s: Using local NVRAM storage\n",
+				__func__);
+		nvram_size = NVRAM_MAX_SIZE;
+		nvram_ptr = kzalloc(nvram_size, GFP_KERNEL);
+		if (nvram_ptr == NULL) {
+			pr_err("%s: failed to allocate memory for nvram buffer!\n",
+								__func__);
+			retval = -ENOMEM;
+			goto exit;
+		}
+		pr_info("NVRAM: PTR: 0x%8x\n", (u32)nvram_ptr);
+	} else {
+		nvram_size = intel_scu_ipc_get_nvram_size();
+		nvram_addr = intel_scu_ipc_get_nvram_addr();
+		pr_info("NVRAM: ADDR: 0x%x\n", nvram_addr);
+	}
+
 	pr_info("NVRAM: SIZE: 0x%x\n", nvram_size);
 
-	if ((nvram_addr != 0) && (nvram_size > 0)) {
+	if ((((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE)) ||
+		(nvram_addr != 0)) && (nvram_size > 0)) {
 		if (register_reboot_notifier(&modem_nvram_reboot))
 			pr_err("%s: can't register reboot_notifier\n",
 								__func__);
@@ -264,12 +312,17 @@ static int __init modem_nvram_init(void)
 
 error:
 	unregister_reboot_notifier(&modem_nvram_reboot);
+exit:
 	unregister_rpmsg_driver(&modem_nvram_rpmsg);
 	return retval;
 }
 
 static void __exit modem_nvram_exit(void)
 {
+	if ((platform_type == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(platform_type == INTEL_MID_CPU_CHIP_ANNIEDALE))
+		kfree(nvram_ptr);
+
 	kobject_put(modem_nvram_kobj);
 	unregister_rpmsg_driver(&modem_nvram_rpmsg);
 	unregister_reboot_notifier(&modem_nvram_reboot);
