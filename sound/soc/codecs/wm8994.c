@@ -2347,7 +2347,8 @@ out:
 	 * If SYSCLK will be less than 50kHz adjust AIFnCLK dividers
 	 * for detection.
 	 */
-	if (max(wm8994->aifclk[0], wm8994->aifclk[1]) < 50000) {
+	if (max(wm8994->aifclk[0], wm8994->aifclk[1]) < 50000 &&
+		!wm8994->aifdiv[0]) {
 		dev_dbg(codec->dev, "Configuring AIFs for 128fs\n");
 
 		wm8994->aifdiv[0] = snd_soc_read(codec, WM8994_AIF1_RATE)
@@ -4257,7 +4258,6 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	}
 	if ((reg & WM8994_GPN_FN_MASK) != WM8994_GP_FN_PIN_SPECIFIC) {
 		wm8994->lrclk_shared[0] = 1;
-		wm8994_dai[0].symmetric_rates = 1;
 	} else {
 		wm8994->lrclk_shared[0] = 0;
 	}

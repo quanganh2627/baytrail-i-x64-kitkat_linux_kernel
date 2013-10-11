@@ -243,7 +243,7 @@ static int ctp_get_battery_temp(int *temp)
 	return platform_get_battery_pack_temp(temp);
 }
 
-int mrfl_get_bat_health(void)
+static int mrfl_get_bat_health(void)
 {
 
 	int pbat_health = -ENODEV;
@@ -273,8 +273,8 @@ int mrfl_get_bat_health(void)
 		return bqbat_health;
 }
 
-#define DEFAULT_VMIN	3400000
-int mrfl_get_vsys_min(void)
+#define DEFAULT_VMIN	3400000		/* 3400mV */
+static int mrfl_get_vsys_min(void)
 {
 	struct ps_batt_chg_prof batt_profile;
 	int ret;
@@ -284,21 +284,27 @@ int mrfl_get_vsys_min(void)
 					->low_batt_mV * 1000;
 	return DEFAULT_VMIN;
 }
-#define DEFAULT_VMAX_LIM	4200
-int mrfl_get_volt_max(void)
+#define DEFAULT_VMAX_LIM	4200000		/* 4200mV */
+static int mrfl_get_volt_max(void)
 {
 	struct ps_batt_chg_prof batt_profile;
 	int ret;
 	ret = get_batt_prop(&batt_profile);
 	if (!ret)
 		return ((struct ps_pse_mod_prof *)batt_profile.batt_prof)
-					->voltage_max;
+					->voltage_max * 1000;
 	return DEFAULT_VMAX_LIM;
 }
 
-int byt_get_vsys_min(void)
+static int byt_get_vsys_min(void)
 {
 	return DEFAULT_VMIN;
+}
+
+#define BYT_BATT_MAX_VOLT	4350000		/* 4350mV */
+static int byt_get_vbatt_max(void)
+{
+	return BYT_BATT_MAX_VOLT;
 }
 
 static bool is_mapped;
@@ -379,8 +385,8 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 		pdata->get_vmin_threshold = mrfl_get_vsys_min;
 		pdata->get_vmax_threshold = mrfl_get_volt_max;
 	} else if (INTEL_MID_BOARD(1, TABLET, BYT)) {
-		pdata->battery_status = smb347_get_charging_status;
 		pdata->get_vmin_threshold = byt_get_vsys_min;
+		pdata->get_vmax_threshold = byt_get_vbatt_max;
 		pdata->reset_chip = true;
 		pdata->temp_min_lim = 0;
 		pdata->temp_max_lim = 55;
@@ -498,10 +504,8 @@ void *max17042_platform_data(void *info)
 	struct i2c_board_info *i2c_info = (struct i2c_board_info *)info;
 	int intr = get_gpio_by_name("max_fg_alert");
 
-
 	if (!INTEL_MID_BOARD(1, TABLET, BYT))
 		i2c_info->irq = intr + INTEL_MID_IRQ_OFFSET;
-
 
 	init_tgain_toff(&platform_data);
 	init_callbacks(&platform_data);

@@ -34,7 +34,6 @@
 
 #include "dmaengine.h"
 
-#define MAX_CHAN	8 /*max ch across controllers*/
 #include "intel_mid_dma_regs.h"
 
 #define INTEL_MID_DMAC1_ID		0x0814
@@ -79,7 +78,7 @@ Utility Functions*/
 static int get_ch_index(int status, unsigned int base)
 {
 	int i;
-	for (i = 0; i < MAX_CHAN; i++) {
+	for (i = 0; i < MID_MAX_CHAN; i++) {
 		if (status & (1 << (i + base)))
 			return i;
 	}
@@ -142,6 +141,15 @@ static void dump_dma_reg(struct dma_chan *chan)
 	pr_debug("CFG_LOW:\t%#x", readl(midc->ch_regs + CFG_LOW));
 	pr_debug("CFG_HIGH:\t%#x", readl(midc->ch_regs + CFG_HIGH));
 	pr_debug("<<<<<<<<<<<< DMA Dump ends >>>>>>>>>>>>");
+}
+
+static void config_dma_fifo_partition(struct middma_device *dma)
+{
+	/* program FIFO Partition registers - 128 bytes for each ch */
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION0_HI);
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_LO);
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_HI);
+	iowrite32(DMA_FIFO_SIZE | BIT(26), dma->dma_base + FIFO_PARTITION0_LO);
 }
 
 /**
@@ -1366,6 +1374,11 @@ static int intel_mid_dma_alloc_chan_resources(struct dma_chan *chan)
 		return -EIO;
 	}
 	dma_cookie_init(chan);
+	/* Workaround to enable controller. Moved from
+		resume handler to here */
+	iowrite32(REG_BIT0, mid->dma_base + DMA_CFG);
+	if (!mid->dword_trf)
+		config_dma_fifo_partition(mid);
 
 	spin_lock_bh(&midc->lock);
 	while (midc->descs_allocated < DESCS_PER_CHANNEL) {
@@ -1613,15 +1626,6 @@ static irqreturn_t intel_mid_dma_interrupt1(int irq, void *data)
 static irqreturn_t intel_mid_dma_interrupt2(int irq, void *data)
 {
 	return intel_mid_dma_interrupt(irq, data);
-}
-
-static void config_dma_fifo_partition(struct middma_device *dma)
-{
-	/* program FIFO Partition registers - 128 bytes for each ch */
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION0_HI);
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_LO);
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_HI);
-	iowrite32(DMA_FIFO_SIZE | BIT(26), dma->dma_base + FIFO_PARTITION0_LO);
 }
 
 /* v1 ops will be used for Medfield & CTP platforms */
@@ -2034,7 +2038,7 @@ struct intel_mid_dma_probe_info dma_byt_info = {
 	.ch_base = 4,
 	.block_size = 131071,
 	.pimr_mask = 0x00FF0000,
-	.pimr_base = 0xDF540018,
+	.pimr_base = 0, /* get base addr from device table */
 	.dword_trf = 0,
 	.pimr_offset = 0x10,
 	.pci_id = INTEL_BYT_DMAC0_ID,
@@ -2042,8 +2046,8 @@ struct intel_mid_dma_probe_info dma_byt_info = {
 };
 
 static const struct dev_pm_ops intel_mid_dma_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(dma_suspend,
-			dma_resume)
+	.suspend_late = dma_suspend,
+	.resume_early = dma_resume,
 	SET_RUNTIME_PM_OPS(dma_runtime_suspend,
 			dma_runtime_resume,
 			dma_runtime_idle)
