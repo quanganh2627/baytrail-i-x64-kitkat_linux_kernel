@@ -3744,12 +3744,10 @@ sep_write(struct file *filp, const char __user *buf, size_t count, loff_t *ppos)
 static long sep_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct sep_client_ctx *client_ctx = filp->private_data;
-	unsigned long long ioctl_start, ioctl_end;
+	unsigned long long ioctl_start;
 	int err = 0;
 
-	preempt_disable_notrace();
 	ioctl_start = sched_clock();
-	preempt_enable_notrace();
 
 	/* Verify IOCTL command: magic + number */
 	if (_IOC_TYPE(cmd) != DXDI_IOC_MAGIC) {
@@ -3907,13 +3905,9 @@ static long sep_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 
 	/* Update stats per IOCTL command */
-	if (err == 0) {
-		preempt_disable_notrace();
-		ioctl_end = sched_clock();
-		preempt_enable_notrace();
+	if (err == 0)
 		sysfs_update_drv_stats(client_ctx->qid, _IOC_NR(cmd),
-				       ioctl_start, ioctl_end);
-	}
+				       ioctl_start, sched_clock());
 
 #ifdef SEP_RUNTIME_PM
 	dx_sep_pm_runtime_put();

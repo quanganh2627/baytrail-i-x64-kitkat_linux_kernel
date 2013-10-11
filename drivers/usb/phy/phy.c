@@ -417,7 +417,6 @@ int usb_add_phy(struct usb_phy *x, enum usb_phy_type type)
 
 	list_for_each_entry(phy, &phy_list, head) {
 		if (phy->type == type) {
-			spin_unlock_irqrestore(&phy_lock, flags);
 			ret = -EBUSY;
 			dev_err(x->dev, "transceiver type %s already exists\n",
 						usb_phy_type_string(type));
@@ -429,7 +428,6 @@ int usb_add_phy(struct usb_phy *x, enum usb_phy_type type)
 	list_add_tail(&x->head, &phy_list);
 
 	if (type == USB_PHY_TYPE_USB2) {
-		spin_unlock_irqrestore(&phy_lock, flags);
 		x->usb_otg_class = class_create(NULL, "usb_otg");
 		if (IS_ERR(x->usb_otg_class))
 			return -EFAULT;
@@ -447,8 +445,7 @@ int usb_add_phy(struct usb_phy *x, enum usb_phy_type type)
 				goto err1;
 		}
 
-	} else
-		spin_unlock_irqrestore(&phy_lock, flags);
+	}
 
 	goto out;
 
@@ -459,6 +456,7 @@ err2:
 	class_destroy(x->usb_otg_class);
 
 out:
+	spin_unlock_irqrestore(&phy_lock, flags);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(usb_add_phy);
