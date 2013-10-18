@@ -38,6 +38,7 @@
 #include "i915_drv.h"
 /*#include "i915_rpm.h"*/
 #include "i915_trace.h"
+#include "hdmi_audio_if.h"
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_crtc_helper.h>
 #include <linux/dma_remapping.h>
@@ -4115,7 +4116,7 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 	intel_crtc_update_cursor(crtc, false);
 	intel_disable_planes(crtc);
 	intel_disable_plane(dev_priv, plane, pipe);
-
+	mdelay(1);
 	intel_disable_pipe(dev_priv, pipe);
 
 	i9xx_pfit_disable(intel_crtc);
@@ -5528,6 +5529,13 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 	ret = intel_pipe_set_base(crtc, x, y, fb);
 
 	intel_update_watermarks(dev);
+	/* Added for HDMI Audio */
+	if (IS_VALLEYVIEW(dev) && intel_pipe_has_type(crtc,
+		INTEL_OUTPUT_HDMI)) {
+		dev_priv->tmds_clock_speed = intel_crtc->config.port_clock;
+		mid_hdmi_audio_signal_event(dev_priv->dev,
+			HAD_EVENT_MODE_CHANGING);
+	}
 
 	return ret;
 }
@@ -5557,6 +5565,34 @@ static void i9xx_get_pfit_config(struct intel_crtc *crtc,
 	if (INTEL_INFO(dev)->gen < 5)
 		pipe_config->gmch_pfit.lvds_border_bits =
 			I915_READ(LVDS) & LVDS_BORDER_ENABLE;
+}
+
+static void vlv_crtc_clock_get(struct intel_crtc *crtc,
+			       struct intel_crtc_config *pipe_config)
+{
+	struct drm_device *dev = crtc->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int pipe = pipe_config->cpu_transcoder;
+	intel_clock_t clock;
+	u32 mdiv;
+	int refclk = 100000, fastclk, update_rate;
+
+	mutex_lock(&dev_priv->dpio_lock);
+	mdiv = vlv_dpio_read(dev_priv, DPIO_DIV(pipe));
+	mutex_unlock(&dev_priv->dpio_lock);
+
+	clock.m1 = (mdiv >> DPIO_M1DIV_SHIFT) & 7;
+	clock.m2 = mdiv & DPIO_M2DIV_MASK;
+	clock.n = (mdiv >> DPIO_N_SHIFT) & 0xf;
+	clock.p1 = (mdiv >> DPIO_P1_SHIFT) & 7;
+	clock.p2 = (mdiv >> DPIO_P2_SHIFT) & 0x1f;
+
+	update_rate = refclk / clock.n;
+	clock.vco = update_rate * clock.m1 * clock.m2;
+	fastclk = clock.vco / clock.p1 / clock.p2;
+	clock.dot = (2 * fastclk);
+
+	pipe_config->port_clock = clock.dot / 10;
 }
 
 static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
@@ -5604,6 +5640,11 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 						     DPLL_PORTC_READY_MASK |
 						     DPLL_PORTB_READY_MASK);
 	}
+
+	if (IS_VALLEYVIEW(dev))
+		vlv_crtc_clock_get(crtc, pipe_config);
+	else
+		i9xx_crtc_clock_get(crtc, pipe_config);
 
 	return true;
 }
@@ -10164,11 +10205,10 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	}
 
 	/* TODO: uncomment after HDMI dependancies are merged */
-	/*
-	int ret = i915_hdmi_audio_suspend(drm_dev);
+	int ret = mid_hdmi_audio_suspend(dev);
 	if (ret != true)
 		DRM_ERROR("Error suspending HDMI audio\n");
-	*/
+
 	dev_priv->s0ixstat = false;
 	i915_rpm_put_disp(dev);
 	return 0;
@@ -10203,8 +10243,7 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 		/* Config may have changed between suspend and resume */
 		intel_resume_hotplug(dev);
 	}
-	/* TODO: uncomment after HDMI dependencies are merged */
-	/* i915_hdmi_audio_resume(drm_dev); */
+	mid_hdmi_audio_resume(dev);
 	dev_priv->s0ixstat = false;
 	return 0;
 }

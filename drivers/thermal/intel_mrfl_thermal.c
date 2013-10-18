@@ -653,6 +653,11 @@ static struct thermal_zone_device_ops tzd_ops = {
 #endif
 };
 
+static irqreturn_t mrfl_thermal_intrpt_handler(int irq, void* dev_data)
+{
+	return IRQ_WAKE_THREAD;
+}
+
 static int mrfl_thermal_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -699,7 +704,7 @@ static int mrfl_thermal_probe(struct platform_device *pdev)
 	 * Order of the channels obtained from adc:
 	 * "SYSTHERM0", "SYSTHERM1", "SYSTHERM2", "PMICDIE"
 	 */
-	tdata->iio_chan = iio_channel_get_all(dev);
+	tdata->iio_chan = iio_channel_get_all(&pdev->dev);
 	if (tdata->iio_chan == NULL) {
 		dev_err(&pdev->dev, "tdata->iio_chan is null\n");
 		ret = -EINVAL;
@@ -737,7 +742,7 @@ static int mrfl_thermal_probe(struct platform_device *pdev)
 	}
 
 	/* Register for Interrupt Handler */
-	ret = request_threaded_irq(tdata->irq, NULL, thermal_intrpt,
+	ret = request_threaded_irq(tdata->irq, mrfl_thermal_intrpt_handler, thermal_intrpt,
 						IRQF_TRIGGER_RISING,
 						DRIVER_NAME, tdata);
 	if (ret) {

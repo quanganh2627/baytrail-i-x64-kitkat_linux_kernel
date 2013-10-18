@@ -678,7 +678,8 @@
 #define RING_ACTHD(base)	((base)+0x74)
 #define RING_NOPID(base)	((base)+0x94)
 #define RING_IMR(base)		((base)+0xa8)
-#define RING_TIMESTAMP(base)	((base)+0x358)
+#define RING_TIMESTAMP_LO(base)	((base)+0x358)
+#define RING_TIMESTAMP_HI(base)	((base)+0x35c)
 #define   TAIL_ADDR		0x001FFFF8
 #define   HEAD_WRAP_COUNT	0xFFE00000
 #define   HEAD_WRAP_ONE		0x00200000
@@ -976,6 +977,16 @@
 #define I915_USER_INTERRUPT				(1<<1)
 #define I915_ASLE_INTERRUPT				(1<<0)
 #define I915_BSD_USER_INTERRUPT				(1 << 25)
+/* Added for HDMI Audio */
+/* HDMI AUDIO INTERRUPT TYPE */
+#define I915_LPE_AUDIO_HDMI_STATUS_A			0x65064
+#define I915_LPE_AUDIO_HDMI_STATUS_B			0x65864
+/* Discrepancy in Display HAS, bit definitions are reversed */
+#define I915_LPE_PIPE_A_INTERRUPT			(1<<21)
+#define I915_LPE_PIPE_B_INTERRUPT			(1<<20)
+#define I915_HDMI_AUDIO_UNDERRUN			(1UL<<31)
+#define I915_HDMI_AUDIO_BUFFER_DONE			(1UL<<29)
+#define I915_HDMI_AUDIO_UNDERRUN_ENABLE			(1UL<<15)
 
 #define GEN6_BSD_RNCID			0x12198
 
@@ -2109,6 +2120,7 @@ EDP_PSR_SW_TIMER
 #define PCH_HDMIB	PCH_SDVOB
 #define PCH_HDMIC	0xe1150
 #define PCH_HDMID	0xe1160
+#define PORT_ENABLE	(1 << 31)
 
 /* Gen 3 SDVO bits: */
 #define   SDVO_ENABLE				(1 << 31)
@@ -3174,6 +3186,8 @@ EDP_PSR_SW_TIMER
 #define   PIPE_VSYNC_INTERRUPT_STATUS		(1UL<<9)
 #define   PIPE_DISPLAY_LINE_COMPARE_STATUS	(1UL<<8)
 #define   PIPE_DPST_EVENT_STATUS		(1UL<<7)
+#define	  DPST_BIN_COUNT			32
+#define   DPST_LUMA_COUNT			33
 #define   PIPE_LEGACY_BLC_EVENT_STATUS		(1UL<<6)
 #define   PIPE_ODD_FIELD_INTERRUPT_STATUS	(1UL<<5)
 #define   PIPE_EVEN_FIELD_INTERRUPT_STATUS	(1UL<<4)

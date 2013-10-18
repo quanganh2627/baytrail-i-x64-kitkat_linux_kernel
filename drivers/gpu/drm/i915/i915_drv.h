@@ -42,6 +42,7 @@
 #include <linux/intel-iommu.h>
 #include <linux/kref.h>
 #include <linux/pm_qos.h>
+#include "hdmi_audio_if.h"
 
 /* General customization:
  */
@@ -1325,6 +1326,12 @@ typedef struct drm_i915_private {
 		u32 signal;
 		u32 blc_adjustment;
 		bool enabled;
+		bool feature_control;
+#ifdef CONFIG_DEBUG_FS
+		u32 bin_data[DPST_BIN_COUNT];
+		u32 luma_data[DPST_LUMA_COUNT];
+		u32 num_interrupt;
+#endif
 	} dpst;
 
 	/* PCH chipset type */
@@ -1437,6 +1444,13 @@ typedef struct drm_i915_private {
 	struct i915_dri1_state dri1;
 	/* Old ums support infrastructure, same warning applies. */
 	struct i915_ums_state ums;
+	/* Added for HDMI Audio */
+	had_event_call_back had_event_callbacks;
+	struct snd_intel_had_interface *had_interface;
+	void *had_pvt_data;
+	int tmds_clock_speed;
+	int hdmi_audio_interrupt_mask;
+	struct work_struct hdmi_audio_wq;
 
 	int planeid_gamma;
 	int planeid_csc;
@@ -2390,6 +2404,8 @@ int i915_dpst_context(struct drm_device *dev, void *data,
 u32 i915_dpst_get_brightness(struct drm_device *dev);
 void i915_dpst_set_brightness(struct drm_device *dev, u32 brightness_val);
 void i915_dpst_irq_handler(struct drm_device *dev);
+int i915_dpst_disable_hist_interrupt(struct drm_device *dev);
+int i915_dpst_enable_hist_interrupt(struct drm_device *dev);
 
 /* intel_acpi.c */
 #ifdef CONFIG_ACPI
@@ -2525,6 +2541,10 @@ int i915_rpm_put_ioctl(struct drm_device *dev);
 
 int i915_rpm_get_disp(struct drm_device *dev);
 int i915_rpm_put_disp(struct drm_device *dev);
+
+bool i915_pm_runtime_enabled(struct device *dev);
+void i915_rpm_disable(struct drm_device *drm_dev);
+void i915_rpm_enable(struct device *dev);
 
 #ifdef CONFIG_DRM_VXD_BYT
 int i915_rpm_get_vxd(struct drm_device *dev);

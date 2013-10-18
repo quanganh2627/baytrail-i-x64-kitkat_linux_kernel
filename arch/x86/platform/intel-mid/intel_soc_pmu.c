@@ -145,6 +145,10 @@ int pmu_set_devices_in_d0i0(void)
 	cur_pmssc.pmu2_states[2] = D0I0_MASK;
 	cur_pmssc.pmu2_states[3] = D0I0_MASK;
 
+	/* Restrict platform Cx state to C6 */
+	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+				(CSTATE_EXIT_LATENCY_S0i1-1));
+
 	down(&mid_pmu_cxt->scu_ready_sem);
 
 	mid_pmu_cxt->shutdown_started = true;
@@ -159,6 +163,10 @@ int pmu_set_devices_in_d0i0(void)
 		printk(KERN_CRIT "%s: Failed to Issue a PM command to PMU2\n",
 								__func__);
 		mid_pmu_cxt->shutdown_started = false;
+
+		/* allow s0ix now */
+		pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+						PM_QOS_DEFAULT_VALUE);
 		goto unlock;
 	}
 
@@ -272,7 +280,7 @@ void log_wakeup_irq(void)
 	return;
 }
 
-static int pmu_interrupt_pending(void)
+static inline int pmu_interrupt_pending(void)
 {
 	u32 temp;
 	union pmu_pm_ics result;
@@ -291,6 +299,42 @@ static inline void pmu_clear_pending_interrupt(void)
 
 	/* read the pm interrupt status register */
 	temp = readl(&mid_pmu_cxt->pmu_reg->pm_ics);
+
+	/* write into the PM_ICS register */
+	writel(temp, &mid_pmu_cxt->pmu_reg->pm_ics);
+}
+
+void pmu_set_interrupt_enable(void)
+{
+	u32 temp;
+	union pmu_pm_ics result;
+
+	/* read the pm interrupt status register */
+	temp = readl(&mid_pmu_cxt->pmu_reg->pm_ics);
+	result.pmu_pm_ics_value = temp;
+
+	/* Set the interrupt enable bit */
+	result.pmu_pm_ics_parts.int_enable = 1;
+
+	temp = result.pmu_pm_ics_value;
+
+	/* write into the PM_ICS register */
+	writel(temp, &mid_pmu_cxt->pmu_reg->pm_ics);
+}
+
+void pmu_clear_interrupt_enable(void)
+{
+	u32 temp;
+	union pmu_pm_ics result;
+
+	/* read the pm interrupt status register */
+	temp = readl(&mid_pmu_cxt->pmu_reg->pm_ics);
+	result.pmu_pm_ics_value = temp;
+
+	/* Clear the interrupt enable bit */
+	result.pmu_pm_ics_parts.int_enable = 0;
+
+	temp = result.pmu_pm_ics_value;
 
 	/* write into the PM_ICS register */
 	writel(temp, &mid_pmu_cxt->pmu_reg->pm_ics);
@@ -445,6 +489,9 @@ static irqreturn_t pmu_sc_irq(int irq, void *ignored)
 
 	ret = IRQ_HANDLED;
 ret_no_clear:
+	/* clear interrupt enable bit */
+	pmu_clear_interrupt_enable();
+
 	return ret;
 }
 
@@ -505,6 +552,21 @@ static inline u32 find_index_in_hash(struct pci_dev *pdev, int *found)
 	return h_index;
 }
 
+static bool is_display_subclass(unsigned int sub_class)
+{
+	/* On MDFLD and CLV, we have display PCI device class 0x30000,
+	 * On MRFLD, we have display PCI device class 0x38000
+	 */
+
+	if ((sub_class == 0x0 &&
+		(platform_is(INTEL_ATOM_MFLD) ||
+		platform_is(INTEL_ATOM_CLV))) ||
+		(sub_class == 0x80 && platform_is(INTEL_ATOM_MRFLD)))
+		return true;
+
+	return false;
+}
+
 static int get_pci_to_pmu_index(struct pci_dev *pdev)
 {
 	int pm, type;
@@ -533,7 +595,8 @@ static int get_pci_to_pmu_index(struct pci_dev *pdev)
 	type = ss & LOG_SS_MASK;
 	ss = ss & LOG_ID_MASK;
 
-	if ((base_class == PCI_BASE_CLASS_DISPLAY) && !sub_class)
+	if ((base_class == PCI_BASE_CLASS_DISPLAY) &&
+			is_display_subclass(sub_class))
 		index = 1;
 	else if ((base_class == PCI_BASE_CLASS_MULTIMEDIA) &&
 			(sub_class == ISP_SUB_CLASS))
@@ -597,7 +660,8 @@ static void get_pci_lss_info(struct pci_dev *pdev)
 		return;
 
 	/* initialize gfx subsystem info */
-	if ((base_class == PCI_BASE_CLASS_DISPLAY) && !sub_class) {
+	if ((base_class == PCI_BASE_CLASS_DISPLAY) &&
+			is_display_subclass(sub_class)) {
 		set_mid_pci_log_id(index, (u32)index);
 		set_mid_pci_cap(index, PM_SUPPORT);
 	} else if ((base_class == PCI_BASE_CLASS_MULTIMEDIA) &&
@@ -1460,6 +1524,19 @@ nc_done:
 	}
 #endif
 
+	/* FIXME:: If S0ix is enabled when North Complex is ON we see
+	 * Fabric errors, tracked in BZ: 115181, hence hold pm_qos
+	 * to restrict s0ix during North Island in D0i0
+	 */
+	if (nc_device_state()) {
+		if (!pm_qos_request_active(mid_pmu_cxt->nc_restrict_qos))
+			pm_qos_add_request(mid_pmu_cxt->nc_restrict_qos,
+			 PM_QOS_CPU_DMA_LATENCY, (CSTATE_EXIT_LATENCY_S0i1-1));
+	} else {
+		if (pm_qos_request_active(mid_pmu_cxt->nc_restrict_qos))
+			pm_qos_remove_request(mid_pmu_cxt->nc_restrict_qos);
+	}
+
 unlock:
 	up(&mid_pmu_cxt->scu_ready_sem);
 
@@ -1509,7 +1586,6 @@ pci_power_t pmu_pci_choose_state(struct pci_dev *pdev)
 int pmu_issue_interactive_command(struct pmu_ss_states *pm_ssc, bool ioc,
 					bool d3_cold)
 {
-	u32 tmp;
 	u32 command;
 
 	if (_pmu2_wait_not_busy()) {
@@ -1523,9 +1599,8 @@ int pmu_issue_interactive_command(struct pmu_ss_states *pm_ssc, bool ioc,
 	 * command is set
 	 */
 	/* Enable the hardware interrupt */
-	tmp = readl(&mid_pmu_cxt->pmu_reg->pm_ics);
-	tmp |= 0x100;/* Enable interrupts */
-	writel(tmp, &mid_pmu_cxt->pmu_reg->pm_ics);
+	if (ioc)
+		pmu_set_interrupt_enable();
 
 	/* Configure the sub systems for pmu2 */
 	pmu_write_subsys_config(pm_ssc);
@@ -1864,6 +1939,10 @@ static void mid_pmu_shutdown(struct pci_dev *dev)
 	dev_dbg(&mid_pmu_cxt->pmu_dev->dev, "Mid PM mid_pmu_shutdown called\n");
 
 	if (mid_pmu_cxt) {
+		/* Restrict platform Cx state to C6 */
+		pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+					(CSTATE_EXIT_LATENCY_S0i1-1));
+
 		down(&mid_pmu_cxt->scu_ready_sem);
 		mid_pmu_cxt->shutdown_started = true;
 		up(&mid_pmu_cxt->scu_ready_sem);
@@ -1906,6 +1985,9 @@ static int standby_enter(void)
 	writel(mid_pmu_cxt->ss_config->wake_state.wake_enable[1],
 		       &mid_pmu_cxt->pmu_reg->pm_wkc[1]);
 
+	mid_pmu_cxt->camera_off = 0;
+	mid_pmu_cxt->display_off = 0;
+
 	if (platform_is(INTEL_ATOM_MRFLD))
 		up(&mid_pmu_cxt->scu_ready_sem);
 
@@ -1916,6 +1998,10 @@ static int mid_suspend_begin(suspend_state_t state)
 {
 	mid_pmu_cxt->suspend_started = true;
 	pmu_s3_stats_update(1);
+
+	/* Restrict to C6 during suspend */
+	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+					(CSTATE_EXIT_LATENCY_S0i1-1));
 	return 0;
 }
 
@@ -1952,6 +2038,14 @@ static int mid_suspend_enter(suspend_state_t state)
 	if (state != PM_SUSPEND_MEM)
 		return -EINVAL;
 
+	/* one last check before entering standby */
+	if (pmu_ops->check_nc_sc_status) {
+		if (!(pmu_ops->check_nc_sc_status())) {
+			trace_printk("Device d0ix status check failed! Aborting Standby entry!\n");
+			WARN_ON(1);
+		}
+	}
+
 	trace_printk("s3_entry\n");
 	ret = standby_enter();
 	trace_printk("s3_exit %d\n", ret);
@@ -1964,6 +2058,10 @@ static int mid_suspend_enter(suspend_state_t state)
 
 static void mid_suspend_end(void)
 {
+	/* allow s0ix now */
+	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+					PM_QOS_DEFAULT_VALUE);
+
 	pmu_s3_stats_update(0);
 	mid_pmu_cxt->suspend_started = false;
 }
@@ -1989,7 +2087,21 @@ static int __init mid_pci_register_init(void)
 	if (mid_pmu_cxt == NULL)
 		return -ENOMEM;
 
+	mid_pmu_cxt->s3_restrict_qos =
+		kzalloc(sizeof(struct pm_qos_request), GFP_KERNEL);
+	if (mid_pmu_cxt->s3_restrict_qos) {
+		pm_qos_add_request(mid_pmu_cxt->s3_restrict_qos,
+			 PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+	} else {
+		return -ENOMEM;
+	}
+
 	init_nc_device_states();
+
+	mid_pmu_cxt->nc_restrict_qos =
+		kzalloc(sizeof(struct pm_qos_request), GFP_KERNEL);
+	if (mid_pmu_cxt->nc_restrict_qos == NULL)
+		return -ENOMEM;
 
 	/* initialize the semaphores */
 	sema_init(&mid_pmu_cxt->scu_ready_sem, 1);
@@ -2017,6 +2129,14 @@ void pmu_power_off(void)
 
 static void __exit mid_pci_cleanup(void)
 {
+	if (mid_pmu_cxt) {
+		if (mid_pmu_cxt->s3_restrict_qos)
+			pm_qos_remove_request(mid_pmu_cxt->s3_restrict_qos);
+
+		if (pm_qos_request_active(mid_pmu_cxt->nc_restrict_qos))
+			pm_qos_remove_request(mid_pmu_cxt->nc_restrict_qos);
+	}
+
 	suspend_set_ops(NULL);
 
 	/* registering PCI device */

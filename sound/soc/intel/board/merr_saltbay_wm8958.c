@@ -268,10 +268,10 @@ static const struct snd_soc_dapm_route map[] = {
 	/*{ "DMIC3DAT", NULL, "DMIC" },*/
 	/*{ "DMIC4DAT", NULL, "DMIC" },*/
 
-	/* MICBIAS2 is connected as Bias for both DMIC and AMIC so we link it
-	 * here. Also AMIC wires up to IN1LP pin
+	/* MICBIAS2 is connected as Bias for AMIC so we link it
+	 * here. Also AMIC wires up to IN1LP pin.
+	 * DMIC is externally connected to 1.8V rail, so no link rqd.
 	 */
-	{ "DMIC", NULL, "MICBIAS1" },
 	{ "AMIC", NULL, "MICBIAS2" },
 	{ "IN1LP", NULL, "AMIC" },
 
@@ -433,14 +433,21 @@ static int mrfld_8958_init(struct snd_soc_pcm_runtime *runtime)
 	mrfld_8958_set_bias_level(card, dapm, SND_SOC_BIAS_OFF);
 	card->dapm.idle_bias_off = true;
 
-	/* mark pins as NC */
-
+	/* these pins are not used in SB config so mark as nc
+	 *
+	 * LINEOUT1, 2
+	 * IN1R
+	 * DMICDAT2
+	 */
+	snd_soc_dapm_nc_pin(dapm, "DMIC2DAT");
+	snd_soc_dapm_nc_pin(dapm, "LINEOUT1P");
+	snd_soc_dapm_nc_pin(dapm, "LINEOUT1N");
+	snd_soc_dapm_nc_pin(dapm, "LINEOUT2P");
+	snd_soc_dapm_nc_pin(dapm, "LINEOUT2N");
+	snd_soc_dapm_nc_pin(dapm, "IN1RN");
+	snd_soc_dapm_nc_pin(dapm, "IN1RP");
 
 	snd_soc_dapm_sync(dapm);
-	/* FIXME
-	 * set all the nc_pins, set all the init control
-	 * and add any machine controls here
-	 */
 
 	ctx->jack_retry = 0;
 	ret = snd_soc_jack_new(codec, "Intel MID Audio Jack",
@@ -460,6 +467,12 @@ static int mrfld_8958_init(struct snd_soc_pcm_runtime *runtime)
 
 	snd_soc_update_bits(codec, WM8994_AIF1_DAC1_FILTERS_1, WM8994_AIF1DAC1_MUTE, 0);
 	snd_soc_update_bits(codec, WM8994_AIF1_DAC2_FILTERS_1, WM8994_AIF1DAC2_MUTE, 0);
+
+	/* Micbias1 is always off, so for pm optimizations make sure the micbias1
+	 * discharge bit is set to floating to avoid discharge in disable state
+	 */
+	snd_soc_update_bits(codec, WM8958_MICBIAS1, WM8958_MICB1_DISCH, 0);
+
 	return 0;
 }
 

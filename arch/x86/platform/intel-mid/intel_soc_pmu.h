@@ -348,6 +348,7 @@ struct mid_pmu_dev {
 	struct mid_pmu_stats pmu_stats[SYS_STATE_MAX];
 	struct device_residency pmu_dev_res[MAX_DEVICES];
 	struct delayed_work log_work;
+	struct pm_qos_request *s3_restrict_qos;
 
 #ifdef LOG_PMU_EVENTS
 	struct mid_pmu_cmd_log cmd_log[LOG_SIZE];
@@ -359,6 +360,7 @@ struct mid_pmu_dev {
 
 	struct pmu_suspend_config *ss_config;
 	struct pci_dev *pmu_dev;
+	struct pm_qos_request *nc_restrict_qos;
 
 	spinlock_t nc_ready_lock;
 
@@ -375,6 +377,7 @@ struct platform_pmu_ops {
 	void (*set_power_state_ops) (int);
 	void (*set_s0ix_complete) (void);
 	int (*nc_set_power_state) (int, int, int, int *);
+	bool (*check_nc_sc_status) (void);
 };
 
 extern char s0ix[5];
@@ -407,6 +410,8 @@ extern int set_extended_cstate_mode(const char *val, struct kernel_param *kp);
 extern int get_extended_cstate_mode(char *buffer, struct kernel_param *kp);
 extern int byt_pmu_nc_set_power_state(int islands, int state_type, int reg);
 extern int byt_pmu_nc_get_power_state(int islands, int reg);
+extern void pmu_set_interrupt_enable(void);
+extern void pmu_clear_interrupt_enable(void);
 
 #ifdef LOG_PMU_EVENTS
 extern void pmu_log_pmu_irq(int status);

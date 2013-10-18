@@ -32,6 +32,8 @@
 /* Header file for Color management through debugfs */
 #include "intel_clrmgr.h"
 
+/* Operations supported
+*/
 #define MAX_BUFFER_STR_LEN	200
 
 #define READ_TOKEN	        "READ"
@@ -57,6 +59,18 @@
 #define RP_MAXFREQ_TOKEN	"SETMAXFREQ"
 #define RP_MINFREQ_TOKEN        "SETMINFREQ"
 
+/* DPST Operations */
+#define DPST_DUMP_REG_TOKEN     "DUMP_REG"
+#define DPST_FACTOR_TOKEN	"BACKLIGHT_FACTOR"
+#define DPST_LEVEL_TOKEN	"CUR_LEVEL"
+#define DPST_GET_BIN_DATA_TOKEN	"GET_BIN_DATA"
+#define DPST_GET_LUMA_DATA_TOKEN	"GET_LUMA_DATA"
+#define DPST_IRQ_COUNT_TOKEN	"INTERRUPT_COUNT"
+
+/* RPM(S0iX) Operations */
+#define RPM_DISPLAY_RUNTIME_SUSPEND_TOKEN       "DISPLAY_SUSPEND"
+#define RPM_DISPLAY_RUNTIME_RESUME_TOKEN        "DISPLAY_RESUME"
+
 /* DebugFS Variable declaration */
 struct debugfs_mmio_vars {
 	char mmio_vars[MAX_BUFFER_STR_LEN];
@@ -73,16 +87,28 @@ struct debugfs_rc6_vars {
 	u32 rc6_input;
 };
 
+struct debugfs_rpm_vars {
+	char rpm_vars[MAX_BUFFER_STR_LEN];
+	u32 rpm_input;
+};
+
 struct debugfs_turbo_vars {
 	char turbo_vars[MAX_BUFFER_STR_LEN];
 	u32 turbo_input;
+};
+
+struct debugfs_dpst_vars {
+	char dpst_vars[MAX_BUFFER_STR_LEN];
+	u32 dpst_input;
 };
 
 union {
 	struct debugfs_mmio_vars mmio;
 	struct debugfs_iosf_vars iosf;
 	struct debugfs_rc6_vars rc6;
+	struct debugfs_rpm_vars rpm;
 	struct debugfs_turbo_vars turbo;
+	struct debugfs_dpst_vars dpst;
 } i915_debugfs_vars;
 
 enum {

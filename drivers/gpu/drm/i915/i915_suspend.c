@@ -500,6 +500,9 @@ static int __i915_drm_freeze(struct drm_device *dev)
 
 	intel_opregion_fini(dev);
 
+	/* make sure console resume work is cancelled before suspend */
+	cancel_work_sync(&dev_priv->console_resume_work);
+
 	console_lock();
 	intel_fbdev_set_suspend(dev, FBINFO_STATE_SUSPENDED);
 	console_unlock();
@@ -658,7 +661,6 @@ static void vlv_punit_write32_bits(struct drm_i915_private *dev_priv,
 				u32 reg, u32 val, u32 mask)
 {
 	u32 tmp;
-	int status;
 
 	tmp = vlv_punit_read(dev_priv, reg);
 
@@ -793,7 +795,6 @@ static void valleyview_power_ungate_disp(struct drm_i915_private *dev_priv)
 static int valleyview_freeze(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_crtc *crtc;
 	u32 reg;
 
 	pci_save_state(dev->pdev);
@@ -808,11 +809,6 @@ static int valleyview_freeze(struct drm_device *dev)
 				"GFX_CLK_ON timed out, suspend might fail\n");
 	}
 
-	/* ii) Set Global Force Wake to avoid waking up wells every
-	 * time during saving registers
-	 */
-	vlv_force_wake_get(dev_priv, FORCEWAKE_ALL);
-
 	/* If KMS is active, we do the leavevt stuff here */
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		int error;
@@ -826,15 +822,15 @@ static int valleyview_freeze(struct drm_device *dev)
 			return error;
 		}
 
+		/* uninstall the interrupts and then cancel outstanding wq.
+		 * this will make sure after cancelation no work is pending.
+		 */
 		drm_irq_uninstall(dev);
-
 		/* cancel all outstanding wq */
 		cancel_delayed_work_sync(&dev_priv->rps.delayed_resume_work);
 		cancel_work_sync(&dev_priv->hotplug_work);
 		cancel_work_sync(&dev_priv->gpu_error.work);
 		cancel_work_sync(&dev_priv->rps.work);
-
-		drm_irq_uninstall(dev);
 
 		intel_modeset_suspend_hw(dev);
 	}
@@ -844,6 +840,9 @@ static int valleyview_freeze(struct drm_device *dev)
 	i915_save_state(dev);
 
 	intel_opregion_fini(dev);
+
+	/* make sure console resume work is cancelled before suspend */
+	cancel_work_sync(&dev_priv->console_resume_work);
 
 	console_lock();
 	intel_fbdev_set_suspend(dev, FBINFO_STATE_SUSPENDED);

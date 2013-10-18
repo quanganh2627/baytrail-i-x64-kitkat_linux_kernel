@@ -14,6 +14,7 @@
 #include <linux/pci.h>
 #include <asm/intel-mid.h>
 #include <asm/intel_scu_ipc.h>
+#include <asm/spid.h>
 #include <linux/dma-mapping.h>
 
 #ifdef CONFIG_USB_DWC3_OTG
@@ -21,12 +22,22 @@
 static struct intel_dwc_otg_pdata dwc_otg_pdata;
 static struct intel_dwc_otg_pdata *get_otg_platform_data(struct pci_dev *pdev)
 {
-	int retval;
-
 	switch (pdev->device) {
 	case PCI_DEVICE_ID_INTEL_MRFL_DWC3_OTG:
-		if (intel_mid_identify_sim() == INTEL_MID_CPU_SIMULATION_HVP)
+		if (INTEL_MID_BOARD(1, PHONE, MOOR)) {
+			dwc_otg_pdata.pmic_type = SHADY_COVE;
+			dwc_otg_pdata.charger_detect_enable = 0;
+
+		} else if (INTEL_MID_BOARD(1, PHONE, MRFL)) {
+			dwc_otg_pdata.pmic_type = BASIN_COVE;
+			dwc_otg_pdata.charger_detect_enable = 1;
+
+		} else if (intel_mid_identify_sim() ==
+				INTEL_MID_CPU_SIMULATION_HVP) {
+			dwc_otg_pdata.pmic_type = NO_PMIC;
 			dwc_otg_pdata.is_hvp = 1;
+			dwc_otg_pdata.charger_detect_enable = 0;
+		}
 		return &dwc_otg_pdata;
 	case PCI_DEVICE_ID_INTEL_BYT_OTG:
 		/* FIXME: Hardcode now, but need to use ACPI table for GPIO */
@@ -40,25 +51,7 @@ static struct intel_dwc_otg_pdata *get_otg_platform_data(struct pci_dev *pdev)
 			pr_info("This is BYT FFRD8 PR0\n");
 			dwc_otg_pdata.gpio_cs = 54;
 			dwc_otg_pdata.gpio_reset = 144;
-		} else
-			return &dwc_otg_pdata;
-
-		retval = gpio_request(dwc_otg_pdata.gpio_cs, "phy_cs");
-		if (retval < 0) {
-			dev_err(&pdev->dev, "failed to request CS pin\n");
-			dwc_otg_pdata.gpio_cs = 0;
-			dwc_otg_pdata.gpio_reset = 0;
-			return &dwc_otg_pdata;
 		}
-
-		retval = gpio_request(dwc_otg_pdata.gpio_reset, "phy_reset");
-		if (retval < 0) {
-			dev_err(&pdev->dev, "failed to request RESET pin\n");
-			dwc_otg_pdata.gpio_cs = 0;
-			dwc_otg_pdata.gpio_reset = 0;
-			return &dwc_otg_pdata;
-		}
-
 		return &dwc_otg_pdata;
 	default:
 		break;

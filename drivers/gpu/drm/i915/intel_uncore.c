@@ -150,28 +150,25 @@ static int __gen6_gt_wait_for_fifo(struct drm_i915_private *dev_priv)
 {
 	int ret = 0;
 
+	/* On VLV, FIFO will be shared by both SW and HW.
+	So, we need to read the	FREE_ENTRIES everytime */
+	if (IS_VALLEYVIEW(dev_priv->dev))
+		dev_priv->uncore.fifo_count =
+			__raw_i915_read32(dev_priv, GT_FIFO_FREE_ENTRIES);
 	if (dev_priv->uncore.fifo_count < GT_FIFO_NUM_RESERVED_ENTRIES) {
 		int loop = 500;
 		u32 fifo = __raw_i915_read32(dev_priv, GT_FIFO_FREE_ENTRIES);
-		while (fifo <= GT_FIFO_NUM_WRITE_THRESHOLD && loop--) {
+		while (fifo <= GT_FIFO_NUM_RESERVED_ENTRIES && loop--) {
 			udelay(10);
 			fifo = __raw_i915_read32(dev_priv, GT_FIFO_FREE_ENTRIES);
 		}
-		if (WARN_ON(loop < 0 && fifo <= GT_FIFO_NUM_WRITE_THRESHOLD))
+		if (WARN_ON(loop < 0 && fifo <= GT_FIFO_NUM_RESERVED_ENTRIES))
 			++ret;
 		dev_priv->uncore.fifo_count = fifo;
 	}
 	dev_priv->uncore.fifo_count--;
 
 	return ret;
-}
-
-static void vlv_force_wake_reset(struct drm_i915_private *dev_priv)
-{
-	__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
-			   _MASKED_BIT_DISABLE(0xffff));
-	/* something from same cacheline, but !FORCEWAKE_VLV */
-	__raw_posting_read(dev_priv, FORCEWAKE_ACK_VLV);
 }
 
 static void __vlv_force_wake_get(struct drm_i915_private *dev_priv,
@@ -334,7 +331,12 @@ void intel_uncore_sanitize(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	if (IS_VALLEYVIEW(dev)) {
-		vlv_force_wake_reset(dev_priv);
+		/* RS state has to be initialized to pull render/media power
+		* wells out of sleep. This is required before initializing gem,
+		* which touches render/media registers
+		*/
+		vlv_rs_sleepstateinit(dev, true);
+		return;
 	} else if (INTEL_INFO(dev)->gen >= 6) {
 		__gen6_gt_force_wake_reset(dev_priv);
 		if (IS_IVYBRIDGE(dev) || IS_HASWELL(dev))
@@ -503,7 +505,8 @@ static const struct register_whitelist {
 	uint32_t size;
 	uint32_t gen_bitmask; /* support gens, 0x10 for 4, 0x30 for 4 and 5, etc. */
 } whitelist[] = {
-	{ RING_TIMESTAMP(RENDER_RING_BASE), 8, 0xF0 },
+	{ RING_TIMESTAMP_LO(RENDER_RING_BASE), 4, 0xF0 },
+	{ RING_TIMESTAMP_HI(RENDER_RING_BASE), 4, 0xF0 }
 };
 
 int i915_reg_read_ioctl(struct drm_device *dev,
@@ -528,6 +531,7 @@ int i915_reg_read_ioctl(struct drm_device *dev,
 		reg->val = I915_READ64(reg->offset);
 		break;
 	case 4:
+
 		reg->val = I915_READ(reg->offset);
 		break;
 	case 2:

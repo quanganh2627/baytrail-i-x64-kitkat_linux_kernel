@@ -22,14 +22,11 @@
 #include <linux/cpuidle.h>
 #include "intel_soc_pm_debug.h"
 #include <asm-generic/io-64-nonatomic-hi-lo.h>
+#include <asm/tsc.h>
 
 #ifdef CONFIG_PM_DEBUG
 #define MAX_CSTATES_POSSIBLE	32
 
-u32 prev_s0ix_cnt[SYS_STATE_MAX];
-unsigned long long prev_s0ix_res[SYS_STATE_MAX];
-u32 S3_count;
-unsigned long long S3_res;
 
 
 static struct latency_stat *lat_stat;
@@ -658,8 +655,8 @@ static void pmu_stat_seq_printf(struct seq_file *s, int type, char *typestr)
 	init_2_now_time =  (unsigned long) t;
 
 	/* for calculating percentage residency */
-	time = time * 100;
 	t = (u64) time;
+	t *= 100;
 
 	/* take care of divide by zero */
 	if (init_2_now_time) {
@@ -668,8 +665,8 @@ static void pmu_stat_seq_printf(struct seq_file *s, int type, char *typestr)
 
 		/* for getting 3 digit precision after
 		 * decimal dot */
-		remainder *= 1000;
 		t = (u64) remainder;
+		t *= 1000;
 		remainder = do_div(t, init_2_now_time);
 	} else
 		time = t = 0;
@@ -715,8 +712,8 @@ static unsigned long pmu_dev_res_print(int index, unsigned long *precision,
 	*sampled_time = time;
 
 	/* for calculating percentage residency */
-	time = time * 100;
 	t = (u64) time;
+	t *= 100;
 
 	/* take care of divide by zero */
 	if (init_to_now_time) {
@@ -725,8 +722,8 @@ static unsigned long pmu_dev_res_print(int index, unsigned long *precision,
 
 		/* for getting 3 digit precision after
 		* decimal dot */
-		remainder *= 1000;
 		t = (u64) remainder;
+		t *= 1000;
 		remainder = do_div(t, init_to_now_time);
 	} else
 		time = t = 0;
@@ -1148,7 +1145,8 @@ static void pmu_log_s0ix_status(int type, char *typestr,
 	init_2_now_time =  (unsigned long) t;
 
 	/* for calculating percentage residency */
-	t = (u64) time * 100;
+	t = (u64) time;
+	t *= 100;
 
 	/* take care of divide by zero */
 	if (init_2_now_time) {
@@ -1157,8 +1155,8 @@ static void pmu_log_s0ix_status(int type, char *typestr,
 
 		/* for getting 3 digit precision after
 		 * decimal dot */
-		remainder *= 1000;
 		t = (u64) remainder;
+		t *= 1000;
 		remainder = do_div(t, init_2_now_time);
 	} else
 		time = t = 0;
@@ -1328,59 +1326,63 @@ void pmu_stats_finish(void)
 #endif /*if CONFIG_X86_MDFLD_POWER || CONFIG_X86_CLV_POWER*/
 
 #ifdef CONFIG_REMOVEME_INTEL_ATOM_MRFLD_POWER
-static char *nc_devices[] = {
-	"GFXSLC",
-	"GSDKCK",
-	"GRSCD",
-	"VED",
-	"VEC",
-	"DPA",
-	"DPB",
-	"DPC",
-	"VSP",
-	"ISP",
-	"MIO",
-	"HDMIO",
-	"GFXSLCLDO"
-};
 
-static int no_of_nc_devices = sizeof(nc_devices)/sizeof(nc_devices[0]);
+static u32 prev_s0ix_cnt[SYS_STATE_MAX];
+static unsigned long long prev_s0ix_res[SYS_STATE_MAX];
+static u32 S3_count;
+static unsigned long long S3_res;
 
 static void pmu_stat_seq_printf(struct seq_file *s, int type, char *typestr)
 {
 	unsigned long long t;
 	u32 scu_val, time;
-	u32 micro_sec_rem, remainder;
+	u32 remainder;
 	unsigned long init_2_now_time;
+	unsigned long long tsc_freq = 1330000;
+
+	/* If tsc calibration fails use the default as 1330Mhz */
+	if (tsc_khz)
+		tsc_freq = tsc_khz;
 
 	/* Print S0ix residency counter */
 	if (type < SYS_STATE_S3) {
 		t = readq(residency[type]);
-		if (t < prev_s0ix_res[type-1])
-			t += (((unsigned long long)~0) - prev_s0ix_res[type-1]);
+		if (t < prev_s0ix_res[type])
+			t += (((unsigned long long)~0) - prev_s0ix_res[type]);
 		else
-			t -= prev_s0ix_res[type-1];
+			t -= prev_s0ix_res[type];
 
 		if (type == SYS_STATE_S0I3)
-			t -= prev_s0ix_res[SYS_STATE_S3-1];
+			t -= prev_s0ix_res[SYS_STATE_S3];
 	} else
-		t = prev_s0ix_res[SYS_STATE_S3-1];
+		t = prev_s0ix_res[SYS_STATE_S3];
 
-	micro_sec_rem = do_div(t, MICRO_SEC);
+	/* s0ix residency counters are in TSC cycle count domain
+	 * convert this to milli second time domain
+	 */
+	remainder = do_div(t, tsc_freq);
+
+	/* store time in millisecs */
 	time = (unsigned int)t;
 
-	seq_printf(s, "%s\t%5lu.%03lu\t",
-		typestr, (unsigned long)(t),
-			(unsigned long) micro_sec_rem / 1000);
+	seq_printf(s, "%s\t%5lu.%03lu\t", typestr,
+		(unsigned long)(time/1000), (unsigned long)(time%1000));
 
 	t =  cpu_clock(0);
 	t -= mid_pmu_cxt->pmu_init_time;
-	do_div(t, NANO_SEC);
+	do_div(t, MICRO_SEC); /* time in milli secs */
+
+	/* Note: with millisecs accuracy we get more
+	 * precise residency percentages, but we have
+	 * to trade off with the max number of days
+	 * that we can run without clearing counters,
+	 * with 32bit counter this value is ~50days.
+	 */
 	init_2_now_time =  (unsigned long) t;
 
 	/* for calculating percentage residency */
-	time = time * 100;
-	t = (u64) time;
+	t	= (u64)(time);
+	t	*= 100;
 
 	/* take care of divide by zero */
 	if (init_2_now_time) {
@@ -1389,26 +1391,26 @@ static void pmu_stat_seq_printf(struct seq_file *s, int type, char *typestr)
 
 		/* for getting 3 digit precision after
 		 * decimal dot */
-		remainder *= 1000;
 		t = (u64) remainder;
+		t *= 1000;
 		remainder = do_div(t, init_2_now_time);
 	} else
 		time = t = 0;
 
 	seq_printf(s, "%5lu.%03lu\t", (unsigned long) time, (unsigned long) t);
 
-	/* Print number of interations of S0ix */
+	/* Print S0ix counters */
 	if (type < SYS_STATE_S3) {
 		scu_val = readl(s0ix_counter[type]);
-		if (scu_val < prev_s0ix_cnt[type-1])
-			scu_val += (((u32)~0) - prev_s0ix_cnt[type-1]);
+		if (scu_val < prev_s0ix_cnt[type])
+			scu_val += (((u32)~0) - prev_s0ix_cnt[type]);
 		else
-			scu_val -= prev_s0ix_cnt[type-1];
+			scu_val -= prev_s0ix_cnt[type];
 
 		if (type == SYS_STATE_S0I3)
-			scu_val -= prev_s0ix_cnt[SYS_STATE_S3-1];
+			scu_val -= prev_s0ix_cnt[SYS_STATE_S3];
 	} else
-			scu_val = prev_s0ix_cnt[SYS_STATE_S3-1];
+			scu_val = prev_s0ix_cnt[SYS_STATE_S3];
 
 	seq_printf(s, "%lu\n", (unsigned long) scu_val);
 }
@@ -1440,17 +1442,17 @@ static int pmu_devices_state_show(struct seq_file *s, void *unused)
 
 	seq_printf(s, "\ttime(secs)\tresidency(%%)\tcount\n");
 
+	down(&mid_pmu_cxt->scu_ready_sem);
 	/* Dump S0ix residency counters */
 	ret = intel_scu_ipc_simple_command(DUMP_RES_COUNTER, 0);
-	if (ret) {
+	if (ret)
 		seq_printf(s, "IPC command to DUMP S0ix residency failed\n");
-		return 0;
-	}
 
 	/* Dump number of interations of S0ix */
 	ret = intel_scu_ipc_simple_command(DUMP_S0IX_COUNT, 0);
 	if (ret)
 		seq_printf(s, "IPC command to DUMP S0ix count failed\n");
+	up(&mid_pmu_cxt->scu_ready_sem);
 
 	pmu_stat_seq_printf(s, SYS_STATE_S0I1, "s0i1");
 	pmu_stat_seq_printf(s, SYS_STATE_S0I2, "s0i2");
@@ -1460,10 +1462,10 @@ static int pmu_devices_state_show(struct seq_file *s, void *unused)
 	seq_printf(s, "\nNORTH COMPLEX DEVICES :\n\n");
 
 	nc_pwr_sts = intel_mid_msgbus_read32(PUNIT_PORT, NC_PM_SSS);
-	for (i = 0; i < no_of_nc_devices; i++) {
+	for (i = 0; i < mrfl_no_of_nc_devices; i++) {
 		val = nc_pwr_sts & 3;
 		nc_pwr_sts >>= BITS_PER_LSS;
-		seq_printf(s, "%9s : %s\n", nc_devices[i], dstates[val]);
+		seq_printf(s, "%9s : %s\n", mrfl_nc_devices[i], dstates[val]);
 	}
 
 	seq_printf(s, "\nSOUTH COMPLEX DEVICES :\n\n");
@@ -1525,17 +1527,17 @@ static ssize_t devices_state_write(struct file *file,
 		ret = intel_scu_ipc_simple_command(DUMP_S0IX_COUNT, 0);
 		if (ret)
 			printk(KERN_ERR "IPC command to DUMP S0ix count failed\n");
+		up(&mid_pmu_cxt->scu_ready_sem);
 
 		mid_pmu_cxt->pmu_init_time = cpu_clock(0);
-		prev_s0ix_cnt[0] = readl(s0ix_counter[SYS_STATE_S0I1]);
-		prev_s0ix_cnt[1] = readl(s0ix_counter[SYS_STATE_S0I2]);
-		prev_s0ix_cnt[2] = readl(s0ix_counter[SYS_STATE_S0I3]);
-		prev_s0ix_cnt[3] = 0;
-		prev_s0ix_res[0] = readq(residency[SYS_STATE_S0I1]);
-		prev_s0ix_res[1] = readq(residency[SYS_STATE_S0I2]);
-		prev_s0ix_res[2] = readq(residency[SYS_STATE_S0I3]);
-		prev_s0ix_res[3] = 0 ;
-		up(&mid_pmu_cxt->scu_ready_sem);
+		prev_s0ix_cnt[SYS_STATE_S0I1] = readl(s0ix_counter[SYS_STATE_S0I1]);
+		prev_s0ix_cnt[SYS_STATE_S0I2] = readl(s0ix_counter[SYS_STATE_S0I2]);
+		prev_s0ix_cnt[SYS_STATE_S0I3] = readl(s0ix_counter[SYS_STATE_S0I3]);
+		prev_s0ix_cnt[SYS_STATE_S3] = 0;
+		prev_s0ix_res[SYS_STATE_S0I1] = readq(residency[SYS_STATE_S0I1]);
+		prev_s0ix_res[SYS_STATE_S0I2] = readq(residency[SYS_STATE_S0I2]);
+		prev_s0ix_res[SYS_STATE_S0I3] = readq(residency[SYS_STATE_S0I3]);
+		prev_s0ix_res[SYS_STATE_S3] = 0 ;
 	}
 	return buf_size;
 }
@@ -2023,11 +2025,12 @@ static ssize_t cstate_ignore_add_write(struct file *file,
 
 	if (cstate == MAX_CSTATES_POSSIBLE) {
 		mid_pmu_cxt->cstate_ignore = ((1 << CPUIDLE_STATE_MAX) - 1);
-		/* Ignore C2, C3, C4, C5 states */
+		/* Ignore C2, C3, C4, C5, C8 states */
 		mid_pmu_cxt->cstate_ignore |= (1 << 1);
 		mid_pmu_cxt->cstate_ignore |= (1 << 2);
 		mid_pmu_cxt->cstate_ignore |= (1 << 3);
 		mid_pmu_cxt->cstate_ignore |= (1 << 4);
+		mid_pmu_cxt->cstate_ignore |= (1 << 7);
 
 		pm_qos_update_request(mid_pmu_cxt->cstate_qos,
 					CSTATE_EXIT_LATENCY_C1 - 1);
@@ -2043,11 +2046,12 @@ static ssize_t cstate_ignore_add_write(struct file *file,
 		/* by default remove C1 from ignore list */
 		mid_pmu_cxt->cstate_ignore &= ~(1 << 0);
 
-		/* Ignore C2, C3, C4, C5 states */
+		/* Ignore C2, C3, C4, C5, C8 states */
 		mid_pmu_cxt->cstate_ignore |= (1 << 1);
 		mid_pmu_cxt->cstate_ignore |= (1 << 2);
 		mid_pmu_cxt->cstate_ignore |= (1 << 3);
 		mid_pmu_cxt->cstate_ignore |= (1 << 4);
+		mid_pmu_cxt->cstate_ignore |= (1 << 7);
 
 		/* populate cstate latency table */
 		cstate_exit_latency[0] = CSTATE_EXIT_LATENCY_C1;
@@ -2140,11 +2144,12 @@ static ssize_t cstate_ignore_remove_write(struct file *file,
 	if (cstate == MAX_CSTATES_POSSIBLE) {
 		mid_pmu_cxt->cstate_ignore =
 				~((1 << CPUIDLE_STATE_MAX) - 1);
-		/* Ignore C2, C3, C4, C5 states */
+		/* Ignore C2, C3, C4, C5, C8 states */
 		mid_pmu_cxt->cstate_ignore |= (1 << 1);
 		mid_pmu_cxt->cstate_ignore |= (1 << 2);
 		mid_pmu_cxt->cstate_ignore |= (1 << 3);
 		mid_pmu_cxt->cstate_ignore |= (1 << 4);
+		mid_pmu_cxt->cstate_ignore |= (1 << 7);
 
 		pm_qos_update_request(mid_pmu_cxt->cstate_qos,
 						PM_QOS_DEFAULT_VALUE);
@@ -2173,11 +2178,12 @@ static ssize_t cstate_ignore_remove_write(struct file *file,
 		/* by default remove C1 from ignore list */
 		mid_pmu_cxt->cstate_ignore &= ~(1 << 0);
 
-		/* Ignore C2, C3, C4, C5 states */
+		/* Ignore C2, C3, C4, C5, C8 states */
 		mid_pmu_cxt->cstate_ignore |= (1 << 1);
 		mid_pmu_cxt->cstate_ignore |= (1 << 2);
 		mid_pmu_cxt->cstate_ignore |= (1 << 3);
 		mid_pmu_cxt->cstate_ignore |= (1 << 4);
+		mid_pmu_cxt->cstate_ignore |= (1 << 7);
 
 		local_cstate_allowed = ~mid_pmu_cxt->cstate_ignore;
 		/* restrict to max c-states */
@@ -2255,23 +2261,23 @@ static const struct file_operations s3_ctrl_ops = {
 unsigned int pmu_get_new_cstate(unsigned int cstate, int *index)
 {
 	static int cstate_index_table[CPUIDLE_STATE_MAX] = {
-					1, 1, 1, 1, 1, 2, 3, 4, 5, 6};
+					1, 1, 1, 1, 1, 2, 3, 4, 5, 5};
 	unsigned int new_cstate = cstate;
 	u32 local_cstate = (u32)(cstate);
 	u32 local_cstate_allowed = ~mid_pmu_cxt->cstate_ignore;
-	u32 cstate_mask;
+	u32 cstate_mask, cstate_no_s0ix_mask = (u32)((1 << 6) - 1);
 
 	if (platform_is(INTEL_ATOM_MRFLD)) {
-		/* cstate is 7 for C8 and C9 so correct */
+		/* cstate is also 7 for C9 so correct */
 		if ((local_cstate == 7) && (*index == 4))
-			local_cstate = 8;
-		else if ((local_cstate == 7) && (*index == 5))
 			local_cstate = 9;
 
 		/* get next low cstate allowed */
 		cstate_mask	= (u32)((1 << local_cstate)-1);
 		local_cstate_allowed	&= ((1<<CPUIDLE_STATE_MAX)-1);
 		local_cstate_allowed	&= cstate_mask;
+		if (!could_do_s0ix())
+			local_cstate_allowed &= cstate_no_s0ix_mask;
 		new_cstate	= fls(local_cstate_allowed);
 
 		if (likely(new_cstate))
@@ -2393,11 +2399,11 @@ void pmu_s3_stats_update(int enter)
 
 	if (enter == 1) {
 		S3_count  = readl(s0ix_counter[SYS_STATE_S0I3]);
-		S3_res = readl(residency[SYS_STATE_S0I3]);
+		S3_res = readq(residency[SYS_STATE_S0I3]);
 	} else {
-		prev_s0ix_cnt[3] +=
+		prev_s0ix_cnt[SYS_STATE_S3] +=
 			(readl(s0ix_counter[SYS_STATE_S0I3])) - S3_count;
-		prev_s0ix_res[3] += (readl(residency[SYS_STATE_S0I3])) - S3_res;
+		prev_s0ix_res[SYS_STATE_S3] += (readq(residency[SYS_STATE_S0I3])) - S3_res;
 	}
 
 #endif

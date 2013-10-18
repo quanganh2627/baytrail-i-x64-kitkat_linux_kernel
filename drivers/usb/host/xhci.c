@@ -27,11 +27,16 @@
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/dmi.h>
+#include <linux/pci.h>
+#include <acpi/acpi.h>
+#include "../../acpi/acpica/achware.h"
 
 #include "xhci.h"
 
 #define DRIVER_AUTHOR "Sarah Sharp"
 #define DRIVER_DESC "'eXtensible' Host Controller (xHC) Driver"
+
+static struct xhci_hcd *xhci_host;
 
 /* Some 0.95 hardware can't handle the chain bit on a Link TRB being cleared */
 static int link_quirk;
@@ -204,6 +209,79 @@ static int xhci_free_msi(struct xhci_hcd *xhci)
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
+bool pci_check_pme_enable_and_status(struct pci_dev *dev)
+{
+	int pmcsr_pos;
+	u16 pmcsr;
+	bool ret = false;
+
+	if (!dev->pm_cap)
+		return false;
+
+	pmcsr_pos = dev->pm_cap + PCI_PM_CTRL;
+	pci_read_config_word(dev, pmcsr_pos, &pmcsr);
+	if (!(pmcsr & PCI_PM_CTRL_PME_STATUS))
+		return false;
+
+	if (pmcsr & PCI_PM_CTRL_PME_ENABLE)
+		return true;
+
+	return ret;
+}
+
+static void xhci_byt_pm_check_work(struct work_struct *work)
+{
+	struct usb_hcd		*hcd;
+	struct pci_dev		*pdev;
+	u32			gpe_en = 0;
+	unsigned long		flags;
+	int			pmcsr_pos = 0;
+	u16			pmcsr = 0;
+
+	if (xhci_host)
+		hcd = xhci_to_hcd(xhci_host);
+	else
+		return;
+
+	pdev = to_pci_dev(hcd->self.controller);
+
+	/* No need to put XHCI back to D0, as PMC will do */
+	msleep(20);
+
+	if (pci_check_pme_enable_and_status(pdev)) {
+		/* wait for PCI core PME polling to be done */
+		xhci_dbg(xhci_host, "PCI STS/EN set\n");
+		msleep(1200);
+	}
+
+	/* sometimes PME received in D0 which is not expected, clear them */
+	pmcsr_pos = pdev->pm_cap + PCI_PM_CTRL;
+	pci_read_config_word(pdev, pmcsr_pos, &pmcsr);
+
+	/* If PME_STS and PME_EN not cleared in time, then clear it*/
+	if (pmcsr & (PCI_PM_CTRL_PME_STATUS | PCI_PM_CTRL_PME_ENABLE)) {
+		pci_write_config_word(pdev, pmcsr_pos,
+					pmcsr & (~PCI_PM_CTRL_PME_ENABLE));
+		pci_read_config_word(pdev, pmcsr_pos, &pmcsr);
+	}
+
+	xhci_dbg(xhci_host, "PCI STS/EN = 0x%x\n", pmcsr);
+
+	/* clear status of GPE.PME_B0 */
+	acpi_hw_register_write(0xf1, 0x2000);
+
+	/* re-enable GPE.PME_B0 interrupt */
+	acpi_hw_register_read(0xf2, &gpe_en);
+	gpe_en = gpe_en | 0x2000;
+	acpi_hw_register_write(0xf2, gpe_en);
+
+	spin_lock_irqsave(&xhci_host->lock, flags);
+	xhci_host->pm_check_flag = 0;
+	spin_unlock_irqrestore(&xhci_host->lock, flags);
+}
+#endif
+
 /*
  * Set up MSI
  */
@@ -224,6 +302,24 @@ static int xhci_setup_msi(struct xhci_hcd *xhci)
 		xhci_dbg(xhci, "disable MSI interrupt\n");
 		pci_disable_msi(pdev);
 	}
+
+#ifdef CONFIG_ACPI
+	/* Workaround: register a shared interrupt handler on ACPI to
+	 * to handle wake up event */
+	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
+		pdev->device == PCI_DEVICE_ID_INTEL_BYT_USH) {
+		xhci_host = xhci;
+		INIT_WORK(&xhci->pm_check, xhci_byt_pm_check_work);
+
+		/* map PMC related MMIO for this workaround */
+		xhci_host->pmc_base_addr = ioremap_nocache(0xfed03000, 0x1000);
+		/* use Fixed value 9 for the ACPI interrupt */
+		ret = request_irq(9, (irq_handler_t)xhci_byt_pm_irq,
+			IRQF_SHARED, "xhci-acpi-wa", xhci_to_hcd(xhci));
+		if (ret)
+			xhci_dbg(xhci, "fail request interrupt handler\n");
+	}
+#endif
 
 	return ret;
 }
@@ -2594,15 +2690,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	if (command) {
 		cmd_completion = command->completion;
 		cmd_status = &command->status;
-		command->command_trb = xhci->cmd_ring->enqueue;
-
-		/* Enqueue pointer can be left pointing to the link TRB,
-		 * we must handle that
-		 */
-		if (TRB_TYPE_LINK_LE32(command->command_trb->link.control))
-			command->command_trb =
-				xhci->cmd_ring->enq_seg->next->trbs;
-
+		command->command_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 		list_add_tail(&command->cmd_list, &virt_dev->cmd_list);
 	} else {
 		cmd_completion = &virt_dev->cmd_completion;
@@ -2610,7 +2698,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	}
 	init_completion(cmd_completion);
 
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	if (!ctx_change)
 		ret = xhci_queue_configure_endpoint(xhci, in_ctx->dma,
 				udev->slot_id, must_succeed);
@@ -3395,14 +3483,7 @@ int xhci_discover_or_reset_device(struct usb_hcd *hcd, struct usb_device *udev)
 
 	/* Attempt to submit the Reset Device command to the command ring */
 	spin_lock_irqsave(&xhci->lock, flags);
-	reset_device_cmd->command_trb = xhci->cmd_ring->enqueue;
-
-	/* Enqueue pointer can be left pointing to the link TRB,
-	 * we must handle that
-	 */
-	if (TRB_TYPE_LINK_LE32(reset_device_cmd->command_trb->link.control))
-		reset_device_cmd->command_trb =
-			xhci->cmd_ring->enq_seg->next->trbs;
+	reset_device_cmd->command_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 
 	list_add_tail(&reset_device_cmd->cmd_list, &virt_dev->cmd_list);
 	ret = xhci_queue_reset_device(xhci, slot_id);
@@ -3594,7 +3675,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	union xhci_trb *cmd_trb;
 
 	spin_lock_irqsave(&xhci->lock, flags);
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	ret = xhci_queue_slot_control(xhci, TRB_ENABLE_SLOT, 0);
 	if (ret) {
 		spin_unlock_irqrestore(&xhci->lock, flags);
@@ -3711,7 +3792,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	xhci_dbg_ctx(xhci, virt_dev->in_ctx, 2);
 
 	spin_lock_irqsave(&xhci->lock, flags);
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	ret = xhci_queue_address_device(xhci, virt_dev->in_ctx->dma,
 					udev->slot_id);
 	if (ret) {

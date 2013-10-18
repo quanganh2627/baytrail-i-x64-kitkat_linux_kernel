@@ -540,13 +540,13 @@ static const struct soc_enum adc_osr =
 static const struct snd_kcontrol_new wm8994_snd_controls[] = {
 SOC_DOUBLE_R_TLV("AIF1ADC1 Volume", WM8994_AIF1_ADC1_LEFT_VOLUME,
 		 WM8994_AIF1_ADC1_RIGHT_VOLUME,
-		 1, 119, 0, digital_tlv),
+		 1, 120, 0, digital_tlv),
 SOC_DOUBLE_R_TLV("AIF1ADC2 Volume", WM8994_AIF1_ADC2_LEFT_VOLUME,
 		 WM8994_AIF1_ADC2_RIGHT_VOLUME,
-		 1, 119, 0, digital_tlv),
+		 1, 120, 0, digital_tlv),
 SOC_DOUBLE_R_TLV("AIF2ADC Volume", WM8994_AIF2_ADC_LEFT_VOLUME,
 		 WM8994_AIF2_ADC_RIGHT_VOLUME,
-		 1, 119, 0, digital_tlv),
+		 1, 120, 0, digital_tlv),
 
 SOC_ENUM("AIF1ADCL Source", aif1adcl_src),
 SOC_ENUM("AIF1ADCR Source", aif1adcr_src),
@@ -608,12 +608,12 @@ SOC_ENUM("ADC OSR", adc_osr),
 SOC_ENUM("DAC OSR", dac_osr),
 
 SOC_DOUBLE_R_TLV("DAC1 Volume", WM8994_DAC1_LEFT_VOLUME,
-		 WM8994_DAC1_RIGHT_VOLUME, 1, 96, 0, digital_tlv),
+		 WM8994_DAC1_RIGHT_VOLUME, 1, 112, 0, digital_tlv),
 SOC_DOUBLE_R("DAC1 Switch", WM8994_DAC1_LEFT_VOLUME,
 	     WM8994_DAC1_RIGHT_VOLUME, 9, 1, 1),
 
 SOC_DOUBLE_R_TLV("DAC2 Volume", WM8994_DAC2_LEFT_VOLUME,
-		 WM8994_DAC2_RIGHT_VOLUME, 1, 96, 0, digital_tlv),
+		 WM8994_DAC2_RIGHT_VOLUME, 1, 112, 0, digital_tlv),
 SOC_DOUBLE_R("DAC2 Switch", WM8994_DAC2_LEFT_VOLUME,
 	     WM8994_DAC2_RIGHT_VOLUME, 9, 1, 1),
 
@@ -1676,15 +1676,15 @@ SND_SOC_DAPM_DAC("DAC1R", NULL, WM8994_POWER_MANAGEMENT_5, 0, 0),
 };
 
 static const struct snd_soc_dapm_widget wm8994_adc_revd_widgets[] = {
-SND_SOC_DAPM_VIRT_MUX_E("ADCL Mux", WM8994_POWER_MANAGEMENT_4, 1, 0, &adcl_mux,
+SND_SOC_DAPM_VIRT_MUX_E("ADCL Mux", SND_SOC_NOPM, 1, 0, &adcl_mux,
 			adc_mux_ev, SND_SOC_DAPM_PRE_PMU),
-SND_SOC_DAPM_VIRT_MUX_E("ADCR Mux", WM8994_POWER_MANAGEMENT_4, 0, 0, &adcr_mux,
+SND_SOC_DAPM_VIRT_MUX_E("ADCR Mux", SND_SOC_NOPM, 0, 0, &adcr_mux,
 			adc_mux_ev, SND_SOC_DAPM_PRE_PMU),
 };
 
 static const struct snd_soc_dapm_widget wm8994_adc_widgets[] = {
-SND_SOC_DAPM_VIRT_MUX("ADCL Mux", WM8994_POWER_MANAGEMENT_4, 1, 0, &adcl_mux),
-SND_SOC_DAPM_VIRT_MUX("ADCR Mux", WM8994_POWER_MANAGEMENT_4, 0, 0, &adcr_mux),
+SND_SOC_DAPM_VIRT_MUX("ADCL Mux", SND_SOC_NOPM, 1, 0, &adcl_mux),
+SND_SOC_DAPM_VIRT_MUX("ADCR Mux", SND_SOC_NOPM, 0, 0, &adcr_mux),
 };
 
 static const struct snd_soc_dapm_widget wm8994_dapm_widgets[] = {
@@ -1780,12 +1780,8 @@ SND_SOC_DAPM_ADC("DMIC2R", NULL, WM8994_POWER_MANAGEMENT_4, 4, 0),
 SND_SOC_DAPM_ADC("DMIC1L", NULL, WM8994_POWER_MANAGEMENT_4, 3, 0),
 SND_SOC_DAPM_ADC("DMIC1R", NULL, WM8994_POWER_MANAGEMENT_4, 2, 0),
 
-/* Power is done with the muxes since the ADC power also controls the
- * downsampling chain, the chip will automatically manage the analogue
- * specific portions.
- */
-SND_SOC_DAPM_ADC("ADCL", NULL, SND_SOC_NOPM, 1, 0),
-SND_SOC_DAPM_ADC("ADCR", NULL, SND_SOC_NOPM, 0, 0),
+SND_SOC_DAPM_ADC("ADCL", NULL, WM8994_POWER_MANAGEMENT_4, 1, 0),
+SND_SOC_DAPM_ADC("ADCR", NULL, WM8994_POWER_MANAGEMENT_4, 0, 0),
 
 SND_SOC_DAPM_MUX("AIF1 Loopback", SND_SOC_NOPM, 0, 0, &aif1_loopback),
 SND_SOC_DAPM_MUX("AIF2 Loopback", SND_SOC_NOPM, 0, 0, &aif2_loopback),
@@ -2347,7 +2343,8 @@ out:
 	 * If SYSCLK will be less than 50kHz adjust AIFnCLK dividers
 	 * for detection.
 	 */
-	if (max(wm8994->aifclk[0], wm8994->aifclk[1]) < 50000) {
+	if (max(wm8994->aifclk[0], wm8994->aifclk[1]) < 50000 &&
+		!wm8994->aifdiv[0]) {
 		dev_dbg(codec->dev, "Configuring AIFs for 128fs\n");
 
 		wm8994->aifdiv[0] = snd_soc_read(codec, WM8994_AIF1_RATE)

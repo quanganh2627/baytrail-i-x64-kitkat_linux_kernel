@@ -158,7 +158,7 @@ static struct usb_configuration android_config_driver = {
 	.unbind		= android_unbind_config,
 	.bConfigurationValue = 1,
 	.bmAttributes	= USB_CONFIG_ATT_ONE,
-	.MaxPower	= 0xFA, /* 500ma */
+	.MaxPower	= 500, /* 500ma */
 };
 
 static void android_work(struct work_struct *data)
@@ -462,16 +462,6 @@ err_usb_add_function:
 	return ret;
 }
 
-static void acm_function_unbind_config(struct android_usb_function *f,
-				       struct usb_configuration *c)
-{
-	int i;
-	struct acm_function_config *config = f->config;
-
-	for (i = 0; i < config->instances_on; i++)
-		usb_remove_function(c, config->f_acm[i]);
-}
-
 static ssize_t acm_instances_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -506,7 +496,6 @@ static struct android_usb_function acm_function = {
 	.init		= acm_function_init,
 	.cleanup	= acm_function_cleanup,
 	.bind_config	= acm_function_bind_config,
-	.unbind_config	= acm_function_unbind_config,
 	.attributes	= acm_function_attributes,
 };
 
@@ -1442,6 +1431,13 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (!dev->connected) {
 		dev->connected = 1;
+
+		/* set MaxPower as 900mA for SuperSpeed mode */
+		if (gadget->speed == USB_SPEED_SUPER)
+			android_config_driver.MaxPower = 896;
+		else
+			android_config_driver.MaxPower = 500;
+
 		schedule_work(&dev->work);
 	} else if (c->bRequest == USB_REQ_SET_CONFIGURATION &&
 						cdev->config) {
