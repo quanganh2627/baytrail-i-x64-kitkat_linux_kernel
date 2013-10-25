@@ -4304,7 +4304,8 @@ static int sep_setup(struct device *dev,
 	pr_info("regbase_virt=0x%08X\n", (u32) drvdata->cc_base);
 
 #ifdef DX_BASE_ENV_REGS
-	pr_info("FPGA ver. = UNKNOWN\n");
+	pr_info("FPGA ver. = 0x%08X\n",
+		     READ_REGISTER(DX_ENV_REG_ADDR(drvdata->cc_base, VERSION)));
 	/* TODO: verify FPGA version against expected version */
 #endif
 
