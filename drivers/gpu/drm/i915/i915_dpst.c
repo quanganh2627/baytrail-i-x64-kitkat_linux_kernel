@@ -84,6 +84,11 @@ int i915_dpst_context(struct drm_device *dev, void *data,
 				}
 				init_context->init_data.image_res =
 						mode->hdisplay*mode->vdisplay;
+
+				/* Free the memory allocated in function
+				 * intel_crtc_mode_get after use, to avoid
+				 * memory leaks */
+				kfree(mode);
 			}
 		}
 		btgr_data = I915_READ(VLV_DISPLAY_BASE + DPST_VLV_BTGR_REG);
