@@ -699,8 +699,8 @@ static struct imx_reg const imx_1080p_strong_dvs_30fps[] = {
 	GROUPED_PARAMETER_HOLD_ENABLE,
 	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
 	/* shutter */
-	{IMX_8BIT, 0x0202, 0x06},  /* coarse _integration_time[15:8] */
-	{IMX_8BIT, 0x0203, 0x4C},  /* coarse _integration_time[7:0] */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xEF},  /* coarse _integration_time[7:0] */
 	/* pll */
 	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
@@ -708,45 +708,106 @@ static struct imx_reg const imx_1080p_strong_dvs_30fps[] = {
 	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030C, 0x01},
-	{IMX_8BIT, 0x030D, 0x12},
+	{IMX_8BIT, 0x030D, 0x2c},
 	/* image sizing */
-	{IMX_8BIT, 0x0340, 0x06},  /* frame_length_lines[15:8] */
-	{IMX_8BIT, 0x0341, 0xA4},  /*	frame_length_lines[7:0]	*/
-	{IMX_8BIT, 0x0342, 0x11},  /*	line_length_pck[15:8]	*/
-	{IMX_8BIT, 0x0343, 0xC6},  /*	line_length_pck[7:0]	*/
-	{IMX_8BIT, 0x0344, 0x01},  /*	x_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0345, 0xDB},  /*	x_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0346, 0x02},  /*	y_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0347, 0x42},  /*	y_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0348, 0x0A},  /*	x_addr_end[15:8]	*/
-	{IMX_8BIT, 0x0349, 0xEA},  /*	x_addr_end[7:0]	*/
-	{IMX_8BIT, 0x034A, 0x07},  /*	y_addr_end[15:8]	*/
-	{IMX_8BIT, 0x034B, 0x61},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x28},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x01},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x46},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xA7},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x08},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x81},  /*	y_addr_end[7:0]	*/
 	{IMX_8BIT, 0x034C, 0x09},  /*	x_output_size[15:8]	*/
 	{IMX_8BIT, 0x034D, 0x10},  /*	x_output_size[7:0]	*/
 	{IMX_8BIT, 0x034E, 0x05},  /*	y_output_size[15:8]	*/
 	{IMX_8BIT, 0x034F, 0x20},  /*	y_output_size[7:0]	*/
 	/* binning & scaling */
 	{IMX_8BIT, 0x0390, 0x00}, /* binning mode */
-	{IMX_8BIT, 0x0401, 0x00}, /* scaling mode*/
-	{IMX_8BIT, 0x0405, 0x10}, /* scale_m[7:0] */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x16}, /* scale_m[7:0] */
 	/* timer */
 	{IMX_8BIT, 0x3344, 0x57},
 	{IMX_8BIT, 0x3345, 0x1F},
 	/* timing */
-	{IMX_8BIT, 0x3370, 0x6F},
-	{IMX_8BIT, 0x3371, 0x27},
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
 	{IMX_8BIT, 0x3372, 0x4F},
 	{IMX_8BIT, 0x3373, 0x2F},
-	{IMX_8BIT, 0x3374, 0x27},
-	{IMX_8BIT, 0x3375, 0x2F},
-	{IMX_8BIT, 0x3376, 0x97},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
 	{IMX_8BIT, 0x3377, 0x37},
 	{IMX_8BIT, 0x33C8, 0x01},
 	{IMX_8BIT, 0x33D4, 0x0C},
 	{IMX_8BIT, 0x33D5, 0xD0},
-	{IMX_8BIT, 0x33D6, 0x07},
-	{IMX_8BIT, 0x33D7, 0x38},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
+	{IMX_TOK_TERM, 0, 0}
+};
+
+static struct imx_reg const imx_1080p_no_dvs_30fps_v2[] = {
+	GROUPED_PARAMETER_HOLD_ENABLE,
+	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
+	/* shutter */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xEF},  /* coarse _integration_time[7:0] */
+	/* pll */
+	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0305, 0x09},  /*	pre_pll_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030C, 0x01},
+	{IMX_8BIT, 0x030D, 0x2c},
+	/* image sizing */
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x00},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x01},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x32},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xCF},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x08},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x6D},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034C, 0x07},  /*	x_output_size[15:8]	*/
+	{IMX_8BIT, 0x034D, 0x94},  /*	x_output_size[7:0]	*/
+	{IMX_8BIT, 0x034E, 0x04},  /*	y_output_size[15:8]	*/
+	{IMX_8BIT, 0x034F, 0x44},  /*	y_output_size[7:0]	*/
+	/* binning & scaling */
+	{IMX_8BIT, 0x0390, 0x00}, /* binning mode */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x1B}, /* scale_m[7:0] */
+	/* timer */
+	{IMX_8BIT, 0x3344, 0x57},
+	{IMX_8BIT, 0x3345, 0x1F},
+	/* timing */
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
+	{IMX_8BIT, 0x3372, 0x4F},
+	{IMX_8BIT, 0x3373, 0x2F},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
+	{IMX_8BIT, 0x3377, 0x37},
+	{IMX_8BIT, 0x33C8, 0x01},
+	{IMX_8BIT, 0x33D4, 0x0C},
+	{IMX_8BIT, 0x33D5, 0xD0},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
 	{IMX_TOK_TERM, 0, 0}
 };
 
@@ -864,8 +925,8 @@ static struct imx_reg const imx_720p_strong_dvs_30fps[] = {
 	GROUPED_PARAMETER_HOLD_ENABLE,
 	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
 	/* shutter */
-	{IMX_8BIT, 0x0202, 0x05},  /* coarse _integration_time[15:8] */
-	{IMX_8BIT, 0x0203, 0xFC},  /* coarse _integration_time[7:0] */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xEF},  /* coarse _integration_time[7:0] */
 	/* pll */
 	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
@@ -873,20 +934,20 @@ static struct imx_reg const imx_720p_strong_dvs_30fps[] = {
 	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030C, 0x01},
-	{IMX_8BIT, 0x030D, 0x12},
+	{IMX_8BIT, 0x030D, 0x2c},
 	/* image sizing */
-	{IMX_8BIT, 0x0340, 0x06},  /* frame_length_lines[15:8] */
-	{IMX_8BIT, 0x0341, 0x00},  /*	frame_length_lines[7:0]	*/
-	{IMX_8BIT, 0x0342, 0x13},  /*	line_length_pck[15:8]	*/
-	{IMX_8BIT, 0x0343, 0x9C},  /*	line_length_pck[7:0]	*/
-	{IMX_8BIT, 0x0344, 0x01},  /*	x_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0345, 0xD7},  /*	x_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0346, 0x02},  /*	y_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0347, 0x3E},  /*	y_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0348, 0x0A},  /*	x_addr_end[15:8]	*/
-	{IMX_8BIT, 0x0349, 0xEE},  /*	x_addr_end[7:0]	*/
-	{IMX_8BIT, 0x034A, 0x07},  /*	y_addr_end[15:8]	*/
-	{IMX_8BIT, 0x034B, 0x65},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x26},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x01},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x48},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xA9},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x08},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x83},  /*	y_addr_end[7:0]	*/
 	{IMX_8BIT, 0x034C, 0x06},  /*	x_output_size[15:8]	*/
 	{IMX_8BIT, 0x034D, 0x10},  /*	x_output_size[7:0]	*/
 	{IMX_8BIT, 0x034E, 0x03},  /*	y_output_size[15:8]	*/
@@ -894,24 +955,85 @@ static struct imx_reg const imx_720p_strong_dvs_30fps[] = {
 	/* binning & scaling */
 	{IMX_8BIT, 0x0390, 0x00}, /* binning mode */
 	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
-	{IMX_8BIT, 0x0405, 0x18}, /* scale_m[7:0] */
+	{IMX_8BIT, 0x0405, 0x21}, /* scale_m[7:0] */
 	/* timer */
 	{IMX_8BIT, 0x3344, 0x57},
 	{IMX_8BIT, 0x3345, 0x1F},
 	/* timing */
-	{IMX_8BIT, 0x3370, 0x6F},
-	{IMX_8BIT, 0x3371, 0x27},
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
 	{IMX_8BIT, 0x3372, 0x4F},
 	{IMX_8BIT, 0x3373, 0x2F},
-	{IMX_8BIT, 0x3374, 0x27},
-	{IMX_8BIT, 0x3375, 0x2F},
-	{IMX_8BIT, 0x3376, 0x97},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
 	{IMX_8BIT, 0x3377, 0x37},
 	{IMX_8BIT, 0x33C8, 0x01},
 	{IMX_8BIT, 0x33D4, 0x0C},
 	{IMX_8BIT, 0x33D5, 0xD0},
-	{IMX_8BIT, 0x33D6, 0x07},
-	{IMX_8BIT, 0x33D7, 0x38},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
+	{IMX_TOK_TERM, 0, 0}
+};
+
+static struct imx_reg const imx_720p_no_dvs_30fps[] = {
+	GROUPED_PARAMETER_HOLD_ENABLE,
+	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
+	/* shutter */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xEF},  /* coarse _integration_time[7:0] */
+	/* pll */
+	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0305, 0x09},  /*	pre_pll_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030C, 0x01},
+	{IMX_8BIT, 0x030D, 0x2c},
+	/* image sizing */
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x14},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x01},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x38},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xBB},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x08},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x67},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034C, 0x05},  /*	x_output_size[15:8]	*/
+	{IMX_8BIT, 0x034D, 0x10},  /*	x_output_size[7:0]	*/
+	{IMX_8BIT, 0x034E, 0x02},  /*	y_output_size[15:8]	*/
+	{IMX_8BIT, 0x034F, 0xE0},  /*	y_output_size[7:0]	*/
+	/* binning & scaling */
+	{IMX_8BIT, 0x0390, 0x01}, /* binning mode */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x14}, /* scale_m[7:0] */
+	/* timer */
+	{IMX_8BIT, 0x3344, 0x57},
+	{IMX_8BIT, 0x3345, 0x1F},
+	/* timing */
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
+	{IMX_8BIT, 0x3372, 0x4F},
+	{IMX_8BIT, 0x3373, 0x2F},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
+	{IMX_8BIT, 0x3377, 0x37},
+	{IMX_8BIT, 0x33C8, 0x01},
+	{IMX_8BIT, 0x33D4, 0x0C},
+	{IMX_8BIT, 0x33D5, 0xD0},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
 	{IMX_TOK_TERM, 0, 0}
 };
 
@@ -919,7 +1041,7 @@ static struct imx_reg const imx_480p_strong_dvs_30fps[] = {
 	GROUPED_PARAMETER_HOLD_ENABLE,
 	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
 	/* shutter */
-	{IMX_8BIT, 0x0202, 0x05},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
 	{IMX_8BIT, 0x0203, 0xFC},  /* coarse _integration_time[7:0] */
 	/* pll */
 	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
@@ -928,20 +1050,20 @@ static struct imx_reg const imx_480p_strong_dvs_30fps[] = {
 	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030C, 0x01},
-	{IMX_8BIT, 0x030D, 0x12},
+	{IMX_8BIT, 0x030D, 0x2c},
 	/* image sizing */
-	{IMX_8BIT, 0x0340, 0x06},  /* frame_length_lines[15:8] */
-	{IMX_8BIT, 0x0341, 0x00},  /*	frame_length_lines[7:0]	*/
-	{IMX_8BIT, 0x0342, 0x13},  /*	line_length_pck[15:8]	*/
-	{IMX_8BIT, 0x0343, 0x9C},  /*	line_length_pck[7:0]	*/
-	{IMX_8BIT, 0x0344, 0x01},  /*	x_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0345, 0xD4},  /*	x_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0346, 0x01},  /*	y_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0347, 0xC8},  /*	y_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0348, 0x0A},  /*	x_addr_end[15:8]	*/
-	{IMX_8BIT, 0x0349, 0xF1},  /*	x_addr_end[7:0]	*/
-	{IMX_8BIT, 0x034A, 0x07},  /*	y_addr_end[15:8]	*/
-	{IMX_8BIT, 0x034B, 0xDB},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x06},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x00},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x86},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xC9},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x09},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x19},  /*	y_addr_end[7:0]	*/
 	{IMX_8BIT, 0x034C, 0x03},  /*	x_output_size[15:8]	*/
 	{IMX_8BIT, 0x034D, 0x70},  /*	x_output_size[7:0]	*/
 	{IMX_8BIT, 0x034E, 0x02},  /*	y_output_size[15:8]	*/
@@ -949,24 +1071,27 @@ static struct imx_reg const imx_480p_strong_dvs_30fps[] = {
 	/* binning & scaling */
 	{IMX_8BIT, 0x0390, 0x01}, /* binning mode */
 	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
-	{IMX_8BIT, 0x0405, 0x15}, /* scale_m[7:0] */
+	{IMX_8BIT, 0x0405, 0x1D}, /* scale_m[7:0] */
 	/* timer */
 	{IMX_8BIT, 0x3344, 0x57},
 	{IMX_8BIT, 0x3345, 0x1F},
 	/* timing */
-	{IMX_8BIT, 0x3370, 0x6F},
-	{IMX_8BIT, 0x3371, 0x27},
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
 	{IMX_8BIT, 0x3372, 0x4F},
 	{IMX_8BIT, 0x3373, 0x2F},
-	{IMX_8BIT, 0x3374, 0x27},
-	{IMX_8BIT, 0x3375, 0x2F},
-	{IMX_8BIT, 0x3376, 0x97},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
 	{IMX_8BIT, 0x3377, 0x37},
 	{IMX_8BIT, 0x33C8, 0x01},
 	{IMX_8BIT, 0x33D4, 0x0C},
 	{IMX_8BIT, 0x33D5, 0xD0},
-	{IMX_8BIT, 0x33D6, 0x07},
-	{IMX_8BIT, 0x33D7, 0x38},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
 	{IMX_TOK_TERM, 0, 0}
 };
 
@@ -1303,54 +1428,57 @@ static struct imx_reg const imx_QVGA_strong_dvs_30fps[] = {
 	GROUPED_PARAMETER_HOLD_ENABLE,
 	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
 	/* shutter */
-	{IMX_8BIT, 0x0202, 0x05},  /* coarse _integration_time[15:8] */
-	{IMX_8BIT, 0x0203, 0x44},  /* coarse _integration_time[7:0] */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xFC},  /* coarse _integration_time[7:0] */
 	/* pll */
 	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
-	{IMX_8BIT, 0x0305, 0x06},  /*	pre_pll_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0305, 0x09},  /*	pre_pll_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
-	{IMX_8BIT, 0x030C, 0x00},
-	{IMX_8BIT, 0x030D, 0x6D},
+	{IMX_8BIT, 0x030C, 0x01},
+	{IMX_8BIT, 0x030D, 0x2c},
 	/* image sizing */
-	{IMX_8BIT, 0x0340, 0x05},  /* frame_length_lines[15:8] */
-	{IMX_8BIT, 0x0341, 0x48},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
 	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
-	{IMX_8BIT, 0x0343, 0x70},  /*	line_length_pck[7:0]	*/
-	{IMX_8BIT, 0x0344, 0x03},  /*	x_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0345, 0x38},  /*	x_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0346, 0x02},  /*	y_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0347, 0x68},  /*	y_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0348, 0x09},  /*	x_addr_end[15:8]	*/
-	{IMX_8BIT, 0x0349, 0x97},  /*	x_addr_end[7:0]	*/
-	{IMX_8BIT, 0x034A, 0x07},  /*	y_addr_end[15:8]	*/
-	{IMX_8BIT, 0x034B, 0x37},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x8C},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x00},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x00},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xCF},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x09},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x13},  /*	y_addr_end[7:0]	*/
 	{IMX_8BIT, 0x034C, 0x01},  /*	x_output_size[15:8]	*/
 	{IMX_8BIT, 0x034D, 0x98},  /*	x_output_size[7:0]	*/
 	{IMX_8BIT, 0x034E, 0x01},  /*	y_output_size[15:8]	*/
 	{IMX_8BIT, 0x034F, 0x34},  /*	y_output_size[7:0]	*/
 	/* binning & scaling */
 	{IMX_8BIT, 0x0390, 0x02}, /* binning mode */
-	{IMX_8BIT, 0x0401, 0x00}, /* scaling mode*/
-	{IMX_8BIT, 0x0405, 0x10}, /* scale_m[7:0] */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x37}, /* scale_m[7:0] */
 	/* timer */
-	{IMX_8BIT, 0x3344, 0x37},
+	{IMX_8BIT, 0x3344, 0x57},
 	{IMX_8BIT, 0x3345, 0x1F},
 	/* timing */
-	{IMX_8BIT, 0x3370, 0x5F},
-	{IMX_8BIT, 0x3371, 0x17},
-	{IMX_8BIT, 0x3372, 0x37},
-	{IMX_8BIT, 0x3373, 0x17},
-	{IMX_8BIT, 0x3374, 0x17},
-	{IMX_8BIT, 0x3375, 0x0F},
-	{IMX_8BIT, 0x3376, 0x57},
-	{IMX_8BIT, 0x3377, 0x27},
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
+	{IMX_8BIT, 0x3372, 0x4F},
+	{IMX_8BIT, 0x3373, 0x2F},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
+	{IMX_8BIT, 0x3377, 0x37},
 	{IMX_8BIT, 0x33C8, 0x01},
-	{IMX_8BIT, 0x33D4, 0x01},
-	{IMX_8BIT, 0x33D5, 0x98},
-	{IMX_8BIT, 0x33D6, 0x01},
-	{IMX_8BIT, 0x33D7, 0x34},
+	{IMX_8BIT, 0x33D4, 0x0C},
+	{IMX_8BIT, 0x33D5, 0xD0},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
 	{IMX_TOK_TERM, 0, 0}
 };
 
@@ -1358,54 +1486,115 @@ static struct imx_reg const imx_QCIF_strong_dvs_30fps[] = {
 	GROUPED_PARAMETER_HOLD_ENABLE,
 	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
 	/* shutter */
-	{IMX_8BIT, 0x0202, 0x05},  /* coarse _integration_time[15:8] */
-	{IMX_8BIT, 0x0203, 0x44},  /* coarse _integration_time[7:0] */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xFC},  /* coarse _integration_time[7:0] */
 	/* pll */
 	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
-	{IMX_8BIT, 0x0305, 0x06},  /*	pre_pll_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0305, 0x09},  /*	pre_pll_clk_div[7:0]	*/
 	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
 	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
-	{IMX_8BIT, 0x030C, 0x00},
-	{IMX_8BIT, 0x030D, 0x6D},
+	{IMX_8BIT, 0x030C, 0x01},
+	{IMX_8BIT, 0x030D, 0x2c},
 	/* image sizing */
-	{IMX_8BIT, 0x0340, 0x05},  /* frame_length_lines[15:8] */
-	{IMX_8BIT, 0x0341, 0x48},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
 	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
-	{IMX_8BIT, 0x0343, 0x70},  /*	line_length_pck[7:0]	*/
-	{IMX_8BIT, 0x0344, 0x04},  /*	x_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0345, 0xB8},  /*	x_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0346, 0x03},  /*	y_addr_start[15:8]	*/
-	{IMX_8BIT, 0x0347, 0x70},  /*	y_addr_start[7:0]	*/
-	{IMX_8BIT, 0x0348, 0x08},  /*	x_addr_end[15:8]	*/
-	{IMX_8BIT, 0x0349, 0x17},  /*	x_addr_end[7:0]	*/
-	{IMX_8BIT, 0x034A, 0x06},  /*	y_addr_end[15:8]	*/
-	{IMX_8BIT, 0x034B, 0x2F},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x00},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x00},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x00},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0xCF},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x09},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x9F},  /*	y_addr_end[7:0]	*/
 	{IMX_8BIT, 0x034C, 0x00},  /*	x_output_size[15:8]	*/
 	{IMX_8BIT, 0x034D, 0xD8},  /*	x_output_size[7:0]	*/
 	{IMX_8BIT, 0x034E, 0x00},  /*	y_output_size[15:8]	*/
 	{IMX_8BIT, 0x034F, 0xB0},  /*	y_output_size[7:0]	*/
 	/* binning & scaling */
-	{IMX_8BIT, 0x0390, 0x02}, /* binning mode */
-	{IMX_8BIT, 0x0401, 0x00}, /* scaling mode*/
-	{IMX_8BIT, 0x0405, 0x10}, /* scale_m[7:0] */
+	{IMX_8BIT, 0x0390, 0x00}, /* binning mode */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x80}, /* scale_m[7:0] */
 	/* timer */
-	{IMX_8BIT, 0x3344, 0x37},
+	{IMX_8BIT, 0x3344, 0x57},
 	{IMX_8BIT, 0x3345, 0x1F},
 	/* timing */
-	{IMX_8BIT, 0x3370, 0x5F},
-	{IMX_8BIT, 0x3371, 0x17},
-	{IMX_8BIT, 0x3372, 0x37},
-	{IMX_8BIT, 0x3373, 0x17},
-	{IMX_8BIT, 0x3374, 0x17},
-	{IMX_8BIT, 0x3375, 0x0F},
-	{IMX_8BIT, 0x3376, 0x57},
-	{IMX_8BIT, 0x3377, 0x27},
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
+	{IMX_8BIT, 0x3372, 0x4F},
+	{IMX_8BIT, 0x3373, 0x2F},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
+	{IMX_8BIT, 0x3377, 0x37},
 	{IMX_8BIT, 0x33C8, 0x01},
-	{IMX_8BIT, 0x33D4, 0x00},
-	{IMX_8BIT, 0x33D5, 0xD8},
-	{IMX_8BIT, 0x33D6, 0x00},
-	{IMX_8BIT, 0x33D7, 0xB0},
+	{IMX_8BIT, 0x33D4, 0x0C},
+	{IMX_8BIT, 0x33D5, 0xD0},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
+	{IMX_TOK_TERM, 0, 0}
+};
+
+static struct imx_reg const imx_CIF_dvs_30fps[] = {
+	GROUPED_PARAMETER_HOLD_ENABLE,
+	{IMX_8BIT, 0x0100, 0x00},  /*	mode_select	*/
+	/* shutter */
+	{IMX_8BIT, 0x0202, 0x0A},  /* coarse _integration_time[15:8] */
+	{IMX_8BIT, 0x0203, 0xFC},  /* coarse _integration_time[7:0] */
+	/* pll */
+	{IMX_8BIT, 0x0301, 0x05},  /*	vt_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0303, 0x01},  /*	vt_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0305, 0x09},  /*	pre_pll_clk_div[7:0]	*/
+	{IMX_8BIT, 0x0309, 0x05},  /*	op_pix_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030B, 0x01},  /*	op_sys_clk_div[7:0]	*/
+	{IMX_8BIT, 0x030C, 0x01},
+	{IMX_8BIT, 0x030D, 0x2c},
+	/* image sizing */
+	{IMX_8BIT, 0x0340, 0x09},  /* frame_length_lines[15:8] */
+	{IMX_8BIT, 0x0341, 0xC4},  /*	frame_length_lines[7:0]	*/
+	{IMX_8BIT, 0x0342, 0x0D},  /*	line_length_pck[15:8]	*/
+	{IMX_8BIT, 0x0343, 0x66},  /*	line_length_pck[7:0]	*/
+	{IMX_8BIT, 0x0344, 0x00},  /*	x_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0345, 0x8C},  /*	x_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0346, 0x00},  /*	y_addr_start[15:8]	*/
+	{IMX_8BIT, 0x0347, 0x00},  /*	y_addr_start[7:0]	*/
+	{IMX_8BIT, 0x0348, 0x0C},  /*	x_addr_end[15:8]	*/
+	{IMX_8BIT, 0x0349, 0x43},  /*	x_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034A, 0x09},  /*	y_addr_end[15:8]	*/
+	{IMX_8BIT, 0x034B, 0x9F},  /*	y_addr_end[7:0]	*/
+	{IMX_8BIT, 0x034C, 0x01},  /*	x_output_size[15:8]	*/
+	{IMX_8BIT, 0x034D, 0xB8},  /*	x_output_size[7:0]	*/
+	{IMX_8BIT, 0x034E, 0x01},  /*	y_output_size[15:8]	*/
+	{IMX_8BIT, 0x034F, 0x6C},  /*	y_output_size[7:0]	*/
+	/* binning & scaling */
+	{IMX_8BIT, 0x0390, 0x02}, /* binning mode */
+	{IMX_8BIT, 0x0401, 0x02}, /* scaling mode*/
+	{IMX_8BIT, 0x0405, 0x1B}, /* scale_m[7:0] */
+	/* timer */
+	{IMX_8BIT, 0x3344, 0x57},
+	{IMX_8BIT, 0x3345, 0x1F},
+	/* timing */
+	{IMX_8BIT, 0x3370, 0x77},
+	{IMX_8BIT, 0x3371, 0x2F},
+	{IMX_8BIT, 0x3372, 0x4F},
+	{IMX_8BIT, 0x3373, 0x2F},
+	{IMX_8BIT, 0x3374, 0x2F},
+	{IMX_8BIT, 0x3375, 0x37},
+	{IMX_8BIT, 0x3376, 0x9F},
+	{IMX_8BIT, 0x3377, 0x37},
+	{IMX_8BIT, 0x33C8, 0x01},
+	{IMX_8BIT, 0x33D4, 0x0C},
+	{IMX_8BIT, 0x33D5, 0xD0},
+	{IMX_8BIT, 0x33D6, 0x09},
+	{IMX_8BIT, 0x33D7, 0xA0},
+
+	{IMX_8BIT, 0x030e, 0x01},
+	{IMX_8BIT, 0x41c0, 0x01},
 	{IMX_TOK_TERM, 0, 0}
 };
 
@@ -1808,12 +1997,29 @@ struct imx_resolution imx175_res_video[] = {
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x0D70,
-				 .lines_per_frame = 0x0548,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 			}
 		},
+	},
+	{
+		.desc = "CIF_dvs_30fps",
+		.regs = imx_CIF_dvs_30fps,
+		.width = 440,
+		.height = 364,
+		.fps_options = {
+			{
+				 .fps = 30,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
+			},
+			{
+			}
+		},
+		.bin_factor_x = 4,
+		.bin_factor_y = 4,
 	},
 	{
 		.desc =	"QVGA_strong_dvs_30fps",
@@ -1826,8 +2032,8 @@ struct imx_resolution imx175_res_video[] = {
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x0D70,
-				 .lines_per_frame = 0x0548,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 			}
@@ -1844,8 +2050,8 @@ struct imx_resolution imx175_res_video[] = {
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x1194,
-				 .lines_per_frame = 0x0600,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 			}
@@ -1862,8 +2068,8 @@ struct imx_resolution imx175_res_video[] = {
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x139C,
-				 .lines_per_frame = 0x0600,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 				 .fps = 60,
@@ -1879,14 +2085,14 @@ struct imx_resolution imx175_res_video[] = {
 		.regs = imx_480p_strong_dvs_30fps,
 		.width = 880,
 		.height = 592,
-		.bin_factor_x = 2,
-		.bin_factor_y = 2,
+		.bin_factor_x = 0,
+		.bin_factor_y = 0,
 		.used = 0,
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x139C,
-				 .lines_per_frame = 0x0600,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 			}
@@ -1921,8 +2127,8 @@ struct imx_resolution imx175_res_video[] = {
 		.fps_options = {
 			{
 				 .fps = 30,
-				 .pixels_per_line = 0x11C6,
-				 .lines_per_frame = 0x06A4,
+				 .pixels_per_line = 0x0D66,
+				 .lines_per_frame = 0x099C,
 			},
 			{
 			}
