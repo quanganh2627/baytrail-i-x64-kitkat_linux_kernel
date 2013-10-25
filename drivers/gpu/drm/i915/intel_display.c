@@ -38,6 +38,7 @@
 #include "i915_drv.h"
 /*#include "i915_rpm.h"*/
 #include "i915_trace.h"
+#include "intel_dsi.h"
 #include "hdmi_audio_if.h"
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_crtc_helper.h>
@@ -64,7 +65,6 @@ struct i915_flip_work {
  */
 static struct i915_flip_work flip_works[I915_MAX_PLANES];
 
-bool intel_pipe_has_type(struct drm_crtc *crtc, int type);
 static void intel_increase_pllclock(struct drm_crtc *crtc);
 static void intel_crtc_update_cursor(struct drm_crtc *crtc, bool on);
 static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
@@ -486,7 +486,7 @@ static void i9xx_clock(int refclk, intel_clock_t *clock)
 /**
  * Returns whether any output on the specified pipe is of the specified type
  */
-bool intel_pipe_has_type(struct drm_crtc *crtc, int type)
+bool intel_pipe_has_type(const struct drm_crtc *crtc, int type)
 {
 	struct drm_device *dev = crtc->dev;
 	struct intel_encoder *encoder;
@@ -4127,6 +4127,14 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 
 	if (!intel_pipe_has_type(crtc, INTEL_OUTPUT_DSI))
 		i9xx_disable_pll(dev_priv, pipe);
+	else {
+		for_each_encoder_on_crtc(dev, crtc, encoder) {
+			if (encoder->type == INTEL_OUTPUT_DSI) {
+				intel_dsi_clear_device_ready(encoder);
+				break;
+			}
+		}
+	}
 
 	intel_crtc->active = false;
 	if (dev_priv->s0ixstat == true)
@@ -5429,7 +5437,6 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 	struct intel_encoder *encoder;
 	const intel_limit_t *limit;
 	int ret;
-	struct intel_program_clock_bending clockbend;
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		switch (encoder->type) {
@@ -8633,6 +8640,9 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 	intel_fb = to_intel_framebuffer(crtc->fb);
 	intel_new_fb = to_intel_framebuffer(fb);
 
+	if (dev_priv->shut_down_state)
+		return -EINVAL;
+
 	/* Can't change pixel format via MI display flips. */
 	if (fb->pixel_format != crtc->fb->pixel_format) {
 		if (IS_VALLEYVIEW(dev))
@@ -10125,8 +10135,9 @@ extern void intel_cancel_fbc_work(struct drm_i915_private *dev_priv);
 static int display_disable_wq(struct drm_device *drm_dev)
 {
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
-	struct drm_crtc *crtc;
-	struct intel_encoder *intel_encoder;
+	/* Uncomment following variables once HDMI audio code is integrated*/
+	/*struct drm_crtc *crtc;
+	struct intel_encoder *intel_encoder; */
 
 	cancel_work_sync(&dev_priv->hotplug_work);
 	//intel_cancel_fbc_work(dev_priv);
@@ -10177,8 +10188,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc;
-	struct intel_encoder *intel_encoder;
-
+	int ret;
 	/* Force a re-detection on Hot-pluggable displays */
 	i915_simulate_hpd(dev, false);
 
@@ -10205,7 +10215,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	}
 
 	/* TODO: uncomment after HDMI dependancies are merged */
-	int ret = mid_hdmi_audio_suspend(dev);
+	ret = mid_hdmi_audio_suspend(dev);
 	if (ret != true)
 		DRM_ERROR("Error suspending HDMI audio\n");
 

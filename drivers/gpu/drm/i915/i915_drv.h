@@ -1459,7 +1459,7 @@ typedef struct drm_i915_private {
 	bool is_hdmi;
 	u16 is_mipi;
 	u16 mipi_panel_id;
-
+	int shut_down_state;
 #ifdef CONFIG_DRM_VXD_BYT
 	struct drm_psb_private *vxd_priv;
 	int (*vxd_driver_open)(struct drm_device *dev, struct drm_file *file);
@@ -2496,7 +2496,7 @@ void vlv_force_wake_put(struct drm_i915_private *dev_priv, int fw_engine);
 /* intel_sideband.c */
 u32 vlv_punit_read(struct drm_i915_private *dev_priv, u8 addr);
 void vlv_punit_write(struct drm_i915_private *dev_priv, u8 addr, u32 val);
-u32 vlv_nc_read(struct drm_i915_private *dev_priv, u8 addr);
+u32 vlv_nc_read(struct drm_i915_private *dev_priv, u16 addr);
 u32 vlv_gpio_nc_read(struct drm_i915_private *dev_priv, u32 reg);
 void vlv_gpio_nc_write(struct drm_i915_private *dev_priv, u32 reg, u32 val);
 u32 vlv_cck_read(struct drm_i915_private *dev_priv, u32 reg);

@@ -4304,8 +4304,7 @@ static int sep_setup(struct device *dev,
 	pr_info("regbase_virt=0x%08X\n", (u32) drvdata->cc_base);
 
 #ifdef DX_BASE_ENV_REGS
-	pr_info("FPGA ver. = 0x%08X\n",
-		     READ_REGISTER(DX_ENV_REG_ADDR(drvdata->cc_base, VERSION)));
+	pr_info("FPGA ver. = UNKNOWN\n");
 	/* TODO: verify FPGA version against expected version */
 #endif
 
@@ -4737,7 +4736,7 @@ static int sep_runtime_suspend(struct device *dev)
 		val = readl(security_cfg_reg);
 		if (val & PWR_DWN_ENB_MASK)
 			break;
-		usleep_range(1, 5);
+		usleep_range(40, 60);
 		count++;
 	}
 	if (count >= SEP_TIMEOUT) {
@@ -4792,7 +4791,7 @@ static int sep_suspend(struct device *dev)
 		val = readl(security_cfg_reg);
 		if (val & PWR_DWN_ENB_MASK)
 			break;
-		usleep_range(1, 5);
+		usleep_range(40, 60);
 		count++;
 	}
 	if (count >= SEP_TIMEOUT) {

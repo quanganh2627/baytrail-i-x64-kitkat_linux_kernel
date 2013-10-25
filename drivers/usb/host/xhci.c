@@ -2690,15 +2690,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	if (command) {
 		cmd_completion = command->completion;
 		cmd_status = &command->status;
-		command->command_trb = xhci->cmd_ring->enqueue;
-
-		/* Enqueue pointer can be left pointing to the link TRB,
-		 * we must handle that
-		 */
-		if (TRB_TYPE_LINK_LE32(command->command_trb->link.control))
-			command->command_trb =
-				xhci->cmd_ring->enq_seg->next->trbs;
-
+		command->command_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 		list_add_tail(&command->cmd_list, &virt_dev->cmd_list);
 	} else {
 		cmd_completion = &virt_dev->cmd_completion;
@@ -2706,7 +2698,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	}
 	init_completion(cmd_completion);
 
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	if (!ctx_change)
 		ret = xhci_queue_configure_endpoint(xhci, in_ctx->dma,
 				udev->slot_id, must_succeed);
@@ -3491,14 +3483,7 @@ int xhci_discover_or_reset_device(struct usb_hcd *hcd, struct usb_device *udev)
 
 	/* Attempt to submit the Reset Device command to the command ring */
 	spin_lock_irqsave(&xhci->lock, flags);
-	reset_device_cmd->command_trb = xhci->cmd_ring->enqueue;
-
-	/* Enqueue pointer can be left pointing to the link TRB,
-	 * we must handle that
-	 */
-	if (TRB_TYPE_LINK_LE32(reset_device_cmd->command_trb->link.control))
-		reset_device_cmd->command_trb =
-			xhci->cmd_ring->enq_seg->next->trbs;
+	reset_device_cmd->command_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 
 	list_add_tail(&reset_device_cmd->cmd_list, &virt_dev->cmd_list);
 	ret = xhci_queue_reset_device(xhci, slot_id);
@@ -3689,8 +3674,14 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	int ret;
 	union xhci_trb *cmd_trb;
 
+	/* Need to wait xhci->cmd_ring_state to be RUNNING before
+	 * issue ENABLE_SLOT command.
+	 */
+	while (!(xhci->cmd_ring_state & CMD_RING_STATE_RUNNING))
+		msleep(200);
+
 	spin_lock_irqsave(&xhci->lock, flags);
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	ret = xhci_queue_slot_control(xhci, TRB_ENABLE_SLOT, 0);
 	if (ret) {
 		spin_unlock_irqrestore(&xhci->lock, flags);
@@ -3701,7 +3692,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
 	/* XXX: how much time for xHC slot assignment? */
-	timeleft = wait_for_completion_interruptible_timeout(&xhci->addr_dev,
+	timeleft = wait_for_completion_interruptible_timeout(&xhci->enable_slot,
 			XHCI_CMD_DEFAULT_TIMEOUT);
 	if (timeleft <= 0) {
 		xhci_warn(xhci, "%s while waiting for a slot\n",
@@ -3715,6 +3706,11 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 		return 0;
 	}
 
+	/* set xhci->slot_id to udev->slot_id just after Enable_Slot
+	 * successful to avoid race condition
+	 */
+	udev->slot_id = xhci->slot_id;
+
 	if ((xhci->quirks & XHCI_EP_LIMIT_QUIRK)) {
 		spin_lock_irqsave(&xhci->lock, flags);
 		ret = xhci_reserve_host_control_ep_resources(xhci);
@@ -3723,6 +3719,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 			xhci_warn(xhci, "Not enough host resources, "
 					"active endpoint contexts = %u\n",
 					xhci->num_active_eps);
+			udev->slot_id = 0;
 			goto disable_slot;
 		}
 		spin_unlock_irqrestore(&xhci->lock, flags);
@@ -3731,11 +3728,12 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	 * xhci_discover_or_reset_device(), which may be called as part of
 	 * mass storage driver error handling.
 	 */
-	if (!xhci_alloc_virt_device(xhci, xhci->slot_id, udev, GFP_NOIO)) {
+	if (!xhci_alloc_virt_device(xhci, udev->slot_id, udev, GFP_NOIO)) {
 		xhci_warn(xhci, "Could not allocate xHCI USB device data structures\n");
+		udev->slot_id = 0;
 		goto disable_slot;
 	}
-	udev->slot_id = xhci->slot_id;
+
 	/* Is this a LS or FS device under a HS hub? */
 	/* Hub or peripherial? */
 	return 1;
@@ -3807,7 +3805,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	xhci_dbg_ctx(xhci, virt_dev->in_ctx, 2);
 
 	spin_lock_irqsave(&xhci->lock, flags);
-	cmd_trb = xhci->cmd_ring->dequeue;
+	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	ret = xhci_queue_address_device(xhci, virt_dev->in_ctx->dma,
 					udev->slot_id);
 	if (ret) {

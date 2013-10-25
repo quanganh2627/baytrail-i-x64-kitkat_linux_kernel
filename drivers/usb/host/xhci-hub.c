@@ -286,7 +286,7 @@ static int xhci_stop_device(struct xhci_hcd *xhci, int slot_id, int suspend)
 		if (virt_dev->eps[i].ring && virt_dev->eps[i].ring->dequeue)
 			xhci_queue_stop_endpoint(xhci, slot_id, i, suspend);
 	}
-	cmd->command_trb = xhci->cmd_ring->enqueue;
+	cmd->command_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	list_add_tail(&cmd->cmd_list, &virt_dev->cmd_list);
 	xhci_queue_stop_endpoint(xhci, slot_id, 0, suspend);
 	xhci_ring_cmd_db(xhci);
@@ -995,6 +995,10 @@ int xhci_hub_status_data(struct usb_hcd *hcd, char *buf)
 	__le32 __iomem **port_array;
 	struct xhci_bus_state *bus_state;
 	bool reset_change = false;
+
+	/* Forbid to access register if controller in suspneded */
+	if (!HCD_HW_ACCESSIBLE(hcd))
+		return -ESHUTDOWN;
 
 	max_ports = xhci_get_ports(hcd, &port_array);
 	bus_state = &xhci->bus_state[hcd_index(hcd)];
