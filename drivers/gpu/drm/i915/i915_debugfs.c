@@ -605,6 +605,10 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 	if (obj->gtt_space != NULL)
 		seq_printf(m, " (gtt offset: %08x, size: %08x)",
 			   obj->gtt_offset, (unsigned int)obj->gtt_space->size);
+	if (obj->stolen) {
+		seq_printf(m, " (stolen: %08lx)", obj->stolen->start);
+		seq_printf(m, " (stolen size: %zu bytes)", obj->stolen->size);
+	}
 	if (obj->pin_mappable || obj->fault_mappable) {
 		char s[3], *t = s;
 		if (obj->pin_mappable)
@@ -626,7 +630,7 @@ static int i915_gem_object_list_info(struct seq_file *m, void *data)
 	struct drm_device *dev = node->minor->dev;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct drm_i915_gem_object *obj;
-	size_t total_obj_size, total_gtt_size;
+	size_t total_obj_size, total_gtt_size, total_stolen_obj_size;
 	int count, ret;
 
 	ret = mutex_lock_interruptible(&dev->struct_mutex);
@@ -647,19 +651,25 @@ static int i915_gem_object_list_info(struct seq_file *m, void *data)
 		return -EINVAL;
 	}
 
-	total_obj_size = total_gtt_size = count = 0;
+	total_obj_size = total_gtt_size = total_stolen_obj_size = count = 0;
 	list_for_each_entry(obj, head, mm_list) {
 		seq_printf(m, "   ");
 		describe_obj(m, obj);
 		seq_printf(m, "\n");
 		total_obj_size += obj->base.size;
 		total_gtt_size += obj->gtt_space->size;
+		if (obj->stolen)
+			total_stolen_obj_size += obj->stolen->size;
 		count++;
 	}
 	mutex_unlock(&dev->struct_mutex);
 
 	seq_printf(m, "Total %d objects, %zu bytes, %zu GTT size\n",
-		   count, total_obj_size, total_gtt_size);
+			count, total_obj_size, total_gtt_size);
+
+	seq_printf(m, "Stolen Used: %zu bytes, Stolen Size: %zu  bytes\n",
+			total_stolen_obj_size, dev_priv->mm.gtt->stolen_size);
+
 	return 0;
 }
 

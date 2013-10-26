@@ -84,7 +84,10 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 
 	size = mode_cmd.pitches[0] * mode_cmd.height;
 	size = ALIGN(size, PAGE_SIZE);
-	obj = i915_gem_alloc_object(dev, size);
+
+	obj = i915_gem_object_create_stolen(dev, size);
+	if (obj == NULL)
+		obj = i915_gem_alloc_object(dev, size);
 	if (!obj) {
 		DRM_ERROR("failed to allocate framebuffer\n");
 		ret = -ENOMEM;
@@ -153,6 +156,13 @@ static int intelfb_create(struct intel_fbdev *ifbdev,
 
 	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(info, &ifbdev->helper, sizes->fb_width, sizes->fb_height);
+
+	/* If the object is shmemfs backed, it will have given us zeroed pages.
+	 * If the object is stolen however, it will be full of whatever
+	 * garbage was left in there.
+	 */
+	if (ifbdev->ifb.obj->stolen)
+		memset_io(info->screen_base, 0, info->screen_size);
 
 	/* Use default scratch pixmap (info->pixmap.flags = FB_PIXMAP_SYSTEM) */
 
@@ -260,12 +270,24 @@ void intel_fbdev_fini(struct drm_device *dev)
 void intel_fbdev_set_suspend(struct drm_device *dev, int state)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
-	if (!dev_priv->fbdev)
-		return;
-	if (!dev_priv->fbdev->helper.fbdev)
+	struct intel_fbdev *ifbdev = dev_priv->fbdev;
+	struct fb_info *info;
+
+	if (!ifbdev)
 		return;
 
-	fb_set_suspend(dev_priv->fbdev->helper.fbdev, state);
+	info = ifbdev->helper.fbdev;
+	if (!info)
+		return;
+
+	/* On resume from hibernation: If the object is shmemfs backed, it has
+	 * been restored from swap. If the object is stolen however, it will be
+	 * full of whatever garbage was left in there.
+	 */
+	if (state == FBINFO_STATE_RUNNING && ifbdev->ifb.obj->stolen)
+		memset_io(info->screen_base, 0, info->screen_size);
+
+	fb_set_suspend(info, state);
 }
 
 MODULE_LICENSE("GPL and additional rights");

@@ -900,6 +900,8 @@ typedef struct drm_i915_private {
 		size_t mappable_gtt_total;
 		size_t object_memory;
 		u32 object_count;
+		/* Start of the Stolen area*/
+		unsigned long stolen_base;
 	} mm;
 
 	/* Old dri1 support infrastructure, beware the dragons ya fools entering
@@ -1128,6 +1130,8 @@ struct drm_i915_gem_object {
 
 	/** Current space allocated to this object in the GTT, if any. */
 	struct drm_mm_node *gtt_space;
+	/* Use stolen area for obj, instead of backing it from shmem. */
+	struct drm_mm_node *stolen;
 	struct list_head gtt_list;
 
 	/** This object's place on the active/inactive lists */
@@ -1667,6 +1671,8 @@ i915_gem_is_vmap_object(struct drm_i915_gem_object *obj)
 	const struct drm_i915_gem_object_ops *ops = obj->base.driver_private;
 	if (ops == NULL)
 		return 0;
+	if (ops->is_vmap_obj == NULL)
+		return 0;
 	return ops->is_vmap_obj();
 }
 
@@ -1771,6 +1777,13 @@ int i915_gem_evict_everything(struct drm_device *dev, bool purgeable_only);
 /* i915_gem_stolen.c */
 int i915_gem_init_stolen(struct drm_device *dev);
 void i915_gem_cleanup_stolen(struct drm_device *dev);
+struct drm_i915_gem_object *
+i915_gem_object_create_stolen(struct drm_device *dev, u32 size);
+struct drm_mm_node *
+i915_reserve_stolen_for_preallocated(struct drm_device *dev,
+					       u32 stolen_offset,
+					       u32 size);
+void i915_gem_object_release_stolen(struct drm_i915_gem_object *obj);
 
 /* i915_gem_tiling.c */
 void i915_gem_detect_bit_6_swizzle(struct drm_device *dev);

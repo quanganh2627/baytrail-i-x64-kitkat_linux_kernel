@@ -161,6 +161,54 @@ static void drm_mm_insert_helper(struct drm_mm_node *hole_node,
 	}
 }
 
+struct drm_mm_node *drm_mm_create_block(struct drm_mm *mm,
+					unsigned long start,
+					unsigned long size,
+					bool atomic)
+{
+	struct drm_mm_node *hole_node, *node;
+	unsigned long end = start + size;
+	unsigned long hole_start;
+	unsigned long hole_end;
+
+	list_for_each_entry(hole_node, &mm->hole_stack, hole_stack) {
+		hole_start = drm_mm_hole_node_start(hole_node);
+		hole_end = drm_mm_hole_node_end(hole_node);
+
+		if (hole_start > start || hole_end < end)
+			continue;
+
+		node = drm_mm_kmalloc(mm, atomic);
+		if (unlikely(node == NULL))
+			return NULL;
+
+		node->start = start;
+		node->size = size;
+		node->mm = mm;
+		node->allocated = 1;
+
+		INIT_LIST_HEAD(&node->hole_stack);
+		list_add(&node->node_list, &hole_node->node_list);
+
+		if (start == hole_start) {
+			hole_node->hole_follows = 0;
+			list_del_init(&hole_node->hole_stack);
+		}
+
+		node->hole_follows = 0;
+		if (end != hole_end) {
+			list_add(&node->hole_stack, &mm->hole_stack);
+			node->hole_follows = 1;
+		}
+
+		return node;
+	}
+
+	WARN(1, "no hole found for block 0x%lx + 0x%lx\n", start, size);
+	return NULL;
+}
+EXPORT_SYMBOL(drm_mm_create_block);
+
 struct drm_mm_node *drm_mm_get_block_generic(struct drm_mm_node *hole_node,
 					     unsigned long size,
 					     unsigned alignment,

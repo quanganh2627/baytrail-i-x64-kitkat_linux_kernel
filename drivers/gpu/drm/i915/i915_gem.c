@@ -1874,6 +1874,15 @@ i915_gem_object_get_pages(struct drm_i915_gem_object *obj,
 	if (obj->pages)
 		return 0;
 
+	/*
+	 * Stolen objects have already backing physical memory
+	 * pages assigned to them
+	 */
+	if (obj->stolen) {
+		BUG_ON(obj->sg_table == NULL);
+		return 0;
+	}
+
 	pages = drm_malloc_ab(obj->base.size/PAGE_SIZE, sizeof(struct page *));
 	if (pages == NULL)
 		return -ENOMEM;
@@ -2975,6 +2984,13 @@ i915_gem_clflush_object(struct drm_i915_gem_object *obj)
 	if (obj->pages == NULL)
 		return;
 
+	/*
+	 * Stolen memory is always coherent with the GPU as it is explicitly
+	 * marked as wc by the system, or the system is cache-coherent.
+	 */
+	if (obj->stolen)
+		return;
+
 	/* If the GPU is snooping the contents of the CPU cache,
 	 * we do not need to manually clear the CPU cache lines.  However,
 	 * the caches are only snooped when the render cache is
@@ -3735,6 +3751,11 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 
 	if (obj->base.map_list.map)
 		drm_gem_free_mmap_offset(&obj->base);
+
+	/* Finally release the backing memory for the Stolen objects
+	 * when the object itself is going to get freed */
+	if (obj->stolen)
+		ops->put_pages(obj);
 
 	ops->release(obj);
 	drm_gem_object_release(&obj->base);
