@@ -104,6 +104,16 @@ struct intel_pch_pll {
 };
 #define I915_NUM_PLLS 2
 
+struct rotation_state {
+	/* Added for rotation */
+	uint32_t planea_rot;
+	uint32_t planeb_rot;
+	uint32_t spritea_rot;
+	uint32_t spriteb_rot;
+	uint32_t spritec_rot;
+	uint32_t sprited_rot;
+};
+
 /* Interface history:
  *
  * 1.1: Original.
@@ -1071,6 +1081,9 @@ typedef struct drm_i915_private {
 	int shut_down_state;
 	bool is_resuming;
 	bool is_turbo_enabled;
+
+	/* Added for rotation */
+	struct rotation_state rot_state;
 } drm_i915_private_t;
 
 /* Iterate over initialised rings */
@@ -1459,7 +1472,6 @@ extern int i915_enable_watchdog __read_mostly;
 extern int i915_enable_ppgtt __read_mostly;
 extern int i915_enable_turbo __read_mostly;
 extern int i915_psr_support __read_mostly;
-extern struct drm_display_mode rot_mode;
 
 extern int i915_suspend(struct drm_device *dev, pm_message_t state);
 extern int i915_resume(struct drm_device *dev);

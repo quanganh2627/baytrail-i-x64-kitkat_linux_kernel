@@ -401,6 +401,7 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_framebuffer *fb,
 	bool rotate = false;
 	unsigned long sprsurf_offset, linear_offset;
 	int pixel_size = drm_format_plane_cpp(fb->pixel_format, 0);
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
 
 	sprctl = I915_READ(SPCNTR(pipe, plane));
 	/* Mask out pixel format bits in case we change it */
@@ -478,9 +479,9 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_framebuffer *fb,
 	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size);
 	I915_WRITE(SPSTRIDE(pipe, plane), fb->pitches[0]);
 	if (rotate)
-		I915_WRITE(SPPOS(pipe, plane), ((rot_mode.vdisplay -
+		I915_WRITE(SPPOS(pipe, plane), ((crtc->hwmode.vdisplay -
 			(crtc_y + crtc_h + 1)) << 16) |
-				(rot_mode.hdisplay - (crtc_x + crtc_w + 1)));
+			(crtc->hwmode.hdisplay - (crtc_x + crtc_w + 1)));
 	else
 		I915_WRITE(SPPOS(pipe, plane), (crtc_y << 16) | crtc_x);
 

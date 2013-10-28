@@ -139,8 +139,6 @@ intel_fdi_link_freq(struct drm_device *dev)
 		return 27;
 }
 
-struct drm_display_mode rot_mode;
-
 static const intel_limit_t intel_limits_i8xx_dvo = {
 	.dot = { .min = 25000, .max = 350000 },
 	.vco = { .min = 930000, .max = 1400000 },
@@ -2255,7 +2253,6 @@ int i915_rotation_ffrd(const struct drm_device *dev,
 	val = I915_READ(reg);
 	sprctla = I915_READ(SPCNTR(pipe, 0));
 	sprctlb = I915_READ(SPCNTR(pipe, 1));
-	memcpy(&rot_mode, &(crtc->hwmode), sizeof(struct drm_display_mode));
 
 	if (i915_rotation) {
 		val |= DISPPLANE_180_ROTATION_ENABLE;
@@ -2312,7 +2309,6 @@ int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 	pipe = intel_crtc->pipe;
 
 	DRM_DEBUG_DRIVER("pipe = %d\n", pipe);
-	memcpy(&rot_mode, &(crtc->hwmode), sizeof(struct drm_display_mode));
 	reg = DSPCNTR(pipe);
 	val = I915_READ(reg);
 	sprctla = I915_READ(SPCNTR(pipe, 0));
@@ -2323,38 +2319,61 @@ int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 		val &= ~DISPPLANE_180_ROTATION_ENABLE;
 		I915_WRITE(reg, val);
 		ret = 0;
+		if (pipe == PIPE_A)
+			dev_priv->rot_state.planea_rot = false;
+		else
+			dev_priv->rot_state.planeb_rot = false;
 	}
 
 	if (sprctla & DISPLAY_PLANE_ENABLE) {
 		sprctla &= ~DISPPLANE_180_ROTATION_ENABLE;
 		I915_WRITE(SPCNTR(pipe, 0), sprctla);
 		ret = 0;
+		if (pipe == PIPE_A)
+			dev_priv->rot_state.spritea_rot = false;
+		else
+			dev_priv->rot_state.spritec_rot = false;
 	}
 
 	if (sprctlb & DISPLAY_PLANE_ENABLE) {
 		sprctlb &= ~DISPPLANE_180_ROTATION_ENABLE;
 		I915_WRITE(SPCNTR(pipe, 1), sprctlb);
 		ret = 0;
+		if (pipe == PIPE_A)
+			dev_priv->rot_state.spriteb_rot = false;
+		else
+			dev_priv->rot_state.sprited_rot = false;
 	}
 
 	if (rotate) {
 		if (val & DISPLAY_PLANE_ENABLE) {
 			val |= DISPPLANE_180_ROTATION_ENABLE;
 			I915_WRITE(reg, val);
+			if (pipe == PIPE_A)
+				dev_priv->rot_state.planea_rot = true;
+			else
+				dev_priv->rot_state.planeb_rot = true;
 		}
 
 		if (sprctla & DISPLAY_PLANE_ENABLE) {
 			sprctla |= DISPPLANE_180_ROTATION_ENABLE;
 			I915_WRITE(SPCNTR(pipe, 0), sprctla);
+			if (pipe == PIPE_A)
+				dev_priv->rot_state.spritea_rot = true;
+			else
+				dev_priv->rot_state.spritec_rot = true;
 		}
 
 		if (sprctlb & DISPLAY_PLANE_ENABLE) {
 			sprctlb |= DISPPLANE_180_ROTATION_ENABLE;
 			I915_WRITE(SPCNTR(pipe, 1), sprctlb);
+			if (pipe == PIPE_A)
+				dev_priv->rot_state.spriteb_rot = true;
+			else
+				dev_priv->rot_state.sprited_rot = true;
 		}
 	}
 
-	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 	return ret;
 }
 
@@ -2372,6 +2391,11 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	u32 dspcntr;
 	u32 reg;
 	int pixel_size;
+	/* Added to restore rotation state after resume */
+	if ((dev_priv->rot_state.planea_rot && intel_crtc->pipe == PIPE_A) ||
+		(dev_priv->rot_state.planeb_rot && intel_crtc->pipe == PIPE_B))
+		rotate = true;
+
 	/* Called to enable 180 degree rotation */
 	if (i915_rotation)
 		i915_rotation_ffrd(dev, crtc);
@@ -7805,6 +7829,49 @@ ssize_t display_runtime_suspend(struct drm_device *drm_dev)
 	return 0;
 }
 
+static void restore_rotation(struct drm_device *drm_dev)
+{
+	struct drm_i915_private *dev_priv = drm_dev->dev_private;
+	uint32_t val;
+
+	/* Restore rotation context */
+	val = I915_READ(DSPCNTR(0));
+	if (dev_priv->rot_state.planea_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(DSPCNTR(0), val);
+	}
+
+	val = I915_READ(DSPCNTR(1));
+	if (dev_priv->rot_state.planeb_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(DSPCNTR(1), val);
+	}
+
+	val = I915_READ(SPCNTR(0, 0));
+	if (dev_priv->rot_state.spritea_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(SPCNTR(0, 0), val);
+	}
+
+	val = I915_READ(SPCNTR(0, 1));
+	if (dev_priv->rot_state.spriteb_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(SPCNTR(0, 1), val);
+	}
+
+	val = I915_READ(SPCNTR(1, 0));
+	if (dev_priv->rot_state.spritec_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(SPCNTR(1, 0), val);
+	}
+
+	val = I915_READ(SPCNTR(1, 1));
+	if (dev_priv->rot_state.sprited_rot) {
+		val |= DISPPLANE_180_ROTATION_ENABLE;
+		I915_WRITE(SPCNTR(1, 1), val);
+	}
+}
+
 ssize_t display_runtime_resume(struct drm_device *drm_dev)
 {
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
@@ -7853,6 +7920,7 @@ ssize_t display_runtime_resume(struct drm_device *drm_dev)
 	/* Simulate HPD: If there is a change in hot pluggable devices
 	scan and take action */
 	intel_hdmi_simulate_hpd(drm_dev, true);
+	restore_rotation(drm_dev);
 	return 0;
 }
 
