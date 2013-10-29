@@ -1,4 +1,4 @@
-/* Release Version: ci_master_byt_20130905_2200 */
+/* Release Version: ci_master_byt_20130916_2228 */
 /*
  * Support for Intel Camera Imaging ISP subsystem.
  *
@@ -2344,6 +2344,22 @@ sh_css_params_set_binning_factor(struct ia_css_stream *stream, unsigned int binn
 	return params->sc_table_changed;
 }
 
+bool
+sh_css_params_set_raw_binning(struct ia_css_stream *stream, bool binning)
+{
+	struct ia_css_isp_parameters *params = stream->isp_params_configs;
+	sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "sh_css_params_set_raw_binning() enter:\n");
+
+	if (params->raw_binning != binning) {
+		params->raw_binning = binning;
+		params->sc_table_changed = true;
+	}
+
+	sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "sh_css_params_set_raw_binning() leave:\n");
+
+	return params->sc_table_changed;
+}
+
 static void
 sh_css_set_shading_table(struct ia_css_stream *stream,
 			 const struct ia_css_shading_table *table)
@@ -3911,7 +3927,7 @@ sh_css_get_dvs_6axis_config(const struct ia_css_isp_parameters *params,
 	assert(params != NULL);
 	assert(dvs_config != NULL);
 	assert(dvs_config->height_y == dvs_config->height_uv);
-	assert( (dvs_config->width_y - 1) == 2 * dvs_config->width_uv - 1);
+	assert( (dvs_config->width_y - 1) == 2 * (dvs_config->width_uv - 1));
 
 	sh_css_dtrace(SH_DBG_TRACE, "sh_css_get_dvs_6axis_config() enter: "
 		"dvs_config=%p\n",dvs_config);
@@ -4931,7 +4947,7 @@ ia_css_isp_dvs_statistics_allocate(const struct ia_css_dvs_grid_info *grid)
 	if (me->hor_proj == mmgr_NULL)
 		goto err;
 	me->ver_proj = mmgr_malloc(ver_size);
-	if (me->hor_proj == mmgr_NULL)
+	if (me->ver_proj == mmgr_NULL)
 		goto err;
 
 	sh_css_dtrace(SH_DBG_TRACE, "ia_css_isp_dvs_statistics_allocate() leave: return=%p\n",me);
@@ -5039,7 +5055,9 @@ ia_css_stream_isp_parameters_init(struct ia_css_stream *stream)
 			"return_err=%d\n",IA_CSS_ERR_CANNOT_ALLOCATE_MEMORY);
 		return IA_CSS_ERR_CANNOT_ALLOCATE_MEMORY;
 	}
-
+	/* reset all data */
+	memset(stream->isp_params_configs, 0, sizeof(*stream->isp_params_configs));
+	/* initialize structure */
 	params = stream->isp_params_configs;
 	ddr_ptrs = &params->ddr_ptrs;
 	ddr_ptrs_size = &params->ddr_ptrs_size;
@@ -5630,6 +5648,8 @@ sh_css_param_update_isp_params(struct ia_css_stream *stream, bool commit)
 	assert(stream != NULL);
 
 	params = stream->isp_params_configs;
+	if (!params)
+		return;
 
 	raw_bit_depth = ia_css_stream_input_format_bits_per_pixel(stream);
 	isp_pipe_version = ia_css_pipe_get_isp_pipe_version(stream->pipes[0]);
@@ -5756,32 +5776,51 @@ sh_css_param_update_isp_params(struct ia_css_stream *stream, bool commit)
 
 		/* enqueue the set to sp */
 		if (err == IA_CSS_SUCCESS) {
-			bool rc;
+			int numfree;
+
 			sh_css_dtrace(SH_DBG_TRACE,
 				"sh_css_param_update_isp_params: "
 				"queue param set %x to %d\n",
 				cpy, thread_id);
 
-			rc = host2sp_enqueue_buffer(thread_id, 0,
-				sh_css_param_buffer_queue,
-				cpy);
-			if (!rc) {
+			numfree = host2sp_empty_slots(thread_id, sh_css_param_buffer_queue);
+			if (numfree < 2) {
+				/* not enough room for ptr + cmd */
 				free_sh_css_ddr_address_map(cpy);
 			}
-			else {
-				/* TMP: check discrepancy between nr of enqueued
-				 * parameter sets and dequeued sets
-				 */
-				g_param_buffer_enqueue_count++;
-				assert(g_param_buffer_enqueue_count < g_param_buffer_dequeue_count+50);
-				/*
-				 * Tell the SP which queues are not empty,
-				 * by sending the software event.
-				 */
-				sh_css_sp_snd_event(SP_SW_EVENT_ID_1,
-						thread_id,
-						sh_css_param_buffer_queue,
-						0);
+			else
+			{
+				bool rc;
+				uint32_t cmd = PARAM_CMD_CODE;
+
+				rc = host2sp_enqueue_buffer(thread_id, 0,
+					sh_css_param_buffer_queue,
+					cpy);
+
+				if (params && params->dvs_6axis_config)
+					cmd = set_param_exp_id_code(cmd, params->dvs_6axis_config->exp_id);
+				rc &= host2sp_enqueue_buffer(thread_id, 0,
+					sh_css_param_buffer_queue,
+					(hrt_vaddress)cmd);
+				if (!rc) {
+					/* this should not happen as we checked before that there are two slots available */
+					free_sh_css_ddr_address_map(cpy);
+				}
+				else {
+					/* TMP: check discrepancy between nr of enqueued
+					 * parameter sets and dequeued sets
+					 */
+					g_param_buffer_enqueue_count++;
+					assert(g_param_buffer_enqueue_count < g_param_buffer_dequeue_count+50);
+					/*
+					 * Tell the SP which queues are not empty,
+					 * by sending the software event.
+					 */
+					sh_css_sp_snd_event(SP_SW_EVENT_ID_1,
+							thread_id,
+							sh_css_param_buffer_queue,
+							0);
+				}
 			}
 		}
 		/* clean-up old copy */
@@ -5836,6 +5875,9 @@ static enum ia_css_err sh_css_params_write_to_ddr_internal(
 
 	sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "sh_css_params_write_to_ddr_internal() enter:\n");
 
+	if (binary == NULL || binary->info == NULL)
+		return IA_CSS_ERR_INVALID_ARGUMENTS;
+
 	if (binary->info->enable.fpnr) {
 		buff_realloced = reallocate_buffer(&ddr_map->fpn_tbl,
 			&ddr_map_size->fpn_tbl,
@@ -5872,17 +5914,20 @@ static enum ia_css_err sh_css_params_write_to_ddr_internal(
 			return err;
 		if (params->sc_table_changed || buff_realloced) {
 			/* shading table is full resolution, reduce */
-			struct ia_css_shading_table *tmp_sc_table = NULL;
+			struct ia_css_shading_table *tmp_sc_table;
 
 			prepare_shading_table(
 				(const struct ia_css_shading_table *)params->sc_table,
 				params->sensor_binning,
+				params->raw_binning,
 				&tmp_sc_table,
 				binary);
 
-			store_sctbl(params, binary, ddr_map->sc_tbl, tmp_sc_table);
-
-			ia_css_shading_table_free(tmp_sc_table);
+			if (tmp_sc_table != NULL)
+			{
+				store_sctbl(params, binary, ddr_map->sc_tbl, tmp_sc_table);
+				ia_css_shading_table_free(tmp_sc_table);
+			}
 		}
 	}
 
@@ -6254,6 +6299,7 @@ struct ia_css_shading_table * ia_css_get_shading_table(struct ia_css_stream *str
 		prepare_shading_table(
 			(const struct ia_css_shading_table *)params->sc_table,
 			params->sensor_binning,
+			params->raw_binning,
 			&tmp_sc_table,
 			binary);
 

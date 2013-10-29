@@ -1,4 +1,4 @@
-/* Release Version: ci_master_byt_20130905_2200 */
+/* Release Version: ci_master_byt_20130916_2228 */
 /*
  * Support for Intel Camera Imaging ISP subsystem.
  *
@@ -223,6 +223,7 @@ generate_id_shading_table(struct ia_css_shading_table **target_table,
 void
 prepare_shading_table(const struct ia_css_shading_table *in_table,
 		      unsigned int sensor_binning,
+		      bool raw_binning,
 		      struct ia_css_shading_table **target_table,
 		      const struct sh_css_binary *binary)
 {
@@ -252,6 +253,12 @@ prepare_shading_table(const struct ia_css_shading_table *in_table,
 	right_padding = binary->in_frame_info.padded_width -
 			(input_width + left_padding);
 
+	if ((binary->info->mode == SH_CSS_BINARY_MODE_PREVIEW)
+		&& raw_binning
+		&& binary->info->enable.raw_binning) {
+		input_width = input_width * 2 - binary->info->left_cropping;
+		input_height = input_height * 2 - binary->info->top_cropping;
+	}
 	/* We take into account the binning done by the sensor. We do this
 	   by cropping the non-binned part of the shading table and then
 	   increasing the size of a grid cell with this same binning factor. */
