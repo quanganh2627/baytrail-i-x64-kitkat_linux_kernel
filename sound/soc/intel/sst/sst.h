@@ -55,7 +55,6 @@
  * platform data to SST driver
  */
 #define MRFLD_FW_VIRTUAL_BASE 0xC0000000
-#define MRFLD_FW_LSP_DDR_BASE 0xC5E00000
 #define MRFLD_FW_DDR_BASE_OFFSET 0x0
 #define MRFLD_FW_FEATURE_BASE_OFFSET 0x4
 #define MRFLD_FW_BSS_RESET_BIT 0
@@ -261,6 +260,9 @@ struct stream_info {
 	u32			cumm_bytes;
 	void			*compr_cb_param;
 	void (*compr_cb)	(void *compr_cb_param);
+	void			*drain_cb_param;
+	void (*drain_notify)	(void *drain_cb_param);
+
 	unsigned int		num_ch;
 	unsigned int		pipe_id;
 	unsigned int		str_id;
@@ -591,6 +593,7 @@ int sst_stalled(void);
 int sst_pause_stream(int id);
 int sst_resume_stream(int id);
 int sst_drop_stream(int id);
+int sst_next_track(void);
 int sst_free_stream(int id);
 int sst_start_stream(int str_id);
 int sst_send_byte_stream_mrfld(void *sbytes);
@@ -632,7 +635,8 @@ int intel_sst_release_cntrl(struct inode *i_node, struct file *file_ptr);
 
 int sst_load_fw(void);
 int sst_load_library(struct snd_sst_lib_download *lib, u8 ops);
-int sst_load_all_modules_elf(struct intel_sst_drv *ctx);
+int sst_load_all_modules_elf(struct intel_sst_drv *ctx,
+		struct sst_module_info *mod_table, int mod_table_size);
 int sst_get_next_lib_mem(struct sst_mem_mgr *mgr, int size,
 			u32 *lib_base);
 void sst_post_download_ctp(struct intel_sst_drv *ctx);
@@ -877,6 +881,18 @@ static inline struct stream_info *get_stream_info(int str_id)
 	if (sst_validate_strid(str_id))
 		return NULL;
 	return &sst_drv_ctx->streams[str_id];
+}
+
+static inline int get_stream_id_mrfld(u32 pipe_id)
+{
+	int i;
+
+	for (i = 1; i <= sst_drv_ctx->info.max_streams; i++)
+		if (pipe_id == sst_drv_ctx->streams[i].pipe_id)
+			return i;
+
+	pr_debug("%s: no such pipe_id(%u)", __func__, pipe_id);
+	return -1;
 }
 
 int register_sst(struct device *);

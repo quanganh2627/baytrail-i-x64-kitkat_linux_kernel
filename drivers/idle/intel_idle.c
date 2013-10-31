@@ -70,7 +70,9 @@
 #define PREFIX "intel_idle: "
 
 #define CLPU_CR_C6_POLICY_CONFIG	0x668
-#define DISABLE_C6_DEMOTION		0x0f0f0f01
+#define CLPU_MD_C6_POLICY_CONFIG	0x669
+#define DISABLE_CORE_C6_DEMOTION	0x0
+#define DISABLE_MODULE_C6_DEMOTION	0x0
 
 static struct cpuidle_driver intel_idle_driver = {
 	.name = "intel_idle",
@@ -388,6 +390,58 @@ static struct cpuidle_state vlv_cstates[CPUIDLE_STATE_MAX] = {
 		.enter = NULL }
 };
 
+static struct cpuidle_state chv_cstates[CPUIDLE_STATE_MAX] = {
+	{ /* MWAIT C1 */
+		.name = "C1-ATM",
+		.desc = "MWAIT 0x00",
+		.flags = MWAIT2flg(0x00) | CPUIDLE_FLAG_TIME_VALID,
+		.exit_latency = 1,
+		.target_residency = 4,
+		.enter = &intel_idle },
+	{ /* MWAIT C4 */
+		.name = "C4-ATM",
+		.desc = "MWAIT 0x30",
+		.flags = MWAIT2flg(0x30) | CPUIDLE_FLAG_TIME_VALID
+						| CPUIDLE_FLAG_TLB_FLUSHED,
+		.exit_latency = 100,
+		.target_residency = 400,
+		.enter = &intel_idle },
+	{ /* MWAIT C6 */
+		.name = "C6-ATM",
+		.desc = "MWAIT 0x52",
+		.flags = MWAIT2flg(0x52) | CPUIDLE_FLAG_TIME_VALID
+						| CPUIDLE_FLAG_TLB_FLUSHED,
+		.exit_latency = 140,
+		.target_residency = 560,
+		.enter = &intel_idle },
+	{ /* MWAIT C7-S0i1 */
+		.name = "S0i1-ATM",
+		.desc = "MWAIT 0x60",
+		.flags = MWAIT2flg(0x60) | CPUIDLE_FLAG_TIME_VALID
+						| CPUIDLE_FLAG_TLB_FLUSHED,
+		.exit_latency = 1200,
+		.target_residency = 4000,
+		.enter = &intel_idle },
+	{ /* MWAIT C8-S0i2 */
+		.name = "S0i2-ATM",
+		.desc = "MWAIT 0x62",
+		.flags = MWAIT2flg(0x62) | CPUIDLE_FLAG_TIME_VALID
+						| CPUIDLE_FLAG_TLB_FLUSHED,
+		.exit_latency = 2000,
+		.target_residency = 8000,
+		.enter = &intel_idle },
+	{ /* MWAIT C9-S0i3 */
+		.name = "S0i3-ATM",
+		.desc = "MWAIT 0x64",
+		.flags = MWAIT2flg(0x64) | CPUIDLE_FLAG_TIME_VALID
+						| CPUIDLE_FLAG_TLB_FLUSHED,
+		.exit_latency = 10000,
+		.target_residency = 20000,
+		.enter = &intel_idle },
+	{
+		.enter = NULL }
+};
+
 #if defined(CONFIG_REMOVEME_INTEL_ATOM_MRFLD_POWER)
 static struct cpuidle_state mrfld_cstates[CPUIDLE_STATE_MAX] = {
 	{ /* MWAIT C1 */
@@ -673,6 +727,17 @@ static int intel_idle(struct cpuidle_device *dev,
 	unsigned int cstate;
 	int cpu = smp_processor_id();
 
+#if (defined(CONFIG_REMOVEME_INTEL_ATOM_MRFLD_POWER) && \
+	defined(CONFIG_PM_DEBUG))
+	{
+		/* Get Cstate based on ignore table from PMU driver */
+		unsigned int ncstate;
+		cstate =
+		(((eax) >> MWAIT_SUBSTATE_SIZE) & MWAIT_CSTATE_MASK) + 1;
+		ncstate = pmu_get_new_cstate(cstate, &index);
+		eax	= flg2MWAIT(drv->states[index].flags);
+	}
+#endif
 	cstate = (((eax) >> MWAIT_SUBSTATE_SIZE) & MWAIT_CSTATE_MASK) + 1;
 
 	/*
@@ -801,6 +866,10 @@ static const struct idle_cpu idle_cpu_vlv = {
 	.state_table = vlv_cstates,
 };
 
+static const struct idle_cpu idle_cpu_chv = {
+	.state_table = chv_cstates,
+};
+
 #define ICPU(model, cpu) \
 	{ X86_VENDOR_INTEL, 6, model, X86_FEATURE_MWAIT, (unsigned long)&cpu }
 
@@ -816,6 +885,7 @@ static const struct x86_cpu_id intel_idle_ids[] = {
 	ICPU(0x2f, idle_cpu_nehalem),
 	ICPU(0x2a, idle_cpu_snb),
 	ICPU(0x2d, idle_cpu_snb),
+	ICPU(0x30, idle_cpu_chv),
 	ICPU(0x37, idle_cpu_vlv),
 	ICPU(0x3a, idle_cpu_ivb),
 	ICPU(0x3e, idle_cpu_ivb),
@@ -1068,10 +1138,17 @@ static int __init intel_idle_init(void)
 			return retval;
 		}
 
-		if (platform_is(INTEL_ATOM_BYT))
+		if (platform_is(INTEL_ATOM_BYT)) {
+			/* Disable automatic core C6 demotion by PUNIT */
 			if (wrmsr_on_cpu(i, CLPU_CR_C6_POLICY_CONFIG,
-						DISABLE_C6_DEMOTION, 0x0))
-				pr_debug(PREFIX "Error to disable C6 demotion");
+					DISABLE_CORE_C6_DEMOTION, 0x0))
+				pr_err("Error to disable core C6 demotion");
+
+			/* Disable automatic module C6 demotion by PUNIT */
+			if (wrmsr_on_cpu(i, CLPU_MD_C6_POLICY_CONFIG,
+					DISABLE_MODULE_C6_DEMOTION, 0x0))
+				pr_err("Error to disable module C6 demotion");
+		}
 	}
 	register_cpu_notifier(&cpu_hotplug_notifier);
 

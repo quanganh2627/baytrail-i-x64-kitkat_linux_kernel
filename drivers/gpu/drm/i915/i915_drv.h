@@ -43,7 +43,7 @@
 #include <linux/kref.h>
 #include <linux/pm_qos.h>
 #include "hdmi_audio_if.h"
-
+#include <linux/mmu_notifier.h>
 /* General customization:
  */
 
@@ -885,7 +885,8 @@ struct intel_gen6_power_mgmt {
 	u32 cz_ts_down_ei;
 	u32 render_down_EI_C0;
 	u32 media_down_EI_C0;
-
+	bool enabled;
+	bool state;
 	struct delayed_work delayed_resume_work;
 
 	/*
@@ -893,6 +894,12 @@ struct intel_gen6_power_mgmt {
 	 * Must be taken after struct_mutex if nested.
 	 */
 	struct mutex hw_lock;
+};
+
+/* RC6 related */
+struct intel_rs_power_mgmt {
+	bool enabled;
+	bool state;
 };
 
 /* Runtime power management related */
@@ -1075,13 +1082,9 @@ struct i915_gpu_error {
 
 	/**
 	 * Special values/flags for reset_counter
-	 *
-	 * Note that the code relies on
-	 * 	I915_WEDGED & I915_RESET_IN_PROGRESS_FLAG
-	 * being true.
 	 */
 #define I915_RESET_IN_PROGRESS_FLAG	1
-#define I915_WEDGED			0xffffffff
+#define I915_WEDGED			(1 << 31)
 
 	/**
 	 * Waitqueue to signal when the reset has completed. Used by clients
@@ -1126,7 +1129,13 @@ struct intel_vbt_data {
 
 	/* MIPI DSI */
 	struct {
+		u8 seq_version;
 		u16 panel_id;
+		struct mipi_config *config;
+		struct mipi_pps_data *pps;
+		u32 size;
+		u8 *data;
+		u8 *sequence[MIPI_SEQ_MAX];
 	} dsi;
 
 	int crt_ddc_pin;
@@ -1326,6 +1335,7 @@ typedef struct drm_i915_private {
 		u32 signal;
 		u32 blc_adjustment;
 		bool enabled;
+		bool state;
 		bool feature_control;
 #ifdef CONFIG_DEBUG_FS
 		u32 bin_data[DPST_BIN_COUNT];
@@ -1376,7 +1386,6 @@ typedef struct drm_i915_private {
 
 	/* Adding this to fallback to normal Turbo logic */
 	bool use_RC0_residency_for_turbo;
-	bool is_turbo_enabled;
 
 	struct {
 		atomic_t up_threshold;
@@ -1386,6 +1395,9 @@ typedef struct drm_i915_private {
 
 	/* gen6+ rps state */
 	struct intel_gen6_power_mgmt rps;
+
+	/* gen7 rc6 related */
+	struct intel_rs_power_mgmt rc6;
 
 	/* Runtime power management related */
 	struct intel_gen7_rpm rpm;
@@ -1459,7 +1471,7 @@ typedef struct drm_i915_private {
 	bool is_hdmi;
 	u16 is_mipi;
 	u16 mipi_panel_id;
-	int shut_down_state;
+
 #ifdef CONFIG_DRM_VXD_BYT
 	struct drm_psb_private *vxd_priv;
 	int (*vxd_driver_open)(struct drm_device *dev, struct drm_file *file);
@@ -1518,6 +1530,9 @@ struct drm_i915_gem_object {
 
 	/** List of VMAs backed by this object */
 	struct list_head vma_list;
+
+	/** Current space allocated to this object in the GTT, if any. */
+	struct drm_mm_node *gtt_space;
 
 	/** Stolen memory for this object, instead of being backed by shmem. */
 	struct drm_mm_node *stolen;
@@ -2025,6 +2040,7 @@ int __must_check i915_gem_object_ggtt_unbind(struct drm_i915_gem_object *obj);
 int i915_gem_object_put_pages(struct drm_i915_gem_object *obj);
 void i915_gem_release_mmap(struct drm_i915_gem_object *obj);
 void i915_gem_lastclose(struct drm_device *dev);
+int __must_check i915_gem_object_unbind(struct drm_i915_gem_object *obj);
 
 int __must_check i915_gem_object_get_pages(struct drm_i915_gem_object *obj);
 static inline struct page *i915_gem_object_get_page(struct drm_i915_gem_object *obj, int n)
@@ -2116,7 +2132,12 @@ static inline bool i915_reset_in_progress(struct i915_gpu_error *error)
 
 static inline bool i915_terminally_wedged(struct i915_gpu_error *error)
 {
-	return atomic_read(&error->reset_counter) == I915_WEDGED;
+	return atomic_read(&error->reset_counter) & I915_WEDGED;
+}
+
+static inline u32 i915_reset_count(struct i915_gpu_error *error)
+{
+	return ((atomic_read(&error->reset_counter) & ~I915_WEDGED) + 1) / 2;
 }
 
 void i915_gem_reset(struct drm_device *dev);
@@ -2255,6 +2276,7 @@ int i915_gem_context_destroy_ioctl(struct drm_device *dev, void *data,
 				   struct drm_file *file);
 
 void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level);
+void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level);
 
 /* i915_gem_gtt.c */
 void i915_gem_cleanup_aliasing_ppgtt(struct drm_device *dev);
@@ -2402,7 +2424,7 @@ static inline void intel_opregion_asle_intr(struct drm_device *dev) { return; }
 int i915_dpst_context(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 u32 i915_dpst_get_brightness(struct drm_device *dev);
-void i915_dpst_set_brightness(struct drm_device *dev, u32 brightness_val);
+u32 i915_dpst_compute_brightness(struct drm_device *dev, u32 brightness_val);
 void i915_dpst_irq_handler(struct drm_device *dev);
 int i915_dpst_disable_hist_interrupt(struct drm_device *dev);
 int i915_dpst_enable_hist_interrupt(struct drm_device *dev);
@@ -2450,10 +2472,15 @@ int i915_set_plane_zorder(struct drm_device *dev, void *data,
 			  struct drm_file *file);
 int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 		struct drm_file *file);
+int i915_enable_plane_reserved_reg_bit_2(struct drm_device *dev, void *data,
+			struct drm_file *file);
 int i915_disp_screen_control(struct drm_device *dev, void *data,
 		struct drm_file *file);
 int i915_set_plane_alpha(struct drm_device *dev, void *data,
 			  struct drm_file *file);
+
+int i915_get_reset_stats_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file);
 
 /* overlay */
 extern struct intel_overlay_error_state *intel_overlay_capture_error_state(struct drm_device *dev);

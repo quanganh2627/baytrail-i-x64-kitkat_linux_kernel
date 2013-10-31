@@ -49,6 +49,7 @@
 #define INTEL_BYT_DMAC0_ID		0x0F28
 
 #define LNW_PERIPHRAL_MASK_SIZE		0x20
+#define ENABLE_PARTITION_UPDATE		(BIT(26))
 
 #define INFO(_max_chan, _ch_base, _block_size, _pimr_mask,	\
 		_pimr_base, _dword_trf, _pimr_offset, _pci_id,	\
@@ -141,15 +142,6 @@ static void dump_dma_reg(struct dma_chan *chan)
 	pr_debug("CFG_LOW:\t%#x", readl(midc->ch_regs + CFG_LOW));
 	pr_debug("CFG_HIGH:\t%#x", readl(midc->ch_regs + CFG_HIGH));
 	pr_debug("<<<<<<<<<<<< DMA Dump ends >>>>>>>>>>>>");
-}
-
-static void config_dma_fifo_partition(struct middma_device *dma)
-{
-	/* program FIFO Partition registers - 128 bytes for each ch */
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION0_HI);
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_LO);
-	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_HI);
-	iowrite32(DMA_FIFO_SIZE | BIT(26), dma->dma_base + FIFO_PARTITION0_LO);
 }
 
 /**
@@ -453,7 +445,8 @@ static void midc_descriptor_complete(struct intel_mid_dma_chan *midc,
 	struct intel_mid_dma_lli	*llitem;
 	void *param_txd = NULL;
 
-	dma_cookie_complete(txd);
+	pr_debug("tx cookie after complete = %d\n", txd->cookie);
+
 	callback_txd = txd->callback;
 	param_txd = txd->callback_param;
 
@@ -467,6 +460,7 @@ static void midc_descriptor_complete(struct intel_mid_dma_chan *midc,
 			desc->current_lli = 0;
 	}
 	if (midc->raw_tfr) {
+		dma_cookie_complete(txd);
 		list_del(&desc->desc_node);
 		desc->status = DMA_SUCCESS;
 		if (desc->lli != NULL && desc->lli->llp != 0)
@@ -637,6 +631,7 @@ static dma_cookie_t intel_mid_dma_tx_submit(struct dma_async_tx_descriptor *tx)
 	}
 
 	cookie = dma_cookie_assign(tx);
+	pr_debug("Allocated cookie = %d\n", cookie);
 
 	if (list_empty(&midc->active_list))
 		list_add_tail(&desc->desc_node, &midc->active_list);
@@ -787,10 +782,29 @@ static int intel_mid_dma_device_control(struct dma_chan *chan,
 	struct intel_mid_dma_chan	*midc = to_intel_mid_dma_chan(chan);
 	struct middma_device	*mid = to_middma_device(chan->device);
 	struct intel_mid_dma_desc	*desc, *_desc;
+	struct dma_async_tx_descriptor	*txd;
 
 	pr_debug("%s:CMD:%d for channel:%d\n", __func__, cmd, midc->ch_id);
 	if (cmd == DMA_SLAVE_CONFIG)
 		return dma_slave_control(chan, arg);
+
+	/*
+	 * Leverage the DMA_PAUSE/DMA_RESUME for tuntime PM managemnt.
+	 * DMA customer need make sure the channel is stopped before calling
+	 * the DMA_PAUSE here, and don't start DMA channel befor calling
+	 * DMA_RESUME.
+	 */
+	if (cmd == DMA_PAUSE) {
+		midc->in_use = 0;
+		pm_runtime_put(mid->dev);
+		return 0;
+	}
+
+	if (cmd == DMA_RESUME) {
+		midc->in_use = 1;
+		pm_runtime_get_sync(mid->dev);
+		return 0;
+	}
 
 	if (cmd != DMA_TERMINATE_ALL)
 		return -ENXIO;
@@ -800,6 +814,7 @@ static int intel_mid_dma_device_control(struct dma_chan *chan,
 		spin_unlock_bh(&midc->lock);
 		return 0;
 	}
+
 	/* Disable CH interrupts */
 	disable_dma_interrupt(midc);
 	/* clear channel interrupts */
@@ -808,6 +823,10 @@ static int intel_mid_dma_device_control(struct dma_chan *chan,
 	midc->busy = false;
 	midc->descs_allocated = 0;
 	list_for_each_entry_safe(desc, _desc, &midc->active_list, desc_node) {
+		if (desc->status == DMA_IN_PROGRESS) {
+			txd = &desc->txd;
+			dma_cookie_complete(txd);
+		}
 		list_del(&desc->desc_node);
 		if (desc->lli != NULL)
 			dma_pool_free(desc->lli_pool, desc->lli,
@@ -1374,11 +1393,6 @@ static int intel_mid_dma_alloc_chan_resources(struct dma_chan *chan)
 		return -EIO;
 	}
 	dma_cookie_init(chan);
-	/* Workaround to enable controller. Moved from
-		resume handler to here */
-	iowrite32(REG_BIT0, mid->dma_base + DMA_CFG);
-	if (!mid->dword_trf)
-		config_dma_fifo_partition(mid);
 
 	spin_lock_bh(&midc->lock);
 	while (midc->descs_allocated < DESCS_PER_CHANNEL) {
@@ -1626,6 +1640,16 @@ static irqreturn_t intel_mid_dma_interrupt1(int irq, void *data)
 static irqreturn_t intel_mid_dma_interrupt2(int irq, void *data)
 {
 	return intel_mid_dma_interrupt(irq, data);
+}
+
+static void config_dma_fifo_partition(struct middma_device *dma)
+{
+	/* program FIFO Partition registers - 128 bytes for each ch */
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION0_HI);
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_LO);
+	iowrite32(DMA_FIFO_SIZE, dma->dma_base + FIFO_PARTITION1_HI);
+	iowrite32(DMA_FIFO_SIZE | ENABLE_PARTITION_UPDATE,
+				dma->dma_base + FIFO_PARTITION0_LO);
 }
 
 /* v1 ops will be used for Medfield & CTP platforms */
@@ -1970,12 +1994,12 @@ int dma_resume(struct device *dev)
 {
 	struct middma_device *device = dev_get_drvdata(dev);
 
-	pr_info("MDMA: dma_resume called, base = %p\n", device->dma_base);
+	pr_debug("MDMA: dma_resume called\n");
 	device->state = RUNNING;
-	/* iowrite32(REG_BIT0, device->dma_base + DMA_CFG);
+	iowrite32(REG_BIT0, device->dma_base + DMA_CFG);
 
 	if (!device->dword_trf)
-		config_dma_fifo_partition(device); */
+		config_dma_fifo_partition(device);
 
 	return 0;
 }

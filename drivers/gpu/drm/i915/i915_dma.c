@@ -1508,6 +1508,13 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	dev_priv->pc8.disable_count = 2; /* requirements_met + gpu_idle */
 	INIT_DELAYED_WORK(&dev_priv->pc8.enable_work, hsw_enable_pc8_work);
 
+	dev_priv->dpst.state = true;
+	dev_priv->rps.state = true;
+	dev_priv->rc6.state = true;
+	dev_priv->dpst.enabled = false;
+	dev_priv->rps.enabled = false;
+	dev_priv->rc6.enabled = false;
+
 	i915_dump_device_info(dev_priv);
 
 	/* Not all pre-production machines fall into this category, only the
@@ -1845,7 +1852,6 @@ int i915_driver_unload(struct drm_device *dev)
 int i915_driver_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct drm_i915_file_private *file_priv;
-	drm_i915_private_t *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_DRIVER("\n");
 	file_priv = kzalloc(sizeof(*file_priv), GFP_KERNEL);
@@ -1860,9 +1866,12 @@ int i915_driver_open(struct drm_device *dev, struct drm_file *file)
 	idr_init(&file_priv->context_idr);
 
 #ifdef CONFIG_DRM_VXD_BYT
+	{
+		drm_i915_private_t *dev_priv = dev->dev_private;
 
-	if (dev_priv->vxd_driver_open)
-		return dev_priv->vxd_driver_open(dev, file);
+		if (dev_priv->vxd_driver_open)
+			return dev_priv->vxd_driver_open(dev, file);
+	}
 #endif
 	return 0;
 }
@@ -1969,6 +1978,8 @@ struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_REG_READ, i915_reg_read_ioctl, DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_SET_PLANE_ZORDER, i915_set_plane_zorder, \
 							DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_SET_RESERVED_REG_BIT_2, \
+		i915_enable_plane_reserved_reg_bit_2, DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_EDP_PSR_CTL, intel_edp_psr_ctl_ioctl, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_EDP_PSR_EXIT, intel_edp_psr_exit_ioctl,
 								DRM_AUTH),
@@ -1986,6 +1997,8 @@ struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_GEM_USERPTR, i915_gem_userptr_ioctl,
 						DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_DPST_CONTEXT, i915_dpst_context, DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_GET_RESET_STATS, i915_get_reset_stats_ioctl,
+					DRM_UNLOCKED),
 };
 
 int i915_max_ioctl = DRM_ARRAY_SIZE(i915_ioctls);

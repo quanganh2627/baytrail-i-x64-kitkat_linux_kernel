@@ -994,8 +994,14 @@ static void gen6_pm_rps_work(struct work_struct *work)
 	* freq by driver is actually the current running frequency
 	*/
 
-	if (IS_VALLEYVIEW(dev_priv->dev))
+	if (IS_VALLEYVIEW(dev_priv->dev)) {
 		vlv_update_rps_cur_delay(dev_priv);
+		/* If debugfs/sysfs sets min_delay higher than rpe_delay
+		* after coming back from rc6 starting frequency should be
+		* min_delay */
+		if (dev_priv->rps.cur_delay < dev_priv->rps.min_delay)
+			dev_priv->rps.cur_delay = dev_priv->rps.min_delay;
+	}
 
 	if (pm_iir & GEN6_PM_RP_UP_THRESHOLD) {
 
@@ -1767,7 +1773,8 @@ static void i915_error_work_func(struct work_struct *work)
 			kobject_uevent_env(&dev->primary->kdev.kobj,
 					   KOBJ_CHANGE, reset_done_event);
 		} else {
-			atomic_set(&error->reset_counter, I915_WEDGED);
+			/* Terminal wedge condition */
+			atomic_set_mask(I915_WEDGED, &error->reset_counter);
 		}
 
 		for_each_ring(ring, dev_priv, i)

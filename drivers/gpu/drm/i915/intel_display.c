@@ -39,6 +39,7 @@
 /*#include "i915_rpm.h"*/
 #include "i915_trace.h"
 #include "intel_dsi.h"
+#include "intel_clrmgr.h"
 #include "hdmi_audio_if.h"
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_crtc_helper.h>
@@ -1973,7 +1974,7 @@ intel_pin_and_fence_fb_obj(struct drm_device *dev,
 			   struct intel_ring_buffer *pipelined)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	u32 alignment;
+	u32 alignment = 0;
 	int ret;
 
 	switch (obj->tiling_mode) {
@@ -2043,41 +2044,53 @@ int i915_enable_plane_reserved_reg_bit_2(struct drm_device *dev, void *data,
 				 struct drm_file *file)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_i915_reserved_reg_bit_2 *rrb = data;
-	u32 enable = rrb->enable;
-	int plane = rrb->plane;
+	struct drm_i915_reserved_reg_bit_2 *rrb;
+	u32 reg1, reg2;
 	u32 val;
 
-	/* Clear the older rrb setting*/
-	val = I915_READ(DSPSURF(plane));
-	val &= ~PLANE_RESERVED_REG_BIT_2_ENABLE;
-	I915_WRITE(DSPSURF(plane), val);
+	if (!data)
+		return -EINVAL;
 
-	val = I915_READ(DSPSURFLIVE(plane));
-	val &= ~PLANE_RESERVED_REG_BIT_2_ENABLE;
-	I915_WRITE(DSPSURFLIVE(plane), val);
+	rrb = data;
 
-	if (plane == 1 || plane == 4) {
-		val = I915_READ(VLV_DSPADDR(plane));
-		val &= ~PLANE_RESERVED_REG_BIT_2_ENABLE;
-		I915_WRITE(VLV_DSPADDR(plane), val);
+	switch (rrb->plane) {
+	case SPRITEA: /* SPRITE A */
+		reg1 = SPSURF(0, 0);
+		reg2 = SPLIVESURF(0, 0);
+		break;
+	case SPRITEB: /* SPRITE B */
+		reg1 = SPSURF(0, 1);
+		reg2 = SPLIVESURF(0, 1);
+		break;
+	case SPRITEC: /* SPRITE C */
+		reg1 = SPSURF(1, 0);
+		reg2 = SPLIVESURF(1, 0);
+		break;
+	case SPRITED: /* SPRITE D */
+		reg1 = SPSURF(1, 1);
+		reg2 = SPLIVESURF(1, 1);
+		break;
+	default: return -EINVAL;
 	}
 
 	/* Program bit enable if it was requested */
-	if (enable) {
-		val = I915_READ(DSPSURF(plane));
+	if (rrb->enable) {
+		val = I915_READ(reg1);
 		val |= PLANE_RESERVED_REG_BIT_2_ENABLE;
-		I915_WRITE(DSPSURF(plane), val);
+		I915_WRITE(reg1, val);
 
-		val = I915_READ(DSPSURFLIVE(plane));
+		val = I915_READ(reg2);
 		val |= PLANE_RESERVED_REG_BIT_2_ENABLE;
-		I915_WRITE(DSPSURFLIVE(plane), val);
+		I915_WRITE(reg2, val);
+	} else {
+		/* Clear the older rrb setting*/
+		val = I915_READ(reg1);
+		val &= ~PLANE_RESERVED_REG_BIT_2_ENABLE;
+		I915_WRITE(reg1, val);
 
-		if (plane == 1 || plane == 4) {
-			val = I915_READ(VLV_DSPADDR(plane));
-			val |= PLANE_RESERVED_REG_BIT_2_ENABLE;
-			I915_WRITE(VLV_DSPADDR(plane), val);
-		}
+		val = I915_READ(reg2);
+		val &= ~PLANE_RESERVED_REG_BIT_2_ENABLE;
+		I915_WRITE(reg2, val);
 	}
 
 	return 0;
@@ -2178,6 +2191,11 @@ int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 
 	crtc = obj_to_crtc(obj);
 	DRM_DEBUG_DRIVER("[CRTC:%d]\n", crtc->base.id);
+	if (!crtc->enabled) {
+		DRM_ERROR("[CRTC:%d] not active\n", crtc->base.id);
+		return -EINVAL;
+	}
+
 	intel_crtc = to_intel_crtc(crtc);
 	pipe = intel_crtc->pipe;
 
@@ -2519,7 +2537,7 @@ static void intel_crtc_update_sarea_pos(struct drm_crtc *crtc, int x, int y)
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_master_private *master_priv;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-
+	int pipe = intel_crtc->pipe;
 	if (!dev->primary->master)
 		return;
 
@@ -2527,7 +2545,7 @@ static void intel_crtc_update_sarea_pos(struct drm_crtc *crtc, int x, int y)
 	if (!master_priv->sarea_priv)
 		return;
 
-	switch (intel_crtc->pipe) {
+	switch (pipe) {
 	case 0:
 		master_priv->sarea_priv->pipeA_x = x;
 		master_priv->sarea_priv->pipeA_y = y;
@@ -4402,6 +4420,7 @@ static bool ironlake_check_fdi_lanes(struct drm_device *dev, enum pipe pipe,
 		return true;
 	default:
 		BUG();
+		return false;
 	}
 }
 
@@ -8640,7 +8659,8 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 	intel_fb = to_intel_framebuffer(crtc->fb);
 	intel_new_fb = to_intel_framebuffer(fb);
 
-	if (dev_priv->shut_down_state)
+	/* Avoid flip operation if shutdown is in progress */
+	if (dev_priv->pm.shutdown_in_progress)
 		return -EINVAL;
 
 	/* Can't change pixel format via MI display flips. */
@@ -9826,9 +9846,6 @@ intel_modeset_stage_output_state(struct drm_device *dev,
 	WARN_ON(!set->fb && (set->num_connectors != 0));
 	WARN_ON(set->fb && (set->num_connectors == 0));
 
-	if (dev_priv->pm.shutdown_in_progress)
-		return -EINVAL;
-
 	list_for_each_entry(connector, &dev->mode_config.connector_list,
 			    base.head) {
 		/* Otherwise traverse passed in connector list and get encoders
@@ -9941,7 +9958,7 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 	ret = -ENOMEM;
 	config = kzalloc(sizeof(*config), GFP_KERNEL);
 	if (!config)
-		goto out_config;
+		return ret;
 
 	ret = intel_set_config_save_state(dev, config);
 	if (ret)
@@ -10135,9 +10152,8 @@ extern void intel_cancel_fbc_work(struct drm_i915_private *dev_priv);
 static int display_disable_wq(struct drm_device *drm_dev)
 {
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
-	/* Uncomment following variables once HDMI audio code is integrated*/
 	/*struct drm_crtc *crtc;
-	struct intel_encoder *intel_encoder; */
+	struct intel_encoder *intel_encoder;*/
 
 	cancel_work_sync(&dev_priv->hotplug_work);
 	//intel_cancel_fbc_work(dev_priv);
@@ -10189,6 +10205,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc;
 	int ret;
+
 	/* Force a re-detection on Hot-pluggable displays */
 	i915_simulate_hpd(dev, false);
 
@@ -10230,6 +10247,10 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	i915_rpm_get_disp(dev);
+
+	  /* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
+	if (!intel_restore_clr_mgr_status(dev))
+		DRM_ERROR("Restore Color manager status failed");
 
 	/* Re-detect hot pluggable displays */
 	i915_simulate_hpd(dev, true);

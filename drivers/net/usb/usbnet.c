@@ -76,9 +76,6 @@
 // us (it polls at HZ/4 usually) before we report too many false errors.
 #define THROTTLE_JIFFIES	(HZ/8)
 
-// between wakeups
-#define UNLINK_TIMEOUT_MS	3
-
 /*-------------------------------------------------------------------------*/
 
 // randomly generated ethernet address
@@ -88,6 +85,7 @@ static const char driver_name [] = "usbnet";
 
 /* use ethtool to change the level for any given device */
 static int msg_level = -1;
+static wait_queue_head_t unlink_wakeup;
 module_param (msg_level, int, 0);
 MODULE_PARM_DESC (msg_level, "Override default message level");
 
@@ -193,6 +191,14 @@ static void intr_complete (struct urb *urb)
 
 	/* software-driven interface shutdown */
 	case -ENOENT:		/* urb killed */
+		if (urb->actual_length) {
+			netdev_dbg(dev->net,
+				"intr status %d\, length: %dn",
+				status, urb->actual_length);
+			dev->driver_info->status(dev, urb);
+		}
+		break;
+
 	case -ESHUTDOWN:	/* hardware gone */
 		netif_dbg(dev, ifdown, dev->net,
 			  "intr shutdown, code %d\n", status);
@@ -572,7 +578,27 @@ static void rx_complete (struct urb *urb)
 		// FALLTHROUGH
 
 	/* software-driven interface shutdown */
+	case -ENOENT:		/* urb killed */
 	case -ECONNRESET:		/* async unlink */
+		if (urb->actual_length) {
+			if (skb->len < dev->net->hard_header_len) {
+				state = rx_cleanup;
+				dev->net->stats.rx_errors++;
+				dev->net->stats.rx_length_errors++;
+				netif_dbg(dev, rx_err, dev->net,
+					  "rx length %d\n", skb->len);
+			}
+			netif_dbg(dev, ifdown, dev->net,
+				  "rx length in async unlink: %d\n",
+					urb->actual_length);
+		} else {
+			netif_dbg(dev, ifdown, dev->net,
+				  "rx async unlink, code %d\n",
+					urb_status);
+			goto block;
+		}
+		break;
+
 	case -ESHUTDOWN:		/* hardware gone */
 		netif_dbg(dev, ifdown, dev->net,
 			  "rx shutdown, code %d\n", urb_status);
@@ -735,7 +761,6 @@ EXPORT_SYMBOL_GPL(usbnet_unlink_rx_urbs);
 // precondition: never called in_interrupt
 static void usbnet_terminate_urbs(struct usbnet *dev)
 {
-	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(unlink_wakeup);
 	DECLARE_WAITQUEUE(wait, current);
 	int temp;
 
@@ -750,7 +775,7 @@ static void usbnet_terminate_urbs(struct usbnet *dev)
 	while (!skb_queue_empty(&dev->rxq)
 		&& !skb_queue_empty(&dev->txq)
 		&& !skb_queue_empty(&dev->done)) {
-			schedule_timeout(msecs_to_jiffies(UNLINK_TIMEOUT_MS));
+			schedule();
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			netif_dbg(dev, ifdown, dev->net,
 				  "waited for %d urb completions\n", temp);
@@ -1370,8 +1395,10 @@ static void usbnet_bh (unsigned long param)
 
 	// waiting for all pending urbs to complete?
 	if (dev->wait) {
+		wait_queue_head_t *wait_d = dev->wait;
 		if ((dev->txq.qlen + dev->rxq.qlen + dev->done.qlen) == 0) {
-			wake_up (dev->wait);
+			if (wait_d)
+				wake_up(wait_d);
 		}
 
 	// or are we maybe short a few urbs?
@@ -1523,6 +1550,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	init_timer (&dev->delay);
 	mutex_init (&dev->phy_mutex);
 	mutex_init(&dev->interrupt_mutex);
+	init_waitqueue_head(&unlink_wakeup);
 	dev->interrupt_count = 0;
 
 	dev->net = net;

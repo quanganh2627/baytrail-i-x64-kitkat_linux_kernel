@@ -127,7 +127,11 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 		sst_shim_write64(drv->shim, SST_IMRX, imr.full);
 		spin_unlock(&drv->ipc_spin_lock);
 		header.full =  sst_shim_read64(drv->shim, drv->ipc_reg.ipcd);
-		sst_create_ipc_msg(&msg, header.p.header_high.part.large);
+		if (sst_create_ipc_msg(&msg, header.p.header_high.part.large)) {
+			pr_err("No memory available\n");
+			drv->ops->clear_interrupt();
+			return IRQ_HANDLED;
+		}
 		if (header.p.header_high.part.large) {
 			size = header.p.header_low_payload;
 			if (SST_VALIDATE_MAILBOX_SIZE(size))
@@ -217,7 +221,11 @@ static irqreturn_t intel_sst_intr_mfld(int irq, void *context)
 		/* Mask all interrupts till we process it in bottom half */
 		set_imr_interrupts(drv, false);
 		header.full = sst_shim_read(drv->shim, drv->ipc_reg.ipcd);
-		sst_create_ipc_msg(&msg, header.part.large);
+		if (sst_create_ipc_msg(&msg, header.part.large)) {
+			pr_err("No memory available\n");
+			drv->ops->clear_interrupt();
+			return IRQ_HANDLED;
+		}
 		if (header.part.large) {
 			size = header.part.data;
 			if (SST_VALIDATE_MAILBOX_SIZE(size))
@@ -585,7 +593,12 @@ static int intel_sst_probe(struct pci_dev *pci,
 		* put temporary check till better soln is available for FW
 		*/
 		ddr_base = relocate_imr_addr_mrfld(sst_drv_ctx->ddr_base);
-		if (ddr_base != MRFLD_FW_LSP_DDR_BASE) {
+		if (!sst_drv_ctx->pdata->lib_info) {
+			pr_err("%s:lib_info pointer NULL\n", __func__);
+			ret = -EINVAL;
+			goto do_release_regions;
+		}
+		if (ddr_base != sst_drv_ctx->pdata->lib_info->mod_base) {
 			pr_err("FW LSP DDR BASE does not match with IFWI\n");
 			ret = -EINVAL;
 			goto do_release_regions;

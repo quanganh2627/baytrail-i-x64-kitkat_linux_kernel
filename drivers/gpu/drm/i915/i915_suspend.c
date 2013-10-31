@@ -24,11 +24,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/console.h>
 #include <drm/drmP.h>
 #include <drm/i915_drm.h>
 #include "intel_drv.h"
 #include "i915_reg.h"
-#include <linux/console.h>
+#include "intel_clrmgr.h"
 
 static u8 i915_read_indexed(struct drm_device *dev, u16 index_port, u16 data_port, u8 reg)
 {
@@ -200,6 +201,28 @@ void i915_restore_dpst_regs(struct drm_i915_private *dev_priv)
 	I915_WRITE(BLC_HIST_GUARD, dev_priv->regfile.saveBLC_HIST_GUARD);
 }
 
+static void i915_save_pcstate(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	dev_priv->dpst.state = dev_priv->dpst.enabled;
+	if (dev_priv->dpst.state)
+		i915_dpst_disable_hist_interrupt(dev);
+
+	dev_priv->rps.state = dev_priv->rps.enabled;
+	dev_priv->rc6.state = dev_priv->rc6.enabled;
+}
+
+static void i915_restore_pcstate(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (dev_priv->dpst.state)
+		i915_dpst_enable_hist_interrupt(dev);
+
+	/* Turbo and RC6 State is restored in valleyview_enable_rps */
+}
+
 static void i915_save_display(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -282,9 +305,6 @@ static void i915_restore_display(struct drm_device *dev)
 	if (INTEL_INFO(dev)->gen <= 4)
 		I915_WRITE(DSPARB, dev_priv->regfile.saveDSPARB);
 
-	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		i915_restore_display_reg(dev);
-
 	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
 
 	/* LVDS state */
@@ -349,7 +369,11 @@ static void i915_restore_display(struct drm_device *dev)
 		i915_restore_vga(dev);
 	else
 		i915_redisable_vga(dev);
+	/* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
+	if (!intel_restore_clr_mgr_status(dev))
+		DRM_ERROR("Restore Color manager status failed");
 }
+
 
 int i915_save_state(struct drm_device *dev)
 {
@@ -361,6 +385,8 @@ int i915_save_state(struct drm_device *dev)
 	mutex_lock(&dev->struct_mutex);
 
 	i915_save_display(dev);
+
+	i915_save_pcstate(dev);
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET)) {
 		/* Interrupt state */
@@ -412,6 +438,8 @@ int i915_restore_state(struct drm_device *dev)
 
 	i915_gem_restore_fences(dev);
 	i915_restore_display(dev);
+
+	i915_restore_pcstate(dev);
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET)) {
 		/* Interrupt state */
@@ -797,6 +825,9 @@ static int valleyview_freeze(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 reg;
 
+	/* Save Hue/Saturation/Brightness/Contrast status */
+	intel_save_clr_mgr_status(dev);
+
 	pci_save_state(dev->pdev);
 
 	/* i) Set Graphics Clocks to Forced ON */
@@ -977,8 +1008,6 @@ static int valleyview_thaw(struct drm_device *dev)
 	mutex_lock(&dev_priv->modeset_restore_lock);
 	dev_priv->modeset_restore = MODESET_DONE;
 	mutex_unlock(&dev_priv->modeset_restore_lock);
-	/* vii) RC6 init and Restore Hysteresis registers */
-	vlv_restore_rc6_regs(dev);
 
 	/* viii) Clear Global Force Wake and transition render and
 	 * media wells to RC6
@@ -1004,7 +1033,6 @@ void i915_pm_init(struct drm_device *dev)
 		dev_priv->pm.funcs.drm_thaw = __i915_drm_thaw;
 	}
 	dev_priv->pm.shutdown_in_progress = false;
-	dev_priv->shut_down_state = 0;
 	i915_rpm_init(dev);
 }
 

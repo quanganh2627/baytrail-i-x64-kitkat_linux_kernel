@@ -652,7 +652,7 @@ static int i915_drm_thaw(struct drm_device *dev, bool restore_gtt)
 	return error;
 }
 
-int i915_resume_common(struct drm_device *dev)
+int i915_resume_common(struct drm_device *dev, bool restore_gtt)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
@@ -665,20 +665,7 @@ int i915_resume_common(struct drm_device *dev)
 
 	pci_set_master(dev->pdev);
 
-	intel_uncore_sanitize(dev);
-
-	/*
-	 * Platforms with opregion should have sane BIOS, older ones (gen3 and
-	 * earlier) need this since the BIOS might clear all our scratch PTEs.
-	 */
-	if (drm_core_check_feature(dev, DRIVER_MODESET) &&
-	    !dev_priv->opregion.header) {
-		mutex_lock(&dev->struct_mutex);
-		i915_gem_restore_gtt_mappings(dev);
-		mutex_unlock(&dev->struct_mutex);
-	}
-
-	ret = i915_drm_thaw(dev, false);
+	ret = i915_drm_thaw(dev, restore_gtt);
 	if (ret)
 		return ret;
 
@@ -689,7 +676,7 @@ int i915_resume_common(struct drm_device *dev)
 
 int i915_resume(struct drm_device *dev)
 {
-	return i915_resume_common(dev);
+	return i915_resume_common(dev, true);
 }
 
 /**
@@ -863,13 +850,16 @@ static int i915_release(struct inode *inode, struct file *filp)
 	int ret = 0;
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
 #ifdef CONFIG_PM_RUNTIME
 	i915_rpm_get_callback(dev);
 #endif
 #ifdef CONFIG_DRM_VXD_BYT
-	if (dev_priv->vxd_release)
-		ret = dev_priv->vxd_release(inode, filp);
+	{
+		struct drm_i915_private *dev_priv = dev->dev_private;
+
+		if (dev_priv->vxd_release)
+			ret = dev_priv->vxd_release(inode, filp);
+	}
 #endif
 	ret |= drm_release(inode, filp);
 #ifdef CONFIG_PM_RUNTIME
@@ -959,7 +949,7 @@ static int i915_pm_resume(struct device *dev)
 	u32 ret;
 
 	DRM_DEBUG_PM("PM Resume called\n");
-	ret = i915_resume_common(drm_dev);
+	ret = i915_resume_common(drm_dev, false);
 	DRM_DEBUG_PM("PM Resume finished\n");
 
 	return ret;
@@ -972,7 +962,7 @@ static int i915_rpm_resume(struct device *dev)
 	int ret;
 
 	DRM_DEBUG_PM("Runtime PM Resume called\n");
-	ret = i915_resume_common(drm_dev);
+	ret = i915_resume_common(drm_dev, false);
 	DRM_DEBUG_PM("Runtime PM Resume finished\n");
 
 	return ret;
@@ -1013,7 +1003,6 @@ static void i915_pm_shutdown(struct pci_dev *pdev)
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 	struct drm_i915_private *dev_priv = drm_dev->dev_private;
 
-	dev_priv->shut_down_state = 1;
 	dev_priv->pm.shutdown_in_progress = true;
 
 	if (!i915_is_device_suspended(drm_dev)) {
