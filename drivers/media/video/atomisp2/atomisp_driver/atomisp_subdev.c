@@ -404,18 +404,17 @@ int atomisp_subdev_set_selection(struct v4l2_subdev *sd,
 					  ATOM_ISP_STEP_WIDTH);
 			dvs_h = rounddown(crop[pad]->height / 5,
 					  ATOM_ISP_STEP_HEIGHT);
-		} else {
-#ifndef CONFIG_VIDEO_ATOMISP_CSS20
-			dvs_w = dvs_h = 0;
-#else
+#ifdef CONFIG_VIDEO_ATOMISP_CSS20
+		} else if (!isp_sd->params.video_dis_en &&
+			   isp_sd->run_mode->val == ATOMISP_RUN_MODE_VIDEO) {
 			/*
-			 * For CSS2.0, digital zoom uses dvs working flow.
-			 * So still need to set the dvs envelop
+			 * For CSS2.0, digital zoom needs to set dvs envelope
+			 * to 12 when dvs is disabled.
 			 */
-			dvs_w = ffmt[pad]->width - crop[pad]->width - 2;
-			dvs_h = ffmt[pad]->height - crop[pad]->height - 2;
+			dvs_w = dvs_h = 12;
 #endif
-		}
+		} else
+			dvs_w = dvs_h = 0;
 
 		atomisp_css_video_set_dis_envelope(isp_sd, dvs_w, dvs_h);
 		atomisp_css_input_set_effective_resolution(isp_sd,

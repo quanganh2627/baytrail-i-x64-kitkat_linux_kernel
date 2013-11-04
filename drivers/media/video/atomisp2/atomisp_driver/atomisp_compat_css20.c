@@ -925,7 +925,7 @@ int atomisp_css_allocate_3a_dis_bufs(struct atomisp_sub_device *asd,
 	}
 
 	if (asd->params.curr_grid_info.dvs_grid.enable) {
-		dis_buf->dis_data = ia_css_isp_dvs_statistics_allocate(
+		dis_buf->dis_data = ia_css_isp_dvs2_statistics_allocate(
 				&asd->params.curr_grid_info.dvs_grid);
 		if (!dis_buf->dis_data) {
 			dev_err(isp->dev, "dvs buf allocation failed.\n");
@@ -1062,7 +1062,7 @@ int atomisp_alloc_dis_coef_buf(struct atomisp_sub_device *asd)
 		return -ENOMEM;
 
 	asd->params.dvs_hor_coef_bytes =
-		asd->params.curr_grid_info.dvs_grid.num_hor_coefs*
+		asd->params.curr_grid_info.dvs_grid.num_hor_coefs *
 		sizeof(*asd->params.dvs_coeff->hor_coefs.odd_real);
 
 	asd->params.dvs_ver_coef_bytes =
@@ -1075,11 +1075,14 @@ int atomisp_alloc_dis_coef_buf(struct atomisp_sub_device *asd)
 				&asd->params.curr_grid_info.dvs_grid);
 	if (!asd->params.dvs_stat)
 		return -ENOMEM;
+
 	asd->params.dvs_hor_proj_bytes =
 		asd->params.curr_grid_info.dvs_grid.aligned_height *
+		asd->params.curr_grid_info.dvs_grid.aligned_width *
 		sizeof(*asd->params.dvs_stat->hor_prod.odd_real);
 
 	asd->params.dvs_ver_proj_bytes =
+		asd->params.curr_grid_info.dvs_grid.aligned_height *
 		asd->params.curr_grid_info.dvs_grid.aligned_width *
 		sizeof(*asd->params.dvs_stat->ver_prod.odd_real);
 
