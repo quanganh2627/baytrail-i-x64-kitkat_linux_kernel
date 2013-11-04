@@ -478,6 +478,12 @@ static void __apply_additional_pipe_config(
 		    .enable_reduced_pipe = true;
 		asd->stream_env.pipe_extra_configs[pipe_id]
 		    .enable_dz = false;
+		if (asd->params.video_dis_en) {
+			asd->stream_env.pipe_extra_configs[pipe_id]
+				.enable_dvs_6axis = true;
+			asd->stream_env.pipe_configs[pipe_id]
+				.dvs_frame_delay = 2;
+		}
 		break;
 	case IA_CSS_PIPE_ID_PREVIEW:
 	case IA_CSS_PIPE_ID_COPY:
@@ -495,10 +501,6 @@ static int __create_pipe(struct atomisp_sub_device *asd)
 	int i;
 
 	ia_css_pipe_extra_config_defaults(&extra_config);
-	if (asd->run_mode->val == ATOMISP_RUN_MODE_VIDEO) {
-		extra_config.enable_dvs_6axis = true;
-		extra_config.enable_dz = false;
-	}
 	for (i = 0; i < IA_CSS_PIPE_ID_NUM; i++) {
 		if (!asd->stream_env.pipe_configs[i].output_info.res.width)
 			continue;
