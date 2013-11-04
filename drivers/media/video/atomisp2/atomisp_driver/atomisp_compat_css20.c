@@ -2418,7 +2418,7 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 	}
 	spin_unlock_irqrestore(&isp->lock, flags);
 
-	if (atomisp_compare_dvs_grid(asd, &stats->grid_info) != 0)
+	if (atomisp_compare_dvs_grid(asd, &stats->dvs2_stat.grid_info) != 0)
 		/* If the grid info in the argument differs from the current
 		   grid info, we tell the caller to reset the grid size and
 		   try again. */
@@ -2428,35 +2428,35 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 		return -EBUSY;
 
 	stats->exp_id = asd->params.exp_id;
-	if (copy_to_user(stats->ver_prod.odd_real,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.odd_real,
 			 asd->params.dvs_stat->ver_prod.odd_real,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.odd_imag,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.odd_imag,
 			 asd->params.dvs_stat->ver_prod.odd_imag,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.even_real,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.even_real,
 			 asd->params.dvs_stat->ver_prod.even_real,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.even_imag,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.even_imag,
 			 asd->params.dvs_stat->ver_prod.even_imag,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.odd_real,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.odd_real,
 			 asd->params.dvs_stat->hor_prod.odd_real,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.odd_imag,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.odd_imag,
 			 asd->params.dvs_stat->hor_prod.odd_imag,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.even_real,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.even_real,
 			 asd->params.dvs_stat->hor_prod.even_real,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.even_imag,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.even_imag,
 			 asd->params.dvs_stat->hor_prod.even_imag,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
