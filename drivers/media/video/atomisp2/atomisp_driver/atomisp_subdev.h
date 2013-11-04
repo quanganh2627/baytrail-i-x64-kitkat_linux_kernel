@@ -197,6 +197,7 @@ struct atomisp_css_params {
 	struct ia_css_dvs2_coefficients *dvs_coeff;
 	struct ia_css_dvs2_statistics *dvs_stat;
 	struct ia_css_dvs_6axis_config *dvs_6axis;
+	uint32_t exp_id;
 #else /* CONFIG_VIDEO_ATOMISP_CSS20 */
 	struct ia_css_dvs_coefficients *dvs_coeff;
 	struct ia_css_dvs_statistics *dvs_stat;

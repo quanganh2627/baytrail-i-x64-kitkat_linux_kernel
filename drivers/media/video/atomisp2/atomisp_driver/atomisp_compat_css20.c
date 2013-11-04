@@ -1108,6 +1108,7 @@ void atomisp_css_get_dis_statistics(struct atomisp_sub_device *asd,
 	if (asd->params.dvs_stat) {
 		ia_css_get_dvs2_statistics(asd->params.dvs_stat,
 				  isp_css_buffer->css_buffer.data.stats_dvs);
+		asd->params.exp_id = isp_css_buffer->css_buffer.exp_id;
 		asd->params.dis_proj_data_valid = true;
 	}
 }
@@ -2426,6 +2427,7 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 	if (!asd->params.dis_proj_data_valid)
 		return -EBUSY;
 
+	stats->exp_id = asd->params.exp_id;
 	if (copy_to_user(stats->ver_prod.odd_real,
 			 asd->params.dvs_stat->ver_prod.odd_real,
 			 asd->params.dvs_ver_proj_bytes))
