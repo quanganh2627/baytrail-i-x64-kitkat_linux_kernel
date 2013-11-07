@@ -678,10 +678,14 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 				intel_dsi->dev.video_mode_type |
 				RANDOM_DPI_DISPLAY_RESOLUTION);
 
-	if (intel_dsi->dev.eotp_pkt)
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), 0);
-	else
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), 1);
+	val = 0;
+	if (intel_dsi->dev.eotp_pkt == 0)
+		val |= EOT_DISABLE;
+
+	if (intel_dsi->dev.clock_stop)
+		val |= CLOCKSTOP;
+
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
 
 	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
 

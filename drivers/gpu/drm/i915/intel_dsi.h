@@ -69,6 +69,7 @@ struct intel_dsi_device {
 	const struct intel_dsi_dev_ops *dev_ops;
 	void *dev_priv;
 	u8 eotp_pkt;
+	u8 clock_stop;
 	u16 dsi_clock_freq;
 	u8 operation_mode;
 	u8 video_mode_type;

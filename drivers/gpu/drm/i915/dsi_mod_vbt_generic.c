@@ -237,6 +237,7 @@ bool generic_init(struct intel_dsi_device *dsi)
 	DRM_DEBUG_KMS("\n");
 
 	dsi->eotp_pkt = mipi_config->eot_disabled ? 0 : 1;
+	dsi->clock_stop = mipi_config->clk_stop ? 1 : 0;
 	dsi->lane_count = mipi_config->lane_cnt + 1;
 	dsi->pixel_format = mipi_config->videomode_color_format << 7;
 
@@ -416,6 +417,8 @@ bool generic_init(struct intel_dsi_device *dsi)
 	dsi->clk_hs_to_lp_count += extra_byte_count;
 
 	DRM_DEBUG_KMS("EOT %s\n", dsi->eotp_pkt ? "ENABLED" : "DISABLED");
+	DRM_DEBUG_KMS("CLOCKSTOP %s\n", dsi->clock_stop ?
+						"ENABLED" : "DISABLED");
 	DRM_DEBUG_KMS("Mode %s\n", dsi->operation_mode ? "COMMAND" : "VIDEO");
 	DRM_DEBUG_KMS("Pixel Format %d\n", dsi->pixel_format);
 	DRM_DEBUG_KMS("TLPX %d\n", dsi->escape_clk_div);
