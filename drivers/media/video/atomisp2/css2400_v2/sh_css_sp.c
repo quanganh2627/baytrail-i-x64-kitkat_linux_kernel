@@ -1,4 +1,4 @@
-/* Release Version: ci_master_byt_20130905_2200 */
+/* Release Version: ci_master_byt_20130916_2228 */
 /*
  * Support for Intel Camera Imaging ISP subsystem.
  *
@@ -512,10 +512,10 @@ set_ref_out_frame_buffer(const struct ia_css_frame *frame,
 
 static enum ia_css_err
 set_ref_extra_frame_buffer(const struct ia_css_frame *frame,
-			unsigned pipe_num, unsigned stage_num)
+			unsigned pipe_num, unsigned stage_num, enum sh_css_frame_id frame_id)
 {
-sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "set_ref_extra_frame_buffer() %08x\n",
-			frame);
+	sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "set_ref_extra_frame_buffer() frame: %08x, frame_id: %d\n",
+			frame, frame_id);
 
 	if (frame == NULL)
 		return IA_CSS_ERR_INVALID_ARGUMENTS;
@@ -524,7 +524,7 @@ sh_css_dtrace(SH_DBG_TRACE_PRIVATE, "set_ref_extra_frame_buffer() %08x\n",
 		return IA_CSS_ERR_INVALID_ARGUMENTS;
 	sh_css_copy_frame_to_spframe(NULL, frame,
 					pipe_num, stage_num,
-					sh_css_frame_ref_extra);
+					frame_id);
 	return IA_CSS_SUCCESS;
 }
 
@@ -726,9 +726,22 @@ sh_css_sp_write_frame_pointers(const struct sh_css_binary_args *args,
 	if (err == IA_CSS_SUCCESS && args->out_frame)
 		err = set_output_frame_buffer(args->out_frame,
 						pipe_num, stage_num);
-	if (err == IA_CSS_SUCCESS && args->extra_ref_frame)
-		err = set_ref_extra_frame_buffer(args->extra_ref_frame,
-						pipe_num, stage_num);
+	if (err == IA_CSS_SUCCESS && args->dvs_ref_frame1)
+		err = set_ref_extra_frame_buffer(args->dvs_ref_frame1,
+						pipe_num, stage_num,
+						sh_css_frame_ref_dvs1);
+	if (err == IA_CSS_SUCCESS && args->dvs_ref_frame2)
+		err = set_ref_extra_frame_buffer(args->dvs_ref_frame2,
+						pipe_num, stage_num,
+						sh_css_frame_ref_dvs2);
+	if (err == IA_CSS_SUCCESS && args->dvs_ref_frame3)
+		err = set_ref_extra_frame_buffer(args->dvs_ref_frame3,
+						pipe_num, stage_num,
+						sh_css_frame_ref_dvs3);
+	if (err == IA_CSS_SUCCESS && args->dvs_ref_frame4)
+		err = set_ref_extra_frame_buffer(args->dvs_ref_frame4,
+						pipe_num, stage_num,
+						sh_css_frame_ref_dvs4);
 	return err;
 }
 
@@ -1019,10 +1032,11 @@ sh_css_sp_init_pipeline(struct sh_css_pipeline *me,
 	struct sh_css_pipeline_stage *stage;
 	struct sh_css_binary	     *first_binary;
 	unsigned num;
-
+	unsigned int i;
 	enum ia_css_pipe_id pipe_id = id;
 	unsigned int thread_id;
 	uint8_t if_config_index;
+	int param_queue_id = -1;
 
 	assert(me != NULL);
 	assert(me->stages != NULL);
@@ -1073,7 +1087,23 @@ sh_css_sp_init_pipeline(struct sh_css_pipeline *me,
 	sh_css_sp_group.pipe[thread_id].input_system_mode
 						= (uint32_t)input_mode;
 	sh_css_sp_group.pipe[thread_id].port_id = port_id;
-	sh_css_sp_group.pipe[thread_id].dvs_frame_delay = (uint32_t)me->dvs_frame_delay;
+	set_dvs_frame_delay(&sh_css_sp_group.pipe[thread_id], me->dvs_frame_delay);
+
+	/* determine which parameter queue is already in use (if any) */
+	if (sh_css_sp_group.pipe[thread_id].pipe_id == IA_CSS_PIPE_ID_VIDEO) {
+		for (i = 0; i < SH_CSS_MAX_SP_THREADS; i++) {
+			if ((i != thread_id) && (sh_css_sp_group.pipe[i].pipe_id == IA_CSS_PIPE_ID_VIDEO)) {
+				assert(param_queue_id == -1); /* otherwise we got here twice and we can have only one ohter VIDEO pipe */
+				if (get_dvs_param_queue(&sh_css_sp_group.pipe[i]) == 0)
+					param_queue_id = 1;
+				else
+					param_queue_id = 0;
+			}
+		}
+	}
+	if (param_queue_id == -1) /* found no other video pipe */
+		param_queue_id = 0;
+	set_dvs_param_queue(&sh_css_sp_group.pipe[thread_id], (unsigned int)param_queue_id);
 
 	/* TODO: next indicates from which queues parameters need to be
 		 sampled, needs checking/improvement */
