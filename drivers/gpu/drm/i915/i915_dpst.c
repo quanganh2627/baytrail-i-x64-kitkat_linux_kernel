@@ -137,7 +137,6 @@ i915_dpst_apply_luma(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 diet_factor, i;
-	u32 level;
 	u32 blm_hist_ctl;
 
 	if (!dev_priv->dpst.enabled)
@@ -147,11 +146,7 @@ i915_dpst_apply_luma(struct drm_device *dev,
 	dev_priv->dpst.blc_adjustment =
 	ioctl_data->ie_container.dpst_blc_factor;
 
-	level = i915_dpst_compute_brightness(dev, dev_priv->backlight.level);
-	if (dev_priv->is_mipi)
-		intel_panel_actually_set_mipi_backlight(dev, level);
-	else
-		intel_panel_actually_set_backlight(dev, level);
+	i915_dpst_set_brightness(dev, dev_priv->backlight.level);
 
 	/* Setup register to access image enhancement value from
 	 * index 0.*/
@@ -259,14 +254,14 @@ i915_dpst_get_brightness(struct drm_device *dev)
 	return dev_priv->backlight.level;
 }
 
-u32
-i915_dpst_compute_brightness(struct drm_device *dev, u32 brightness_val)
+void
+i915_dpst_set_brightness(struct drm_device *dev, u32 brightness_val)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	u32 backlight_level = brightness_val;
 
 	if (!dev_priv->dpst.enabled)
-		return backlight_level;
+		return;
 
 	/* Calculate the backlight after it has been reduced by "dpst
 	 * blc adjustment" percent . blc_adjustment value is stored
@@ -275,7 +270,7 @@ i915_dpst_compute_brightness(struct drm_device *dev, u32 brightness_val)
 	backlight_level = ((brightness_val *
 				dev_priv->dpst.blc_adjustment)/100)/100;
 
-	return backlight_level;
+	intel_panel_actually_set_backlight(dev, backlight_level);
 }
 
 void

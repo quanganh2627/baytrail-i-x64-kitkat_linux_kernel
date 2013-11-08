@@ -149,6 +149,18 @@ static int sst_send_runtime_param(struct snd_sst_runtime_params *params)
 	return sst_send_ipc_msg_nowait(&msg);
 }
 
+static inline int get_stream_id_mrfld(u32 pipe_id)
+{
+	int i;
+
+	for (i = 1; i <= sst_drv_ctx->info.max_streams; i++)
+		if (pipe_id == sst_drv_ctx->streams[i].pipe_id)
+			return i;
+
+	pr_err("%s: no such pipe_id(%u)", __func__, pipe_id);
+	return -1;
+}
+
 void sst_post_message_mrfld(struct work_struct *work)
 {
 	struct ipc_post *msg;
@@ -590,9 +602,7 @@ void sst_process_message_mrfld(struct ipc_post *msg)
 
 	str_id = msg->mrfld_header.p.header_high.part.drv_id;
 
-	pr_debug("IPC process message header %x payload %x\n",
-			msg->mrfld_header.p.header_high.full,
-			msg->mrfld_header.p.header_low_payload);
+	pr_debug("ProcesMsg:%d\n", msg->mrfld_header.p.header_high.part.msg_id);
 
 	return;
 }
@@ -634,7 +644,7 @@ static void process_fw_async_large_msg(void *data, u32 msg_size)
 	if (msg_id == IPC_IA_FW_ASYNC_ERR_MRFLD) {
 		memcpy(&err_msg, (data + sizeof(msg_id)),
 						sizeof(err_msg));
-		pr_err("FW sent async error msg: %x\n", msg_id);
+		pr_err("FW sent async error msg:\n");
 		pr_err("FW error: 0x%x, Lib error: 0x%x\n",
 			err_msg.fw_resp, err_msg.lib_resp);
 	} else if (msg_id == IPC_IA_VTSV_DETECTED) {
@@ -649,18 +659,6 @@ static void process_fw_async_large_msg(void *data, u32 msg_size)
 		pr_err("Invalid async msg from FW\n");
 }
 
-void process_drain_notify(int str_id)
-{
-	struct stream_info *stream;
-
-	pr_debug("in process_drain_notify\n");
-	if (str_id > 0) {
-		stream = &sst_drv_ctx->streams[str_id];
-		if (stream->drain_notify)
-			stream->drain_notify(stream->drain_cb_param);
-	}
-}
-
 void sst_process_reply_mrfld(struct ipc_post *msg)
 {
 	int str_id;
@@ -672,10 +670,6 @@ void sst_process_reply_mrfld(struct ipc_post *msg)
 
 	msg_high = msg->mrfld_header.p.header_high;
 	msg_low = msg->mrfld_header.p.header_low_payload;
-
-	pr_debug("IPC process message header %x payload %x\n",
-			msg->mrfld_header.p.header_high.full,
-			msg->mrfld_header.p.header_low_payload);
 
 	drv_id = msg_high.part.drv_id;
 
@@ -696,17 +690,6 @@ void sst_process_reply_mrfld(struct ipc_post *msg)
 		}
 		goto end;
 	}
-
-	/* check if we got a drain complete */
-	if ((msg_id == IPC_IA_DRAIN_STREAM_MRFLD) &&
-			(msg_high.part.msg_id == IPC_CMD)) {
-		pipe_id = msg_low >> 16;
-		str_id = get_stream_id_mrfld(pipe_id);
-		if (str_id > 0)
-			process_drain_notify(str_id);
-		goto end;
-	}
-
 	/* First process error responses */
 	if (msg_high.part.result && drv_id && !msg_high.part.large) {
 		/* 32-bit FW error code in msg_low */
@@ -772,15 +755,6 @@ void sst_process_reply_mfld(struct ipc_post *msg)
 	str_id = msg->header.part.str_id;
 
 	pr_debug("sst: IPC process reply for %x\n", msg->header.full);
-
-	/* handle drain notify first */
-	if (msg->header.part.msg_id == IPC_IA_DRAIN_STREAM) {
-		pr_debug("drain message notify\n");
-		process_drain_notify(str_id);
-		return;
-	}
-
-
 	if (!msg->header.part.large) {
 		if (!msg->header.part.data)
 			pr_debug("Success\n");

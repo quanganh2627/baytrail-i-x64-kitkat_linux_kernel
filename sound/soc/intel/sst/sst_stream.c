@@ -557,19 +557,6 @@ int sst_drop_stream(int str_id)
 }
 
 /**
- * sst_next_track: notify next track
- * @str_id:		stream ID
- *
- * This function is called by any function which wants to
- * set next track. Current this is NOP as FW doest care
- */
-int sst_next_track(void)
-{
-	pr_debug("SST DBG: next_track");
-	return 0;
-}
-
-/**
 * sst_drain_stream - Send msg for draining stream
 * @str_id:		stream ID
 *
@@ -631,11 +618,7 @@ int sst_drain_stream(int str_id, bool partial_drain)
 	list_add_tail(&msg->node, &sst_drv_ctx->ipc_dispatch_list);
 	spin_unlock_irqrestore(&sst_drv_ctx->ipc_spin_lock, irq_flags);
 	ops->post_message(&sst_drv_ctx->ipc_post_msg_wq);
-	/* with new non blocked drain implementation in core we dont need to
-	 * wait for respsonse, and need to only invoke callback for drain
-	 * complete
-	 */
-
+	retval = sst_wait_interruptible(sst_drv_ctx, block);
 	sst_free_block(sst_drv_ctx, block);
 	return retval;
 }
@@ -735,11 +718,6 @@ int sst_request_vtsv_file(char *fname, struct intel_sst_drv *ctx,
 	const struct firmware *file;
 	u32 ddr_virt_addr, file_base;
 
-	if (!ctx->pdata->lib_info) {
-		pr_err("lib_info pointer NULL\n");
-		return -EINVAL;
-	}
-
 	pr_debug("Requesting VTSV file %s now...\n", fname);
 	retval = request_firmware(&file, fname, ctx->dev);
 	if (file == NULL) {
@@ -757,7 +735,7 @@ int sst_request_vtsv_file(char *fname, struct intel_sst_drv *ctx,
 		*out_file = (void *)file_base;
 	}
 	ddr_virt_addr = (u32)ctx->ddr +
-			(u32)(*out_file - ctx->pdata->lib_info->mod_base);
+			(u32)(*out_file - MRFLD_FW_LSP_DDR_BASE);
 	memcpy((void *)ddr_virt_addr, file->data, file->size);
 	*out_size = file->size;
 	release_firmware(file);

@@ -593,12 +593,7 @@ static int intel_sst_probe(struct pci_dev *pci,
 		* put temporary check till better soln is available for FW
 		*/
 		ddr_base = relocate_imr_addr_mrfld(sst_drv_ctx->ddr_base);
-		if (!sst_drv_ctx->pdata->lib_info) {
-			pr_err("%s:lib_info pointer NULL\n", __func__);
-			ret = -EINVAL;
-			goto do_release_regions;
-		}
-		if (ddr_base != sst_drv_ctx->pdata->lib_info->mod_base) {
+		if (ddr_base != MRFLD_FW_LSP_DDR_BASE) {
 			pr_err("FW LSP DDR BASE does not match with IFWI\n");
 			ret = -EINVAL;
 			goto do_release_regions;
