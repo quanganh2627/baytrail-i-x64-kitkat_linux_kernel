@@ -165,10 +165,7 @@ static int mei_release(struct inode *inode, struct file *file)
 
 	file->private_data = NULL;
 
-	if (cb) {
-		mei_io_cb_free(cb);
-		cb = NULL;
-	}
+	mei_io_cb_free(cb);
 
 	kfree(cl);
 out:
@@ -291,6 +288,7 @@ copy_buffer:
 	length = min_t(size_t, length, cb->buf_idx - *offset);
 
 	if (copy_to_user(ubuf, cb->response_buffer.data + *offset, length)) {
+		dev_err(&dev->pdev->dev, "failed to copy data to userland\n");
 		rets = -EFAULT;
 		goto free;
 	}
@@ -404,8 +402,11 @@ static ssize_t mei_write(struct file *file, const char __user *ubuf,
 		goto out;
 
 	rets = copy_from_user(write_cb->request_buffer.data, ubuf, length);
-	if (rets)
+	if (rets) {
+		dev_err(&dev->pdev->dev, "failed to copy data from userland\n");
+		rets = -EFAULT;
 		goto out;
+	}
 
 	if (cl == &dev->iamthif_cl) {
 		rets = mei_amthif_write(dev, write_cb);
@@ -567,7 +568,7 @@ static long mei_ioctl(struct file *file, unsigned int cmd, unsigned long data)
 	dev_dbg(&dev->pdev->dev, "copy connect data from user\n");
 	if (copy_from_user(connect_data, (char __user *)data,
 				sizeof(struct mei_connect_client_data))) {
-		dev_dbg(&dev->pdev->dev, "failed to copy data from userland\n");
+		dev_err(&dev->pdev->dev, "failed to copy data from userland\n");
 		rets = -EFAULT;
 		goto out;
 	}
@@ -581,7 +582,7 @@ static long mei_ioctl(struct file *file, unsigned int cmd, unsigned long data)
 	dev_dbg(&dev->pdev->dev, "copy connect data to user\n");
 	if (copy_to_user((char __user *)data, connect_data,
 				sizeof(struct mei_connect_client_data))) {
-		dev_dbg(&dev->pdev->dev, "failed to copy data to userland\n");
+		dev_err(&dev->pdev->dev, "failed to copy data to userland\n");
 		rets = -EFAULT;
 		goto out;
 	}
@@ -625,24 +626,32 @@ static unsigned int mei_poll(struct file *file, poll_table *wait)
 	unsigned int mask = 0;
 
 	if (WARN_ON(!cl || !cl->dev))
-		return mask;
+		return POLLERR;
 
 	dev = cl->dev;
 
 	mutex_lock(&dev->device_lock);
 
-	if (dev->dev_state != MEI_DEV_ENABLED)
-		goto out;
-
-
-	if (cl == &dev->iamthif_cl) {
-		mask = mei_amthif_poll(dev, file, wait);
+	if (!mei_cl_is_connected(cl)) {
+		mask = POLLERR;
 		goto out;
 	}
 
 	mutex_unlock(&dev->device_lock);
+
+
+	if (cl == &dev->iamthif_cl)
+		return mei_amthif_poll(dev, file, wait);
+
 	poll_wait(file, &cl->tx_wait, wait);
+
 	mutex_lock(&dev->device_lock);
+
+	if (!mei_cl_is_connected(cl)) {
+		mask = POLLERR;
+		goto out;
+	}
+
 	if (MEI_WRITE_COMPLETE == cl->writing_state)
 		mask |= (POLLIN | POLLRDNORM);
 

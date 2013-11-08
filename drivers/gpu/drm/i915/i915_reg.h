@@ -32,6 +32,7 @@
 
 #define _MASKED_BIT_ENABLE(a) (((a) << 16) | (a))
 #define _MASKED_BIT_DISABLE(a) ((a) << 16)
+#define _MASKED_BIT_ENABLE_ALL(b) (0xFFFF0000 | (b))
 
 /*
  * The Bridge device's PCI config space has information about the
@@ -649,7 +650,8 @@
 #define RING_SYNC_0(base)	((base)+0x40)
 #define RING_SYNC_1(base)	((base)+0x44)
 #define RING_SYNC_2(base)	((base)+0x48)
-#define RING_MI_MODE(base)		((base)+0x9c)
+#define RING_MI_MODE(base)	((base)+0x9c)
+#define RING_UHPTR(base)    ((base)+0x134)
 #define GEN6_RVSYNC	(RING_SYNC_0(RENDER_RING_BASE))
 #define GEN6_RBSYNC	(RING_SYNC_1(RENDER_RING_BASE))
 #define GEN6_RVESYNC	(RING_SYNC_2(RENDER_RING_BASE))
@@ -712,7 +714,7 @@
 #define GEN7_SC_INSTDONE	0x07100
 #define GEN7_SAMPLER_INSTDONE	0x0e160
 #define GEN7_ROW_INSTDONE	0x0e164
-#define I915_NUM_INSTDONE_REG	4
+#define I915_MAX_INSTDONE_REG   4
 #define RING_IPEIR(base)	((base)+0x64)
 #define RING_IPEHR(base)	((base)+0x68)
 #define RING_INSTDONE(base)	((base)+0x6c)
@@ -778,6 +780,7 @@
 #define GFX_MODE	0x02520
 #define GFX_MODE_GEN7	0x0229c
 #define RING_MODE_GEN7(ring)	((ring)->mmio_base+0x29c)
+#define RING_EXCC_GEN7(ring)	((ring)->mmio_base+0x028)
 #define   GFX_RUN_LIST_ENABLE		(1<<15)
 #define   GFX_TLB_INVALIDATE_ALWAYS	(1<<13)
 #define   GFX_SURFACE_FAULT_ENABLE	(1<<12)
@@ -915,7 +918,7 @@
 #define CACHE_MODE_1		0x7004 /* IVB+ */
 /* CACHE_MODE_0 offset is different for per-IVB and IVB+ systems */
 #define CACHE_MODE_0_OFFSET(d) ((INTEL_INFO(d)->gen >= 7) ? \
-					CACHE_MODE_1 : CACHE_MODE_0)
+					GEN7_CACHE_MODE_0 : CACHE_MODE_0)
 #define   PIXEL_SUBSPAN_COLLECT_OPT_DISABLE (1<<6)
 
 #define GEN6_BLITTER_ECOSKPD	0x221d0
@@ -979,8 +982,8 @@
 #define I915_BSD_USER_INTERRUPT				(1 << 25)
 /* Added for HDMI Audio */
 /* HDMI AUDIO INTERRUPT TYPE */
-#define I915_LPE_AUDIO_HDMI_STATUS_A			0x65064
-#define I915_LPE_AUDIO_HDMI_STATUS_B			0x65864
+#define I915_LPE_AUDIO_HDMI_STATUS_A	(dev_priv->info->display_mmio_offset + 0x65064)
+#define I915_LPE_AUDIO_HDMI_STATUS_B	(dev_priv->info->display_mmio_offset + 0x65864)
 /* Discrepancy in Display HAS, bit definitions are reversed */
 #define I915_LPE_PIPE_A_INTERRUPT			(1<<21)
 #define I915_LPE_PIPE_B_INTERRUPT			(1<<20)
@@ -2114,6 +2117,8 @@ EDP_PSR_SW_TIMER
  * The same register may be used for SDVO or HDMI */
 #define GEN3_SDVOB	0x61140
 #define GEN3_SDVOC	0x61160
+#define HDMIB	(dev_priv->info->display_mmio_offset + 0x61140)
+#define HDMIC	(dev_priv->info->display_mmio_offset + 0x61160)
 #define GEN4_HDMIB	GEN3_SDVOB
 #define GEN4_HDMIC	GEN3_SDVOC
 #define PCH_SDVOB	0xe1140
@@ -5845,6 +5850,7 @@ EDP_PSR_SW_TIMER
 #define VLV_GFX_CLK_STATUS_BIT (1<<3)
 
 #define VLV_IOSFSB_PWRGT_STATUS                        0x61
+#define VLV_PWRGT_DPIO_RX_LANES_MASK   0x00F00000
 #define VLV_PWRGT_DISP_CNT_MASK		   0x000000C0
 #define VLV_PWRGT_DPIO_TX_LANES_MASK   0x000FF000
 #define VLV_PWRGT_DPIO_CMN_LANES_MASK  0x00000C00
@@ -5855,5 +5861,12 @@ EDP_PSR_SW_TIMER
 #define GUNIT_CONTROL1		0x02034
 #define GUNIT_CZCLOCK_GATING_DISABLE1 0x02060
 #define GUNIT_CZCLOCK_GATING_DISABLE2 0x02064
+
+/* VHDMI switch control */
+#define VHDMICNT		0x6d
+#define VHDMI_ON		0x03
+#define VHDMI_OFF		0x02
+
+
 
 #endif /* _I915_REG_H_ */

@@ -137,6 +137,7 @@ i915_dpst_apply_luma(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 diet_factor, i;
+	u32 level;
 	u32 blm_hist_ctl;
 
 	if (!dev_priv->dpst.enabled)
@@ -146,7 +147,11 @@ i915_dpst_apply_luma(struct drm_device *dev,
 	dev_priv->dpst.blc_adjustment =
 	ioctl_data->ie_container.dpst_blc_factor;
 
-	i915_dpst_set_brightness(dev, dev_priv->backlight.level);
+	level = i915_dpst_compute_brightness(dev, dev_priv->backlight.level);
+	if (dev_priv->is_mipi)
+		intel_panel_actually_set_mipi_backlight(dev, level);
+	else
+		intel_panel_actually_set_backlight(dev, level);
 
 	/* Setup register to access image enhancement value from
 	 * index 0.*/
@@ -222,6 +227,8 @@ i915_dpst_init(struct drm_device *dev,
 			ioctl_data->init_data.threshold_gb = gb_val;
 			ioctl_data->init_data.image_res =
 					mode->hdisplay*mode->vdisplay;
+			/*mode is allocated by kzalloc, need be freed*/
+			kfree(mode);
 		}
 	}
 
@@ -254,14 +261,14 @@ i915_dpst_get_brightness(struct drm_device *dev)
 	return dev_priv->backlight.level;
 }
 
-void
-i915_dpst_set_brightness(struct drm_device *dev, u32 brightness_val)
+u32
+i915_dpst_compute_brightness(struct drm_device *dev, u32 brightness_val)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	u32 backlight_level = brightness_val;
 
 	if (!dev_priv->dpst.enabled)
-		return;
+		return backlight_level;
 
 	/* Calculate the backlight after it has been reduced by "dpst
 	 * blc adjustment" percent . blc_adjustment value is stored
@@ -270,7 +277,7 @@ i915_dpst_set_brightness(struct drm_device *dev, u32 brightness_val)
 	backlight_level = ((brightness_val *
 				dev_priv->dpst.blc_adjustment)/100)/100;
 
-	intel_panel_actually_set_backlight(dev, backlight_level);
+	return backlight_level;
 }
 
 void
@@ -289,9 +296,18 @@ i915_dpst_context(struct drm_device *dev, void *data,
 			struct drm_file *file_priv)
 {
 	struct dpst_initialize_context *ioctl_data = NULL;
+	struct drm_crtc *crtc  = intel_get_crtc_for_pipe(dev, PIPE_A);
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+
 	int ret = -EINVAL;
 
+	if (!I915_HAS_DPST(dev))
+		return -EINVAL;
+
 	if (!data)
+		return -EINVAL;
+
+	if (!intel_crtc->active)
 		return -EINVAL;
 
 	ioctl_data = (struct dpst_initialize_context *) data;

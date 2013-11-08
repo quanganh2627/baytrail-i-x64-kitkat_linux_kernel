@@ -563,7 +563,7 @@ trip_point_temp_store(struct device *dev, struct device_attribute *attr,
 {
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 	int trip, ret;
-	unsigned long temperature;
+	long temperature;
 
 	if (!tz->ops->set_trip_temp)
 		return -EPERM;
@@ -1138,7 +1138,7 @@ thermal_add_hwmon_sysfs(struct thermal_zone_device *tz)
 		goto free_temp_mem;
 
 	if (tz->ops->get_crit_temp) {
-		unsigned long temperature;
+		long temperature;
 		if (!tz->ops->get_crit_temp(tz, &temperature)) {
 			snprintf(temp->temp_crit.name,
 				 sizeof(temp->temp_crit.name),
@@ -1428,7 +1428,7 @@ thermal_cooling_device_register(char *type, void *devdata,
 	struct thermal_cooling_device *cdev;
 	int result;
 
-	if (type && strlen(type) >= THERMAL_NAME_LENGTH)
+	if (!type || strlen(type) >= THERMAL_NAME_LENGTH)
 		return ERR_PTR(-EINVAL);
 
 	if (!ops || !ops->get_max_state || !ops->get_cur_state ||
@@ -1461,11 +1461,9 @@ thermal_cooling_device_register(char *type, void *devdata,
 	}
 
 	/* sys I/F */
-	if (type) {
-		result = device_create_file(&cdev->device, &dev_attr_cdev_type);
-		if (result)
-			goto unregister;
-	}
+	result = device_create_file(&cdev->device, &dev_attr_cdev_type);
+	if (result)
+		goto unregister;
 
 	result = device_create_file(&cdev->device, &dev_attr_max_state);
 	if (result)
@@ -1564,8 +1562,7 @@ void thermal_cooling_device_unregister(struct thermal_cooling_device *cdev)
 
 	mutex_unlock(&thermal_list_lock);
 
-	if (cdev->type[0])
-		device_remove_file(&cdev->device, &dev_attr_cdev_type);
+	device_remove_file(&cdev->device, &dev_attr_cdev_type);
 	device_remove_file(&cdev->device, &dev_attr_max_state);
 	device_remove_file(&cdev->device, &dev_attr_cur_state);
 	if (cdev->ops->get_force_state_override)
@@ -1765,7 +1762,7 @@ struct thermal_zone_device *thermal_zone_device_register(const char *type,
 	int count;
 	int passive = 0;
 
-	if (type && strlen(type) >= THERMAL_NAME_LENGTH)
+	if (!type || strlen(type) >= THERMAL_NAME_LENGTH)
 		return ERR_PTR(-EINVAL);
 
 	if (trips > THERMAL_MAX_TRIPS || trips < 0 || mask >> trips)
@@ -1808,11 +1805,9 @@ struct thermal_zone_device *thermal_zone_device_register(const char *type,
 	}
 
 	/* sys I/F */
-	if (type) {
-		result = device_create_file(&tz->device, &dev_attr_type);
-		if (result)
-			goto unregister;
-	}
+	result = device_create_file(&tz->device, &dev_attr_type);
+	if (result)
+		goto unregister;
 
 	result = device_create_file(&tz->device, &dev_attr_temp);
 	if (result)
@@ -1947,8 +1942,7 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 
 	thermal_zone_device_set_polling(tz, 0);
 
-	if (tz->type[0])
-		device_remove_file(&tz->device, &dev_attr_type);
+	device_remove_file(&tz->device, &dev_attr_type);
 	device_remove_file(&tz->device, &dev_attr_temp);
 	if (tz->ops->get_mode)
 		device_remove_file(&tz->device, &dev_attr_mode);

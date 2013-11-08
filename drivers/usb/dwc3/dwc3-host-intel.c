@@ -260,6 +260,7 @@ static int dwc3_start_host(struct usb_hcd *hcd)
 {
 	int ret = -EINVAL;
 	struct xhci_hcd *xhci;
+	struct usb_hcd *xhci_shared_hcd;
 
 	if (!hcd)
 		return ret;
@@ -276,6 +277,10 @@ static int dwc3_start_host(struct usb_hcd *hcd)
 	dwc_silicon_wa(hcd);
 	dwc_set_host_mode(hcd);
 	dwc_disable_ssphy_p3(hcd);
+
+	/* Clear the hcd->flags.
+	 * To prevent incorrect flags set during last time. */
+	hcd->flags = 0;
 
 	ret = usb_add_hcd(hcd, otg_irqnum, IRQF_SHARED);
 	if (ret)
@@ -316,8 +321,9 @@ static int dwc3_start_host(struct usb_hcd *hcd)
 
 put_usb3_hcd:
 	if (xhci->shared_hcd) {
-		usb_remove_hcd(xhci->shared_hcd);
-		usb_put_hcd(xhci->shared_hcd);
+		xhci_shared_hcd = xhci->shared_hcd;
+		usb_remove_hcd(xhci_shared_hcd);
+		usb_put_hcd(xhci_shared_hcd);
 	}
 
 dealloc_usb2_hcd:
@@ -336,6 +342,7 @@ dealloc_usb2_hcd:
 static int dwc3_stop_host(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci;
+	struct usb_hcd *xhci_shared_hcd;
 
 	if (!hcd)
 		return -EINVAL;
@@ -347,8 +354,9 @@ static int dwc3_stop_host(struct usb_hcd *hcd)
 	dwc3_xhci_driver.shutdown = NULL;
 
 	if (xhci->shared_hcd) {
-		usb_remove_hcd(xhci->shared_hcd);
-		usb_put_hcd(xhci->shared_hcd);
+		xhci_shared_hcd = xhci->shared_hcd;
+		usb_remove_hcd(xhci_shared_hcd);
+		usb_put_hcd(xhci_shared_hcd);
 	}
 
 	usb_remove_hcd(hcd);

@@ -123,6 +123,7 @@ static int snd_compr_open(struct inode *inode, struct file *f)
 	}
 	runtime->state = SNDRV_PCM_STATE_OPEN;
 	init_waitqueue_head(&runtime->sleep);
+	init_waitqueue_head(&runtime->wait);
 	data->stream.runtime = runtime;
 	f->private_data = (void *)data;
 	mutex_lock(&compr->lock);
@@ -649,7 +650,6 @@ static int snd_compr_pause(struct snd_compr_stream *stream)
 
 	if (stream->runtime->state != SNDRV_PCM_STATE_RUNNING)
 		return -EPERM;
-
 	retval = stream->ops->trigger(stream, SNDRV_PCM_TRIGGER_PAUSE_PUSH);
 	if (!retval)
 		stream->runtime->state = SNDRV_PCM_STATE_PAUSED;
@@ -693,10 +693,32 @@ static int snd_compr_stop(struct snd_compr_stream *stream)
 	if (!retval) {
 		stream->runtime->state = SNDRV_PCM_STATE_SETUP;
 		wake_up(&stream->runtime->sleep);
+		snd_compr_drain_notify(stream);
 		stream->runtime->total_bytes_available = 0;
 		stream->runtime->total_bytes_transferred = 0;
 	}
 	return retval;
+}
+
+static int snd_compress_wait_for_drain(struct snd_compr_stream *stream)
+{
+	/*
+	 * We are called with lock held. So drop the lock while we wait for
+	 * drain complete notfication from the driver
+	 *
+	 * It is expected that driver will notify the drain completion and then
+	 * stream will be moved to SETUP state, even if draining resulted in an
+	 * error. We can trigger next track after this.
+	 */
+	stream->runtime->state = SNDRV_PCM_STATE_DRAINING;
+	mutex_unlock(&stream->device->lock);
+
+	wait_event(stream->runtime->wait, stream->runtime->drain_wake);
+
+	wake_up(&stream->runtime->sleep);
+	mutex_lock(&stream->device->lock);
+
+	return 0;
 }
 
 static int snd_compr_drain(struct snd_compr_stream *stream)
@@ -705,12 +727,25 @@ static int snd_compr_drain(struct snd_compr_stream *stream)
 
 	if (stream->runtime->state == SNDRV_PCM_STATE_SETUP)
 		return -EPERM;
+
+	stream->runtime->drain_wake = 0;
+
+	/* this is hackish for our tree but for now lets carry it while we fix
+	 * usermode behaviour
+	 */
 	if (stream->runtime->state != SNDRV_PCM_STATE_PREPARED)
 		retval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_DRAIN);
-	if (!retval) {
-		stream->runtime->state = SNDRV_PCM_STATE_DRAINING;
+	else
+		return 0;
+
+	if (retval) {
+		pr_err("SND_COMPR_TRIGGER_DRAIN failed %d\n", retval);
 		wake_up(&stream->runtime->sleep);
+		return retval;
 	}
+
+	retval = snd_compress_wait_for_drain(stream);
+	stream->runtime->state = SNDRV_PCM_STATE_SETUP;
 	return retval;
 }
 
@@ -740,14 +775,28 @@ static int snd_compr_partial_drain(struct snd_compr_stream *stream)
 {
 	int retval = 0;
 
+	/* agaain hackish  changes */
 	if (stream->runtime->state == SNDRV_PCM_STATE_SETUP)
 		return -EPERM;
+	/* stream can be drained only when next track has been signalled */
+	if (stream->next_track == false)
+		return -EPERM;
+
+	stream->runtime->drain_wake = 0;
 	if (stream->runtime->state != SNDRV_PCM_STATE_PREPARED)
 		retval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_PARTIAL_DRAIN);
-	if (retval)
-		pr_err("Partial drain returned failure\n");
 	else
-		stream->runtime->state = SNDRV_PCM_STATE_SETUP;
+		return 0;
+
+	if (retval) {
+		pr_err("Partial drain returned failure\n");
+		wake_up(&stream->runtime->sleep);
+		return retval;
+	}
+
+	stream->next_track = false;
+	retval = snd_compress_wait_for_drain(stream);
+	stream->runtime->state = SNDRV_PCM_STATE_SETUP;
 	return retval;
 }
 

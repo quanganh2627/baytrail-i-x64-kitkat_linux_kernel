@@ -33,6 +33,7 @@
 #include <linux/moduleparam.h>
 #include "intel_drv.h"
 #include "linux/mfd/intel_mid_pmic.h"
+#include <linux/platform_data/lp855x.h>
 
 #define PCI_LBPC 0xf4 /* legacy/combination backlight modes */
 
@@ -421,17 +422,28 @@ static u32 intel_panel_get_backlight(struct drm_device *dev)
 	u32 val = 0;
 	unsigned long flags;
 
-	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
 
+	/*
+	 * PMIC i2c write for backlight control is accessed only
+	 * from intel_panel.c and need not be in spin_lock
+	 * There are anyway mutex to protect the i2c read in the
+	 * PMIC driver
+	 *
+	 * Was causing BUG as mutex was taken within spin_lock
+	 */
 	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
 #ifdef CONFIG_CRYSTAL_COVE
 		val = intel_mid_pmic_readb(0x4E);
 #else
 		DRM_ERROR("Backlight not supported yet\n");
 #endif
-	} else if (HAS_PCH_SPLIT(dev)) {
+	}
+
+	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
+
+	if (HAS_PCH_SPLIT(dev)) {
 		val = I915_READ(BLC_PWM_CPU_CTL) & BACKLIGHT_DUTY_CYCLE_MASK;
-	} else {
+	} else if (!(IS_VALLEYVIEW(dev) && dev_priv->is_mipi)) {
 		val = I915_READ(BLC_PWM_CTL) & BACKLIGHT_DUTY_CYCLE_MASK;
 		if (INTEL_INFO(dev)->gen < 4)
 			val >>= 1;
@@ -491,20 +503,20 @@ void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level)
 		pci_write_config_byte(dev->pdev, PCI_LBPC, lbpc);
 	}
 
-	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
+	tmp = I915_READ(BLC_PWM_CTL);
+	if (INTEL_INFO(dev)->gen < 4)
+		level <<= 1;
+	tmp &= ~BACKLIGHT_DUTY_CYCLE_MASK;
+	I915_WRITE(BLC_PWM_CTL, tmp | level);
+}
+
+void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
+{
 #ifdef CONFIG_CRYSTAL_COVE
-		DRM_DEBUG_DRIVER("tux: set backlight PWM = %d\n", level);
-		intel_mid_pmic_writeb(0x4E, level);
+	intel_mid_pmic_writeb(0x4E, level);
 #else
-		DRM_ERROR("Backlight not supported yet\n");
+	DRM_ERROR("Non PMIC MIPI Backlight control is not supported yet\n");
 #endif
-	} else {
-		tmp = I915_READ(BLC_PWM_CTL);
-		if (INTEL_INFO(dev)->gen < 4)
-			level <<= 1;
-		tmp &= ~BACKLIGHT_DUTY_CYCLE_MASK;
-		I915_WRITE(BLC_PWM_CTL, tmp | level);
-	}
 }
 
 /* set backlight brightness to level in range [0..max] */
@@ -519,7 +531,8 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 	freq = intel_panel_get_max_backlight(dev);
 	if (!freq) {
 		/* we are screwed, bail out */
-		goto out;
+		spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
+		return;
 	}
 
 	/* scale to hardware */
@@ -529,14 +542,19 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 	if (dev_priv->backlight.device)
 		dev_priv->backlight.device->props.brightness = level;
 
+
 	if (dev_priv->backlight.enabled) {
 		if (dev_priv->dpst.enabled)
-			i915_dpst_set_brightness(dev, level);
-		else
+			level = i915_dpst_compute_brightness(dev, level);
+
+		if (!dev_priv->is_mipi)
 			intel_panel_actually_set_backlight(dev, level);
 	}
-out:
+
 	spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
+
+	if (dev_priv->is_mipi)
+		intel_panel_actually_set_mipi_backlight(dev, level);
 }
 
 void intel_panel_disable_backlight(struct drm_device *dev)
@@ -544,12 +562,9 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	unsigned long flags;
 
-	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
-
-	dev_priv->backlight.enabled = false;
-	intel_panel_actually_set_backlight(dev, 0);
-
 	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
+		intel_panel_actually_set_mipi_backlight(dev, 0);
+
 #ifdef CONFIG_CRYSTAL_COVE
 		intel_mid_pmic_writeb(0x51, 0x00);
 		intel_mid_pmic_writeb(0x52, 0x00);
@@ -557,8 +572,17 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 #else
 		DRM_ERROR("Backlight not supported yet\n");
 #endif
-	} else if (INTEL_INFO(dev)->gen >= 4) {
+	}
+
+	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
+
+	dev_priv->backlight.enabled = false;
+
+	if (INTEL_INFO(dev)->gen >= 4 &&
+				!(IS_VALLEYVIEW(dev) && dev_priv->is_mipi)) {
 		uint32_t reg, tmp;
+
+		intel_panel_actually_set_backlight(dev, 0);
 
 		reg = HAS_PCH_SPLIT(dev) ? BLC_PWM_CPU_CTL2 : BLC_PWM_CTL2;
 
@@ -582,6 +606,45 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 		intel_pipe_to_cpu_transcoder(dev_priv, pipe);
 	unsigned long flags;
 
+	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
+#ifdef CONFIG_CRYSTAL_COVE
+		intel_mid_pmic_writeb(0x4B, 0xFF);
+		intel_mid_pmic_writeb(0x4E, 0xFF);
+		intel_mid_pmic_writeb(0x51, 0x01);
+		intel_mid_pmic_writeb(0x52, 0x01);
+
+		intel_panel_actually_set_mipi_backlight(dev,
+					dev_priv->backlight.level);
+
+		if (lpdata) {
+			/* FIXME: Need to find the right delay so that registers
+			 * A9, A5 and A7 can be updated. Other the LP8556 chip
+			 * restores default values.
+			 * Tried delays <= 20ms. didn't work.
+			 */
+			msleep(30);
+
+			lp855x_ext_write_byte(LP8556_CFG9,
+						LP8556_VBOOST_MAX_NA_21V |
+						LP8556_JUMP_DIS |
+						LP8556_JMP_TSHOLD_10P |
+						LP8556_JMP_VOLT_0_5V);
+			lp855x_ext_write_byte(LP8556_CFG5,
+						LP8556_PWM_DRECT_DIS |
+						LP8556_PS_MODE_5P5D |
+						LP8556_PWM_FREQ_9616HZ);
+			lp855x_ext_write_byte(LP8556_CFG7,
+						LP8556_RSRVD_76 |
+						LP8556_DRV3_EN |
+						LP8556_DRV2_EN |
+						LP8556_RSRVD_32 |
+						LP8556_IBOOST_LIM_1_8A_NA);
+		}
+#else
+		DRM_ERROR("Backlight not supported yet\n");
+#endif
+	}
+
 	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
 
 	if (dev_priv->backlight.level == 0) {
@@ -591,16 +654,8 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 				dev_priv->backlight.level;
 	}
 
-	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
-#ifdef CONFIG_CRYSTAL_COVE
-		intel_mid_pmic_writeb(0x4B, 0xFF);
-		intel_mid_pmic_writeb(0x4E, 0xFF);
-		intel_mid_pmic_writeb(0x51, 0x01);
-		intel_mid_pmic_writeb(0x52, 0x01);
-#else
-		DRM_ERROR("Backlight not supported yet\n");
-#endif
-	} else if (INTEL_INFO(dev)->gen >= 4) {
+	if (INTEL_INFO(dev)->gen >= 4 &&
+				!(IS_VALLEYVIEW(dev) && dev_priv->is_mipi)) {
 		uint32_t reg, tmp;
 
 		reg = HAS_PCH_SPLIT(dev) ? BLC_PWM_CPU_CTL2 : BLC_PWM_CTL2;
@@ -644,7 +699,9 @@ set_level:
 	 * registers are set.
 	 */
 	dev_priv->backlight.enabled = true;
-	intel_panel_actually_set_backlight(dev, dev_priv->backlight.level);
+	if (!dev_priv->is_mipi)
+		intel_panel_actually_set_backlight(dev,
+						dev_priv->backlight.level);
 
 	spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 }

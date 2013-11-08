@@ -212,10 +212,30 @@ static int __init acpi_parse_pidv(struct acpi_table_header *table)
 	/*
 	 * FIXME: add ssn accessor, instead of memcpy
 	 */
-	memcpy(&intel_platform_ssn, &(pidv_tbl->pidv.part_number),
+	memcpy(intel_platform_ssn, &(pidv_tbl->pidv.part_number),
 			INTEL_PLATFORM_SSN_SIZE);
 	intel_platform_ssn[INTEL_PLATFORM_SSN_SIZE] = '\0';
 
+	pr_info("SPID updated according to ACPI Table:\n");
+	pr_info("\tspid customer id : %04x\n"
+			"\tspid vendor id : %04x\n"
+			"\tspid manufacturer id : %04x\n"
+			"\tspid platform family id : %04x\n"
+			"\tspid product line id : %04x\n"
+			"\tspid hardware id : %04x\n"
+			"\tspid fru[4..0] : %02x %02x %02x %02x %02x\n"
+			"\tspid fru[9..5] : %02x %02x %02x %02x %02x\n"
+			"\tssn : %s\n",
+			spid.customer_id,
+			spid.vendor_id,
+			spid.manufacturer_id,
+			spid.platform_family_id,
+			spid.product_line_id,
+			spid.hardware_id,
+			spid.fru[4], spid.fru[3], spid.fru[2], spid.fru[1],
+			spid.fru[0], spid.fru[9], spid.fru[8], spid.fru[7],
+			spid.fru[6], spid.fru[5],
+			intel_platform_ssn);
 	return 0;
 }
 
@@ -276,6 +296,24 @@ err_sysfs_spid:
 arch_initcall(acpi_spid_init);
 #endif
 
+/**
+ * Check if buffer contains printable character, from SPACE(0x20) to
+ * TILDE (0x7E), until \0 or maxlen characters occur.
+ * param char *str_buf buffer of characters to look for
+ * param int maxlen max number of characters to look for
+ * return int 0 if valid, otherwise index of the first non valid character
+ * */
+static int chk_prt_validity(char *strbuf, int max_len)
+{
+	int idx = 0;
+	while ((idx < max_len) && (strbuf[idx] != '\0')) {
+		if ((strbuf[idx] < 0x20) || (strbuf[idx] > 0x7E))
+			return idx;
+		idx++;
+	}
+	return 0;
+}
+
 int __init sfi_handle_spid(struct sfi_table_header *table)
 {
 	struct sfi_table_oemb *oemb;
@@ -305,12 +343,19 @@ int __init sfi_handle_spid(struct sfi_table_header *table)
 	memcpy(&spid, &oemb->spid, sizeof(struct soft_platform_id));
 
 	if (oemb->header.len <
-			(char *)oemb->ssn + INTEL_PLATFORM_SSN_SIZE - (char *)oemb) {
+			(char *)oemb->ssn + INTEL_PLATFORM_SSN_SIZE -
+			(char *)oemb) {
 		pr_err("SFI OEMB does not contains SSN\n");
 		intel_platform_ssn[0] = '\0';
 	} else {
-		memcpy(intel_platform_ssn, oemb->ssn, INTEL_PLATFORM_SSN_SIZE);
-		intel_platform_ssn[INTEL_PLATFORM_SSN_SIZE] = '\0';
+		if (chk_prt_validity(oemb->ssn, INTEL_PLATFORM_SSN_SIZE) != 0) {
+			pr_err("SSN contains non printable character\n");
+			intel_platform_ssn[0] = '\0';
+		} else {
+			memcpy(intel_platform_ssn, oemb->ssn,
+				INTEL_PLATFORM_SSN_SIZE);
+			intel_platform_ssn[INTEL_PLATFORM_SSN_SIZE] = '\0';
+		}
 	}
 
 	/* Populate command line with SPID values */

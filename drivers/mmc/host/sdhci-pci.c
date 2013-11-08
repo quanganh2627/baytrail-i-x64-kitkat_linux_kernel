@@ -629,7 +629,7 @@ static int byt_emmc_probe_slot(struct sdhci_pci_slot *slot)
 	switch (slot->chip->pdev->device) {
 	case PCI_DEVICE_ID_INTEL_BYT_EMMC45:
 		slot->host->quirks2 |= SDHCI_QUIRK2_CARD_CD_DELAY |
-			SDHCI_QUIRK2_WAIT_FOR_IDLE;
+			SDHCI_QUIRK2_WAIT_FOR_IDLE | SDHCI_QUIRK2_TUNING_POLL;
 		if (!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP1) &&
 			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP2) &&
 			!INTEL_MID_BOARDV3(TABLET, BYT, BLK, PRO, RVP3) &&
@@ -810,11 +810,11 @@ static int intel_mrfl_mmc_probe_slot(struct sdhci_pci_slot *slot)
 					MMC_CAP2_INIT_CARD_SYNC |
 					MMC_CAP2_CACHE_CTRL;
 		if (slot->chip->pdev->revision == 0x1) { /* B0 stepping */
-			slot->host->mmc->caps2 |= MMC_CAP2_HS200_1_8V_SDR |
-						MMC_CAP2_HS200_WA;
+			slot->host->mmc->caps2 |= MMC_CAP2_HS200_1_8V_SDR;
 			/* WA for async abort silicon issue */
 			slot->host->quirks2 |= SDHCI_QUIRK2_CARD_CD_DELAY |
-					SDHCI_QUIRK2_WAIT_FOR_IDLE;
+					SDHCI_QUIRK2_WAIT_FOR_IDLE |
+					SDHCI_QUIRK2_TUNING_POLL;
 		}
 		mrfl_ioapic_rte_reg_addr_map(slot);
 		break;

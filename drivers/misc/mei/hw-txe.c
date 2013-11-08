@@ -84,7 +84,6 @@ static inline u32 mei_txe_sec_reg_read(struct mei_txe_hw *hw,
 
 	if (!hw->aliveness)
 		dev_warn(&dev->pdev->dev, "aliveness not asserted\n");
-	hw->aliveness_atime = jiffies;
 
 	return mei_txe_sec_reg_read_silent(hw, offset);
 }
@@ -117,7 +116,6 @@ static inline void mei_txe_sec_reg_write(struct mei_txe_hw *hw,
 
 	if (!hw->aliveness)
 		dev_warn(&dev->pdev->dev, "aliveness not asserted\n");
-	hw->aliveness_atime = jiffies;
 	mei_txe_sec_reg_write_silent(hw, offset, value);
 }
 /**
@@ -161,9 +159,6 @@ static bool mei_txe_aliveness_set(struct mei_device *dev, u32 req)
 
 	dev_dbg(&dev->pdev->dev, "Aliveness current=%d request=%d\n",
 				hw->aliveness, req);
-	/* Clear requested */
-	if (req)
-		hw->aliveness_atime = jiffies;
 
 	if (do_req) {
 		hw->recvd_aliv_resp = false;
@@ -545,30 +540,32 @@ static int mei_txe_write(struct mei_device *dev,
 {
 	struct mei_txe_hw *hw = to_txe_hw(dev);
 	unsigned long rem;
-	unsigned long length = header->length;
+	unsigned long length;
 	u32 *reg_buf = (u32 *)buf;
 	int i;
+
+	if (WARN_ON(!header || !buf))
+		return -EINVAL;
+
+	length = header->length;
 
 	dev_dbg(&dev->pdev->dev, MEI_HDR_FMT, MEI_HDR_PRM(header));
 
 	if ((length + sizeof(struct mei_msg_hdr)) > PAYLOAD_SIZE) {
-		dev_dbg(&dev->pdev->dev,
-			"write lenght exceeded = %ld\n", length);
-		return 0;
+		dev_err(&dev->pdev->dev, "write lenght exceeded = %ld > %d\n",
+			length + sizeof(struct mei_msg_hdr), PAYLOAD_SIZE);
+		return -ERANGE;
 	}
 
-	if (!hw->aliveness) {
-		dev_dbg(&dev->pdev->dev, "Aliveness not set .... requesting\n");
-		if (mei_txe_aliveness_set_sync(dev, 1))
-			return 0;
-	}
+	if (WARN(!hw->aliveness, "txe write: aliveness not asserted\n"))
+		return -EAGAIN;
 
 	/* Enable Input Ready Interrupt. */
 	mei_txe_input_ready_interrupt_enable(dev);
 
 	if (!mei_txe_is_input_ready(dev)) {
-		dev_dbg(&dev->pdev->dev, "Input is not ready");
-		return 0;
+		dev_err(&dev->pdev->dev, "Input is not ready");
+		return -EAGAIN;
 	}
 
 	mei_txe_input_payload_write(dev, 0, *((u32 *)header));
@@ -626,6 +623,9 @@ static int mei_txe_read(struct mei_device *dev,
 	u32 *reg_buf = (u32 *)buf;
 	u32 rem = len & 0x3;
 
+	if (WARN_ON(!buf || !len))
+		return -EINVAL;
+
 	dev_dbg(&dev->pdev->dev,
 		"buffer-length = %lu buf[0]0x%08X\n",
 		len, mei_txe_out_data_read(dev, 0));
@@ -678,8 +678,8 @@ static int mei_txe_hw_reset(struct mei_device *dev, bool intr_enable)
 	 */
 	if (aliveness_req != hw->aliveness)
 		if (mei_txe_aliveness_poll(dev, aliveness_req) < 0) {
-			dev_dbg(&dev->pdev->dev,
-				"wait for aliveness failed ... bailing out\n");
+			dev_err(&dev->pdev->dev,
+				"wait for aliveness settle failed ... bailing out\n");
 			return -ENODEV;
 		}
 
@@ -691,7 +691,7 @@ static int mei_txe_hw_reset(struct mei_device *dev, bool intr_enable)
 	if (aliveness_req) {
 		mei_txe_aliveness_set(dev, 0);
 		if (mei_txe_aliveness_poll(dev, 0) < 0) {
-			dev_dbg(&dev->pdev->dev,
+			dev_err(&dev->pdev->dev,
 				"wait for aliveness failed ... bailing out\n");
 			return -ENODEV;
 		}
@@ -856,20 +856,21 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 	s32 slots;
 	int rets;
 
-	dev_dbg(&dev->pdev->dev, "Interrupt Registers HHISR|HISR|SEC=%02X|%04X|%02X\n",
+	dev_dbg(&dev->pdev->dev, "irq thread: Interrupt Registers HHISR|HISR|SEC=%02X|%04X|%02X\n",
 		mei_txe_br_reg_read(hw, HHISR_REG),
 		mei_txe_br_reg_read(hw, HISR_REG),
 		mei_txe_sec_reg_read_silent(hw, SEC_IPC_HOST_INT_STATUS_REG));
 
-	mei_txe_pending_interrupts(dev);
 
-	dev_dbg(&dev->pdev->dev, "function called after ISR to handle the interrupt processing.\n");
 	/* initialize our complete list */
 	mutex_lock(&dev->device_lock);
 	mei_io_list_init(&complete_list);
 
 	if (pci_dev_msi_enabled(dev->pdev))
 		mei_txe_check_and_ack_intrs(dev, true);
+
+	/* show irq events */
+	mei_txe_pending_interrupts(dev);
 
 	hw->aliveness = mei_txe_aliveness_get(dev);
 	hw->readiness_state = mei_txe_readiness_get(dev);
@@ -909,7 +910,7 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 	if (test_and_clear_bit(TXE_INTR_ALIVENESS_BIT, &hw->intr_cause)) {
 		/* Clear the interrupt cause */
 		dev_dbg(&dev->pdev->dev,
-			"Aliveness Interrrupt: Status: %d\n", hw->aliveness);
+			"Aliveness Interrupt: Status: %d\n", hw->aliveness);
 		if (waitqueue_active(&hw->wait_aliveness_resp)) {
 			hw->recvd_aliv_resp = true;
 			wake_up(&hw->wait_aliveness_resp);
@@ -926,9 +927,9 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 
 		/* Read from TXE */
 		rets = mei_irq_read_handler(dev, &complete_list, &slots);
-		dev_dbg(&dev->pdev->dev,
-			"from mei_irq_read_handler ret=%d.\n", rets);
 		if (rets) {
+			dev_err(&dev->pdev->dev,
+				"mei_irq_read_handler ret = %d.\n", rets);
 			mutex_unlock(&dev->device_lock);
 			goto out;
 		}
@@ -946,17 +947,20 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 		}
 
 		rets = mei_irq_write_handler(dev, &complete_list);
-		dev_dbg(&dev->pdev->dev,
-				"mei_irq_write_handler ret=%d.\n", rets);
+		if (rets) {
+			dev_err(&dev->pdev->dev,
+				"mei_irq_write_handler ret = %d.\n", rets);
+		}
 	}
 
-	dev_dbg(&dev->pdev->dev, "end of bottom half function.\n");
 
 	mutex_unlock(&dev->device_lock);
 
 	mei_irq_compl_handler(dev, &complete_list);
 
 out:
+	dev_dbg(&dev->pdev->dev, "irq thread end rets = %d\n", rets);
+
 	mei_enable_interrupts(dev);
 	return IRQ_HANDLED;
 }

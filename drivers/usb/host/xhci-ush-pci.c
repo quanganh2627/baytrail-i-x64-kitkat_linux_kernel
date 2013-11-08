@@ -33,12 +33,9 @@
 
 static struct pci_dev	*pci_dev;
 
-static int ush_hsic_start_host(struct pci_dev  *pdev);
-static int ush_hsic_stop_host(struct pci_dev *pdev);
 static int create_device_files();
 static void remove_device_files();
 
-static int enabling_disabling;
 static int hsic_enable;
 static struct ush_hsic_priv hsic;
 
@@ -394,7 +391,7 @@ static void hsicdev_remove(struct usb_device *udev)
 		mutex_lock(&hsic.hsic_mutex);
 		hsic.modem_dev = NULL;
 		mutex_unlock(&hsic.hsic_mutex);
-		usb_disable_autosuspend(hsic.rh_dev);
+		usb_enable_autosuspend(hsic.rh_dev);
 	}
 }
 
@@ -521,13 +518,13 @@ static void ush_hsic_port_disable(void)
 	if (hsic.modem_dev) {
 		dev_dbg(&pci_dev->dev,
 			"Disable auto suspend in port disable\n");
-		usb_disable_autosuspend(hsic.modem_dev);
-		usb_disable_autosuspend(hsic.rh_dev);
+		usb_enable_autosuspend(hsic.modem_dev);
+		usb_enable_autosuspend(hsic.rh_dev);
 	}
 	if (hsic.rh_dev) {
 		dev_dbg(&pci_dev->dev,
 			"%s----> disable port\n", __func__);
-		usb_disable_autosuspend(hsic.rh_dev);
+		usb_enable_autosuspend(hsic.rh_dev);
 		clear_port_feature(hsic.rh_dev, HSIC_USH_PORT,
 				USB_PORT_FEAT_POWER);
 	}
@@ -538,7 +535,6 @@ static void ush_hsic_port_enable(void)
 {
 	printk(KERN_ERR "%s---->\n", __func__);
 	hsic_enable = 1;
-	hsic.port_disconnect = 0;
 	if (hsic.modem_dev) {
 		dev_dbg(&pci_dev->dev,
 			"Disable auto suspend in port enable\n");
@@ -567,27 +563,6 @@ static void hsic_port_logical_disconnect(struct usb_device *hdev,
 	usb_kick_khubd(hdev);
 }
 
-#ifdef START_STOP_HOST
-static void hsic_aux_work(struct work_struct *work)
-{
-	dev_dbg(&pci_dev->dev,
-		"%s---->\n", __func__);
-	mutex_lock(&hsic.hsic_mutex);
-	if (hsic.hsic_stopped == 0)
-		ush_hsic_stop_host(pci_dev);
-
-	usleep_range(hsic.reenumeration_delay,
-			hsic.reenumeration_delay + 1000);
-	ush_hsic_start_host(pci_dev);
-	mutex_unlock(&hsic.hsic_mutex);
-
-	hsic.hsic_aux_finish = 1;
-	wake_up(&hsic.aux_wq);
-	dev_dbg(&pci_dev->dev,
-		"%s<----\n", __func__);
-	return;
-}
-#else
 static void hsic_aux_work(struct work_struct *work)
 {
 	dev_dbg(&pci_dev->dev,
@@ -602,6 +577,8 @@ static void hsic_aux_work(struct work_struct *work)
 	if (hsic.port_disconnect == 0)
 		hsic_port_logical_disconnect(hsic.rh_dev,
 				HSIC_USH_PORT);
+	else
+		ush_hsic_port_disable();
 
 	usleep_range(hsic.reenumeration_delay,
 			hsic.reenumeration_delay + 1000);
@@ -614,7 +591,6 @@ static void hsic_aux_work(struct work_struct *work)
 		"%s<----\n", __func__);
 	return;
 }
-#endif
 
 static void wakeup_work(struct work_struct *work)
 {
@@ -752,7 +728,7 @@ static ssize_t hsic_host_resume_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(host_resume, S_IRUGO | S_IWUSR | S_IROTH | S_IWOTH,
+static DEVICE_ATTR(host_resume, S_IWUSR | S_IWOTH,
 		NULL, hsic_host_resume_store);
 
 static ssize_t hsic_port_enable_show(struct device *dev,
@@ -761,57 +737,6 @@ static ssize_t hsic_port_enable_show(struct device *dev,
 	return sprintf(buf, "%d\n", hsic_enable);
 }
 
-#ifdef START_STOP_HOST
-static ssize_t hsic_port_enable_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	int retval;
-	int org_req;
-
-	if (size > HSIC_ENABLE_SIZE)
-		return -EINVAL;
-
-	if (sscanf(buf, "%d", &org_req) != 1) {
-		dev_dbg(dev, "Invalid, value\n");
-		return -EINVAL;
-	}
-
-	if (delayed_work_pending(&hsic.hsic_aux)) {
-		dev_dbg(dev,
-			"%s---->Wait for delayed work finish\n",
-			 __func__);
-		retval = wait_event_interruptible(hsic.aux_wq,
-						hsic.hsic_aux_finish);
-		if (retval < 0)
-			return retval;
-
-		if (org_req)
-			return size;
-	}
-
-	mutex_lock(&hsic.hsic_mutex);
-
-	if (org_req) {
-		dev_dbg(dev, "enable hsic\n");
-
-		/* add this due to hcd release
-			 doesn't set hcd to NULL */
-		if (hsic.hsic_stopped == 0)
-			ush_hsic_stop_host(pci_dev);
-		usleep_range(5000, 6000);
-		ush_hsic_start_host(pci_dev);
-	} else {
-		dev_dbg(dev, "disable hsic\n");
-		/* add this due to hcd release
-			 doesn't set hcd to NULL */
-		if (hsic.hsic_stopped == 0)
-			ush_hsic_stop_host(pci_dev);
-
-	}
-	mutex_unlock(&hsic.hsic_mutex);
-	return size;
-}
-#else
 static ssize_t hsic_port_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -863,6 +788,9 @@ static ssize_t hsic_port_enable_store(struct device *dev,
 		if (hsic.port_disconnect == 0)
 			hsic_port_logical_disconnect(hsic.rh_dev,
 					HSIC_USH_PORT);
+		else
+			ush_hsic_port_disable();
+
 		usleep_range(5000, 6000);
 		ush_hsic_port_enable();
 	} else {
@@ -876,7 +804,6 @@ static ssize_t hsic_port_enable_store(struct device *dev,
 	mutex_unlock(&hsic.hsic_mutex);
 	return size;
 }
-#endif
 
 static DEVICE_ATTR(hsic_enable, S_IRUGO | S_IWUSR | S_IROTH | S_IWOTH,
 		hsic_port_enable_show, hsic_port_enable_store);
@@ -1586,32 +1513,6 @@ static struct pci_driver xhci_ush_driver = {
 #endif
 	.shutdown =     usb_hcd_pci_shutdown,
 };
-
-static int ush_hsic_start_host(struct pci_dev  *pdev)
-{
-	int		retval;
-
-	pm_runtime_get_sync(&pdev->dev);
-	enabling_disabling = 1;
-	retval = xhci_ush_pci_probe(pdev, xhci_ush_driver.id_table);
-	if (retval)
-		dev_dbg(&pdev->dev, "Failed to start host\n");
-	enabling_disabling = 0;
-	pm_runtime_put(&pdev->dev);
-
-	return retval;
-}
-
-static int ush_hsic_stop_host(struct pci_dev *pdev)
-{
-	pm_runtime_get_sync(&pdev->dev);
-	enabling_disabling = 1;
-	xhci_ush_pci_remove(pdev);
-	enabling_disabling = 0;
-	pm_runtime_put(&pdev->dev);
-
-	return 0;
-}
 
 int xhci_register_ush_pci(void)
 {

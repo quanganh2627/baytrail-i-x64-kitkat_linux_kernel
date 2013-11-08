@@ -36,6 +36,7 @@
 #include <linux/lnw_gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/irqdomain.h>
+#include <asm/intel_scu_flis.h>
 #include "gpiodebug.h"
 
 #define IRQ_TYPE_EDGE	(1 << 0)
@@ -90,8 +91,6 @@ enum GPIO_CONTROLLERS {
 struct lnw_gpio_ddata_t {
 	u16 ngpio;		/* number of gpio pins */
 	u32 gplr_offset;	/* offset of first GPLR register from base */
-	u32 flis_base;		/* base address of FLIS registers */
-	u32 flis_len;		/* length of FLIS registers */
 	u32 (*get_flis_offset)(int gpio);
 	u32 chip_irq_type;	/* chip interrupt type */
 };
@@ -181,8 +180,6 @@ static struct lnw_gpio_ddata_t lnw_gpio_ddata[] = {
 	[TANGIER_GPIO] = {
 		.ngpio = 192,
 		.gplr_offset = 4,
-		.flis_base = 0xFF0C0000,
-		.flis_len = 0x8000,
 		.get_flis_offset = get_flis_offset_by_gpio,
 		.chip_irq_type = IRQ_TYPE_EDGE | IRQ_TYPE_LEVEL,
 	},
@@ -192,7 +189,6 @@ struct lnw_gpio {
 	struct gpio_chip	chip;
 	void			*reg_base;
 	void			*reg_gplr;
-	void			*flis_base;
 	spinlock_t		lock;
 	struct pci_dev		*pdev;
 	struct irq_domain	*domain;
@@ -214,7 +210,7 @@ static void __iomem *gpio_reg(struct gpio_chip *chip, unsigned offset,
 	void *base;
 
 	/**
-	 * On TNG B0, GITR[0]' address is 0xFF008300, while GPLR[0]'s address
+	 * On TNG B0, GITR[0]'s address is 0xFF008300, while GPLR[0]'s address
 	 * is 0xFF008004. To count GITR[0]'s address, it's easier to count
 	 * from 0xFF008000. So for GITR,GLPR... we switch the base to reg_base.
 	 * This does not affect PNW/CLV, since the reg_gplr is the reg_base,
@@ -271,15 +267,12 @@ void lnw_gpio_set_alt(int gpio, int alt)
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
 		spin_lock_irqsave(&lnw->lock, flags);
-		value = readl(mem);
+		value = get_flis_value(offset);
 		value &= ~7;
 		value |= (alt & 7);
-		writel(value, mem);
+		set_flis_value(value, offset);
 		spin_unlock_irqrestore(&lnw->lock, flags);
-		dev_dbg(lnw->chip.dev, "ALT: writing 0x%x to %p\n", value, mem);
 	}
 }
 EXPORT_SYMBOL_GPL(lnw_gpio_set_alt);
@@ -326,9 +319,7 @@ int gpio_get_alt(int gpio)
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return -EINVAL;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
-		value = readl(mem) & 7;
+		value = get_flis_value(offset) & 7;
 	}
 
 	return value;
@@ -400,9 +391,45 @@ static int lnw_gpio_get(struct gpio_chip *chip, unsigned offset)
 	return readl(gplr) & BIT(offset % 32);
 }
 
+#define PULLUP_ENABLE	(1 << 8)
+#define PULLDOWN_ENABLE	(1 << 9)
+#define PUPD_VAL_2K	(0 << 4)
+#define PUPD_VAL_20K	(1 << 4)
+#define PUPD_VAL_50K	(2 << 4)
+#define PUPD_VAL_910	(3 << 4)
+#define I2C_FLIS_START	0x1D00
+#define I2C_FLIS_END	0x1D34
+
+static int lnw_gpio_set_pull(struct gpio_chip *chip, unsigned gpio, int value)
+{
+	u32 flis_offset, flis_value;
+	struct lnw_gpio *lnw = to_lnw_priv(chip);
+
+	if (lnw->type != TANGIER_GPIO)
+		return 0;
+
+	flis_offset = lnw->get_flis_offset(gpio);
+	if (WARN(flis_offset == -EINVAL, "invalid pin %d\n", gpio))
+		return -1;
+	if (flis_offset >= I2C_FLIS_START && flis_offset <= I2C_FLIS_END)
+		return 0;
+	flis_value = get_flis_value(flis_offset);
+	if (value) {
+		flis_value |= PULLUP_ENABLE;
+		flis_value &= ~PULLDOWN_ENABLE;
+	} else {
+		flis_value |= PULLDOWN_ENABLE;
+		flis_value &= ~PULLUP_ENABLE;
+	}
+	flis_value |= PUPD_VAL_50K;
+	set_flis_value(flis_value, flis_offset);
+}
+
 static void lnw_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	void __iomem *gpsr, *gpcr;
+
+	lnw_gpio_set_pull(chip, offset, value);
 
 	if (value) {
 		gpsr = gpio_reg(chip, offset, GPSR);
@@ -799,7 +826,6 @@ static int gpio_set_pinvalue(struct gpio_control *control, void *private_data,
 	struct lnw_gpio *lnw = private_data;
 
 	lnw_gpio_set(&lnw->chip, gpio, num);
-
 	return 0;
 }
 
@@ -875,7 +901,6 @@ static int flis_get_normal(struct gpio_control *control, void *private_data,
 		unsigned gpio)
 {
 	struct lnw_gpio *lnw = private_data;
-	u32 __iomem *mem;
 	u32 offset, value;
 	int num;
 
@@ -884,9 +909,7 @@ static int flis_get_normal(struct gpio_control *control, void *private_data,
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return -1;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
-		value = readl(mem);
+		value = get_flis_value(offset);
 		num = (value >> control->shift) & control->mask;
 		if (num < control->num)
 			return num;
@@ -899,7 +922,6 @@ static int flis_set_normal(struct gpio_control *control, void *private_data,
 		unsigned gpio, unsigned int num)
 {
 	struct lnw_gpio *lnw = private_data;
-	u32 __iomem *mem;
 	u32 shift = control->shift;
 	u32 mask = control->mask;
 	u32 offset, value;
@@ -910,13 +932,11 @@ static int flis_set_normal(struct gpio_control *control, void *private_data,
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return -1;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
 		spin_lock_irqsave(&lnw->lock, flags);
-		value = readl(mem);
+		value = get_flis_value(offset);
 		value &= ~(mask << shift);
 		value |= ((num & mask) << shift);
-		writel(value, mem);
+		set_flis_value(value, offset);
 		spin_unlock_irqrestore(&lnw->lock, flags);
 
 		return 0;
@@ -929,7 +949,6 @@ static int flis_get_override(struct gpio_control *control, void *private_data,
 		unsigned gpio)
 {
 	struct lnw_gpio *lnw = private_data;
-	u32 __iomem *mem;
 	u32 offset, value;
 	u32 val_bit, en_bit;
 	int num;
@@ -942,9 +961,7 @@ static int flis_get_override(struct gpio_control *control, void *private_data,
 		val_bit = 1 << control->shift;
 		en_bit = 1 << control->rshift;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
-		value = readl(mem);
+		value = get_flis_value(offset);
 
 		if (value & en_bit)
 			if (value & val_bit)
@@ -964,7 +981,6 @@ static int flis_set_override(struct gpio_control *control, void *private_data,
 		unsigned gpio, unsigned int num)
 {
 	struct lnw_gpio *lnw = private_data;
-	u32 __iomem *mem;
 	u32 offset, value;
 	u32 val_bit, en_bit;
 	unsigned long flags;
@@ -977,10 +993,8 @@ static int flis_set_override(struct gpio_control *control, void *private_data,
 		val_bit = 1 << control->shift;
 		en_bit = 1 << control->rshift;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
 		spin_lock_irqsave(&lnw->lock, flags);
-		value = readl(mem);
+		value = get_flis_value(offset);
 		switch (num) {
 		case 0:
 			value &= ~(en_bit | val_bit);
@@ -995,7 +1009,7 @@ static int flis_set_override(struct gpio_control *control, void *private_data,
 		default:
 			break;
 		}
-		writel(value, mem);
+		set_flis_value(value, offset);
 		spin_unlock_irqrestore(&lnw->lock, flags);
 
 		return 0;
@@ -1045,7 +1059,6 @@ FLIS_NORMAL_CONTROL(TYPE_SBY_OD_DIS, enable, 2, 30, 0x1),
 static unsigned int lnw_get_conf_reg(struct gpio_debug *debug, unsigned gpio)
 {
 	struct lnw_gpio *lnw = debug->private_data;
-	u32 __iomem *mem;
 	u32 offset, value = 0;
 
 	if (lnw->type == TANGIER_GPIO) {
@@ -1053,9 +1066,7 @@ static unsigned int lnw_get_conf_reg(struct gpio_debug *debug, unsigned gpio)
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return -EINVAL;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
-		value = readl(mem);
+		value = get_flis_value(offset);
 	}
 
 	return value;
@@ -1065,7 +1076,6 @@ static void lnw_set_conf_reg(struct gpio_debug *debug, unsigned gpio,
 		unsigned int value)
 {
 	struct lnw_gpio *lnw = debug->private_data;
-	u32 __iomem *mem;
 	u32 offset;
 
 	if (lnw->type == TANGIER_GPIO) {
@@ -1073,9 +1083,7 @@ static void lnw_set_conf_reg(struct gpio_debug *debug, unsigned gpio,
 		if (WARN(offset == -EINVAL, "invalid pin %d\n", gpio))
 			return;
 
-		mem = (void __iomem *)(lnw->flis_base + offset);
-
-		writel(value, mem);
+		set_flis_value(value, offset);
 	}
 
 	return;
@@ -1302,16 +1310,6 @@ static int lnw_gpio_probe(struct pci_dev *pdev,
 	if (retval) {
 		dev_err(&pdev->dev, "langwell gpiochip_add error %d\n", retval);
 		goto err_ioremap;
-	}
-
-	if (ddata->flis_base) {
-		lnw->flis_base = ioremap_nocache(ddata->flis_base,
-					ddata->flis_len);
-		if (!lnw->flis_base) {
-			dev_err(&pdev->dev, "error mapping flis base\n");
-			retval = -EFAULT;
-			goto err_ioremap;
-		}
 	}
 
 	lnw_irq_init_hw(lnw);

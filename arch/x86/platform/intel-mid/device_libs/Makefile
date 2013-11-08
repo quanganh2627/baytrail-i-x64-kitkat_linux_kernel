@@ -32,7 +32,7 @@ obj-$(subst m,y,$(CONFIG_SENSORS_THERMAL_MRFLD)) += platform_mrfl_thermal.o
 obj-$(subst m,y,$(CONFIG_INTEL_SCU_FLIS)) += platform_scu_flis.o
 
 # I2C Devices
-obj-$(subst m,y,$(CONFIG_I2C_DESIGNWARE_PCI_FORK)) += platform_dw_i2c.o
+obj-$(subst m,y,$(CONFIG_I2C_DESIGNWARE_CORE_FORK)) += platform_dw_i2c.o
 obj-$(subst m,y,$(CONFIG_SENSORS_EMC1403)) += platform_emc1403.o
 obj-$(subst m,y,$(CONFIG_SENSORS_LIS3LV02D)) += platform_lis331.o
 obj-$(subst m,y,$(CONFIG_GPIO_PCA953X)) += platform_max7315.o
@@ -42,6 +42,7 @@ obj-$(subst m,y,$(CONFIG_CHARGER_BQ24192)) += platform_bq24192.o
 obj-$(subst m,y,$(CONFIG_BQ24261_CHARGER)) += platform_bq24261.o
 obj-$(subst m,y,$(CONFIG_SND_SOC_CS42L73)) += platform_cs42l73.o
 obj-$(subst m,y,$(CONFIG_SND_SOC_WM8994)) += platform_wm8994.o
+obj-$(subst m,y,$(CONFIG_INTEL_CRYSTALCOVE_PAGE0)) += platform_crystalcove_page0.o
 obj-$(subst m,y,$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4_FORK)) += platform_rmi4.o
 obj-$(subst m,y,$(CONFIG_TOUCHSCREEN_R69001_I2C)) += platform_r69001.o
 obj-$(subst m,y,$(CONFIG_PN544_NFC_FORK)) += platform_pn544.o
@@ -51,6 +52,7 @@ obj-$(subst m,y,$(CONFIG_SENSORS_LSM303_MAG)) += platform_lsm303.o
 obj-$(subst m,y,$(CONFIG_SENSORS_APDS990X_FORK)) += platform_apds990x.o
 obj-$(subst m,y,$(CONFIG_A1026)) += platform_a1026.o
 obj-$(subst m,y,$(CONFIG_EXTCON_FSA9285)) += platform_fsa9285.o
+obj-$(subst m,y,$(CONFIG_SND_SOC_WM5102)) += platform_wm5102.o
 
 # SPI Devices
 obj-$(subst m,y,$(CONFIG_SERIAL_MRST_MAX3110)) += platform_max3111.o
@@ -108,3 +110,5 @@ obj-$(subst m,y,$(CONFIG_INTEL_MID_GPS)) += platform_gps.o
 obj-$(subst m,y,$(CONFIG_WIFI_PLATFORM_DATA)) += platform_wifi.o
 # SCU log
 obj-$(subst m,y,$(CONFIG_SCU_LOGGING)) += platform_scu_log.o
+# Display Control Device
+obj-y += platform_display.o

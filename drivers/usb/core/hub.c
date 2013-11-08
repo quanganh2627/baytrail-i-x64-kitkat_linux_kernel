@@ -1568,10 +1568,15 @@ static int hub_configure(struct usb_hub *hub,
 	if (hub->has_indicators && blinkenlights)
 		hub->indicator [0] = INDICATOR_CYCLE;
 
-	for (i = 0; i < hdev->maxchild; i++)
-		if (usb_hub_create_port_device(hub, i + 1) < 0)
+	for (i = 0; i < hdev->maxchild; i++) {
+		ret = usb_hub_create_port_device(hub, i + 1);
+		if (ret < 0) {
 			dev_err(hub->intfdev,
 				"couldn't create port%d device.\n", i + 1);
+			hdev->maxchild = i;
+			goto fail_keep_maxchild;
+		}
+	}
 
 	usb_hub_adjust_deviceremovable(hdev, hub->descriptor);
 
@@ -1579,6 +1584,9 @@ static int hub_configure(struct usb_hub *hub,
 	return 0;
 
 fail:
+	hdev->maxchild = 0;
+
+fail_keep_maxchild:
 	dev_err (hub_dev, "config failed, %s (err %d)\n",
 			message, ret);
 	/* hub_disconnect() frees urb and descriptor */
@@ -3008,6 +3016,13 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 			goto err_lpm3;
 	}
 
+	/*
+	 * Hold port wakeup mutex before set port suspend if device may
+	 * generate remote wakeup to avoid race condition.
+	 */
+	if (udev->do_remote_wakeup)
+		mutex_lock(&port_dev->wakeup_mutex);
+
 	/* see 7.1.7.6 */
 	if (hub_is_superspeed(hub->hdev))
 		status = hub_set_port_link_state(hub, port1, USB_SS_PORT_LS_U3);
@@ -3074,6 +3089,9 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 		}
 		usb_set_device_state(udev, USB_STATE_SUSPENDED);
 	}
+
+	if (udev->do_remote_wakeup)
+		mutex_unlock(&port_dev->wakeup_mutex);
 
 	if (status == 0 && !udev->do_remote_wakeup && udev->persist_enabled) {
 		pm_runtime_put_sync(&port_dev->dev);
@@ -4369,6 +4387,14 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		"port %d, status %04x, change %04x, %s\n",
 		port1, portstatus, portchange, portspeed(hub, portstatus));
 
+#ifdef CONFIG_PM_RUNTIME
+	/* add 5s time-out wakelock for delay system suspend */
+	wake_lock_timeout(&hcd->wake_lock, 5 * HZ);
+	dev_dbg(hub_dev,
+		"%s add 5s wake_lock for port connect change\n",
+		__func__);
+#endif
+
 	if (hub->has_indicators) {
 		set_port_led(hub, port1, HUB_LED_AUTO);
 		hub->indicator[port1-1] = INDICATOR_AUTO;
@@ -4574,6 +4600,10 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 loop_disable:
 		hub_port_disable(hub, port1, 1);
 loop:
+		/* If the hcd was already quiesce,
+		 * we needn't to continue retry. */
+		if (hcd->state == HC_STATE_QUIESCING)
+			return -ESHUTDOWN;
 		usb_ep0_reinit(udev);
 		release_devnum(udev);
 		hub_free_dev(udev);
@@ -4622,7 +4652,12 @@ static int hub_handle_remote_wakeup(struct usb_hub *hub, unsigned int port,
 		msleep(10);
 
 		usb_lock_device(udev);
+		/* hold port mutex before handle remote wakup */
+		if (hub->ports[port - 1])
+			mutex_lock(&hub->ports[port - 1]->wakeup_mutex);
 		ret = usb_remote_wakeup(udev);
+		if (hub->ports[port - 1])
+			mutex_unlock(&hub->ports[port - 1]->wakeup_mutex);
 		usb_unlock_device(udev);
 		if (ret < 0)
 			connect_change = 1;

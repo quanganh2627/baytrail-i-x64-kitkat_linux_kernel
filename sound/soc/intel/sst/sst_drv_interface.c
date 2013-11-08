@@ -493,6 +493,8 @@ static int sst_cdev_open(struct snd_sst_params *str_params,
 		stream = &sst_drv_ctx->streams[str_id];
 		stream->compr_cb = cb->compr_cb;
 		stream->compr_cb_param = cb->param;
+		stream->drain_notify = cb->drain_notify;
+		stream->drain_cb_param = cb->drain_cb_param;
 	} else {
 		pr_err("stream encountered error during alloc %d\n", str_id);
 		str_id = -EINVAL;
@@ -614,10 +616,13 @@ static int sst_cdev_control(unsigned int cmd, unsigned int str_id)
 		return sst_drop_stream(str_id);
 	case SND_COMPR_TRIGGER_DRAIN:
 		return sst_drain_stream(str_id, false);
+	case SND_COMPR_TRIGGER_NEXT_TRACK:
+		return sst_next_track();
 	case SND_COMPR_TRIGGER_PARTIAL_DRAIN:
 		return sst_drain_stream(str_id, true);
+	default:
+		return -EINVAL;
 	}
-	return -EINVAL;
 }
 
 static int sst_cdev_tstamp(unsigned int str_id, struct snd_compr_tstamp *tstamp)
@@ -955,12 +960,11 @@ static int sst_set_generic_params(enum sst_controls cmd, void *arg)
 		break;
 	}
 	case SST_SET_BYTE_STREAM: {
-		struct snd_sst_bytes *sst_bytes = (struct snd_sst_bytes *)arg;
 		ret_val = intel_sst_check_device();
 		if (ret_val)
 			return ret_val;
 
-		ret_val = sst_send_byte_stream_mrfld(sst_bytes);
+		ret_val = sst_send_byte_stream_mrfld(arg);
 		sst_pm_runtime_put(sst_drv_ctx);
 		break;
 	}

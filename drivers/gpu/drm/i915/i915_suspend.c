@@ -30,6 +30,7 @@
 #include "intel_drv.h"
 #include "i915_reg.h"
 #include "intel_clrmgr.h"
+#include "linux/mfd/intel_mid_pmic.h"
 
 static u8 i915_read_indexed(struct drm_device *dev, u16 index_port, u16 data_port, u8 reg)
 {
@@ -685,7 +686,7 @@ void vlv_restore_rc6_regs(struct drm_device *drm_dev)
 #define TIMEOUT 100
 
 /* write with mask */
-static void vlv_punit_write32_bits(struct drm_i915_private *dev_priv,
+void vlv_punit_write32_bits(struct drm_i915_private *dev_priv,
 				u32 reg, u32 val, u32 mask)
 {
 	u32 tmp;
@@ -697,6 +698,11 @@ static void vlv_punit_write32_bits(struct drm_i915_private *dev_priv,
 	tmp = val | tmp;
 
 	vlv_punit_write(dev_priv, reg, tmp);
+}
+
+static int set_vhdmi_state(u8 value)
+{
+	return intel_mid_pmic_writeb(VHDMICNT, value);
 }
 
 static int set_power_state_with_timeout(
@@ -767,6 +773,13 @@ static void valleyview_power_gate_disp(struct drm_i915_private *dev_priv)
 		dev_err(&dev_priv->bridge_dev->dev,
 				"Power gate DPIO CMN timed out, suspend might fail\n");
 	}
+
+	/* 4. VHDMI power switch off */
+	ret = set_vhdmi_state(VHDMI_OFF);
+	if (ret) {
+		dev_err(&dev_priv->bridge_dev->dev,
+				"Power gate HDMI failed\n");
+	}
 }
 
 static void valleyview_power_ungate_disp(struct drm_i915_private *dev_priv)
@@ -793,16 +806,22 @@ static void valleyview_power_ungate_disp(struct drm_i915_private *dev_priv)
 	}
 
 	/* 3. Power ungate display controller */
-    ret = set_power_state_with_timeout(dev_priv,
-            VLV_IOSFSB_PWRGT_CNT_CTRL,
-            VLV_PWRGT_DISP_CNT_MASK,
-            VLV_IOSFSB_PWRGT_STATUS,
-            VLV_PWRGT_DISP_CNT_MASK,
-            0);
-    if (ret) {
-        dev_err(&dev_priv->bridge_dev->dev,
-        "Power ungate DISP Controller timed out, resume might fail\n");
-    }
+	ret = set_power_state_with_timeout(dev_priv,
+		VLV_IOSFSB_PWRGT_CNT_CTRL,
+		VLV_PWRGT_DISP_CNT_MASK,
+		VLV_IOSFSB_PWRGT_STATUS,
+		VLV_PWRGT_DISP_CNT_MASK, 0);
+	if (ret) {
+		dev_err(&dev_priv->bridge_dev->dev,
+		"Power ungate DISP Controller timed out, resume might fail\n");
+	}
+
+	/* 4. VHDMI power switch */
+	ret = set_vhdmi_state(VHDMI_ON);
+	if (ret) {
+		dev_err(&dev_priv->bridge_dev->dev,
+				"Power gate VHDMI failed\n");
+	}
 }
 
 /* follow the sequence below for VLV suspend*/
@@ -824,6 +843,7 @@ static int valleyview_freeze(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 reg;
+	u32 i;
 
 	/* Save Hue/Saturation/Brightness/Contrast status */
 	intel_save_clr_mgr_status(dev);
@@ -862,6 +882,15 @@ static int valleyview_freeze(struct drm_device *dev)
 		cancel_work_sync(&dev_priv->hotplug_work);
 		cancel_work_sync(&dev_priv->gpu_error.work);
 		cancel_work_sync(&dev_priv->rps.work);
+
+		/* Clear any pending reset requests as we have cancelled the
+		* work function. They should be picked up after resume when
+		* new work is submitted*/
+		for (i = 0; i < I915_NUM_RINGS; i++)
+			atomic_set(&dev_priv->hangcheck[i].flags, 0);
+
+		atomic_clear_mask(I915_RESET_IN_PROGRESS_FLAG,
+			&dev_priv->gpu_error.reset_counter);
 
 		intel_modeset_suspend_hw(dev);
 	}

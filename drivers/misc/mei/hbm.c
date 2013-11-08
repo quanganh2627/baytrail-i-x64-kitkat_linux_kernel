@@ -143,7 +143,7 @@ int mei_hbm_start_wait(struct mei_device *dev)
 
 	if (ret <= 0 && (dev->hbm_state <= MEI_HBM_START)) {
 		dev->hbm_state = MEI_HBM_IDLE;
-		dev_err(&dev->pdev->dev, "wating for mei start failed\n");
+		dev_err(&dev->pdev->dev, "waiting for mei start failed\n");
 		return -ETIMEDOUT;
 	}
 	return 0;
@@ -171,7 +171,7 @@ int mei_hbm_start_req(struct mei_device *dev)
 
 	dev->hbm_state = MEI_HBM_IDLE;
 	if (mei_write_message(dev, mei_hdr, dev->wr_msg.data)) {
-		dev_err(&dev->pdev->dev, "version message writet failed\n");
+		dev_err(&dev->pdev->dev, "version message write failed\n");
 		dev->dev_state = MEI_DEV_RESETTING;
 		mei_reset(dev, 1);
 		return -EIO;
@@ -227,9 +227,6 @@ static int mei_hbm_prop_req(struct mei_device *dev)
 	unsigned long next_client_index;
 	unsigned long client_num;
 
-
-	client_num = dev->me_client_presentation_num;
-
 	next_client_index = find_next_bit(dev->me_clients_map, MEI_CLIENTS_MAX,
 					  dev->me_client_index);
 
@@ -239,6 +236,10 @@ static int mei_hbm_prop_req(struct mei_device *dev)
 
 		return 0;
 	}
+
+	client_num = dev->me_client_presentation_num;
+	if (WARN_ON(dev->me_clients_num <= client_num))
+		return -EIO;
 
 	dev->me_clients[client_num].client_id = next_client_index;
 	dev->me_clients[client_num].mei_flow_ctrl_creds = 0;
@@ -676,7 +677,10 @@ void mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr)
 
 	case HOST_ENUM_RES_CMD:
 		enum_res = (struct hbm_host_enum_response *) mei_msg;
-		memcpy(dev->me_clients_map, enum_res->valid_addresses, 32);
+		BUILD_BUG_ON(sizeof(dev->me_clients_map)
+				< sizeof(enum_res->valid_addresses));
+		memcpy(dev->me_clients_map, enum_res->valid_addresses,
+			sizeof(enum_res->valid_addresses));
 		if (dev->dev_state == MEI_DEV_INIT_CLIENTS &&
 		    dev->hbm_state == MEI_HBM_ENUM_CLIENTS) {
 				dev->init_clients_timer = 0;

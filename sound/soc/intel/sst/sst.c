@@ -134,11 +134,13 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 		}
 		if (header.p.header_high.part.large) {
 			size = header.p.header_low_payload;
-			if (SST_VALIDATE_MAILBOX_SIZE(size))
+			if (SST_VALIDATE_MAILBOX_SIZE(size)) {
 				memcpy_fromio(msg->mailbox_data,
 					drv->mailbox + drv->mailbox_recv_offset, size);
-			else
-				pr_err("Mailbox not copied.....\n");
+			} else {
+				pr_err("Mailbox not copied, payload siz is: %u\n", size);
+				header.p.header_low_payload = 0;
+			}
 		}
 		msg->mrfld_header = header;
 		msg->is_process_reply =
@@ -228,11 +230,13 @@ static irqreturn_t intel_sst_intr_mfld(int irq, void *context)
 		}
 		if (header.part.large) {
 			size = header.part.data;
-			if (SST_VALIDATE_MAILBOX_SIZE(size))
+			if (SST_VALIDATE_MAILBOX_SIZE(size)) {
 				memcpy_fromio(msg->mailbox_data,
 					drv->mailbox + drv->mailbox_recv_offset + 4, size);
-			else
-				pr_err("Mailbox not copied.....\n");
+			} else {
+				pr_err("Mailbox not copied, payload siz is: %u\n", size);
+				header.part.data = 0;
+			}
 		}
 		msg->header = header;
 		msg->is_process_reply =
@@ -593,7 +597,12 @@ static int intel_sst_probe(struct pci_dev *pci,
 		* put temporary check till better soln is available for FW
 		*/
 		ddr_base = relocate_imr_addr_mrfld(sst_drv_ctx->ddr_base);
-		if (ddr_base != MRFLD_FW_LSP_DDR_BASE) {
+		if (!sst_drv_ctx->pdata->lib_info) {
+			pr_err("%s:lib_info pointer NULL\n", __func__);
+			ret = -EINVAL;
+			goto do_release_regions;
+		}
+		if (ddr_base != sst_drv_ctx->pdata->lib_info->mod_base) {
 			pr_err("FW LSP DDR BASE does not match with IFWI\n");
 			ret = -EINVAL;
 			goto do_release_regions;

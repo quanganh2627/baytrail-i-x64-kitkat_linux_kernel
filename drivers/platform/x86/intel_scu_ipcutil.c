@@ -135,6 +135,47 @@ static struct chip_reset_event chip_reset_events[] = {
 	{ INTEL_MID_CPU_CHIP_PENWELL, "RESETIRQ1", "RESETIRQ2" },
 };
 
+struct osnib_target_os {
+	const char *target_os_name;
+	int id;
+};
+
+static struct osnib_target_os osnib_target_oses[] = {
+	{ "main", SIGNED_MOS_ATTR },
+	{ "charging", SIGNED_COS_ATTR  },
+	{ "recovery", SIGNED_RECOVERY_ATTR },
+	{ "fastboot", SIGNED_POS_ATTR },
+	{ "factory", SIGNED_FACTORY_ATTR },
+};
+
+
+struct osnib_wake_src {
+	u8 id;
+	const char *wakesrc_name;
+};
+
+static struct osnib_wake_src osnib_wake_srcs[] = {
+	{ WAKE_BATT_INSERT, "battery inserted" },
+	{ WAKE_PWR_BUTTON_PRESS, "power button pressed" },
+	{ WAKE_RTC_TIMER, "rtc timer" },
+	{ WAKE_USB_CHRG_INSERT, "usb charger inserted" },
+	{ WAKE_RESERVED, "reserved" },
+	{ WAKE_REAL_RESET, "real reset" },
+	{ WAKE_COLD_BOOT, "cold boot" },
+	{ WAKE_UNKNOWN, "unknown" },
+	{ WAKE_KERNEL_WATCHDOG_RESET, "kernel watchdog reset" },
+	{ WAKE_SECURITY_WATCHDOG_RESET, "security watchdog reset" },
+	{ WAKE_WATCHDOG_COUNTER_EXCEEDED, "watchdog counter exceeded" },
+	{ WAKE_POWER_SUPPLY_DETECTED, "power supply detected" },
+	{ WAKE_FASTBOOT_BUTTONS_COMBO, "fastboot combo" },
+	{ WAKE_NO_MATCHING_OSIP_ENTRY, "no matching osip entry" },
+	{ WAKE_CRITICAL_BATTERY, "critical battery" },
+	{ WAKE_INVALID_CHECKSUM, "invalid checksum" },
+	{ WAKE_FORCED_RESET, "forced reset"},
+	{ WAKE_ACDC_CHRG_INSERT, "ac charger inserted" },
+	{ WAKE_PMIC_WATCHDOG_RESET, "pmic watchdog reset" },
+};
+
 
 /* OSNIB allocation. */
 struct scu_ipc_osnib {
@@ -1137,12 +1178,22 @@ exit:
  */
 int intel_scu_ipc_write_osnib_rr(u8 rr)
 {
-	pr_info("intel_scu_ipc_write_osnib_rr: reboot reason %x\n", rr);
+	int i;
 
-	return oshob_info->scu_ipc_write_osnib(
-			&rr,
-			1,
-			offsetof(struct scu_ipc_osnib, target_mode));
+	for (i = 0; i < ARRAY_SIZE(osnib_target_oses); i++) {
+		if (osnib_target_oses[i].id == rr) {
+			pr_info("intel_scu_ipc_write_osnib_rr: reboot reason: %s\n",
+				osnib_target_oses[i].target_os_name);
+			return oshob_info->scu_ipc_write_osnib(
+				&rr,
+				1,
+				offsetof(struct scu_ipc_osnib, target_mode));
+		}
+	}
+
+	pr_warn("intel_scu_ipc_write_osnib_rr: reboot reason [0x%x] not found\n",
+			rr);
+	return -1;
 }
 EXPORT_SYMBOL_GPL(intel_scu_ipc_write_osnib_rr);
 
@@ -2483,6 +2534,133 @@ static void intel_mid_scu_ipc_cmd_debugfs_exit(void)
 {
 	debugfs_remove_recursive(scu_ipc_cmd_dir);
 }
+
+#ifdef DUMP_OSNIB
+
+static ssize_t intel_scu_ipc_osnib_read_reset_event(
+	struct file *file, char __user *buf,
+	size_t count, loff_t *ppos)
+{
+	loff_t pos = *ppos;
+	u8 rev[1] = {0};
+	int ret, i;
+
+	if (pos > 0)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(chip_reset_events); i++) {
+		if (chip_reset_events[i].id == oshob_info->platform_type) {
+			if (strcmp(
+				file->f_path.dentry->d_name.name,
+				chip_reset_events[i].reset_ev1_name) == 0)
+				ret = intel_scu_ipc_read_osnib_reset_ev1(rev);
+			else
+				ret = intel_scu_ipc_read_osnib_reset_ev2(rev);
+
+			if (ret != 0) {
+				pr_err("%s: cannot read %s, ret=%d",
+					__func__,
+					file->f_path.dentry->d_name.name,
+					ret);
+				return ret;
+			}
+
+			/*
+			*  buf is allocated by the kernel (4ko) and we will
+			*  never write more than 6 bytes so no need to check
+			*/
+			ret = sprintf(buf, "0x%x\n", rev[0]);
+			if (ret < 0) {
+				pr_err(
+					"%s: cannot convert the value, ret = %d",
+					__func__,
+					ret);
+				return ret;
+			}
+
+			*ppos += ret;
+			return ret;
+		}
+	}
+
+	pr_err("%s: param not found\n", __func__);
+	return -EFAULT;
+}
+
+/* Attach the debugfs operations methods */
+static const struct file_operations scu_ipc_osnib_fops = {
+	.owner = THIS_MODULE,
+	.read  = intel_scu_ipc_osnib_read_reset_event,
+};
+
+static struct dentry *scu_ipc_osnib_dir;
+static struct dentry *scu_ipc_osnib_file_reset_ev1;
+static struct dentry *scu_ipc_osnib_file_reset_ev2;
+
+/*
+*	debugfs interface: init interface.
+*/
+static int intel_mid_scu_ipc_osnib_debugfs_init(void)
+{
+	int i;
+
+	/* Create debugfs directory /sys/kernel/debug/intel_scu_osnib */
+	scu_ipc_osnib_dir = debugfs_create_dir("intel_scu_osnib", NULL);
+
+	if (!scu_ipc_osnib_dir) {
+		pr_err("%s: cannot create OSNIB debugfs directory\n", __func__);
+		return -1;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(chip_reset_events); i++) {
+		if (chip_reset_events[i].id == oshob_info->platform_type) {
+
+			scu_ipc_osnib_file_reset_ev1 = debugfs_create_file(
+					chip_reset_events[i].reset_ev1_name,
+					S_IFREG | S_IRUGO,
+					scu_ipc_osnib_dir,
+					NULL, &scu_ipc_osnib_fops);
+
+			if (!scu_ipc_osnib_file_reset_ev1) {
+				pr_err("%s: cannot create %s debugfs file\n",
+					__func__,
+					chip_reset_events[i].reset_ev1_name);
+				debugfs_remove(scu_ipc_osnib_dir);
+				return -1;
+			}
+
+			scu_ipc_osnib_file_reset_ev2 = debugfs_create_file(
+					chip_reset_events[i].reset_ev2_name,
+					S_IFREG | S_IRUGO,
+					scu_ipc_osnib_dir,
+					NULL, &scu_ipc_osnib_fops);
+
+			if (!scu_ipc_osnib_file_reset_ev2) {
+				pr_err("%s: cannot create %s debugfs file\n",
+					__func__,
+					chip_reset_events[i].reset_ev1_name);
+				debugfs_remove_recursive(scu_ipc_osnib_dir);
+				return -1;
+			}
+
+			return 0;
+		}
+	}
+
+	pr_err("%s: param not found\n", __func__);
+	return -EFAULT;
+}
+
+/*
+*	debugfs interface: exit interface.
+*/
+static void intel_mid_scu_ipc_osnib_debugfs_exit(void)
+{
+	debugfs_remove_recursive(scu_ipc_osnib_dir);
+}
+
+#endif /* DUMP_OSNIB */
+
 #endif /* CONFIG_DEBUG_FS */
 
 static const struct file_operations scu_ipc_fops = {
@@ -2505,6 +2683,7 @@ static int oshob_init(void)
 
 #ifdef DUMP_OSNIB
 	u8 rr, reset_ev1, reset_ev2, wd, alarm, wakesrc, *ptr;
+	int rr_found = 0, wksrc_found = 0;
 	u32 pmit, scu_trace[OSHOB_SCU_BUF_BASE_DW_SIZE*4], ia_trace;
 	int buff_size;
 #endif
@@ -2662,17 +2841,35 @@ static int oshob_init(void)
 		goto exit;
 	}
 
-	pr_warn("[BOOT] RR=0x%02x WD=0x%02x ALARM=0x%02x (osnib)\n",
-		rr, wd, alarm);
+	for (i = 0; i < ARRAY_SIZE(osnib_target_oses); i++) {
+		if (osnib_target_oses[i].id == rr) {
+			pr_warn("[BOOT] RR=[%s] WD=0x%02x ALARM=0x%02x (osnib)\n",
+				osnib_target_oses[i].target_os_name, wd, alarm);
+			rr_found++;
+			break;
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(osnib_wake_srcs); i++) {
+		if (osnib_wake_srcs[i].id == wakesrc) {
+			pr_warn("[BOOT] WAKESRC=[%s] (osnib)\n",
+				osnib_wake_srcs[i].wakesrc_name);
+			wksrc_found++;
+			break;
+		}
+	}
+
+	if ((!rr_found) || (!wksrc_found))
+		pr_err("[BOOT] Could not identify passed RR/WAKESRC\n");
 
 	for (i = 0; i < ARRAY_SIZE(chip_reset_events); i++) {
 		if (chip_reset_events[i].id == oshob_info->platform_type) {
-			pr_warn("[BOOT] WAKESRC=0x%02x %s=0x%02x %s=0x%02x (osnib)\n",
-				wakesrc,
+			pr_warn("[BOOT] %s=0x%02x %s=0x%02x (osnib)\n",
 				chip_reset_events[i].reset_ev1_name,
 				reset_ev1,
 				chip_reset_events[i].reset_ev2_name,
 				reset_ev2);
+			break;
 		}
 	}
 
@@ -2696,6 +2893,14 @@ static int oshob_init(void)
 		goto exit;
 	}
 
+#ifdef DUMP_OSNIB
+	ret = intel_mid_scu_ipc_osnib_debugfs_init();
+	if (ret != 0) {
+		pr_err("Cannot register OSNIB interface to debugfs\n");
+		goto exit;
+	} else
+		pr_info("OSNIB interface registered to debugfs\n");
+#endif /* DUMP_OSNIB */
 #endif /* CONFIG_DEBUG_FS */
 
 exit:
@@ -2759,6 +2964,10 @@ static void ipcutil_rpmsg_remove(struct rpmsg_channel *rpdev)
 		intel_mid_scu_ipc_oemnib_debugfs_exit();
 	}
 	intel_mid_scu_ipc_cmd_debugfs_exit();
+
+#ifdef DUMP_OSNIB
+	intel_mid_scu_ipc_osnib_debugfs_exit();
+#endif /* DUMP_OSNIB */
 #endif /* CONFIG_DEBUG_FS */
 
 	kfree(oshob_info);

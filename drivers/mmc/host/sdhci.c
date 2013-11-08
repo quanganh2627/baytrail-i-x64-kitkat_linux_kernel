@@ -2236,6 +2236,11 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	sdhci_clear_set_irqs(host, ier, SDHCI_INT_DATA_AVAIL);
 
 	/*
+	 * set the data timeout register to be max value
+	 */
+	sdhci_writeb(host, 0xe, SDHCI_TIMEOUT_CONTROL);
+
+	/*
 	 * Issue CMD19 repeatedly till Execute Tuning is set to 0 or the number
 	 * of loops reaches 40 times or a timeout of 150ms occurs.
 	 */
@@ -2244,6 +2249,7 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		struct mmc_command cmd = {0};
 		struct mmc_request mrq = {NULL};
 		unsigned int intmask;
+		unsigned long t = jiffies + msecs_to_jiffies(150);
 
 		if (!tuning_loop_counter && !timeout)
 			break;
@@ -2284,47 +2290,58 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		sdhci_writew(host, SDHCI_TRNS_READ, SDHCI_TRANSFER_MODE);
 
 		sdhci_send_command(host, &cmd);
+		mmiowb();
 
 		host->cmd = NULL;
 		host->mrq = NULL;
 
 		/* delete the timer created by send command */
 		del_timer(&host->timer);
-		intmask = sdhci_readl(host, SDHCI_INT_STATUS);
-		if (intmask & SDHCI_INT_DATA_AVAIL) {
-			host->tuning_done = 1;
-			sdhci_writel(host, intmask & SDHCI_INT_DATA_AVAIL,
-				SDHCI_INT_STATUS);
-		}
 
-		spin_unlock(&host->lock);
-		enable_irq(host->irq);
+		if (host->quirks2 & SDHCI_QUIRK2_TUNING_POLL) {
+			while (!time_after(jiffies, t)) {
+				intmask = sdhci_readl(host, SDHCI_INT_STATUS);
+				if (intmask & SDHCI_INT_DATA_AVAIL) {
+					host->tuning_done = 1;
+					sdhci_writel(host,
+						intmask & SDHCI_INT_DATA_AVAIL,
+						SDHCI_INT_STATUS);
+					break;
+				}
+			}
+		} else {
+			intmask = sdhci_readl(host, SDHCI_INT_STATUS);
+			if (intmask & SDHCI_INT_DATA_AVAIL) {
+				host->tuning_done = 1;
+				sdhci_writel(host,
+					intmask & SDHCI_INT_DATA_AVAIL,
+					SDHCI_INT_STATUS);
+			}
+			spin_unlock(&host->lock);
+			enable_irq(host->irq);
 
-		/* Wait for Buffer Read Ready interrupt */
-		if (!host->tuning_done)
-			wait_event_interruptible_timeout(host->buf_ready_int,
+			if (!host->tuning_done)
+				/* Wait for Buffer Read Ready interrupt */
+				wait_event_interruptible_timeout(
+						host->buf_ready_int,
 						(host->tuning_done == 1),
 						msecs_to_jiffies(50));
-		disable_irq(host->irq);
-		spin_lock(&host->lock);
+			disable_irq(host->irq);
+			spin_lock(&host->lock);
 
-		intmask = sdhci_readl(host, SDHCI_INT_STATUS);
-		if (intmask & SDHCI_INT_DATA_AVAIL) {
-			host->tuning_done = 1;
-			sdhci_writel(host, intmask & SDHCI_INT_DATA_AVAIL,
-				SDHCI_INT_STATUS);
+			intmask = sdhci_readl(host, SDHCI_INT_STATUS);
+			if (intmask & SDHCI_INT_DATA_AVAIL) {
+				host->tuning_done = 1;
+				sdhci_writel(host,
+					intmask & SDHCI_INT_DATA_AVAIL,
+					SDHCI_INT_STATUS);
+			}
 		}
 
 		if (!host->tuning_done) {
 			pr_warn(DRIVER_NAME ": Timeout waiting for "
 				"Buffer Read Ready interrupt during tuning "
-				"procedure, falling back to fixed sampling "
-				"clock\n");
-			ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
-			ctrl &= ~SDHCI_CTRL_TUNED_CLK;
-			ctrl &= ~SDHCI_CTRL_EXEC_TUNING;
-			sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
-
+				"procedure\n");
 			pr_warn("%s: present %08x, ctrl2 %08x, irq %08x\n"
 				"%s: loop %d, timeout %ld, retry....\n",
 				mmc_hostname(host->mmc),
@@ -2333,17 +2350,18 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 				sdhci_readl(host, SDHCI_INT_STATUS),
 				mmc_hostname(host->mmc),
 				tuning_loop_counter, timeout);
-
-			err = -EIO;
-			goto out;
 		}
 
 		host->tuning_done = 0;
 
 		ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
-		tuning_loop_counter--;
-		timeout--;
-		mdelay(1);
+		if (tuning_loop_counter)
+			tuning_loop_counter--;
+		if (timeout)
+			timeout--;
+		spin_unlock(&host->lock);
+		usleep_range(900, 1100);
+		spin_lock(&host->lock);
 	} while (ctrl & SDHCI_CTRL_EXEC_TUNING);
 
 	/*
