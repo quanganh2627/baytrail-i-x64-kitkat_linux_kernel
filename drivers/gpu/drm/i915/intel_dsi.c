@@ -87,6 +87,7 @@
 #include <drm/i915_drm.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
+#include <asm/intel-mid.h>
 #ifdef CONFIG_CRYSTAL_COVE
 #include "linux/mfd/intel_mid_pmic.h"
 #endif
@@ -601,6 +602,11 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 
 	DRM_DEBUG_KMS("\n");
 
+	if (board_id == BOARD_ID_BAYROCK) {
+		mode = intel_dsi->panel_fixed_mode;
+		adjusted_mode = intel_dsi->panel_fixed_mode;
+	}
+
 	intel_enable_dsi_pll(intel_dsi);
 	intel_dsi_device_ready(intel_encoder);
 
@@ -701,12 +707,14 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 
 	I915_WRITE(MIPI_INTR_STAT(pipe), 0xFFFFFFFF);
 
-	/*
-	 * Enabling panel fitter produces banding effect in non 24 bit
-	 * panels. Until we get a clarification from h/w designers don't
-	 * enable Panel Fitter in the MIPI DSI path.
-	 */
-	return;
+	if (board_id != BOARD_ID_BAYROCK) {
+		/*
+		 * Enabling panel fitter produces banding effect in non 24 bit
+		 * panels. Until we get a clarification from h/w designers don't
+		 * enable Panel Fitter in the MIPI DSI path.
+		 */
+		return;
+	}
 
 	if (intel_dsi->pfit && (adjusted_mode->hdisplay < PFIT_SIZE_LIMIT)) {
 		u32 val = 0;

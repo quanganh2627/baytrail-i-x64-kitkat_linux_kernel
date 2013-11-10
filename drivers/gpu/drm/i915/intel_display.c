@@ -31,6 +31,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/vgaarb.h>
+#include <asm/intel-mid.h>
 #include <drm/drm_edid.h>
 #include <linux/dma_remapping.h>
 #include "drmP.h"
@@ -2390,6 +2391,9 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	} else {
 		intel_crtc->dspaddr_offset = linear_offset;
 	}
+
+	I915_WRITE(PIPESRC(plane),
+		   ((fb->width - 1) << 16) | (fb->height - 1));
 
 	I915_WRITE(DSPSTRIDE(plane), fb->pitches[0]);
 	if (INTEL_INFO(dev)->gen >= 4) {
@@ -8030,6 +8034,12 @@ static void intel_setup_outputs(struct drm_device *dev)
 		 *
 		 * Can be fixed later when VBT or equivalent is available
 		 */
+		/*
+		 * For Bayrock, if no paneil ID specified by command line,
+		 * use Panasonic MIPI panel with ID 3 as default one
+		 */
+		if (i915_mipi_panel_id <= 0 && board_id == BOARD_ID_BAYROCK)
+			i915_mipi_panel_id = 3;
 		if (i915_mipi_panel_id <= 0)
 			intel_dp_init(dev, DP_C, PORT_C);
 		else

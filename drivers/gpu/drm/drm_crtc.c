@@ -3562,6 +3562,8 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	struct drm_pending_vblank_event *e = NULL;
 	unsigned long flags;
 	int ret = -EINVAL;
+	struct drm_connector *connector = NULL;
+	uint64_t panel_fitter_en = 0;
 
 	if (page_flip->flags & ~DRM_MODE_PAGE_FLIP_FLAGS ||
 	    page_flip->reserved != 0)
@@ -3591,10 +3593,36 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		goto out;
 	fb = obj_to_fb(obj);
 
-	if (crtc->mode.hdisplay > fb->width ||
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (connector->encoder->crtc == crtc) {
+			int i;
+			for (i = 0; i < connector->properties.count; i++) {
+				struct drm_mode_object *obj;
+				struct drm_property *property;
+				obj = drm_mode_object_find(dev,
+						connector->properties.ids[i],
+						DRM_MODE_OBJECT_PROPERTY);
+					if (!obj) {
+						ret = -EINVAL;
+						goto out;
+					}
+				property = obj_to_property(obj);
+				if (!strcmp(property->name, "pfit")) {
+					drm_connector_property_get_value(
+							connector,
+							property,
+							&panel_fitter_en);
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	if ((crtc->mode.hdisplay > fb->width ||
 	    crtc->mode.vdisplay > fb->height ||
 	    crtc->x > fb->width - crtc->mode.hdisplay ||
-	    crtc->y > fb->height - crtc->mode.vdisplay) {
+	    crtc->y > fb->height - crtc->mode.vdisplay) && !panel_fitter_en) {
 		DRM_DEBUG_KMS("Invalid fb size %ux%u for CRTC viewport %ux%u+%d+%d.\n",
 			      fb->width, fb->height,
 			      crtc->mode.hdisplay, crtc->mode.vdisplay,
@@ -3602,7 +3630,6 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		ret = -ENOSPC;
 		goto out;
 	}
-
 	if (page_flip->flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		ret = -ENOMEM;
 		spin_lock_irqsave(&dev->event_lock, flags);
