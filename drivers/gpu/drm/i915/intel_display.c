@@ -5125,6 +5125,10 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 		case INTEL_OUTPUT_DSI:
 			is_dsi = true;
 			intel_dsi = enc_to_intel_dsi(&encoder->base);
+			if (board_id == BOARD_ID_BAYROCK) {
+				mode = intel_dsi->panel_fixed_mode;
+				adjusted_mode = intel_dsi->panel_fixed_mode;
+			}
 			break;
 		case INTEL_OUTPUT_EDP:
 			is_edp = true;
