@@ -714,6 +714,11 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 		 * enable Panel Fitter in the MIPI DSI path.
 		 */
 		return;
+	} else {
+		val = PFIT_ENABLE | (intel_crtc->pipe <<
+			PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
+		I915_WRITE(PFIT_CONTROL, val);
+		return;
 	}
 
 	if (intel_dsi->pfit && (adjusted_mode->hdisplay < PFIT_SIZE_LIMIT)) {
@@ -762,11 +767,45 @@ intel_dsi_detect(struct drm_connector *connector, bool force)
 	return status;
 }
 
+static struct drm_display_mode *get_mode_12x8()
+{
+	struct drm_display_mode *mode = NULL;
+
+	/* Allocate */
+	mode = kzalloc(sizeof(*mode), GFP_KERNEL);
+	if (!mode) {
+		DRM_DEBUG_KMS("Panasonic panel: No memory\n");
+		return NULL;
+	}
+
+	/* Hardcode 1280x800 */
+	mode->hdisplay = 1280;
+	mode->hsync_start = mode->hdisplay + 110;
+	mode->hsync_end = mode->hsync_start + 38;
+	mode->htotal = mode->hsync_end + 90;
+
+	mode->vdisplay = 800;
+	mode->vsync_start = mode->vdisplay + 15;
+	mode->vsync_end = mode->vsync_start + 10;
+	mode->vtotal = mode->vsync_end + 10;
+	mode->vrefresh = 60;
+	mode->clock =  mode->vrefresh * mode->vtotal *
+			mode->htotal / 1000;
+
+	/* Configure */
+	drm_mode_set_name(mode);
+	drm_mode_set_crtcinfo(mode, 0);
+	mode->type |= DRM_MODE_TYPE_PREFERRED;
+
+	return mode;
+}
+
 static int intel_dsi_get_modes(struct drm_connector *connector)
 {
 	u32 count = 0;
 	struct intel_dsi *intel_dsi = intel_attached_dsi(connector);
 	struct drm_display_mode *mode = NULL;
+	struct drm_display_mode *input_mode = NULL;
 
 	/* Fix panel, No need to read modes again If we already
 	have modes with connector */
@@ -786,7 +825,19 @@ static int intel_dsi_get_modes(struct drm_connector *connector)
 		return 0;
 	}
 
-	mode = drm_mode_duplicate(connector->dev, intel_dsi->panel_fixed_mode);
+	if (board_id == BOARD_ID_BAYROCK) {
+		input_mode = get_mode_12x8();
+		if (!input_mode) {
+			DRM_ERROR("out of memory for fixed panel mode\n");
+			return 0;
+		}
+		mode = drm_mode_duplicate(connector->dev, input_mode);
+		kfree(input_mode);
+	} else {
+		mode = drm_mode_duplicate(connector->dev,
+				intel_dsi->panel_fixed_mode);
+	}
+
 	if (!mode)
 		return 0;
 	else
