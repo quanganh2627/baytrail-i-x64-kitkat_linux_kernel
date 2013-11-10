@@ -186,6 +186,10 @@ struct intel_crtc {
 	bool cursor_visible;
 	unsigned int bpp;
 
+	bool primary_alpha;
+	bool sprite0_alpha;
+	bool sprite1_alpha;
+
 	/* We can share PLLs across outputs if the timings match */
 	struct intel_pch_pll *pch_pll;
 };
