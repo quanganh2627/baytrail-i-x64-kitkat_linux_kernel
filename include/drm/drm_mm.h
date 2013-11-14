@@ -224,6 +224,11 @@ extern int drm_mm_init(struct drm_mm *mm,
 extern void drm_mm_takedown(struct drm_mm *mm);
 extern int drm_mm_clean(struct drm_mm *mm);
 extern int drm_mm_pre_get(struct drm_mm *mm);
+extern struct drm_mm_node *drm_mm_create_block(
+					struct drm_mm *mm,
+					unsigned long start,
+					unsigned long size,
+					bool atomic);
 
 static inline struct drm_mm *drm_get_mm(struct drm_mm_node *block)
 {

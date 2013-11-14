@@ -104,6 +104,16 @@ struct intel_pch_pll {
 };
 #define I915_NUM_PLLS 2
 
+struct rotation_state {
+	/* Added for rotation */
+	uint32_t planea_rot;
+	uint32_t planeb_rot;
+	uint32_t spritea_rot;
+	uint32_t spriteb_rot;
+	uint32_t spritec_rot;
+	uint32_t sprited_rot;
+};
+
 /* Interface history:
  *
  * 1.1: Original.
@@ -890,6 +900,8 @@ typedef struct drm_i915_private {
 		size_t mappable_gtt_total;
 		size_t object_memory;
 		u32 object_count;
+		/* Start of the Stolen area*/
+		unsigned long stolen_base;
 	} mm;
 
 	/* Old dri1 support infrastructure, beware the dragons ya fools entering
@@ -1071,6 +1083,9 @@ typedef struct drm_i915_private {
 	int shut_down_state;
 	bool is_resuming;
 	bool is_turbo_enabled;
+
+	/* Added for rotation */
+	struct rotation_state rot_state;
 } drm_i915_private_t;
 
 /* Iterate over initialised rings */
@@ -1115,6 +1130,8 @@ struct drm_i915_gem_object {
 
 	/** Current space allocated to this object in the GTT, if any. */
 	struct drm_mm_node *gtt_space;
+	/* Use stolen area for obj, instead of backing it from shmem. */
+	struct drm_mm_node *stolen;
 	struct list_head gtt_list;
 
 	/** This object's place on the active/inactive lists */
@@ -1202,6 +1219,11 @@ struct drm_i915_gem_object {
 
 	unsigned int has_aliasing_ppgtt_mapping:1;
 	unsigned int has_global_gtt_mapping:1;
+
+	/*
+	 * Is the object associated with User created FB.
+	 */
+	unsigned int user_fb:1;
 
 	/*
 	 * Is the object to be mapped as read-only to the GPU
@@ -1459,7 +1481,6 @@ extern int i915_enable_watchdog __read_mostly;
 extern int i915_enable_ppgtt __read_mostly;
 extern int i915_enable_turbo __read_mostly;
 extern int i915_psr_support __read_mostly;
-extern struct drm_display_mode rot_mode;
 
 extern int i915_suspend(struct drm_device *dev, pm_message_t state);
 extern int i915_resume(struct drm_device *dev);
@@ -1655,6 +1676,8 @@ i915_gem_is_vmap_object(struct drm_i915_gem_object *obj)
 	const struct drm_i915_gem_object_ops *ops = obj->base.driver_private;
 	if (ops == NULL)
 		return 0;
+	if (ops->is_vmap_obj == NULL)
+		return 0;
 	return ops->is_vmap_obj();
 }
 
@@ -1759,6 +1782,14 @@ int i915_gem_evict_everything(struct drm_device *dev, bool purgeable_only);
 /* i915_gem_stolen.c */
 int i915_gem_init_stolen(struct drm_device *dev);
 void i915_gem_cleanup_stolen(struct drm_device *dev);
+struct drm_i915_gem_object *
+i915_gem_object_create_stolen(struct drm_device *dev, u32 size);
+struct drm_mm_node *
+i915_reserve_stolen_for_preallocated(struct drm_device *dev,
+					       u32 stolen_offset,
+					       u32 size);
+void i915_gem_object_move_to_stolen(struct drm_i915_gem_object *obj);
+void i915_gem_object_release_stolen(struct drm_i915_gem_object *obj);
 
 /* i915_gem_tiling.c */
 void i915_gem_detect_bit_6_swizzle(struct drm_device *dev);

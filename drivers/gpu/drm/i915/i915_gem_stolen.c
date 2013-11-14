@@ -190,8 +190,38 @@ static void i915_setup_pctx(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_mm_node *pctx;
-	unsigned long pctx_paddr;
+	unsigned int pctx_paddr;
 	int pctx_size = 24*1024;
+
+	if (!dev_priv->need_pcbr_setup) {
+		/* BIOS set it up already, grab the pre-alloc'd space */
+		int pcbr_offset;
+
+		pctx_paddr = I915_READ(VLV_PCBR);
+		DRM_DEBUG_DRIVER("PhysAddr of PwrCtx given by BIOS is 0x%x\n",
+			pctx_paddr);
+
+		/*BUG_ON((pctx_paddr >> 20) == 0);*/
+
+		if ((pctx_paddr < dev_priv->mm.stolen_base) ||
+		    (pctx_paddr > (dev_priv->mm.stolen_base +
+				dev_priv->mm.gtt->stolen_size)) ||
+		    ((pctx_paddr + pctx_size) > (dev_priv->mm.stolen_base +
+					     dev_priv->mm.gtt->stolen_size))) {
+			DRM_ERROR("PwrCtx not allocatd from stolen by BIOS\n");
+			return;
+		}
+
+		pcbr_offset = (pctx_paddr & (~4095)) - dev_priv->mm.stolen_base;
+		pctx = i915_reserve_stolen_for_preallocated(dev_priv->dev,
+								pcbr_offset,
+								pctx_size);
+		if (!pctx)
+			goto err;
+
+		dev_priv->vlv_pctx = pctx;
+		return;
+	}
 
 	pctx = drm_mm_search_free(&dev_priv->mm.stolen, pctx_size, 4096, 0);
 	if (pctx)
@@ -206,6 +236,8 @@ static void i915_setup_pctx(struct drm_device *dev)
 	dev_priv->vlv_pctx = pctx;
 	I915_WRITE(VLV_PCBR, pctx_paddr);
 
+	DRM_DEBUG_DRIVER("PhyAddr of PwrCtx allocated by Driver is 0x%x\n",
+			pctx_paddr);
 	return;
 
 err_free_pctx:
@@ -240,6 +272,21 @@ int i915_gem_init_stolen(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	unsigned long prealloc_size = dev_priv->mm.gtt->stolen_size;
+	int bios_reserved = 0;
+
+	dev_priv->mm.stolen_base = i915_stolen_to_phys(dev, 0);
+	if (dev_priv->mm.stolen_base == 0) {
+		DRM_ERROR("Stolen Base detected as NULL\n");
+		return 0;
+	}
+
+	DRM_DEBUG_DRIVER("The Base address of the Stolen area is 0x%lx\n",
+			dev_priv->mm.stolen_base);
+
+	if (IS_VALLEYVIEW(dev))
+		bios_reserved = 1024*1024; /* top 1MB on VLV/BYT */
+	BUG_ON(bios_reserved > dev_priv->mm.gtt->stolen_size);
+	prealloc_size -= bios_reserved;
 
 	/* Basic memrange allocator for stolen space */
 	drm_mm_init(&dev_priv->mm.stolen, 0, prealloc_size);
@@ -258,9 +305,274 @@ int i915_gem_init_stolen(struct drm_device *dev)
 		i915_setup_compression(dev, cfb_size);
 	}
 
-	/*Setup PCBR only if FW hasnt set it up already*/
-	if (IS_VALLEYVIEW(dev) && i915_powersave && dev_priv->need_pcbr_setup)
+	/*Setup PCBR only if FW hasnt set it up already or
+	  mark the stolen space, already used by BIOS for pctx,
+	  as reserved */
+	if (IS_VALLEYVIEW(dev) && i915_powersave)
 		i915_setup_pctx(dev);
 
 	return 0;
+}
+
+static struct sg_table *
+i915_pages_create_for_stolen(struct drm_device *dev,
+			     u32 offset, u32 size)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct sg_table *st;
+	struct scatterlist *sg;
+
+	DRM_DEBUG_DRIVER("offset=0x%x, size=0x%x\n", offset, size);
+	BUG_ON(offset > dev_priv->mm.gtt->stolen_size - size);
+
+	/* We hide that we have no struct page backing our stolen object
+	 * by wrapping the contiguous physical allocation with a fake
+	 * dma mapping in a single scatterlist.
+	 */
+
+	st = kmalloc(sizeof(*st), GFP_KERNEL);
+	if (st == NULL)
+		return NULL;
+
+	if (sg_alloc_table(st, 1, GFP_KERNEL)) {
+		kfree(st);
+		return NULL;
+	}
+
+	sg = st->sgl;
+	sg->offset = offset;
+	sg->length = size;
+
+	sg_dma_address(sg) = (dma_addr_t)dev_priv->mm.stolen_base + offset;
+	sg_dma_len(sg) = size;
+
+	return st;
+}
+
+static int
+i915_gem_object_get_pages_stolen(struct drm_i915_gem_object *obj,
+				  struct page **pages,
+				  gfp_t gfpmask,
+				  u32 *offset)
+{
+	BUG();
+	return -EINVAL;
+}
+
+static int i915_gem_object_put_pages_stolen(struct drm_i915_gem_object *obj)
+{
+	/* Should only be called during free */
+	sg_free_table(obj->sg_table);
+	kfree(obj->sg_table);
+	return 0;
+}
+
+static const struct drm_i915_gem_object_ops i915_gem_object_stolen_ops = {
+	.get_pages = i915_gem_object_get_pages_stolen,
+	.put_pages = i915_gem_object_put_pages_stolen,
+	.release   = i915_gem_object_release_stolen,
+};
+
+static struct drm_i915_gem_object *
+_i915_gem_object_create_stolen(struct drm_device *dev,
+			       struct drm_mm_node *stolen)
+{
+	struct drm_i915_gem_object *obj;
+
+	/* Allocate the new object */
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	if (obj == NULL)
+		return NULL;
+
+	if (drm_gem_private_object_init(dev, &(obj->base), stolen->size))
+		goto cleanup;
+
+	i915_gem_object_init(dev, obj, &i915_gem_object_stolen_ops);
+
+	obj->sg_table = i915_pages_create_for_stolen(dev,
+						stolen->start, stolen->size);
+	if (obj->sg_table == NULL)
+		goto cleanup;
+
+	obj->stolen = stolen;
+
+	obj->base.write_domain = I915_GEM_DOMAIN_GTT;
+	obj->base.read_domains = I915_GEM_DOMAIN_GTT;
+	obj->cache_level = I915_CACHE_NONE;
+
+	obj->pages = NULL;
+
+	DRM_DEBUG_DRIVER("Created stolen obj: with offset=0x%lx, size=0x%lx\n",
+			stolen->start, stolen->size);
+	return obj;
+
+cleanup:
+	kfree(obj);
+	return NULL;
+}
+
+struct drm_i915_gem_object *
+i915_gem_object_create_stolen(struct drm_device *dev, u32 size)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_i915_gem_object *obj;
+	struct drm_mm_node *stolen;
+
+	if (dev_priv->mm.stolen_base == 0)
+		return NULL;
+
+	if (size == 0)
+		return NULL;
+
+	stolen = drm_mm_search_free(&dev_priv->mm.stolen, size, 4096, 0);
+	if (stolen)
+		stolen = drm_mm_get_block(stolen, size, 4096);
+	if (stolen == NULL)
+		return NULL;
+
+	obj = _i915_gem_object_create_stolen(dev, stolen);
+	if (obj)
+		return obj;
+
+	drm_mm_put_block(stolen);
+	return NULL;
+}
+
+static void i915_memset_stolen_obj(struct drm_device *dev,
+					struct drm_i915_gem_object *obj)
+{
+	if (obj->gtt_space == NULL) {
+		int ret;
+		char __iomem *base;
+		int size = obj->base.size;
+		struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+		unsigned alignment = 0;
+		bool map_and_fenceable =  true;
+
+		ret = i915_gem_object_pin(obj, alignment, map_and_fenceable);
+		if (ret) {
+			DRM_ERROR("Mapping of User FB to GTT failed\n");
+			return;
+		}
+
+		/* Get the CPU virtual address of the frame buffer */
+		base =
+		   ioremap_wc(dev_priv->mm.gtt_base_addr + obj->gtt_offset,
+			size);
+		if (base == NULL) {
+			DRM_ERROR("Mapping of User FB to CPU failed\n");
+			i915_gem_object_unpin(obj);
+			return;
+		}
+
+		memset_io(base, 0, size);
+
+		iounmap(base);
+		i915_gem_object_unpin(obj);
+
+		DRM_DEBUG_DRIVER(
+		   "UserFB obj ptr=0x%x cleared using CPU address 0x%x\n",
+			(u32)obj, (u32)base);
+	} else
+		BUG_ON(1);
+}
+
+void
+i915_gem_object_move_to_stolen(struct drm_i915_gem_object *obj)
+{
+	struct drm_device *dev = obj->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_mm_node *stolen;
+	u32 size = obj->base.size;
+
+	if (obj->stolen) {
+		BUG_ON(obj->sg_table == NULL);
+		return;
+	}
+
+	if (dev_priv->mm.stolen_base == 0)
+		return;
+
+	if (size == 0)
+		return;
+
+	stolen = drm_mm_search_free(&dev_priv->mm.stolen, size, 4096, 0);
+	if (stolen)
+		stolen = drm_mm_get_block(stolen, size, 4096);
+	if (stolen == NULL) {
+		DRM_DEBUG_DRIVER("ran out of stolen space\n");
+		return;
+	}
+	/* Set up the object to use the stolen memory,
+	 * backing store no longer managed by shmem layer */
+	drm_gem_object_release(&(obj->base));
+	obj->base.filp = NULL;
+	obj->base.driver_private = (void *)&i915_gem_object_stolen_ops;
+
+	obj->sg_table = i915_pages_create_for_stolen(dev,
+						stolen->start, stolen->size);
+	if (obj->sg_table == NULL)
+		goto cleanup;
+
+	obj->stolen = stolen;
+
+	obj->base.write_domain = I915_GEM_DOMAIN_GTT;
+	obj->base.read_domains = I915_GEM_DOMAIN_GTT;
+	obj->cache_level = I915_CACHE_NONE;
+
+	obj->pages = NULL;
+
+	DRM_DEBUG_DRIVER("Obj moved to stolen with ptr=0x%x, size=%x\n",
+					(unsigned int)obj, size);
+
+	/* Any allocation from shmem area is also zeroed out.
+	   Need to do the same for allocations from stolen area */
+	i915_memset_stolen_obj(dev, obj);
+	return;
+
+cleanup:
+	drm_mm_put_block(stolen);
+	return;
+}
+
+struct drm_mm_node *
+i915_reserve_stolen_for_preallocated(struct drm_device *dev,
+					       u32 stolen_offset,
+					       u32 size)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_mm_node *stolen;
+
+	if (dev_priv->mm.stolen_base == 0)
+		return NULL;
+
+	DRM_DEBUG_DRIVER("Creating preallocated stolen object:"\
+					 "stolen_offset=%x, size=%x\n",
+					 stolen_offset, size);
+
+	/* KISS and expect everything to be page-aligned */
+	BUG_ON(stolen_offset & 4095);
+	BUG_ON(size & 4095);
+
+	if (WARN_ON(size == 0))
+		return NULL;
+
+	stolen = drm_mm_create_block(&dev_priv->mm.stolen,
+				     stolen_offset, size,
+				     false);
+	if (stolen == NULL) {
+		DRM_DEBUG_DRIVER("failed to allocate stolen space\n");
+		return NULL;
+	}
+
+	return stolen;
+}
+
+void
+i915_gem_object_release_stolen(struct drm_i915_gem_object *obj)
+{
+	if (obj->stolen) {
+		drm_mm_put_block(obj->stolen);
+		obj->stolen = NULL;
+	}
 }

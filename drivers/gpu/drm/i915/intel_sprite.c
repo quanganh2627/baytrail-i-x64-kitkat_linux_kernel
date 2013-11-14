@@ -401,6 +401,7 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_framebuffer *fb,
 	bool rotate = false;
 	unsigned long sprsurf_offset, linear_offset;
 	int pixel_size = drm_format_plane_cpp(fb->pixel_format, 0);
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
 
 	sprctl = I915_READ(SPCNTR(pipe, plane));
 	/* Mask out pixel format bits in case we change it */
@@ -478,9 +479,9 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_framebuffer *fb,
 	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size);
 	I915_WRITE(SPSTRIDE(pipe, plane), fb->pitches[0]);
 	if (rotate)
-		I915_WRITE(SPPOS(pipe, plane), ((rot_mode.vdisplay -
+		I915_WRITE(SPPOS(pipe, plane), ((crtc->hwmode.vdisplay -
 			(crtc_y + crtc_h + 1)) << 16) |
-				(rot_mode.hdisplay - (crtc_x + crtc_w + 1)));
+			(crtc->hwmode.hdisplay - (crtc_x + crtc_w + 1)));
 	else
 		I915_WRITE(SPPOS(pipe, plane), (crtc_y << 16) | crtc_x);
 
@@ -494,14 +495,16 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_framebuffer *fb,
 	if (obj->tiling_mode != I915_TILING_NONE) {
 		if (rotate) {
 			I915_WRITE(SPTILEOFF(pipe, plane),
-				(((crtc_h + 1) << 16) | (crtc_w + 1)));
+				((y + crtc_h) << 16) | (x + crtc_w));
 		} else
 			I915_WRITE(SPTILEOFF(pipe, plane), (y << 16) | x);
 	} else {
 		if (rotate) {
-			I915_WRITE(SPLINOFF(pipe, plane),
-				(((crtc_h + 1) * (crtc_w + 1) *
-				pixel_size)) - pixel_size);
+			int rot_linoff = linear_offset +
+					 crtc_h * fb->pitches[0] +
+					 (crtc_w + 1) * pixel_size;
+			I915_WRITE(SPLINOFF(pipe, plane), rot_linoff);
+
 		} else
 			I915_WRITE(SPLINOFF(pipe, plane), linear_offset);
 	}
@@ -918,12 +921,14 @@ intel_disable_primary(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	int reg = DSPCNTR(intel_crtc->plane);
+	int plane = intel_crtc->plane;
+	int reg = DSPCNTR(plane);
 
 	if (intel_crtc->primary_disabled)
 		return;
 
 	I915_WRITE(reg, I915_READ(reg) & ~DISPLAY_PLANE_ENABLE);
+	I915_WRITE(DSPSURF(plane), I915_READ(DSPSURF(plane)));
 
 	intel_crtc->primary_disabled = true;
 	intel_update_fbc(dev);
@@ -1085,10 +1090,9 @@ void intel_unpin_sprite_work_fn(struct work_struct *__work)
 	if (work->old_fb_obj != NULL)
 		intel_unpin_fb_obj(work->old_fb_obj);
 
-	drm_gem_object_unreference(&work->pending_flip_obj->base);
-
 	if (work->old_fb_obj != NULL)
 		drm_gem_object_unreference(&work->old_fb_obj->base);
+
 	mutex_unlock(&work->dev->struct_mutex);
 	kfree(work);
 }
@@ -1123,34 +1127,6 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	intel_fb = to_intel_framebuffer(fb);
 	obj = intel_fb->obj;
 	old_obj = intel_plane->old_obj;
-
-	if (event) {
-		work = kzalloc(sizeof *work, GFP_KERNEL);
-		if (work == NULL)
-			return -ENOMEM;
-		work->event = event;
-		work->dev = dev;
-		work->old_fb_obj = old_obj;
-		INIT_WORK(&work->work, intel_unpin_sprite_work_fn);
-
-		ret = drm_vblank_get(dev, intel_crtc->pipe);
-		if (ret)
-			goto free_work;
-
-		/* We borrow the event spin lock for protecting unpin_work */
-		spin_lock_irqsave(&dev->event_lock, flags);
-		if (intel_crtc->sprite_unpin_work) {
-			spin_unlock_irqrestore(&dev->event_lock, flags);
-			kfree(work);
-			drm_vblank_put(dev, intel_crtc->pipe);
-			intel_crtc->sprite_unpin_work = NULL;
-			DRM_ERROR("flip queue: crtc already busy\n");
-			return -EBUSY;
-		}
-
-		intel_crtc->sprite_unpin_work = work;
-		spin_unlock_irqrestore(&dev->event_lock, flags);
-	}
 
 	src_w = src_w >> 16;
 	src_h = src_h >> 16;
@@ -1204,15 +1180,36 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	}
 
 	if (event) {
+		work = kzalloc(sizeof *work, GFP_KERNEL);
+		if (work == NULL)
+			return -ENOMEM;
+		work->event = event;
+		work->dev = dev;
+		work->old_fb_obj = old_obj;
+		INIT_WORK(&work->work, intel_unpin_sprite_work_fn);
+
+		ret = drm_vblank_get(dev, intel_crtc->pipe);
+		if (ret)
+			goto free_work;
+
+		/* We borrow the event spin lock for protecting unpin_work */
+		spin_lock_irqsave(&dev->event_lock, flags);
+		if (intel_crtc->sprite_unpin_work) {
+			spin_unlock_irqrestore(&dev->event_lock, flags);
+			kfree(work);
+			drm_vblank_put(dev, intel_crtc->pipe);
+			intel_crtc->sprite_unpin_work = NULL;
+			DRM_ERROR("flip queue: crtc already busy\n");
+			return -EBUSY;
+		}
+
+		intel_crtc->sprite_unpin_work = work;
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+
 		ret = i915_mutex_lock_interruptible(dev);
 		if (ret)
 			goto cleanup;
 
-		/* Reference the objects for the scheduled work. */
-		if (work->old_fb_obj != NULL)
-			drm_gem_object_reference(&work->old_fb_obj->base);
-
-		drm_gem_object_reference(&obj->base);
 		work->pending_flip_obj = obj;
 
 		/* Block clients from rendering to the new back buffer until

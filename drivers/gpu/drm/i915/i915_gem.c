@@ -1874,6 +1874,15 @@ i915_gem_object_get_pages(struct drm_i915_gem_object *obj,
 	if (obj->pages)
 		return 0;
 
+	/*
+	 * Stolen objects have already backing physical memory
+	 * pages assigned to them
+	 */
+	if (obj->stolen) {
+		BUG_ON(obj->sg_table == NULL);
+		return 0;
+	}
+
 	pages = drm_malloc_ab(obj->base.size/PAGE_SIZE, sizeof(struct page *));
 	if (pages == NULL)
 		return -ENOMEM;
@@ -2975,6 +2984,13 @@ i915_gem_clflush_object(struct drm_i915_gem_object *obj)
 	if (obj->pages == NULL)
 		return;
 
+	/*
+	 * Stolen memory is always coherent with the GPU as it is explicitly
+	 * marked as wc by the system, or the system is cache-coherent.
+	 */
+	if (obj->stolen)
+		return;
+
 	/* If the GPU is snooping the contents of the CPU cache,
 	 * we do not need to manually clear the CPU cache lines.  However,
 	 * the caches are only snooped when the render cache is
@@ -3425,6 +3441,21 @@ i915_gem_object_pin(struct drm_i915_gem_object *obj,
 		}
 	}
 
+	if (obj->user_fb == 1) {
+		if (obj->pages == NULL && obj->sg_table == NULL) {
+			if (obj->tiling_mode == I915_TILING_X) {
+				/* Tiled(X) Scanout buffers are more suitable
+				   for allocation from stolen area, as its very
+				   unlikely that they will be accessed directly
+				   from the CPU side and any allocation from
+				   stolen area is not directly CPU accessible,
+				   only through the aperture space it can be
+				   accessed */
+				i915_gem_object_move_to_stolen(obj);
+			}
+		}
+	}
+
 	if (obj->gtt_space == NULL) {
 		ret = i915_gem_object_bind_to_gtt(obj, alignment,
 						  map_and_fenceable);
@@ -3735,6 +3766,11 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 
 	if (obj->base.map_list.map)
 		drm_gem_free_mmap_offset(&obj->base);
+
+	/* Finally release the backing memory for the Stolen objects
+	 * when the object itself is going to get freed */
+	if (obj->stolen)
+		ops->put_pages(obj);
 
 	ops->release(obj);
 	drm_gem_object_release(&obj->base);
