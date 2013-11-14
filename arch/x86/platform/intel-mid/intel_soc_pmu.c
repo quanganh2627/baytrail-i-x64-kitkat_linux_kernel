@@ -835,7 +835,7 @@ static bool update_nc_device_states(int i, pci_power_t state)
 			reg = APM_REG_TYPE;
 		} else if (platform_is(INTEL_ATOM_MRFLD) ||
 				platform_is(INTEL_ATOM_MOORFLD)) {
-			islands = TNG_ISP_ISLAND;
+			islands = ISP_PWR_ISLAND;
 			reg = ISP_SS_PM0;
 		} else
 			return false;
