@@ -926,6 +926,11 @@ static void insert_work(struct cpu_workqueue_struct *cwq,
 	set_work_cwq(work, cwq, extra_flags);
 
 	/*
+	 * REVERT ME: check cwq is OK before adding the work to list
+	 */
+	WARN_ON(!get_work_cwq(work));
+
+	/*
 	 * Ensure that we get the right work->data if we see the
 	 * result of list_add() below, see try_to_grab_pending().
 	 */
