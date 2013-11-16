@@ -970,7 +970,7 @@ static void vmid_dereference(struct snd_soc_codec *codec)
 				    WM8994_VMID_RAMP_MASK, 0);
 
 		snd_soc_update_bits(codec, WM8994_POWER_MANAGEMENT_1,
-				    WM8994_BIAS_ENA | WM8994_VMID_SEL_MASK, 0);
+				    WM8994_VMID_SEL_MASK, 0);
 	}
 
 	pm_runtime_put(codec->dev);
@@ -4607,9 +4607,6 @@ static int wm8994_suspend(struct device *dev)
 			dev_dbg(codec->dev, "Disable MIC Detection!!!\n");
 			snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 						WM8958_MICD_ENA, 0);
-
-			snd_soc_dapm_disable_pin(&codec->dapm, "CLK_SYS");
-			snd_soc_dapm_sync(&codec->dapm);
 		}
 	}
 
@@ -4630,9 +4627,6 @@ static int wm8994_resume(struct device *dev)
 	/* Enable the MIC Detection when resumed */
 	if ((control->type == WM8958) && wm8994->mic_id_cb) {
 		dev_dbg(codec->dev, "Enable MIC Detection!!!\n");
-		snd_soc_dapm_force_enable_pin(&codec->dapm, "CLK_SYS");
-		snd_soc_dapm_sync(&codec->dapm);
-
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 					WM8958_MICD_ENA, WM8958_MICD_ENA);
 	}
