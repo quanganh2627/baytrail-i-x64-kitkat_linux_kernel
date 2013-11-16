@@ -8269,6 +8269,7 @@ static void do_intel_finish_page_flip(struct drm_device *dev,
 
 	if (work == NULL || atomic_read(&work->pending) < INTEL_FLIP_COMPLETE) {
 		spin_unlock_irqrestore(&dev->event_lock, flags);
+		DRM_ERROR("invalid or inactive unpin_work!\n");
 		return;
 	}
 
@@ -8541,8 +8542,8 @@ static void intel_gen7_queue_mmio_flip_work(struct work_struct *__work)
 				flipwork->flipdata.seqno);
 	}
 
-	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 	intel_mark_page_flip_active(intel_crtc);
+	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 }
 
 /* Using MMIO based flips starting from VLV, for Media power well
@@ -9276,6 +9277,8 @@ intel_modeset_update_state(struct drm_device *dev, unsigned prepare_pipes)
 
 }
 
+/*Retaining the unused function, as it might be used in future */
+#if 0
 static bool intel_fuzzy_clock_check(struct intel_crtc_config *cur,
 				    struct intel_crtc_config *new)
 {
@@ -9297,6 +9300,7 @@ static bool intel_fuzzy_clock_check(struct intel_crtc_config *cur,
 
 	return false;
 }
+#endif
 
 #define for_each_intel_crtc_masked(dev, mask, intel_crtc) \
 	list_for_each_entry((intel_crtc), \
@@ -9304,6 +9308,8 @@ static bool intel_fuzzy_clock_check(struct intel_crtc_config *cur,
 			    base.head) \
 		if (mask & (1 <<(intel_crtc)->pipe))
 
+/*Retaining the unused function, as it might be used in future */
+#if 0
 static bool
 intel_pipe_config_compare(struct drm_device *dev,
 			  struct intel_crtc_config *current_config,
@@ -9414,6 +9420,7 @@ intel_pipe_config_compare(struct drm_device *dev,
 
 	return true;
 }
+#endif
 
 static void
 check_connector_state(struct drm_device *dev)
@@ -9881,7 +9888,6 @@ intel_modeset_stage_output_state(struct drm_device *dev,
 	struct drm_crtc *new_crtc;
 	struct intel_connector *connector;
 	struct intel_encoder *encoder;
-	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ro;
 
 	/* The upper layers ensure that we either disable a crtc or have a list

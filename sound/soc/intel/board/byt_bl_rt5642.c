@@ -69,7 +69,7 @@ struct byt_mc_private {
 	int hs_det_poll_intrvl;
 	int hs_det_retry;
 	bool process_button_events;
-
+	int tristate_buffer_gpio;
 };
 
 static int byt_hs_detection(void);
@@ -479,6 +479,7 @@ static int byt_aif2_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct byt_mc_private *ctx = snd_soc_card_get_drvdata(rtd->card);
 	unsigned int fmt;
 	int ret;
 
@@ -500,6 +501,19 @@ static int byt_aif2_hw_params(struct snd_pcm_substream *substream,
 		pr_err("can't set codec pll: %d\n", ret);
 		return ret;
 	}
+	if (ctx->tristate_buffer_gpio >= 0)
+		gpio_set_value(ctx->tristate_buffer_gpio, 1);
+
+	return 0;
+}
+
+static int byt_aif2_hw_free(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct byt_mc_private *ctx = snd_soc_card_get_drvdata(rtd->card);
+
+	if (ctx->tristate_buffer_gpio >= 0)
+		gpio_set_value(ctx->tristate_buffer_gpio, 0);
 	return 0;
 }
 
@@ -537,9 +551,18 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	card->dapm.idle_bias_off = true;
 	/* Set overcurrent detection threshold base and scale factor
 	   for jack type identification and button events. */
-	/* Threshold base = 2000uA; scale factor = 0.5 =>
-	   effective threshold of 1000uA */
-	rt5640_config_ovcd_thld(codec, RT5640_MIC1_OVTH_2000UA, RT5640_MIC_OVCD_SF_0P5);
+
+	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1))
+		/* The mic bias resistor in BYT FFRD8 PR1 is reduced from
+		2.1K to 1.5K. Therefore the correct over current threshold
+		for this bias resistance is 1500uA. */
+		rt5640_config_ovcd_thld(codec, RT5640_MIC1_OVTH_1500UA,
+					RT5640_MIC_OVCD_SF_1P0);
+	else
+		/* Threshold base = 2000uA; scale factor = 0.5 =>
+		effective threshold of 1000uA */
+		rt5640_config_ovcd_thld(codec, RT5640_MIC1_OVTH_2000UA,
+					RT5640_MIC_OVCD_SF_0P5);
 
 	/* FFRD8 uses codec's JD1 for jack detection */
 	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR0) ||
@@ -609,6 +632,7 @@ static struct snd_soc_ops byt_aif1_ops = {
 };
 static struct snd_soc_ops byt_aif2_ops = {
 	.hw_params = byt_aif2_hw_params,
+	.hw_free = byt_aif2_hw_free,
 };
 
 static struct snd_soc_dai_link byt_dailink[] = {
@@ -705,6 +729,20 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&drv->hs_button_work, byt_check_hs_button_status);
 	INIT_DELAYED_WORK(&drv->hs_button_en_work, byt_enable_hs_button_events);
 	mutex_init(&drv->jack_mlock);
+	drv->tristate_buffer_gpio = -1;
+	/* Configure GPIO_SCORE56 for BT SCO workaround on FFRD8 PR1 */
+	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1)) {
+		drv->tristate_buffer_gpio = acpi_get_gpio("\\_SB.GPO0", 56);
+		ret_val = devm_gpio_request_one(&pdev->dev,
+					drv->tristate_buffer_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"byt_ffrd8_tristate_buffer_gpio");
+		if (ret_val) {
+			pr_err("Tri-state buffer gpio config failed %d\n",
+				ret_val);
+			return ret_val;
+		}
+	}
 
 	/* register the soc card */
 	snd_soc_card_byt.dev = &pdev->dev;

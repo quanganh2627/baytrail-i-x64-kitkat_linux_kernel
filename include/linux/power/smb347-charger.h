@@ -86,7 +86,9 @@ enum smb347_otg_control {
  * factory programmed default will be used. For soft/hard temperature
  * values, pass in %SMB347_TEMP_USE_DEFAULT instead.
  */
-#define  MAXSMB347_CONFIG_DATA_SIZE 32
+#define  MAXSMB34x_CONFIG_REG		18
+#define  MAXSMB347_CONFIG_DATA_SIZE	(MAXSMB34x_CONFIG_REG*2)
+
 struct smb347_charger_platform_data {
 	struct power_supply_info battery_info;
 	bool		use_mains;
@@ -108,6 +110,8 @@ struct smb347_charger_platform_data {
 	unsigned long supported_cables;
 	struct power_supply_throttle *throttle_states;
 	struct ps_batt_chg_prof *chg_profile;
+	bool	detect_chg;
+	int	gpio_mux;
 };
 
 #ifdef CONFIG_CHARGER_SMB347
