@@ -2473,6 +2473,8 @@ int atomisp_set_dvs_6axis_config(struct atomisp_sub_device *asd,
 			return -ENOMEM;
 	}
 
+	dvs_6axis_config->exp_id = user_6axis_config->exp_id;
+
 	if (copy_from_user(dvs_6axis_config->xcoords_y,
 			   user_6axis_config->xcoords_y,
 			   user_6axis_config->width_y *

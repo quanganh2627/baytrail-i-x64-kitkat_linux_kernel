@@ -478,6 +478,12 @@ static void __apply_additional_pipe_config(
 		    .enable_reduced_pipe = true;
 		asd->stream_env.pipe_extra_configs[pipe_id]
 		    .enable_dz = false;
+		if (asd->params.video_dis_en) {
+			asd->stream_env.pipe_extra_configs[pipe_id]
+				.enable_dvs_6axis = true;
+			asd->stream_env.pipe_configs[pipe_id]
+				.dvs_frame_delay = 2;
+		}
 		break;
 	case IA_CSS_PIPE_ID_PREVIEW:
 	case IA_CSS_PIPE_ID_COPY:
@@ -495,10 +501,6 @@ static int __create_pipe(struct atomisp_sub_device *asd)
 	int i;
 
 	ia_css_pipe_extra_config_defaults(&extra_config);
-	if (asd->run_mode->val == ATOMISP_RUN_MODE_VIDEO) {
-		extra_config.enable_dvs_6axis = true;
-		extra_config.enable_dz = false;
-	}
 	for (i = 0; i < IA_CSS_PIPE_ID_NUM; i++) {
 		if (!asd->stream_env.pipe_configs[i].output_info.res.width)
 			continue;
@@ -923,7 +925,7 @@ int atomisp_css_allocate_3a_dis_bufs(struct atomisp_sub_device *asd,
 	}
 
 	if (asd->params.curr_grid_info.dvs_grid.enable) {
-		dis_buf->dis_data = ia_css_isp_dvs_statistics_allocate(
+		dis_buf->dis_data = ia_css_isp_dvs2_statistics_allocate(
 				&asd->params.curr_grid_info.dvs_grid);
 		if (!dis_buf->dis_data) {
 			dev_err(isp->dev, "dvs buf allocation failed.\n");
@@ -1060,7 +1062,7 @@ int atomisp_alloc_dis_coef_buf(struct atomisp_sub_device *asd)
 		return -ENOMEM;
 
 	asd->params.dvs_hor_coef_bytes =
-		asd->params.curr_grid_info.dvs_grid.num_hor_coefs*
+		asd->params.curr_grid_info.dvs_grid.num_hor_coefs *
 		sizeof(*asd->params.dvs_coeff->hor_coefs.odd_real);
 
 	asd->params.dvs_ver_coef_bytes =
@@ -1073,11 +1075,14 @@ int atomisp_alloc_dis_coef_buf(struct atomisp_sub_device *asd)
 				&asd->params.curr_grid_info.dvs_grid);
 	if (!asd->params.dvs_stat)
 		return -ENOMEM;
+
 	asd->params.dvs_hor_proj_bytes =
 		asd->params.curr_grid_info.dvs_grid.aligned_height *
+		asd->params.curr_grid_info.dvs_grid.aligned_width *
 		sizeof(*asd->params.dvs_stat->hor_prod.odd_real);
 
 	asd->params.dvs_ver_proj_bytes =
+		asd->params.curr_grid_info.dvs_grid.aligned_height *
 		asd->params.curr_grid_info.dvs_grid.aligned_width *
 		sizeof(*asd->params.dvs_stat->ver_prod.odd_real);
 
@@ -1103,6 +1108,7 @@ void atomisp_css_get_dis_statistics(struct atomisp_sub_device *asd,
 	if (asd->params.dvs_stat) {
 		ia_css_get_dvs2_statistics(asd->params.dvs_stat,
 				  isp_css_buffer->css_buffer.data.stats_dvs);
+		asd->params.exp_id = isp_css_buffer->css_buffer.exp_id;
 		asd->params.dis_proj_data_valid = true;
 	}
 }
@@ -2412,7 +2418,7 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 	}
 	spin_unlock_irqrestore(&isp->lock, flags);
 
-	if (atomisp_compare_dvs_grid(asd, &stats->grid_info) != 0)
+	if (atomisp_compare_dvs_grid(asd, &stats->dvs2_stat.grid_info) != 0)
 		/* If the grid info in the argument differs from the current
 		   grid info, we tell the caller to reset the grid size and
 		   try again. */
@@ -2421,35 +2427,36 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 	if (!asd->params.dis_proj_data_valid)
 		return -EBUSY;
 
-	if (copy_to_user(stats->ver_prod.odd_real,
+	stats->exp_id = asd->params.exp_id;
+	if (copy_to_user(stats->dvs2_stat.ver_prod.odd_real,
 			 asd->params.dvs_stat->ver_prod.odd_real,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.odd_imag,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.odd_imag,
 			 asd->params.dvs_stat->ver_prod.odd_imag,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.even_real,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.even_real,
 			 asd->params.dvs_stat->ver_prod.even_real,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->ver_prod.even_imag,
+	if (copy_to_user(stats->dvs2_stat.ver_prod.even_imag,
 			 asd->params.dvs_stat->ver_prod.even_imag,
 			 asd->params.dvs_ver_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.odd_real,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.odd_real,
 			 asd->params.dvs_stat->hor_prod.odd_real,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.odd_imag,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.odd_imag,
 			 asd->params.dvs_stat->hor_prod.odd_imag,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.even_real,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.even_real,
 			 asd->params.dvs_stat->hor_prod.even_real,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;
-	if (copy_to_user(stats->hor_prod.even_imag,
+	if (copy_to_user(stats->dvs2_stat.hor_prod.even_imag,
 			 asd->params.dvs_stat->hor_prod.even_imag,
 			 asd->params.dvs_hor_proj_bytes))
 		return -EFAULT;

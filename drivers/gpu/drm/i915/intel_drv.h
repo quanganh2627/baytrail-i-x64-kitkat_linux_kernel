@@ -163,6 +163,7 @@ struct intel_crtc {
 	struct drm_crtc base;
 	enum pipe pipe;
 	enum plane plane;
+	bool rotate180;
 	u8 lut_r[256], lut_g[256], lut_b[256];
 	int dpms_mode;
 	bool active; /* is the crtc on? independent of the dpms mode */
@@ -186,6 +187,10 @@ struct intel_crtc {
 	bool cursor_visible;
 	unsigned int bpp;
 
+	bool primary_alpha;
+	bool sprite0_alpha;
+	bool sprite1_alpha;
+
 	/* We can share PLLs across outputs if the timings match */
 	struct intel_pch_pll *pch_pll;
 };
@@ -196,6 +201,7 @@ struct intel_plane {
 	enum pipe pipe;
 	struct drm_i915_gem_object *obj, *old_obj;
 	int max_downscale;
+	bool rotate180;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
 	void (*update_plane)(struct drm_plane *plane,
 			     struct drm_framebuffer *fb,
@@ -492,7 +498,7 @@ int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
 extern void intel_wait_for_vblank(struct drm_device *dev, int pipe);
 extern void intel_wait_for_pipe_off(struct drm_device *dev, int pipe);
-extern int intel_enable_CSC(struct drm_device *dev, void *csc_params,
+extern int intel_enable_csc(struct drm_device *dev, void *csc_params,
 		struct drm_file *file_priv);
 
 struct intel_load_detect_pipe {

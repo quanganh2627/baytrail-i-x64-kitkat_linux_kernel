@@ -2421,10 +2421,25 @@ static void sandybridge_write_fence_reg(struct drm_device *dev, int reg,
 					struct drm_i915_gem_object *obj)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
-	uint64_t val;
+	int fence_reg = FENCE_REG_SANDYBRIDGE_0;
+
+	fence_reg += reg * 8;
+
+	/* To w/a incoherency with non-atomic 64-bit register updates,
+	* we split the 64-bit update into two 32-bit writes. In order
+	* for a partial fence not to be evaluated between writes, we
+	* precede the update with write to turn off the fence register,
+	* and only enable the fence as the last step.
+	*
+	* For extra levels of paranoia, we make sure each step lands
+	* before applying the next step.
+	*/
+	I915_WRITE(fence_reg, 0);
+	POSTING_READ(fence_reg);
 
 	if (obj) {
 		u32 size = obj->gtt_space->size;
+		uint64_t val;
 
 		val = (uint64_t)((obj->gtt_offset + size - 4096) &
 				 0xfffff000) << 32;
@@ -2435,11 +2450,16 @@ static void sandybridge_write_fence_reg(struct drm_device *dev, int reg,
 		if (obj->tiling_mode == I915_TILING_Y)
 			val |= 1 << I965_FENCE_TILING_Y_SHIFT;
 		val |= I965_FENCE_REG_VALID;
-	} else
-		val = 0;
 
-	I915_WRITE64(FENCE_REG_SANDYBRIDGE_0 + reg * 8, val);
-	POSTING_READ(FENCE_REG_SANDYBRIDGE_0 + reg * 8);
+		I915_WRITE(fence_reg + 4, val >> 32);
+		POSTING_READ(fence_reg + 4);
+
+		I915_WRITE(fence_reg + 0, val);
+		POSTING_READ(fence_reg);
+	} else {
+		I915_WRITE(fence_reg + 4, 0);
+		POSTING_READ(fence_reg + 4);
+	}
 }
 
 static void i965_write_fence_reg(struct drm_device *dev, int reg,
@@ -2541,42 +2561,26 @@ static void i830_write_fence_reg(struct drm_device *dev, int reg,
 	POSTING_READ(FENCE_REG_830_0 + reg * 4);
 }
 
-struct write_fence {
-	struct drm_device *dev;
-	struct drm_i915_gem_object *obj;
-	int reg;
-};
-
-static void sandybridge_write_fence__ipi(void *data)
-{
-	struct write_fence *args = data;
-
-	/* Required for SNB+ with LLC */
-	wbinvd();
-
-	/* Required for VLV */
-	sandybridge_write_fence_reg(args->dev, args->reg, args->obj);
-}
-
 static void i915_gem_write_fence(struct drm_device *dev, int reg,
 				 struct drm_i915_gem_object *obj)
 {
-	struct write_fence args = {
-		.dev = dev,
-		.reg = reg,
-		.obj = obj,
-	};
-
 	switch (INTEL_INFO(dev)->gen) {
 	case 7:
 	case 6:
-		on_each_cpu((void (*)(void *))sandybridge_write_fence__ipi,
-				&args, 1); break;
+		sandybridge_write_fence_reg(dev, reg, obj);
+		break;
 	case 5:
-	case 4: i965_write_fence_reg(dev, reg, obj); break;
-	case 3: i915_write_fence_reg(dev, reg, obj); break;
-	case 2: i830_write_fence_reg(dev, reg, obj); break;
-	default: break;
+	case 4:
+		i965_write_fence_reg(dev, reg, obj);
+		break;
+	case 3:
+		i915_write_fence_reg(dev, reg, obj);
+		break;
+	case 2:
+		i830_write_fence_reg(dev, reg, obj);
+		break;
+	default:
+		break;
 	}
 }
 

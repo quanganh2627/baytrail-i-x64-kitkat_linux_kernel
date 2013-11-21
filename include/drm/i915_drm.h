@@ -63,20 +63,20 @@ extern bool i915_gpu_turbo_disable(void);
 
 #define MAX_CSC_COEFFICIENTS 9
 struct drm_intel_csc_params {
-	float   m_CSCCoeff[MAX_CSC_COEFFICIENTS];
+	float   m_csccoeff[MAX_CSC_COEFFICIENTS];
 };
 
-union CSC_COEFFICIENT_WG {
-	unsigned int  Value;
+union csc_coefficient_wg {
+	unsigned int  value;
 	struct {
-	unsigned int Coeff_2:16; /* bit 0-15 */
-	unsigned int  Coeff_1:16; /* bits 16-32 */
+	unsigned int coeff_2:16; /* bit 0-15 */
+	unsigned int  coeff_1:16; /* bits 16-32 */
 	};
 };
 
-struct CSC_Coeff {
+struct csc_coeff {
 	unsigned int crtc_id;
-	union CSC_COEFFICIENT_WG VLV_CSC_Coeff[6];
+	union csc_coefficient_wg vlv_csc_coeff[6];
 };
 
 typedef struct _drm_i915_init {
@@ -320,7 +320,7 @@ typedef struct _drm_i915_sarea {
 			DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_VMAP, \
 			struct drm_i915_gem_vmap)
 #define DRM_IOCTL_I915_SET_CSC DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_SET_CSC, \
-		struct CSC_Coeff)
+		struct csc_coeff)
 #define DRM_IOCTL_I915_GET_PSR_SUPPORT	DRM_IOR(DRM_COMMAND_BASE + \
 						DRM_I915_GET_PSR_SUPPORT, bool)
 #define DRM_IOCTL_I915_PERFMON DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_PERFMON, \
@@ -1087,7 +1087,8 @@ struct drm_i915_disp_screen_control {
 };
 
 struct drm_i915_plane_180_rotation {
-	__u32 crtc_id;
+	__u32 obj_id;
+	__u32 obj_type;
 	__u32 rotate;
 };
 
