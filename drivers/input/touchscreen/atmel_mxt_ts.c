@@ -211,6 +211,7 @@ struct t9_range {
 
 #define MSLEEP(ms)	usleep_range(ms*1000, ms*1000)
 #define MXT_FRAME_TRY		10
+#define MXT_RESET_NUM		2
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void mxt_early_suspend(struct early_suspend *es);
@@ -315,6 +316,7 @@ struct mxt_data {
 	/* Indicates whether device is in suspend */
 	bool suspended;
 
+	u8 reset_num;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 #endif
@@ -353,6 +355,8 @@ struct mxt_platform_data mxt_pdata[] = {
 		.hardware_id = MXT_3432S_ID,
 	},
 };
+
+static void mxt_reset_slots(struct mxt_data *data);
 
 static inline size_t mxt_obj_size(const struct mxt_object *obj)
 {
@@ -1287,6 +1291,21 @@ static int mxt_read_and_process_messages(struct mxt_data *data, u8 count)
 	return num_valid;
 }
 
+static void mxt_reset_touch(struct mxt_data *data)
+{
+	struct device *dev = &data->client->dev;
+
+	dev_info(dev, "%s: Reset touch.\n", __func__);
+	gpio_request(data->pdata->gpio_reset, "ts_rst");
+	gpio_direction_output(data->pdata->gpio_reset, 0);
+	MSLEEP(10);
+	gpio_direction_output(data->pdata->gpio_reset, 1);
+	MSLEEP(50);
+	gpio_free(data->pdata->gpio_reset);
+
+	mxt_reset_slots(data);
+}
+
 static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 {
 	struct device *dev = &data->client->dev;
@@ -1297,10 +1316,14 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	ret = __mxt_read_reg(data->client, data->T44_address,
 		data->T5_msg_size + 1, data->msg_buf);
 	if (ret) {
-		dev_err(dev, "%s: Failed to read T44 and T5 (%d)\n",
-				__func__, ret);
+		data->reset_num++;
+		dev_dbg(dev, "%s: Failed to read T44 and T5 (%d) (%d)\n",
+				__func__, ret, data->reset_num);
+		if (data->reset_num > MXT_RESET_NUM)
+			mxt_reset_touch(data);
 		return IRQ_NONE;
 	}
+	data->reset_num = 0;
 
 	count = data->msg_buf[0];
 
@@ -1938,7 +1961,7 @@ static int mxt_set_t7_power_cfg(struct mxt_data *data, u8 sleep)
 		return error;
 	}
 
-	dev_dbg(dev, "Set T7 ACTV:%d IDLE:%d\n",
+	dev_info(dev, "Set T7 ACTV:%d IDLE:%d\n",
 		new_config->active, new_config->idle);
 
 	return 0;
