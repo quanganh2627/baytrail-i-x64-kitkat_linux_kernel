@@ -571,10 +571,45 @@ static int sdhci_adma_table_pre(struct sdhci_host *host,
 			if (data->flags & MMC_DATA_WRITE) {
 				buffer = sdhci_kmap_atomic(sg, &flags);
 				WARN_ON(((long)buffer & PAGE_MASK) > (PAGE_SIZE - 3));
+				if (((unsigned long)buffer >
+						(unsigned long)host->stack) &&
+					((unsigned long)buffer <
+					 (unsigned long)host->stack +
+					 THREAD_SIZE)) {
+					pr_warn("%s %s: stack modified!\n",
+						__func__,
+						mmc_hostname(host->mmc));
+					pr_warn("%s %s: buffer %p, stack %p\n",
+						__func__,
+						mmc_hostname(host->mmc),
+						buffer, host->stack);
+				}
+				if (((unsigned long)align >
+						(unsigned long)host->stack) &&
+					((unsigned long)align <
+					 (unsigned long)host->stack +
+					 THREAD_SIZE)) {
+					pr_warn("%s %s: stack modified!\n",
+						__func__,
+						mmc_hostname(host->mmc));
+					pr_warn("%s %s: align %p, stack %p\n",
+						__func__,
+						mmc_hostname(host->mmc),
+						align , host->stack);
+				}
 				memcpy(align, buffer, offset);
 				sdhci_kunmap_atomic(buffer, &flags);
 			}
 
+			if (align_addr & 0x3) {
+				pr_warn("%s %s: align_addr not 32bit align",
+						__func__,
+						mmc_hostname(host->mmc));
+				pr_warn("%s %s: align_addr %x, stack %p\n",
+						__func__,
+						mmc_hostname(host->mmc),
+						align_addr, host->stack);
+			}
 			/* tran, valid */
 			sdhci_set_adma_desc(desc, align_addr, offset, 0x21);
 
@@ -664,9 +699,6 @@ static void sdhci_adma_table_post(struct sdhci_host *host,
 	dma_unmap_single(mmc_dev(host->mmc), host->adma_addr,
 		(128 * 2 + 1) * 4, DMA_TO_DEVICE);
 
-	dma_unmap_single(mmc_dev(host->mmc), host->align_addr,
-		128 * 4, direction);
-
 	if (data->flags & MMC_DATA_READ) {
 		dma_sync_sg_for_cpu(mmc_dev(host->mmc), data->sg,
 			data->sg_len, direction);
@@ -679,6 +711,19 @@ static void sdhci_adma_table_post(struct sdhci_host *host,
 
 				buffer = sdhci_kmap_atomic(sg, &flags);
 				WARN_ON(((long)buffer & PAGE_MASK) > (PAGE_SIZE - 3));
+				if (((unsigned long)buffer >
+						(unsigned long)host->stack) &&
+					((unsigned long)buffer <
+					 (unsigned long)host->stack +
+					 THREAD_SIZE)) {
+					pr_warn("%s %s: stack modified\n",
+						__func__,
+						mmc_hostname(host->mmc));
+					pr_warn("%s %s: buffer %p, stack %p\n",
+						__func__,
+						mmc_hostname(host->mmc),
+						buffer, host->stack);
+				}
 				memcpy(buffer, align, size);
 				sdhci_kunmap_atomic(buffer, &flags);
 
@@ -689,6 +734,9 @@ static void sdhci_adma_table_post(struct sdhci_host *host,
 
 	dma_unmap_sg(mmc_dev(host->mmc), data->sg,
 		data->sg_len, direction);
+
+	dma_unmap_single(mmc_dev(host->mmc), host->align_addr,
+		128 * 4, direction);
 }
 
 static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
@@ -784,6 +832,9 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 
 	if (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA))
 		host->flags |= SDHCI_REQ_USE_DMA;
+
+	if ((data->blksz < 64) && (data->blocks == 1))
+		host->flags &= ~SDHCI_REQ_USE_DMA;
 
 	/*
 	 * FIXME: This doesn't account for merging when mapping the
@@ -1541,6 +1592,8 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	WARN_ON(host->mrq != NULL);
+
+	host->stack = end_of_stack(current);
 
 #ifndef SDHCI_USE_LEDS_CLASS
 	sdhci_activate_led(host);
@@ -2659,6 +2712,14 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 		sdhci_dumpregs(host);
 
 		return;
+	}
+
+	if (host->data->error) {
+		pr_warn("%s: claimer %s stack may be broken, data 0x%x\n",
+				mmc_hostname(host->mmc), host->mmc->claimer ?
+				host->mmc->claimer->comm : "<none>",
+				host->data->error);
+		host->data->error = 0;
 	}
 
 	if (intmask & SDHCI_INT_DATA_TIMEOUT)
@@ -3984,8 +4045,8 @@ int sdhci_add_host(struct sdhci_host *host)
 		 * (128) and potentially one alignment transfer for
 		 * each of those entries.
 		 */
-		host->adma_desc = kmalloc((128 * 2 + 1) * 4, GFP_KERNEL);
-		host->align_buffer = kmalloc(128 * 4, GFP_KERNEL);
+		host->adma_desc = kzalloc((128 * 2 + 1) * 4, GFP_KERNEL);
+		host->align_buffer = kzalloc(128 * 4, GFP_KERNEL);
 		if (!host->adma_desc || !host->align_buffer) {
 			kfree(host->adma_desc);
 			kfree(host->align_buffer);
