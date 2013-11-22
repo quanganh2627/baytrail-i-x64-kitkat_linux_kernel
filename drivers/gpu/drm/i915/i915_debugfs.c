@@ -131,7 +131,7 @@ ssize_t i915_gamma_adjust_write(struct file *filp,
 	}
 
 	/* Parse data and load the gamma  table */
-	ret = parse_clrmgr_input(gammaSoftlut, buf,
+	ret = parse_clrmgr_input(gamma_softlut, buf,
 		GAMMA_CORRECT_MAX_COUNT, count);
 	if (ret < 0)
 		DRM_ERROR("Gamma table loading failed\n");
@@ -268,7 +268,7 @@ ssize_t i915_cb_adjust_write(struct file *filp,
 {
 	int ret = count;
 	struct drm_device *dev = filp->private_data;
-	struct ContBrightlut *cb_ptr = NULL;
+	struct cont_brightlut *cb_ptr = NULL;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	char *buf = NULL;
 
@@ -284,7 +284,7 @@ ssize_t i915_cb_adjust_write(struct file *filp,
 		return -ENOMEM;
 	}
 
-	cb_ptr = kzalloc(sizeof(struct ContBrightlut), GFP_KERNEL);
+	cb_ptr = kzalloc(sizeof(struct cont_brightlut), GFP_KERNEL);
 	if (!cb_ptr) {
 		DRM_ERROR("Contrast Brightness adjust: insufficient memory\n");
 		kfree(buf);
@@ -342,7 +342,7 @@ ssize_t i915_hs_adjust_write(struct file *filp,
 {
 	int ret = count;
 	struct drm_device *dev = filp->private_data;
-	struct HueSaturationlut *hs_ptr = NULL;
+	struct hue_saturationlut *hs_ptr = NULL;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	char *buf = NULL;
 
@@ -358,7 +358,7 @@ ssize_t i915_hs_adjust_write(struct file *filp,
 		return -ENOMEM;
 	}
 
-	hs_ptr = kzalloc(sizeof(struct HueSaturationlut), GFP_KERNEL);
+	hs_ptr = kzalloc(sizeof(struct hue_saturationlut), GFP_KERNEL);
 	if (!hs_ptr) {
 		DRM_ERROR("Hue Saturation adjust: insufficient memory\n");
 		kfree(buf);
@@ -439,7 +439,7 @@ ssize_t i915_csc_adjust_write(struct file *filp,
 	}
 
 	/* Parse data and load the csc  table */
-	ret = parse_clrmgr_input(CSCSoftlut, buf,
+	ret = parse_clrmgr_input(csc_softlut, buf,
 		CSC_MAX_COEFF_COUNT, count);
 	if (ret < 0)
 		DRM_ERROR("CSC table loading failed\n");
@@ -529,15 +529,15 @@ ssize_t i915_csc_enable_write(struct file *filp,
 
 	/* if CSC enabled, apply CSC correction */
 	if (dev_priv->csc_enabled) {
-		if (do_intel_enable_CSC(dev,
-			(void *) CSCSoftlut, crtc)) {
+		if (do_intel_enable_csc(dev,
+			(void *) csc_softlut, crtc)) {
 			DRM_ERROR("CSC correction failed\n");
 			ret = -EINVAL;
 		} else
 			ret = count;
 	} else {
 		/* Disable CSC on this CRTC */
-		do_intel_disable_CSC(dev, crtc);
+		do_intel_disable_csc(dev, crtc);
 		ret = count;
 	}
 
@@ -2352,7 +2352,7 @@ i915_wedged_set(void *data, u64 val)
 	DRM_INFO("Manually setting wedged to %llu\n", val);
 	if (val) {
 		if (!i915_reset_in_progress(&dev_priv->gpu_error))
-			i915_handle_error(dev, NULL);
+			i915_handle_error(dev, NULL, 0);
 	}
 
 	return 0;
@@ -2527,15 +2527,23 @@ i915_ring_hangcheck_read(struct file *filp,
 	 * have hung and been reset since boot */
 	struct drm_device *dev = filp->private_data;
 	drm_i915_private_t *dev_priv = dev->dev_private;
-	char buf[100];
+	char buf[200];
 	int len;
 
 	len = scnprintf(buf, sizeof(buf),
-		       "GPU=0x%08X,RCS=0x%08X,VCS=0x%08X,BCS=0x%08X\n",
+			"GPU=0x%08X,RCS=0x%08X,VCS=0x%08X,BCS=0x%08X\n,"
+			"RCS_T=0x%08x,VCS_T=0x%08x,BCS_T=0x%08x,"
+			"RCS_W=0x%08x,VCS_W=0x%08x,BCS_W=0x%08x\n",
 			dev_priv->gpu_error.total_resets,
 			dev_priv->hangcheck[RCS].total,
 			dev_priv->hangcheck[VCS].total,
-			dev_priv->hangcheck[BCS].total);
+			dev_priv->hangcheck[BCS].total,
+			dev_priv->hangcheck[RCS].tdr_count,
+			dev_priv->hangcheck[VCS].tdr_count,
+			dev_priv->hangcheck[BCS].tdr_count,
+			dev_priv->hangcheck[RCS].watchdog_count,
+			dev_priv->hangcheck[VCS].watchdog_count,
+			dev_priv->hangcheck[BCS].watchdog_count);
 
 	return simple_read_from_buffer(ubuf, max, ppos, buf, len);
 }
@@ -2558,6 +2566,8 @@ i915_ring_hangcheck_write(struct file *filp,
 	for (i = 0; i < I915_NUM_RINGS; i++) {
 		/* Reset the hangcheck counters */
 		dev_priv->hangcheck[i].total = 0;
+		dev_priv->hangcheck[i].tdr_count = 0;
+		dev_priv->hangcheck[i].watchdog_count = 0;
 	}
 
 	dev_priv->gpu_error.total_resets = 0;
@@ -2685,7 +2695,7 @@ i915_dpst_get_luma_data(struct drm_device *dev, char *buf, int *len)
 }
 
 
-static int
+static ssize_t
 i915_read_dpst_api(struct file *filp,
 			char __user *ubuf,
 			size_t max,
@@ -2703,7 +2713,7 @@ i915_read_dpst_api(struct file *filp,
 	if (i915_debugfs_vars.dpst.dpst_input == 0)
 		return len;
 
-	scnprintf(format, sizeof(format), "%%%ds %%%ds %%%ds",
+	scnprintf(format, sizeof(format), "%%%zus %%%zus %%%zus",
 			sizeof(control), sizeof(operation), sizeof(val));
 
 	no_of_tokens = sscanf(i915_debugfs_vars.dpst.dpst_vars,
@@ -3011,7 +3021,7 @@ i915_display_pm(struct drm_device *drm_dev, long unsigned int val)
 }
 
 
-static int
+static ssize_t
 i915_read_rpm_api(struct file *filp,
 		char __user *ubuf,
 		size_t max,
@@ -3027,7 +3037,7 @@ i915_read_rpm_api(struct file *filp,
 	if (i915_debugfs_vars.rpm.rpm_input == 0)
 		return len;
 
-	scnprintf(format, sizeof(format), "%%%ds %%%ds %%%ds",
+	scnprintf(format, sizeof(format), "%%%zus %%%zus %%%zus",
 		sizeof(control), sizeof(operation), sizeof(val));
 
 	no_of_tokens = sscanf(i915_debugfs_vars.rpm.rpm_vars,
@@ -3121,7 +3131,7 @@ static const struct file_operations i915_rpm_fops = {
 	.llseek = default_llseek,
 };
 
-static int
+static ssize_t
 i915_read_turbo_api(struct file *filp,
 		   char __user *ubuf,
 		   size_t max,
@@ -3140,7 +3150,7 @@ i915_read_turbo_api(struct file *filp,
 	if (i915_debugfs_vars.turbo.turbo_input == 0)
 		return len;
 
-	snprintf(format, sizeof(format), "%%%ds %%%ds %%%ds",
+	snprintf(format, sizeof(format), "%%%zus %%%zus %%%zus",
 			sizeof(control), sizeof(operation), sizeof(val));
 
 	no_of_tokens = sscanf(i915_debugfs_vars.turbo.turbo_vars,
@@ -3330,7 +3340,7 @@ rc6_enable_disable(struct drm_device *dev, long unsigned int val)
 }
 
 
-static int
+static ssize_t
 i915_read_rc6_api(struct file *filp,
 		   char __user *ubuf,
 		   size_t max,
@@ -3347,7 +3357,7 @@ i915_read_rc6_api(struct file *filp,
 	if (i915_debugfs_vars.rc6.rc6_input == 0)
 		return len;
 
-	snprintf(format, sizeof(format), "%%%ds %%%ds",
+	snprintf(format, sizeof(format), "%%%zus %%%zus",
 				sizeof(control), sizeof(operation));
 
 	no_of_tokens = sscanf(i915_debugfs_vars.rc6.rc6_vars,
@@ -3472,7 +3482,7 @@ static const struct file_operations i915_rc6_fops = {
 };
 
 
-static int
+static ssize_t
 i915_read_rc6_status(struct file *filp,
 		   char __user *ubuf,
 		   size_t max,
@@ -3570,7 +3580,7 @@ i915_mmio_read_api(struct file *filp,
 	if (i915_debugfs_vars.mmio.mmio_input == 0)
 		return len;
 
-	snprintf(format, sizeof(format), "%%%ds %%%ds %%%ds",
+	snprintf(format, sizeof(format), "%%%zus %%%zus %%%zus",
 				sizeof(operation), sizeof(offset), sizeof(val));
 
 	no_of_tokens = sscanf(i915_debugfs_vars.mmio.mmio_vars,
@@ -3675,7 +3685,7 @@ i915_iosf_read_api(struct file *filp,
 	if (i915_debugfs_vars.iosf.iosf_input == 0)
 		return len;
 
-	snprintf(format, sizeof(format), "%%%ds %%%ds %%%ds",
+	snprintf(format, sizeof(format), "%%%zus %%%zus %%%zus",
 			sizeof(operation), sizeof(port), sizeof(offset));
 
 	noOfTokens = sscanf(i915_debugfs_vars.iosf.iosf_vars,

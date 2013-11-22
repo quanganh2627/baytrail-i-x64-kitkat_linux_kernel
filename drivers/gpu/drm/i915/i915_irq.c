@@ -37,6 +37,7 @@
 #include "intel_drv.h"
 /* Added for HDMI Audio */
 #include "hdmi_audio_if.h"
+#include "intel_sync.h"
 
 static const u32 hpd_ibx[] = {
 	[HPD_CRT] = SDE_CRT_HOTPLUG,
@@ -833,6 +834,7 @@ static void notify_ring(struct drm_device *dev,
 	trace_i915_gem_request_complete(ring, ring->last_irq_seqno);
 
 	wake_up_all(&ring->irq_queue);
+	i915_sync_timeline_advance(ring);
 }
 
 /**
@@ -1167,6 +1169,7 @@ static void snb_gt_irq_handler(struct drm_device *dev,
 			       struct drm_i915_private *dev_priv,
 			       u32 gt_iir)
 {
+	struct intel_ring_buffer *ring;
 
 	if (gt_iir &
 	    (GT_RENDER_USER_INTERRUPT | GT_RENDER_PIPECTL_NOTIFY_INTERRUPT))
@@ -1177,13 +1180,33 @@ static void snb_gt_irq_handler(struct drm_device *dev,
 		notify_ring(dev, &dev_priv->ring[BCS]);
 
 	if (gt_iir & GT_RENDER_CS_MASTER_ERROR_INTERRUPT)
-		i915_handle_error(dev, &dev_priv->hangcheck[RCS]);
+		i915_handle_error(dev, &dev_priv->hangcheck[RCS], 0);
 
 	if (gt_iir & GT_BSD_CS_ERROR_INTERRUPT)
-		i915_handle_error(dev, &dev_priv->hangcheck[VCS]);
+		i915_handle_error(dev, &dev_priv->hangcheck[VCS], 0);
+
+	if (gt_iir & GEN6_RENDER_TIMEOUT_COUNTER_EXPIRED) {
+		DRM_DEBUG_TDR("Render timeout counter exceeded\n");
+
+		/* Stop the counter to prevent further interrupts */
+		ring = &dev_priv->ring[RCS];
+		I915_WRITE(RING_CNTR(ring->mmio_base), RCS_WATCHDOG_DISABLE);
+		dev_priv->hangcheck[RCS].watchdog_count++;
+		i915_handle_error(dev, &dev_priv->hangcheck[RCS], 1);
+	}
+
+	if (gt_iir & GEN6_BSD_TIMEOUT_COUNTER_EXPIRED) {
+		DRM_DEBUG_TDR("Video timeout counter exceeded\n");
+
+		/* Stop the counter to prevent further interrupts */
+		ring = &dev_priv->ring[VCS];
+		I915_WRITE(RING_CNTR(ring->mmio_base), VCS_WATCHDOG_DISABLE);
+		dev_priv->hangcheck[VCS].watchdog_count++;
+		i915_handle_error(dev, &dev_priv->hangcheck[VCS], 1);
+	}
 
 	if (gt_iir & GT_BLT_CS_ERROR_INTERRUPT)
-		i915_handle_error(dev, &dev_priv->hangcheck[BCS]);
+		i915_handle_error(dev, &dev_priv->hangcheck[BCS], 0);
 
 	if (gt_iir & GT_RENDER_L3_PARITY_ERROR_INTERRUPT)
 		ivybridge_parity_error_irq_handler(dev);
@@ -1288,7 +1311,7 @@ static void gen6_rps_irq_handler(struct drm_i915_private *dev_priv, u32 pm_iir)
 		if (pm_iir & PM_VEBOX_CS_ERROR_INTERRUPT) {
 			DRM_ERROR("VEBOX CS error interrupt 0x%08x\n", pm_iir);
 			i915_handle_error(dev_priv->dev,
-				&dev_priv->hangcheck[VECS]);
+				&dev_priv->hangcheck[VECS], 0);
 		}
 	}
 }
@@ -1782,33 +1805,19 @@ static void i915_error_work_func(struct work_struct *work)
 	if (i915_reset_in_progress(error) && !i915_terminally_wedged(error)) {
 		DRM_DEBUG_DRIVER("resetting chip\n");
 
+		for (i = 0; i < I915_NUM_RINGS; i++) {
+			/* Clear hang state and reset request flags
+			* for each ring. Do this BEFORE calling
+			* i915_reset otherwise context restore may fail*/
+			atomic_set(&dev_priv->hangcheck[i].flags, 0);
+		}
+
 		ret = i915_reset(dev);
 
 		kobject_uevent_env(&dev->primary->kdev.kobj, KOBJ_CHANGE,
 				   reset_event);
 
-		if (ret == 0) {
-			for (i = 0; i < I915_NUM_RINGS; i++) {
-				/* Clear hang state and reset request flags
-				* for each ring*/
-				atomic_set(&dev_priv->hangcheck[i].flags, 0);
-			}
-
-			/*
-			 * After all the gem state is reset, increment the reset
-			 * counter and wake up everyone waiting for the reset to
-			 * complete.
-			 *
-			 * Since unlock operations are a one-sided barrier only,
-			 * we need to insert a barrier here to order any seqno
-			 * updates before
-			 * the counter increment.
-			 * The increment clears the RESET_IN_PROGRESS flag.
-			 */
-			smp_mb__before_atomic_inc();
-			atomic_inc(&dev_priv->gpu_error.reset_counter);
-
-		} else {
+		if (ret != 0) {
 			/* Terminal wedge condition */
 			atomic_set_mask(I915_WEDGED, &error->reset_counter);
 		}
@@ -1818,15 +1827,10 @@ static void i915_error_work_func(struct work_struct *work)
 	for_each_ring(ring, dev_priv, i)
 		wake_up_all(&ring->irq_queue);
 
-	/* Notify i915_gem_wait_for_error that reset processing
-	* has completed */
-	wake_up_all(&dev_priv->gpu_error.reset_queue);
-
 	kobject_uevent_env(&dev->primary->kdev.kobj,
 				KOBJ_CHANGE, reset_done_event);
 
 	DRM_DEBUG_TDR("End recovery work\n\n");
-
 }
 
 static void i915_report_and_clear_eir(struct drm_device *dev)
@@ -1937,7 +1941,8 @@ i915_report_and_clear_eir_exit:
  * so userspace knows something bad happened (should trigger collection
  * of a ring dump etc.).
  */
-void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc)
+void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc,
+			int watchdog)
 {
 	int i;
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -1966,12 +1971,14 @@ void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc)
 		/* Now determine what type of reset to use to clear
 		* the hang...*/
 
-		cur_time = get_seconds();
-		last_reset = hc->last_reset;
-		hc->last_reset = cur_time;
+		if (!watchdog) {
+			cur_time = get_seconds();
+			last_reset = hc->last_reset;
+			hc->last_reset = cur_time;
+		}
 
-		if ((cur_time - last_reset) <
-			i915_ring_reset_min_alive_period) {
+		if (!watchdog && ((cur_time - last_reset) <
+			i915_ring_reset_min_alive_period)) {
 			/* This ring is hanging too frequently.
 			* Opt for full-reset instead */
 			DRM_DEBUG_TDR("Ring %d hanging too quickly...\r\n",
@@ -1997,6 +2004,7 @@ void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc)
 		* individual ring resets pending then they may
 		* still be processed before the global reset request
 		* is noticed by the error work function.*/
+
 		atomic_set_mask(I915_RESET_IN_PROGRESS_FLAG,
 				&dev_priv->gpu_error.reset_counter);
 		DRM_DEBUG_TDR("Full reset of GPU requested\n");
@@ -2282,6 +2290,8 @@ static bool i915_hangcheck_hung(struct intel_hangcheck *hc)
 		/* Reset the counter*/
 		hc->count = 0;
 
+		i915_sync_hung_ring(ring);
+
 		if (!IS_GEN2(dev)) {
 			/* If the ring is hanging on a WAIT_FOR_EVENT
 			 * then simply poke the RB_WAIT bit
@@ -2293,8 +2303,10 @@ static bool i915_hangcheck_hung(struct intel_hangcheck *hc)
 			DRM_DEBUG_TDR("hung=%d after kick ring\n", hung);
 		}
 
-		if (hung)
-			i915_handle_error(dev, hc);
+		if (hung) {
+			hc->tdr_count++;
+			i915_handle_error(dev, hc, 0);
+		}
 
 		return hung;
 	}
@@ -2582,6 +2594,9 @@ static void gen5_gt_irq_postinstall(struct drm_device *dev)
 		gt_irqs |= GT_RENDER_L3_PARITY_ERROR_INTERRUPT;
 	}
 
+	if (IS_VALLEYVIEW(dev))
+		dev_priv->gt_irq_mask &= ~(I915_SYNC_USER_INTERRUPTS);
+
 	gt_irqs |= GT_RENDER_USER_INTERRUPT;
 	if (IS_GEN5(dev)) {
 		gt_irqs |= GT_RENDER_PIPECTL_NOTIFY_INTERRUPT |
@@ -2589,6 +2604,13 @@ static void gen5_gt_irq_postinstall(struct drm_device *dev)
 	} else {
 		gt_irqs |= GT_BLT_USER_INTERRUPT | GT_BSD_USER_INTERRUPT;
 	}
+
+	/* Enable watchdog interrupts by default */
+	dev_priv->gt_irq_mask &= ~(GT_GEN6_BSD_WATCHDOG_INTERRUPT |
+			GT_GEN6_RENDER_WATCHDOG_INTERRUPT);
+
+	gt_irqs |= (GEN6_RENDER_TIMEOUT_COUNTER_EXPIRED |
+		GEN6_BSD_TIMEOUT_COUNTER_EXPIRED);
 
 	I915_WRITE(GTIIR, I915_READ(GTIIR));
 	I915_WRITE(GTIMR, dev_priv->gt_irq_mask);
@@ -2892,7 +2914,7 @@ static irqreturn_t i8xx_irq_handler(int irq, void *arg)
 		 */
 		spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
 		if (iir & I915_RENDER_COMMAND_PARSER_ERROR_INTERRUPT)
-			i915_handle_error(dev, NULL);
+			i915_handle_error(dev, NULL, 0);
 
 		for_each_pipe(pipe) {
 			int reg = PIPESTAT(pipe);
@@ -3066,7 +3088,7 @@ static irqreturn_t i915_irq_handler(int irq, void *arg)
 		 */
 		spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
 		if (iir & I915_RENDER_COMMAND_PARSER_ERROR_INTERRUPT)
-			i915_handle_error(dev, NULL);
+			i915_handle_error(dev, NULL, 0);
 
 		for_each_pipe(pipe) {
 			int reg = PIPESTAT(pipe);
@@ -3306,7 +3328,7 @@ static irqreturn_t i965_irq_handler(int irq, void *arg)
 		 */
 		spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
 		if (iir & I915_RENDER_COMMAND_PARSER_ERROR_INTERRUPT)
-			i915_handle_error(dev, NULL);
+			i915_handle_error(dev, NULL, 0);
 
 		for_each_pipe(pipe) {
 			int reg = PIPESTAT(pipe);

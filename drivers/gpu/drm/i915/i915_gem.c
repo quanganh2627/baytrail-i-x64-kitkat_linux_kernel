@@ -107,37 +107,6 @@ static void i915_gem_info_remove_obj(struct drm_i915_private *dev_priv,
 	spin_unlock(&dev_priv->mm.object_stat_lock);
 }
 
-static int
-i915_gem_wait_for_error(struct drm_device *dev,
-						struct i915_gpu_error *error)
-{
-	int ret;
-
-#define EXIT_COND (!i915_gem_wedged(dev, true) || \
-		   i915_terminally_wedged(error))
-	if (EXIT_COND)
-		return 0;
-
-	/*
-	 * Only wait 10 seconds for the reset to complete to avoid hanging
-	 * userspace. If it takes that long something really bad is going on and
-	 * we should simply try to bail out and fail as gracefully as possible.
-	 */
-	ret = wait_event_interruptible_timeout(error->reset_queue,
-					       EXIT_COND,
-					       10*HZ);
-	if (i915_terminally_wedged(error)) {
-		return -EIO;
-	} else if (ret == 0) {
-		DRM_ERROR("Timed out waiting for the gpu reset to complete\n");
-		return -EIO;
-	} else if (ret < 0) {
-		return ret;
-	}
-#undef EXIT_COND
-
-	return 0;
-}
 
 int i915_gem_wedged(struct drm_device *dev, bool interruptible)
 {
@@ -171,10 +140,6 @@ int i915_mutex_lock_interruptible(struct drm_device *dev)
 {
 	int ret;
 
-	/* There should be no need to call i915_gem_wait_for_error
-	* as the error recovery handler takes dev->struct_mutex
-	* so if it is active we will wait on the mutex_lock_interruptible
-	* call instead */
 	ret = mutex_lock_interruptible(&dev->struct_mutex);
 	if (ret)
 		return ret;
@@ -2061,6 +2026,8 @@ i915_gem_init_seqno(struct drm_device *dev, u32 seqno)
 			ring->sync_seqno[j] = 0;
 	}
 
+	i915_sync_reset_timelines(dev_priv);
+
 	return 0;
 }
 
@@ -2105,6 +2072,22 @@ i915_gem_get_seqno(struct drm_device *dev, u32 *seqno)
 	}
 
 	*seqno = dev_priv->last_seqno = dev_priv->next_seqno++;
+	return 0;
+}
+
+int
+i915_gem_next_request_seqno(struct intel_ring_buffer *ring, u32 *seqno)
+{
+	int ret;
+
+	if (ring->outstanding_lazy_request == 0) {
+		ret = i915_gem_get_seqno(ring->dev,
+			&ring->outstanding_lazy_request);
+		if (ret)
+			return ret;
+	}
+
+	*seqno = ring->outstanding_lazy_request;
 	return 0;
 }
 
@@ -2269,16 +2252,17 @@ static bool i915_request_guilty(struct drm_i915_gem_request *request,
 		if (i915_head_inside_object(acthd, request->batch_obj,
 					    request_to_vm(request))) {
 			*inside = true;
-			DRM_DEBUG_TDR("Head in obj 0x%08x\n",
-				(unsigned int)request->batch_obj);
+			DRM_DEBUG_TDR("Head in obj 0x%lx\n",
+				(long unsigned int)request->batch_obj);
 			return true;
 		}
 	}
 
 	if (i915_head_inside_request(acthd, request->head, request->tail)) {
 		*inside = false;
-		DRM_DEBUG_TDR("Head in req 0x%08x (HD: 0x%08x TL: 0x%08x)\n",
-			(unsigned int)request, request->head, request->tail);
+		DRM_DEBUG_TDR("Head in req 0x%lx (HD: 0x%08x TL: 0x%08x)\n",
+			(long unsigned int)request, request->head,
+			request->tail);
 		return true;
 	}
 
@@ -3807,11 +3791,7 @@ i915_gem_ring_throttle(struct drm_device *dev, struct drm_file *file)
 	struct intel_ring_buffer *ring = NULL;
 	unsigned reset_counter;
 	u32 seqno = 0;
-	int ret;
-
-	ret = i915_gem_wait_for_error(dev, &dev_priv->gpu_error);
-	if (ret)
-		return ret;
+	int ret = 0;
 
 	spin_lock(&file_priv->mm.lock);
 	list_for_each_entry(request, &file_priv->mm.request_list, client_list) {
@@ -3871,6 +3851,21 @@ i915_gem_object_pin(struct drm_i915_gem_object *obj,
 			ret = i915_vma_unbind(vma);
 			if (ret)
 				return ret;
+		}
+	}
+
+	if (obj->user_fb == 1) {
+		if (obj->pages == NULL) {
+			if (obj->tiling_mode == I915_TILING_X) {
+				/* Tiled(X) Scanout buffers are more suitable
+				   for allocation from stolen area, as its very
+				   unlikely that they will be accessed directly
+				   from the CPU side and any allocation from
+				   stolen area is not directly CPU accessible,
+				   only through the aperture space it can be
+				   accessed */
+				i915_gem_object_move_to_stolen(obj);
+			}
 		}
 	}
 
@@ -4608,7 +4603,6 @@ i915_gem_load(struct drm_device *dev)
 		INIT_LIST_HEAD(&dev_priv->fence_regs[i].lru_list);
 	INIT_DELAYED_WORK(&dev_priv->mm.retire_work,
 			  i915_gem_retire_work_handler);
-	init_waitqueue_head(&dev_priv->gpu_error.reset_queue);
 
 	/* On GEN3 we really need to make sure the ARB C3 LP bit is set */
 	if (IS_GEN3(dev)) {

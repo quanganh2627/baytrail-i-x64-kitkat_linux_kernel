@@ -1718,6 +1718,8 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 		acpi_video_register_with_quirks();
 	}
 
+	i915_init_watchdog(dev);
+
 	if (IS_GEN5(dev))
 		intel_gpu_ips_init(dev_priv);
 
@@ -1999,7 +2001,7 @@ struct drm_ioctl_desc i915_ioctls[] = {
 							DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_SET_PLANE_180_ROTATION, \
 		i915_set_plane_180_rotation, DRM_AUTH | DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(I915_SET_CSC, intel_enable_CSC, DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_SET_CSC, intel_enable_csc, DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_GET_PSR_SUPPORT, intel_edp_get_psr_support,
 								DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_SET_PLANE_ALPHA, i915_set_plane_alpha, \

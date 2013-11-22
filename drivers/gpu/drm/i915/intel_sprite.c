@@ -461,8 +461,6 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_crtc *crtc,
 		rotate = true;
 
 	/* Sizes are 0 based */
-	src_w--;
-	src_h--;
 	crtc_w--;
 	crtc_h--;
 	/*
@@ -1039,7 +1037,7 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	intel_fb = to_intel_framebuffer(fb);
 	obj = intel_fb->obj;
 
-	old_obj = intel_plane->obj;
+	old_obj = intel_plane->old_obj;
 
 	intel_plane->crtc_x = crtc_x;
 	intel_plane->crtc_y = crtc_y;
@@ -1195,16 +1193,18 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	}
 
 	mutex_lock(&dev->struct_mutex);
-
+	drm_gem_object_reference(&obj->base);
 	/* Note that this will apply the VT-d workaround for scanouts,
 	 * which is more restrictive than required for sprites. (The
 	 * primary plane requires 256KiB alignment with 64 PTE padding,
 	 * the sprite planes only require 128KiB alignment and 32 PTE padding.
 	 */
 	ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
-	if (ret)
+	if (ret) {
+		drm_gem_object_unreference(&obj->base);
 		goto out_unlock;
-
+	}
+	intel_plane->old_obj = intel_plane->obj;
 	intel_plane->obj = obj;
 
 	/*
@@ -1245,6 +1245,7 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 			}
 		}
 		intel_unpin_fb_obj(old_obj);
+		drm_gem_object_unreference(&old_obj->base);
 	}
 
 out_unlock:
@@ -1266,18 +1267,23 @@ intel_disable_plane(struct drm_plane *plane)
 		return -EINVAL;
 
 	intel_enable_primary(plane->crtc);
+	intel_wait_for_vblank(dev, intel_plane->pipe);
 	intel_plane->disable_plane(plane, plane->crtc);
 
-	if (!intel_plane->obj)
-		goto out;
-
-	intel_wait_for_vblank(dev, intel_plane->pipe);
-
-	mutex_lock(&dev->struct_mutex);
-	intel_unpin_fb_obj(intel_plane->obj);
-	intel_plane->obj = NULL;
-	mutex_unlock(&dev->struct_mutex);
-out:
+	if (intel_plane->obj || intel_plane->old_obj) {
+		mutex_lock(&dev->struct_mutex);
+		if (intel_plane->obj) {
+			intel_unpin_fb_obj(intel_plane->obj);
+			drm_gem_object_unreference(&intel_plane->obj->base);
+			intel_plane->obj = NULL;
+		}
+		if (intel_plane->old_obj) {
+			intel_unpin_fb_obj(intel_plane->old_obj);
+			drm_gem_object_unreference(&intel_plane->old_obj->base);
+			intel_plane->old_obj = NULL;
+		}
+		mutex_unlock(&dev->struct_mutex);
+	}
 
 	return ret;
 }

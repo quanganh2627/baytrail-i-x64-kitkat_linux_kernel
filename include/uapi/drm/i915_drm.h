@@ -76,20 +76,20 @@
 #define PIPEB		10
 
 struct drm_intel_csc_params {
-	float   m_CSCCoeff[MAX_CSC_COEFFICIENTS];
+	float   m_csccoeff[MAX_CSC_COEFFICIENTS];
 };
 
-union CSC_COEFFICIENT_WG {
-	unsigned int  Value;
+union csc_coefficient_wg {
+	unsigned int  value;
 	struct {
-	unsigned int Coeff_2:16; /* bit 0-15 */
-	unsigned int  Coeff_1:16; /* bits 16-32 */
+	unsigned int coeff_2:16; /* bit 0-15 */
+	unsigned int  coeff_1:16; /* bits 16-32 */
 	};
 };
 
-struct CSC_Coeff {
+struct csc_coeff {
 	unsigned int crtc_id;
-	union CSC_COEFFICIENT_WG VLV_CSC_Coeff[6];
+	union csc_coefficient_wg vlv_csc_coeff[6];
 };
 
 typedef struct _drm_i915_init {
@@ -283,7 +283,9 @@ typedef struct _drm_i915_sarea {
 #define DRM_IOCTL_I915_HWS_ADDR		DRM_IOW(DRM_COMMAND_BASE + DRM_I915_HWS_ADDR, struct drm_i915_gem_init)
 #define DRM_IOCTL_I915_GEM_INIT		DRM_IOW(DRM_COMMAND_BASE + DRM_I915_GEM_INIT, struct drm_i915_gem_init)
 #define DRM_IOCTL_I915_GEM_EXECBUFFER	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_GEM_EXECBUFFER, struct drm_i915_gem_execbuffer)
-#define DRM_IOCTL_I915_GEM_EXECBUFFER2	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_GEM_EXECBUFFER2, struct drm_i915_gem_execbuffer2)
+#define DRM_IOCTL_I915_GEM_EXECBUFFER2	DRM_IOWR( \
+				DRM_COMMAND_BASE + DRM_I915_GEM_EXECBUFFER2,\
+				struct drm_i915_gem_execbuffer2)
 #define DRM_IOCTL_I915_GEM_PIN		DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_PIN, struct drm_i915_gem_pin)
 #define DRM_IOCTL_I915_GEM_UNPIN	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_GEM_UNPIN, struct drm_i915_gem_unpin)
 #define DRM_IOCTL_I915_GEM_BUSY		DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_BUSY, struct drm_i915_gem_busy)
@@ -326,7 +328,7 @@ typedef struct _drm_i915_sarea {
 		DRM_IOW(DRM_COMMAND_BASE + DRM_I915_SET_RESERVED_REG_BIT_2, \
 		struct drm_i915_reserved_reg_bit_2)
 #define DRM_IOCTL_I915_SET_CSC DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_SET_CSC, \
-		struct CSC_Coeff)
+		struct csc_coeff)
 #define DRM_IOCTL_I915_GET_PSR_SUPPORT	DRM_IOR(DRM_COMMAND_BASE + \
 						DRM_I915_GET_PSR_SUPPORT, bool)
 #define DRM_IOCTL_I915_SET_PLANE_ALPHA		\
@@ -813,7 +815,20 @@ struct drm_i915_gem_execbuffer2 {
  */
 #define I915_EXEC_HANDLE_LUT		(1<<12)
 
-#define __I915_EXEC_UNKNOWN_FLAGS -(I915_EXEC_HANDLE_LUT<<1)
+/** Caller supplies a sync fence fd in the rsvd2 field.
+ * Wait for it to be signalled before starting the work
+ */
+#define I915_EXEC_WAIT_FENCE            (1<<13)
+
+/** Caller wants a sync fence fd for this execbuffer.
+ *  It will be returned in rsvd2
+ */
+#define I915_EXEC_REQUEST_FENCE         (1<<14)
+
+/* Enable watchdog timer for this batch buffer */
+#define I915_EXEC_ENABLE_WATCHDOG       (1<<15)
+
+#define __I915_EXEC_UNKNOWN_FLAGS -(I915_EXEC_ENABLE_WATCHDOG<<1)
 
 #define I915_EXEC_CONTEXT_ID_MASK	(0xffffffff)
 #define i915_execbuffer2_set_context_id(eb2, context) \

@@ -652,6 +652,8 @@
 #define RING_SYNC_2(base)	((base)+0x48)
 #define RING_MI_MODE(base)	((base)+0x9c)
 #define RING_UHPTR(base)    ((base)+0x134)
+#define RING_CNTR(base)		((base)+0x178)
+#define RING_THRESH(base)	((base)+0x17C)
 #define GEN6_RVSYNC	(RING_SYNC_0(RENDER_RING_BASE))
 #define GEN6_RBSYNC	(RING_SYNC_1(RENDER_RING_BASE))
 #define GEN6_RVESYNC	(RING_SYNC_2(RENDER_RING_BASE))
@@ -790,10 +792,18 @@
 
 #define VLV_DISPLAY_BASE 0x180000
 
+/* Watchdog counter registers */
+#define PR_CTR_CTL      0x2178
+#define PR_CTR_THRESH   0x217c
+#define PR_CTR          0x2190
+#define VCS_CTR_THRESH  0x1217c
+#define VCS_CTR         0x12178
+
 #define SCPD0		0x0209c /* 915+ only */
 #define IER		0x020a0
 #define IIR		0x020a4
 #define IMR		0x020a8
+#define   GEN6_RENDER_TIMEOUT_COUNTER_EXPIRED           (1 << 6)
 #define ISR		0x020ac
 #define VLV_GUNIT_CLOCK_GATE	(VLV_DISPLAY_BASE + 0x2060)
 #define   GCFG_DIS		(1<<8)
@@ -948,8 +958,10 @@
 #define GT_BLT_FLUSHDW_NOTIFY_INTERRUPT		(1 << 26)
 #define GT_BLT_CS_ERROR_INTERRUPT		(1 << 25)
 #define GT_BLT_USER_INTERRUPT			(1 << 22)
+#define GT_GEN6_BSD_WATCHDOG_INTERRUPT          (1 << 18)
 #define GT_BSD_CS_ERROR_INTERRUPT		(1 << 15)
 #define GT_BSD_USER_INTERRUPT			(1 << 12)
+#define GT_GEN6_RENDER_WATCHDOG_INTERRUPT       (1 << 6)
 #define GT_RENDER_L3_PARITY_ERROR_INTERRUPT	(1 <<  5) /* !snb */
 #define GT_RENDER_PIPECTL_NOTIFY_INTERRUPT	(1 <<  4)
 #define GT_RENDER_CS_MASTER_ERROR_INTERRUPT	(1 <<  3)
@@ -990,6 +1002,9 @@
 #define I915_HDMI_AUDIO_UNDERRUN			(1UL<<31)
 #define I915_HDMI_AUDIO_BUFFER_DONE			(1UL<<29)
 #define I915_HDMI_AUDIO_UNDERRUN_ENABLE			(1UL<<15)
+#define GEN6_BSD_IMR			0x120a8
+#define   GEN6_BSD_USER_INTERRUPT	(1 << 12)
+#define   GEN6_BSD_TIMEOUT_COUNTER_EXPIRED (1 << 18)
 
 #define GEN6_BSD_RNCID			0x12198
 
@@ -1867,8 +1882,8 @@
 #define _VSYNCSHIFT_B	(dev_priv->info->display_mmio_offset + 0x61028)
 
 /* CSC Control Register */
-#define	_PIPEACSC	0x600b0
-#define	_PIPEBCSC	0x610b0
+#define	_PIPEACSC	(dev_priv->info->display_mmio_offset + 0x600b0)
+#define	_PIPEBCSC	(dev_priv->info->display_mmio_offset + 0x610b0)
 #define	PIPECONF_CSC_ENABLE	(1<<15)
 
 #define HTOTAL(trans) _TRANSCODER(trans, _HTOTAL_A, _HTOTAL_B)
@@ -5857,10 +5872,10 @@ EDP_PSR_SW_TIMER
 #define VLV_PWRGT_DPIO_RX_TX_LANES_MASK        0x00FFF000
 
 /* GUnit registers for save/restore during s0ix */
-#define GUNIT_CONTROL		0x02030
-#define GUNIT_CONTROL1		0x02034
-#define GUNIT_CZCLOCK_GATING_DISABLE1 0x02060
-#define GUNIT_CZCLOCK_GATING_DISABLE2 0x02064
+#define GUNIT_CONTROL		(VLV_DISPLAY_BASE + 0x02030)
+#define GUNIT_CONTROL1		(VLV_DISPLAY_BASE + 0x02034)
+#define GUNIT_CZCLOCK_GATING_DISABLE1 (VLV_DISPLAY_BASE + 0x02060)
+#define GUNIT_CZCLOCK_GATING_DISABLE2 (VLV_DISPLAY_BASE + 0x02064)
 
 /* VHDMI switch control */
 #define VHDMICNT		0x6d

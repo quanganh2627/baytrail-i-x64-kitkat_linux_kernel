@@ -347,7 +347,7 @@ struct intel_plane {
 	struct drm_plane base;
 	int plane;
 	enum pipe pipe;
-	struct drm_i915_gem_object *obj;
+	struct drm_i915_gem_object *obj, *old_obj;
 	bool can_scale;
 	int max_downscale;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
@@ -668,7 +668,7 @@ intel_pipe_to_cpu_transcoder(struct drm_i915_private *dev_priv,
 			     enum pipe pipe);
 extern void intel_wait_for_vblank(struct drm_device *dev, int pipe);
 extern void intel_wait_for_pipe_off(struct drm_device *dev, int pipe);
-extern int intel_enable_CSC(struct drm_device *dev, void *csc_params,
+extern int intel_enable_csc(struct drm_device *dev, void *csc_params,
 		struct drm_file *file_priv);
 extern int ironlake_get_lanes_required(int target_clock, int link_bw, int bpp);
 extern void vlv_wait_port_ready(struct drm_i915_private *dev_priv, int port);

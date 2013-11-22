@@ -3189,16 +3189,8 @@ static void ironlake_fdi_disable(struct drm_crtc *crtc)
 static bool intel_crtc_has_pending_flip(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	unsigned long flags;
 	bool pending;
-
-	/* Only do this for global reset as page flips for TDR should
-	* sort themselves out*/
-	if (i915_reset_in_progress(&dev_priv->gpu_error) ||
-	    intel_crtc->reset_counter != atomic_read(&dev_priv->gpu_error.reset_counter))
-		return false;
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 	pending = to_intel_crtc(crtc)->unpin_work != NULL;
@@ -4777,7 +4769,7 @@ static void vlv_pllb_recal_opamp(struct drm_i915_private *dev_priv)
 
 	reg_val = vlv_dpio_read(dev_priv, DPIO_CALIBRATION);
 	reg_val &= 0x8cffffff;
-	reg_val = 0x8c000000;
+	reg_val |= 0x8c000000;
 	vlv_dpio_write(dev_priv, DPIO_CALIBRATION, reg_val);
 
 	reg_val = vlv_dpio_read(dev_priv, DPIO_IREF(1));
@@ -6483,6 +6475,11 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 		pll = intel_crtc_to_shared_dpll(intel_crtc);
 
 	}
+	if (pll == NULL) {
+		DRM_DEBUG_DRIVER("failed to find PLL for pipe %c\n",
+				pipe_name(pipe));
+		return -EINVAL;
+	}
 
 	intel_set_pipe_timings(intel_crtc);
 
@@ -7549,7 +7546,7 @@ static int intel_crtc_cursor_set(struct drm_crtc *crtc,
 	if (&obj->base == NULL)
 		return -ENOENT;
 	if (obj->base.size < width * height * 4) {
-		DRM_ERROR("buffer is to small %d needs to be bigger than %d\n",\
+		DRM_ERROR("buffer too small %zu needs to be bigger than %u\n",
 				obj->base.size, width * height * 4);
 		ret = -ENOMEM;
 		goto fail;
@@ -8269,6 +8266,7 @@ static void do_intel_finish_page_flip(struct drm_device *dev,
 
 	if (work == NULL || atomic_read(&work->pending) < INTEL_FLIP_COMPLETE) {
 		spin_unlock_irqrestore(&dev->event_lock, flags);
+		DRM_ERROR("invalid or inactive unpin_work!\n");
 		return;
 	}
 
@@ -8541,8 +8539,8 @@ static void intel_gen7_queue_mmio_flip_work(struct work_struct *__work)
 				flipwork->flipdata.seqno);
 	}
 
-	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 	intel_mark_page_flip_active(intel_crtc);
+	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 }
 
 /* Using MMIO based flips starting from VLV, for Media power well
@@ -10296,10 +10294,6 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 
 	i915_rpm_get_disp(dev);
 
-	  /* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
-	if (!intel_restore_clr_mgr_status(dev))
-		DRM_ERROR("Restore Color manager status failed");
-
 	/* Re-detect hot pluggable displays */
 	i915_simulate_hpd(dev, true);
 
@@ -10325,6 +10319,9 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	}
 	dev_priv->late_resume = true;
 	mid_hdmi_audio_resume(dev);
+	/* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
+	if (!intel_restore_clr_mgr_status(dev))
+		DRM_ERROR("Restore Color manager status failed");
 	dev_priv->s0ixstat = false;
 	return 0;
 }
@@ -10574,6 +10571,7 @@ static void intel_user_framebuffer_destroy(struct drm_framebuffer *fb)
 {
 	struct intel_framebuffer *intel_fb = to_intel_framebuffer(fb);
 
+	intel_fb->obj->user_fb = 0;
 	intel_framebuffer_fini(intel_fb);
 	kfree(intel_fb);
 }
@@ -10713,6 +10711,7 @@ intel_user_framebuffer_create(struct drm_device *dev,
 	if (&obj->base == NULL)
 		return ERR_PTR(-ENOENT);
 
+	obj->user_fb = 1;
 	return intel_framebuffer_create(dev, mode_cmd, obj);
 }
 

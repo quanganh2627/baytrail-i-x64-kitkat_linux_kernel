@@ -33,6 +33,7 @@
 
 #include "i915_reg.h"
 #include "intel_bios.h"
+#include "intel_sync.h"
 #include "intel_ringbuffer.h"
 #include <linux/io-mapping.h>
 #include <linux/i2c.h>
@@ -729,6 +730,12 @@ struct intel_hangcheck {
 	/* Number of times this ring has been
 	* reset since boot*/
 	u32 total;
+
+	/* Number of TDR hang detections for this ring */
+	u32 tdr_count;
+
+	/* Number of watchdog hang detections for this ring */
+	u32 watchdog_count;
 };
 
 struct i915_suspend_saved_registers {
@@ -1116,8 +1123,7 @@ struct i915_gpu_error {
 	 * Lowest bit controls the reset state machine: Set means a reset is in
 	 * progress. This state will (presuming we don't have any bugs) decay
 	 * into either unset (successful reset) or the special WEDGED value (hw
-	 * terminally sour). All waiters on the reset_queue will be woken when
-	 * that happens.
+	 * terminally sour).
 	 */
 	atomic_t reset_counter;
 
@@ -1126,11 +1132,6 @@ struct i915_gpu_error {
 	 */
 #define I915_RESET_IN_PROGRESS_FLAG	1
 #define I915_WEDGED			(1 << 31)
-
-	/**
-	 * Waitqueue to signal when the reset has completed.
-	 */
-	wait_queue_head_t reset_queue;
 
 	uint32_t total_resets;
 
@@ -1528,6 +1529,8 @@ typedef struct drm_i915_private {
 	int (*psb_mmap)(struct file *filp, struct vm_area_struct *vma);
 	int (*psb_msvdx_interrupt)(void *pvData);
 #endif
+
+	uint32_t watchdog_threshold[I915_NUM_RINGS];
 } drm_i915_private_t;
 
 static inline struct drm_i915_private *to_i915(const struct drm_device *dev)
@@ -1681,6 +1684,12 @@ struct drm_i915_gem_object {
 	unsigned int has_aliasing_ppgtt_mapping:1;
 	unsigned int has_global_gtt_mapping:1;
 	unsigned int has_dma_mapping:1;
+
+	/*
+	 * Is the object associated with user created FB
+	 */
+
+	unsigned int user_fb:1;
 
 	/*
 	 * Is the object to be mapped as read-only to the GPU
@@ -1951,6 +1960,7 @@ extern bool i915_enable_hangcheck __read_mostly;
 extern unsigned int i915_hangcheck_period __read_mostly;
 extern unsigned int i915_ring_reset_min_alive_period __read_mostly;
 extern unsigned int i915_gpu_reset_min_alive_period __read_mostly;
+extern int i915_enable_watchdog __read_mostly;
 extern int i915_enable_ppgtt __read_mostly;
 extern int i915_enable_turbo __read_mostly;
 extern int i915_psr_support __read_mostly;
@@ -2001,8 +2011,8 @@ extern void intel_console_resume(struct work_struct *work);
 
 /* i915_irq.c */
 void i915_queue_hangcheck(struct drm_device *dev, u32 ringid);
-void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc);
-
+void i915_handle_error(struct drm_device *dev, struct intel_hangcheck *hc,
+			int watchdog);
 void i915_hangcheck_sample(unsigned long data);
 
 extern void intel_irq_init(struct drm_device *dev);
@@ -2146,6 +2156,9 @@ int __must_check i915_gem_get_seqno(struct drm_device *dev, u32 *seqno);
 int __must_check i915_gem_set_seqno(struct drm_device *dev, u32 seqno);
 int __must_check i915_gem_object_get_fence(struct drm_i915_gem_object *obj);
 int __must_check i915_gem_object_put_fence(struct drm_i915_gem_object *obj);
+
+int __must_check i915_gem_next_request_seqno(struct intel_ring_buffer *ring,
+					     u32 *seqno);
 
 static inline bool
 i915_gem_object_pin_fence(struct drm_i915_gem_object *obj)
@@ -2312,6 +2325,8 @@ i915_gem_obj_ggtt_pin(struct drm_i915_gem_object *obj,
 
 /* i915_gem_context.c */
 void i915_gem_context_init(struct drm_device *dev);
+void i915_gem_context_restore(struct drm_device *dev,
+				struct intel_ring_buffer *ring);
 void i915_gem_context_fini(struct drm_device *dev);
 void i915_gem_context_close(struct drm_device *dev, struct drm_file *file);
 int i915_switch_context(struct intel_ring_buffer *ring,
@@ -2386,6 +2401,7 @@ i915_gem_object_create_stolen_for_preallocated(struct drm_device *dev,
 					       u32 stolen_offset,
 					       u32 gtt_offset,
 					       u32 size);
+void i915_gem_object_move_to_stolen(struct drm_i915_gem_object *obj);
 void i915_gem_object_release_stolen(struct drm_i915_gem_object *obj);
 
 /* i915_gem_tiling.c */
@@ -2625,6 +2641,19 @@ int vlv_freq_opcode(int ddr_freq, int val);
 int i915_rpm_init(struct drm_device *dev);
 int i915_rpm_deinit(struct drm_device *dev);
 
+#define KM_MEDIA_ENGINE_TIMEOUT_VALUE_IN_MS 60
+#define KM_BSD_ENGINE_TIMEOUT_VALUE_IN_MS   60
+#define KM_TIMER_MILLISECOND 1000
+
+/* Timestamp timer resolution = 0.080 uSec, or 12500000 counts per second*/
+#define KM_TIMESTAMP_CNTS_PER_SEC_80NS          12500000
+
+/* Timestamp timer resolution = 0.640 uSec, or  1562500 counts per second*/
+#define KM_TIMESTAMP_CNTS_PER_SEC_640NS          1562500
+
+#define KM_TIMER_MHZ 1000000
+#define KM_CD_CLK_FREQ (450 * KM_TIMER_MHZ)
+
 int i915_rpm_get_ring(struct drm_device *dev);
 int i915_rpm_put_ring(struct drm_device *dev);
 
@@ -2741,5 +2770,7 @@ timespec_to_jiffies_timeout(const struct timespec *value)
 
 	return min_t(unsigned long, MAX_JIFFY_OFFSET, j + 1);
 }
+
+void i915_init_watchdog(struct drm_device *dev);
 
 #endif

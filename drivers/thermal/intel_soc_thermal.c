@@ -66,7 +66,14 @@
 
 /* Power Limit registers */
 #define PKG_TURBO_POWER_LIMIT	0x610
+#define PKG_TURBO_CFG		0x670
 #define CPU_PWR_BUDGET_CTL	0x02
+
+/* PKG_TURBO_PL1 holds PL1 in terms of 32mW */
+#define PL_UNIT_MW		32
+
+/* Magic number symbolising Dynamic Turbo OFF */
+#define DISABLE_DYNAMIC_TURBO	0xB0FF
 
 /* IRQ details */
 #define SOC_DTS_CONTROL		0x80
@@ -410,6 +417,49 @@ static int soc_get_cur_state(struct thermal_cooling_device *cdev,
 	return 0;
 }
 
+static void set_floor_freq(int val)
+{
+	u32 eax;
+
+	eax = read_soc_reg(CPU_PWR_BUDGET_CTL);
+
+	/* Set bits[8:14] of eax to val */
+	eax = (eax & ~(0x7F << 8)) | (val << 8);
+
+	write_soc_reg(CPU_PWR_BUDGET_CTL, eax);
+}
+
+static int disable_dynamic_turbo(struct cooling_device_info *cdev_info)
+{
+	u32 eax, edx;
+
+	mutex_lock(&cdev_info->lock_state);
+
+	rdmsr_on_cpu(0, PKG_TURBO_CFG, &eax, &edx);
+
+	/* Set bits[0:2] to 0 to enable TjMax Turbo mode */
+	eax = eax & ~0x07;
+
+	/* Set bit[8] to 0 to disable Dynamic Turbo */
+	eax = eax & ~(1 << 8);
+
+	/* Set bits[9:11] to 0 disable Dynamic Turbo Policy */
+	eax = eax & ~(0x07 << 9);
+
+	wrmsr_on_cpu(0, PKG_TURBO_CFG, eax, edx);
+
+	/*
+	 * Now that we disabled Dynamic Turbo, we can
+	 * make the floor frequency ratio also 0.
+	 */
+	set_floor_freq(0);
+
+	cdev_info->soc_cur_state = DISABLE_DYNAMIC_TURBO;
+
+	mutex_unlock(&cdev_info->lock_state);
+	return 0;
+}
+
 static int soc_set_cur_state(struct thermal_cooling_device *cdev,
 				unsigned long state)
 {
@@ -417,6 +467,9 @@ static int soc_set_cur_state(struct thermal_cooling_device *cdev,
 	struct soc_throttle_data *data;
 	struct cooling_device_info *cdev_info =
 			(struct cooling_device_info *)cdev->devdata;
+
+	if (state == DISABLE_DYNAMIC_TURBO)
+		return disable_dynamic_turbo(cdev_info);
 
 	if (state >= SOC_MAX_STATES) {
 		pr_err("Invalid SoC throttle state:%ld\n", state);
@@ -434,18 +487,73 @@ static int soc_set_cur_state(struct thermal_cooling_device *cdev,
 
 	wrmsr_on_cpu(0, PKG_TURBO_POWER_LIMIT, eax, edx);
 
-	eax = read_soc_reg(CPU_PWR_BUDGET_CTL);
-
-	/* Set bits[8:14] of eax to 'data->floor_freq' */
-	eax = (eax & ~(0x7F << 8)) | (data->floor_freq << 8);
-
-	write_soc_reg(CPU_PWR_BUDGET_CTL, eax);
+	set_floor_freq(data->floor_freq);
 
 	cdev_info->soc_cur_state = state;
 
 	mutex_unlock(&cdev_info->lock_state);
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_THERMAL
+static int soc_get_force_state_override(struct thermal_cooling_device *cdev,
+					char *buf)
+{
+	int i;
+	int pl1_vals_mw[SOC_MAX_STATES];
+	struct cooling_device_info *cdev_info =
+			(struct cooling_device_info *)cdev->devdata;
+
+	mutex_lock(&cdev_info->lock_state);
+
+	/* PKG_TURBO_PL1 holds PL1 in terms of 32mW. So, multiply by 32 */
+	for (i = 0; i < SOC_MAX_STATES; i++) {
+		pl1_vals_mw[i] =
+			cdev_info->soc_data[i].power_limit * PL_UNIT_MW;
+	}
+
+	mutex_unlock(&cdev_info->lock_state);
+
+	return sprintf(buf, "%d %d %d %d\n", pl1_vals_mw[0], pl1_vals_mw[1],
+					pl1_vals_mw[2], pl1_vals_mw[3]);
+}
+
+static int soc_set_force_state_override(struct thermal_cooling_device *cdev,
+					char *buf)
+{
+	int i, ret;
+	int pl1_vals_mw[SOC_MAX_STATES];
+	unsigned long cur_state;
+	struct cooling_device_info *cdev_info =
+				(struct cooling_device_info *)cdev->devdata;
+
+	/*
+	 * The four space separated values entered via the sysfs node
+	 * override the default values configured through platform data.
+	 */
+	ret = sscanf(buf, "%d %d %d %d", &pl1_vals_mw[0], &pl1_vals_mw[1],
+					&pl1_vals_mw[2], &pl1_vals_mw[3]);
+	if (ret != SOC_MAX_STATES) {
+		pr_err("Invalid values in soc_set_force_state_override\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&cdev_info->lock_state);
+
+	/* PKG_TURBO_PL1 takes PL1 in terms of 32mW. So, divide by 32 */
+	for (i = 0; i < SOC_MAX_STATES; i++) {
+		cdev_info->soc_data[i].power_limit =
+					pl1_vals_mw[i] / PL_UNIT_MW;
+	}
+
+	/* Update the cur_state value of this cooling device */
+	cur_state = cdev_info->soc_cur_state;
+
+	mutex_unlock(&cdev_info->lock_state);
+
+	return soc_set_cur_state(cdev, cur_state);
+}
+#endif
 
 static void notify_thermal_event(struct thermal_zone_device *tzd,
 				long temp, int event, int level)
@@ -568,6 +676,10 @@ static struct thermal_cooling_device_ops soc_cooling_ops = {
 	.get_max_state = soc_get_max_state,
 	.get_cur_state = soc_get_cur_state,
 	.set_cur_state = soc_set_cur_state,
+#ifdef CONFIG_DEBUG_THERMAL
+	.get_force_state_override = soc_get_force_state_override,
+	.set_force_state_override = soc_set_force_state_override,
+#endif
 };
 
 /*********************************************************************

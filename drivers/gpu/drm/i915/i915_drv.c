@@ -180,6 +180,11 @@ MODULE_PARM_DESC(i915_gpu_reset_min_alive_period,
 		"prevent further resets. "
 		"default=0 seconds (disabled)");
 
+int i915_enable_watchdog __read_mostly = 1;
+module_param_named(i915_enable_watchdog, i915_enable_watchdog, int, 0644);
+MODULE_PARM_DESC(i915_enable_watchdog,
+		"Enable watchdog timers (default: true)");
+
 int i915_enable_ppgtt __read_mostly = -1;
 module_param_named(i915_enable_ppgtt, i915_enable_ppgtt, int, 0600);
 MODULE_PARM_DESC(i915_enable_ppgtt,
@@ -751,10 +756,20 @@ int i915_reset(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	bool simulated;
-	int ret;
+	int ret = 0;
 
 	if (!i915_try_reset)
 		return 0;
+
+	drm_halt(dev);
+
+	/* Wait for DRM to go idle.
+	* We will try the reset even if this fails because the alternative
+	* is a terminal wedge */
+	ret = drm_wait_idle(dev, 5000);
+
+	if (ret != 0)
+		DRM_ERROR("Failed to halt DRM. Attempting reset anyway...\n");
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -764,8 +779,9 @@ int i915_reset(struct drm_device *dev)
 
 	simulated = dev_priv->gpu_error.stop_rings != 0;
 
-	if (!simulated && (get_seconds() - dev_priv->gpu_error.last_reset)
-	    < i915_gpu_reset_min_alive_period) {
+	if (!simulated && i915_gpu_reset_min_alive_period > 0 &&
+		(get_seconds() - dev_priv->gpu_error.last_reset)
+			< i915_gpu_reset_min_alive_period) {
 		DRM_ERROR("GPU hanging too fast, declaring wedged!\n");
 		ret = -ENODEV;
 	} else {
@@ -786,11 +802,8 @@ int i915_reset(struct drm_device *dev)
 	if (ret) {
 		DRM_ERROR("Failed to reset chip.\n");
 		mutex_unlock(&dev->struct_mutex);
-		return ret;
+		goto done;
 	}
-
-	/* Clean up the display following reset */
-	intel_display_handle_reset(dev);
 
 	/* Ok, now get things going again... */
 
@@ -815,14 +828,23 @@ int i915_reset(struct drm_device *dev)
 
 		i915_gem_init_swizzling(dev);
 
-		for_each_ring(ring, dev_priv, i)
-			ring->init(ring);
+		/* Release the reset condition so that i915_gem_context_restore
+		 * can submit a request to the ring to set the context */
+		smp_mb__before_atomic_inc();
+		atomic_inc(&dev_priv->gpu_error.reset_counter);
 
-		i915_gem_context_init(dev);
+		for_each_ring(ring, dev_priv, i) {
+			ring->init(ring);
+			i915_gem_context_restore(dev, ring);
+		}
+
 		if (dev_priv->mm.aliasing_ppgtt) {
 			ret = dev_priv->mm.aliasing_ppgtt->enable(dev);
-			if (ret)
+
+			if (ret) {
+				DRM_ERROR("Enable PPGTT returns %d\n", ret);
 				i915_gem_cleanup_aliasing_ppgtt(dev);
+			}
 		}
 
 		/*
@@ -831,16 +853,34 @@ int i915_reset(struct drm_device *dev)
 		 * some unknown reason, this blows up my ilk, so don't.
 		 */
 
+		/* Do any cleanup required for pending vblanks / flips */
+		drm_clean_pending_vblanks(dev);
+		intel_display_handle_reset(dev);
+
+		drm_irq_uninstall_locked(dev, 1);
+		drm_irq_install_locked(dev, 1);
+
 		mutex_unlock(&dev->struct_mutex);
 
-		drm_irq_uninstall(dev);
-		drm_irq_install(dev);
+		/* rps/rc6 re-init is necessary to restore state lost
+		 * after the reset and the re-install of drm irq. */
+		if (INTEL_INFO(dev)->gen > 5) {
+			mutex_lock(&dev->struct_mutex);
+			intel_enable_gt_powersave(dev);
+			mutex_unlock(&dev->struct_mutex);
+		}
+
 		intel_hpd_init(dev);
+
 	} else {
 		mutex_unlock(&dev->struct_mutex);
 	}
 
-	return 0;
+done:
+	/* Allow DRM to continue processing IOCTLs */
+	drm_continue(dev);
+
+	return ret;
 }
 
 static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -907,9 +947,10 @@ static int i915_mmap(struct file *filp, struct vm_area_struct *vma)
 static int i915_release(struct inode *inode, struct file *filp)
 {
 	int ret = 0;
+#ifdef CONFIG_PM_RUNTIME
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
-#ifdef CONFIG_PM_RUNTIME
+
 	i915_rpm_get_callback(dev);
 #endif
 #ifdef CONFIG_DRM_VXD_BYT
@@ -930,8 +971,11 @@ static int i915_release(struct inode *inode, struct file *filp)
 static long i915_ioctl(struct file *filp,
 	      unsigned int cmd, unsigned long arg)
 {
+#ifdef CONFIG_PM_RUNTIME
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
+#endif
+
 #ifdef CONFIG_DRM_VXD_BYT
 	unsigned int nr = DRM_IOCTL_NR(cmd);
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -990,6 +1034,7 @@ static int i915_pm_suspend(struct device *dev)
 	return ret;
 }
 
+#ifdef CONFIG_PM_RUNTIME
 static int i915_rpm_suspend(struct device *dev)
 {
 	int ret;
@@ -1000,6 +1045,7 @@ static int i915_rpm_suspend(struct device *dev)
 
 	return ret;
 }
+#endif
 
 static int i915_pm_resume(struct device *dev)
 {
@@ -1014,6 +1060,7 @@ static int i915_pm_resume(struct device *dev)
 	return ret;
 }
 
+#ifdef CONFIG_PM_RUNTIME
 static int i915_rpm_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -1026,6 +1073,7 @@ static int i915_rpm_resume(struct device *dev)
 
 	return ret;
 }
+#endif
 
 static int i915_pm_freeze(struct device *dev)
 {
@@ -1207,3 +1255,35 @@ module_exit(i915_exit);
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL and additional rights");
+
+void i915_init_watchdog(struct drm_device *dev)
+{
+	drm_i915_private_t *dev_priv = dev->dev_private;
+
+	/* Based on pre-defined time out value (60ms or 30ms) calculate
+	* timer count thresholds needed based on core frequency.
+	*
+	* For RCS.
+	* The timestamp resolution changed in Gen7 and beyond to 80ns
+	* for all pipes. Before that it was 640ns.*/
+
+	int freq;
+
+	if (INTEL_INFO(dev)->gen >= 7)
+		freq = KM_TIMESTAMP_CNTS_PER_SEC_80NS;
+	else
+		freq = KM_TIMESTAMP_CNTS_PER_SEC_640NS;
+
+	dev_priv->watchdog_threshold[RCS] =
+		((KM_MEDIA_ENGINE_TIMEOUT_VALUE_IN_MS) *
+		(freq / KM_TIMER_MILLISECOND));
+
+	dev_priv->watchdog_threshold[VCS] =
+		((KM_BSD_ENGINE_TIMEOUT_VALUE_IN_MS) *
+		(freq / KM_TIMER_MILLISECOND));
+
+	DRM_DEBUG_TDR("RCS Thresh 0x%08x  VCS Thresh 0x%08x\n",
+		dev_priv->watchdog_threshold[RCS],
+		dev_priv->watchdog_threshold[VCS]);
+}
+

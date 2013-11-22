@@ -31,7 +31,9 @@
 #include "i915_drv.h"
 #include "i915_trace.h"
 #include "intel_drv.h"
+#include "intel_sync.h"
 #include <linux/dma_remapping.h>
+#include "intel_ringbuffer.h"
 
 struct eb_objects {
 	struct list_head objects;
@@ -868,14 +870,20 @@ i915_reset_gen7_sol_offsets(struct drm_device *dev,
 	if (!IS_GEN7(dev) || ring != &dev_priv->ring[RCS])
 		return 0;
 
-	ret = intel_ring_begin(ring, 4 * 3);
+	ret = intel_ring_begin(ring, 2 + (4 * 4));
 	if (ret)
 		return ret;
+
+	/* Comments in i915_reg.h indicate that a MI_LOAD_REGISTER_IMM
+	* should be preceded by a MI_NOOP*/
+	intel_ring_emit(ring, MI_NOOP);
+	intel_ring_emit(ring, MI_NOOP);
 
 	for (i = 0; i < 4; i++) {
 		intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(1));
 		intel_ring_emit(ring, GEN7_SO_WRITE_OFFSET(i));
 		intel_ring_emit(ring, 0);
+		intel_ring_emit(ring, MI_NOOP);
 	}
 
 	intel_ring_advance(ring);
@@ -900,8 +908,10 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 	u32 ctx_id = i915_execbuffer2_get_context_id(*args);
 	u32 exec_start, exec_len;
 	u32 mask, flags;
-	int ret, mode, i;
+	int ret, mode, i, sync_err = 0;
 	bool need_relocs;
+	u32 seqno;
+	void *handle = NULL;
 
 	if (!i915_gem_check_execbuffer(args))
 		return -EINVAL;
@@ -1135,8 +1145,31 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			goto err;
 	}
 
+	ret = i915_gem_next_request_seqno(ring, &seqno);
+	if (ret)
+		goto err;
+
+	handle = i915_sync_prepare_request(args, ring, seqno);
+	if (handle && IS_ERR(handle)) {
+		ret = PTR_ERR(handle);
+		if (ret)
+			goto err;
+	}
+
+	/* Start watchdog timer*/
+	if ((args->flags & I915_EXEC_ENABLE_WATCHDOG) &&
+		i915_enable_watchdog &&
+		intel_ring_supports_watchdog(ring)) {
+
+		ret = intel_ring_start_watchdog(ring);
+
+		if (ret)
+			goto err;
+	}
+
 	exec_start = i915_gem_obj_offset(batch_obj, vm) +
 		args->batch_start_offset;
+
 	exec_len = args->batch_len;
 	if (cliprects) {
 		/* Non-NULL cliprects only possible for Gen <= 4 */
@@ -1163,12 +1196,27 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			goto err;
 	}
 
-	trace_i915_gem_ring_dispatch(ring, intel_ring_get_seqno(ring), flags);
+	/* Cancel watchdog timer */
+	if ((args->flags & I915_EXEC_ENABLE_WATCHDOG) &&
+		i915_enable_watchdog &&
+		intel_ring_supports_watchdog(ring)) {
+
+		ret = intel_ring_stop_watchdog(ring);
+		if (ret)
+			goto err;
+	}
+
+	sync_err = i915_sync_finish_request(handle, args, ring);
+
+	trace_i915_gem_ring_dispatch(ring, seqno, flags);
 
 	i915_gem_execbuffer_move_to_active(&eb->objects, vm, ring);
 	i915_gem_execbuffer_retire_commands(dev, file, ring, batch_obj);
 
 err:
+	if (ret || sync_err)
+		i915_sync_cancel_request(handle, args, ring);
+
 	eb_destroy(eb);
 
 	mutex_unlock(&dev->struct_mutex);

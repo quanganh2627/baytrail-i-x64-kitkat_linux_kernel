@@ -1,6 +1,8 @@
 #ifndef _INTEL_RINGBUFFER_H_
 #define _INTEL_RINGBUFFER_H_
 
+#include "intel_sync.h" /* FIXME: Replace with config once implemented */
+
 /*
  * Gen2 BSpec "1. Programming Environment" / 1.4.4.6 "Ring Buffer Use"
  * Gen3 BSpec "vol1c Memory Interface Functions" / 2.3.4.5 "Ring Buffer Use"
@@ -33,6 +35,10 @@ struct  intel_hw_status_page {
 				MAX_CTX(MAX_CTX(RCS_RING_CTX_SIZE, \
 						VCS_RING_CTX_SIZE), \
 						BCS_RING_CTX_SIZE))
+
+#define WATCHDOG_ENABLE 0
+#define RCS_WATCHDOG_DISABLE 1
+#define VCS_WATCHDOG_DISABLE 0xFFFFFFFF
 
 #define I915_READ_TAIL(ring) I915_READ(RING_TAIL((ring)->mmio_base))
 #define I915_WRITE_TAIL(ring, val) I915_WRITE(RING_TAIL((ring)->mmio_base), val)
@@ -187,6 +193,11 @@ struct  intel_ring_buffer {
 
 	uint32_t last_irq_seqno;
 
+#ifdef CONFIG_I915_HW_SYNC
+	struct i915_sync_timeline *timeline;
+	u32 tdr_seqno; /* Contains the failing seqno when signal called */
+#endif
+
 	void *private;
 };
 
@@ -258,6 +269,9 @@ intel_write_status_page(struct intel_ring_buffer *ring,
 #define I915_GEM_HWS_SCRATCH_INDEX	0x30
 #define I915_GEM_HWS_SCRATCH_ADDR (I915_GEM_HWS_SCRATCH_INDEX << MI_STORE_DWORD_INDEX_SHIFT)
 #define I915_GEM_PGFLIP_INDEX           0x35
+/* Executing seqno used for TDR only. */
+#define I915_GEM_ACTIVE_SEQNO_INDEX     0x34
+
 
 void intel_cleanup_ring_buffer(struct intel_ring_buffer *ring);
 
@@ -308,5 +322,9 @@ int intel_ring_enable(struct intel_ring_buffer *ring);
 int intel_ring_save(struct intel_ring_buffer *ring,
 			u32 flags);
 int intel_ring_restore(struct intel_ring_buffer *ring);
+
+int intel_ring_supports_watchdog(struct intel_ring_buffer *ring);
+int intel_ring_start_watchdog(struct intel_ring_buffer *ring);
+int intel_ring_stop_watchdog(struct intel_ring_buffer *ring);
 
 #endif /* _INTEL_RINGBUFFER_H_ */

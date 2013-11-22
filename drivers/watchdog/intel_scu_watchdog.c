@@ -88,7 +88,7 @@
 #define STRING_COLD_BOOT "COLD_BOOT"
 
 #ifdef CONFIG_DEBUG_FS
-#define SECURITY_WATCHDOG_ADDR  0xFF222232
+#define SECURITY_WATCHDOG_ADDR  0xFF222230
 #define STRING_NONE "NONE"
 #endif
 
@@ -764,11 +764,10 @@ static ssize_t kwd_reset_type_read(struct file *file, char __user *buff,
 	if (ret)
 		return -EINVAL;
 	else {
-		for (len = 0; len < STRING_RESET_TYPE_MAX_LEN
+		for (len = 0; len < (STRING_RESET_TYPE_MAX_LEN - 1)
 			     && str[len] != '\0'; len++)
 			;
 		str[len++] = '\n';
-		str[len] = '\0';
 		ret = copy_to_user(buff, str, len);
 	}
 
