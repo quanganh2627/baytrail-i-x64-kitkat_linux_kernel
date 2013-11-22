@@ -8269,7 +8269,6 @@ static void do_intel_finish_page_flip(struct drm_device *dev,
 
 	if (work == NULL || atomic_read(&work->pending) < INTEL_FLIP_COMPLETE) {
 		spin_unlock_irqrestore(&dev->event_lock, flags);
-		DRM_ERROR("invalid or inactive unpin_work!\n");
 		return;
 	}
 
@@ -8542,8 +8541,8 @@ static void intel_gen7_queue_mmio_flip_work(struct work_struct *__work)
 				flipwork->flipdata.seqno);
 	}
 
-	intel_mark_page_flip_active(intel_crtc);
 	i9xx_update_plane(crtc, crtc->fb, 0, 0);
+	intel_mark_page_flip_active(intel_crtc);
 }
 
 /* Using MMIO based flips starting from VLV, for Media power well
