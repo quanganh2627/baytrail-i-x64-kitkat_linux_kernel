@@ -239,17 +239,17 @@ int i915_set_plane_zorder(struct drm_device *dev, void *data,
 		val |= SPRITE_FORCE_BOTTOM;
 	I915_WRITE(SPCNTR(pipe, 1), val);
 
-	if (zorder != P1S1S2C1 && zorder != P1S2S1C1)
+	if (z_order != P1S1S2C1 && z_order != P1S2S1C1)
 		intel_crtc->primary_alpha = true;
 	else
 		intel_crtc->primary_alpha = false;
 
-	if (zorder != S1P1S2C1 && zorder != S1S2P1C1)
+	if (z_order != S1P1S2C1 && z_order != S1S2P1C1)
 		intel_crtc->sprite0_alpha = true;
 	else
 		intel_crtc->sprite0_alpha = false;
 
-	if (zorder != S2P1S1C1 && zorder != S2S1P1C1)
+	if (z_order != S2P1S1C1 && z_order != S2S1P1C1)
 		intel_crtc->sprite1_alpha = true;
 	else
 		intel_crtc->sprite1_alpha = false;
