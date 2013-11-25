@@ -116,7 +116,6 @@ store_i915_videostatus(struct device *dev, struct device_attribute *attr,
 {
 	struct drm_minor *dminor = container_of(dev, struct drm_minor, kdev);
 	struct drm_device *drm_dev = dminor->dev;
-	char *cp;
 	int len = n;
 	drm_i915_private_t *dev_priv = drm_dev->dev_private;
 
@@ -260,7 +259,6 @@ static struct bin_attribute dpf_attrs = {
 void i915_setup_sysfs(struct drm_device *dev)
 {
 	int ret;
-	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	if (INTEL_INFO(dev)->gen >= 6) {
 		ret = sysfs_merge_group(&dev->primary->kdev.kobj,

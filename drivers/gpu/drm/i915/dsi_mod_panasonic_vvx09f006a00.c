@@ -111,10 +111,6 @@ static bool vvx09f006a00_get_hw_state(struct intel_dsi_device *dev)
 static enum drm_connector_status vvx09f006a00_detect(
 					struct intel_dsi_device *dsi)
 {
-	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	struct drm_device *dev = intel_dsi->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	return connector_status_connected;
 }
 

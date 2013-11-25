@@ -148,7 +148,6 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
 	int pipe = intel_crtc->pipe;
-	u32 temp;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -188,7 +187,7 @@ void intel_dsi_enable(struct intel_encoder *encoder)
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
 	int pipe = intel_crtc->pipe;
-	int intr_stat, dpi_ctrl;
+	int intr_stat;
 	u32 temp;
 
 	DRM_DEBUG_KMS("\n");
@@ -355,7 +354,6 @@ void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 	struct drm_connector *connector = container_of(\
 			encoder, struct drm_connector, encoder);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
-	struct drm_crtc *crtc;
 	struct drm_device *dev = encoder->dev;
 
 	DRM_DEBUG_KMS("\n");

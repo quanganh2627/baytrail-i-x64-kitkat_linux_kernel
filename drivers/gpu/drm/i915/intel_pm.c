@@ -1359,11 +1359,13 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 
 static void valleyview_update_wm(struct drm_device *dev)
 {
-	static const int sr_latency_ns = 12000;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int planea_wm, planeb_wm, cursora_wm, cursorb_wm;
 	int plane_sr, cursor_sr;
 	unsigned int enabled = 0;
+#ifdef ENABLE_MAXFIFO
+	static const int sr_latency_ns = 12000;
+#endif
 
 	vlv_update_drain_latency(dev);
 
