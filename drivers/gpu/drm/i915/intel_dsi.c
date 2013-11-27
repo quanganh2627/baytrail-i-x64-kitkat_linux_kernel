@@ -87,7 +87,9 @@
 #include <drm/i915_drm.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
+#ifdef CONFIG_CRYSTAL_COVE
 #include "linux/mfd/intel_mid_pmic.h"
+#endif
 #include "i915_drv.h"
 #include "intel_drv.h"
 #include "intel_dsi.h"
@@ -150,6 +152,15 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	int pipe = intel_crtc->pipe;
 
 	DRM_DEBUG_KMS("\n");
+
+#ifdef CONFIG_CRYSTAL_COVE
+	/* Panel Enable */
+	intel_mid_pmic_writeb(PMIC_PANEL_EN, 0x01);
+#else
+	/* need to code for BYT-CR for example where things have changed */
+	DRM_ERROR("PANEL Enable to supported yet\n");
+#endif
+	msleep(intel_dsi->dev.panel_on_delay);
 
 	if (intel_dsi->dev.dev_ops->panel_reset)
 		intel_dsi->dev.dev_ops->panel_reset(&intel_dsi->dev);
@@ -351,6 +362,16 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 
 	if (intel_dsi->dev.dev_ops->disable_panel_power)
 		intel_dsi->dev.dev_ops->disable_panel_power(&intel_dsi->dev);
+
+#ifdef CONFIG_CRYSTAL_COVE
+	/* Disable Panel */
+	intel_mid_pmic_writeb(PMIC_PANEL_EN, 0x00);
+#else
+	/* need to code for BYT-CR for example where things have changed */
+	DRM_ERROR("PANEL Disable to supported yet\n");
+#endif
+	msleep(intel_dsi->dev.panel_off_delay);
+	msleep(intel_dsi->dev.panel_pwr_cycle_delay);
 }
 
 /* Encoder dpms must, add functionality later */

@@ -58,6 +58,9 @@
 #define DSI_HFP_PACKET_EXTRA_SIZE 6
 #define DSI_EOTP_PACKET_SIZE 4
 
+#define PMIC_PANEL_EN	0x52
+#define PMIC_PWM_EN	0x51
+
 struct intel_dsi_device {
 	unsigned short panel_id;
 	const char *name;
@@ -86,10 +89,15 @@ struct intel_dsi_device {
 	u32 video_frmt_cfg_bits;
 	u32 dphy_reg;
 
-	u8 backlight_off_delay; /*in ms*/
-	u8 backlight_on_delay; /*in ms*/
+	/* all delays in ms */
+	u8 backlight_off_delay;
+	u8 backlight_on_delay;
+	u8 panel_on_delay;
+	u8 panel_off_delay;
+	u8 panel_pwr_cycle_delay;
+
 	bool send_shutdown;
-	u8 shutdown_pkt_delay; /*in ms*/
+	u8 shutdown_pkt_delay;
 
 };
 

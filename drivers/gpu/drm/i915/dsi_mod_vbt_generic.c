@@ -216,6 +216,7 @@ bool generic_init(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct _mipi_config *mipi_config = dev_priv->mipi.config;
 	unsigned long long pixel_clock;
+	struct _mipi_pps_data *pps = dev_priv->mipi.pps;
 	u32 bits_per_pixel = 24;
 	u32 tlpx_ns, extra_byte_count, bitrate, tlpx_ui;
 	struct drm_display_mode *mode = dev_priv->lfp_lvds_vbt_mode;
@@ -429,8 +430,16 @@ bool generic_init(struct intel_dsi_device *dsi)
 			"DISABLED" : "ENABLED");
 	DRM_DEBUG_KMS("DPHY 0x%x\n", dsi->dphy_reg);
 
-	dsi->backlight_off_delay = 20;
-	dsi->send_shutdown = false;
+	/* delays in VBT are in unit of 100us, so need to convert
+	 * here in ms
+	 * Delay (100us) * 100 /1000 = Delay / 10 (ms) */
+	dsi->backlight_off_delay = pps->bl_disable_delay / 10;
+	dsi->backlight_on_delay = pps->bl_enable_delay / 10;
+	dsi->panel_on_delay = pps->panel_on_delay / 10;
+	dsi->panel_off_delay = pps->panel_off_delay / 10;
+	dsi->panel_pwr_cycle_delay = pps->panel_power_cycle_delay / 10;
+
+	dsi->send_shutdown = true;
 	dsi->shutdown_pkt_delay = 20;
 
 	return true;
