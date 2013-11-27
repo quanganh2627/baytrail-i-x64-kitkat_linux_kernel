@@ -53,17 +53,18 @@ static u8 *mipi_exec_send_packet(struct intel_dsi *intel_dsi, u8 *data)
 	u8 type, byte, mode, vc, port;
 	u16 len;
 
-	DRM_DEBUG_DRIVER("MIPI: Executing sene packet element\n");
-
 	byte = *data++;
 	mode = (byte >> MIPI_TRANSFER_MODE_SHIFT) & 0x1;
 	vc = (byte >> MIPI_VIRTUAL_CHANNEL_SHIFT) & 0x3;
 	port = (byte >> MIPI_PORT_SHIFT) & 0x3;
 
+	/* LP or HS mode */
+	intel_dsi->hs = mode;
+
 	/* get packet type and increment the pointer */
 	type = *data++;
 
-	len = *data;
+	len = *((u16 *) data);
 	data += 2;
 
 	switch (type) {
@@ -72,11 +73,9 @@ static u8 *mipi_exec_send_packet(struct intel_dsi *intel_dsi, u8 *data)
 		break;
 	case MIPI_GENERIC_SHORT_WRITE_1_PARAM:
 		dsi_vc_generic_write_1(intel_dsi, vc, *data);
-		data++;
 		break;
 	case MIPI_GENERIC_SHORT_WRITE_2_PARAM:
 		dsi_vc_generic_write_2(intel_dsi, vc, *data, *(data + 1));
-		data += 2;
 		break;
 	case MIPI_GENERIC_READ_0_PARAM:
 	case MIPI_GENERIC_READ_1_PARAM:
@@ -85,31 +84,29 @@ static u8 *mipi_exec_send_packet(struct intel_dsi *intel_dsi, u8 *data)
 		break;
 	case MIPI_GENERIC_LONG_WRITE:
 		dsi_vc_generic_write(intel_dsi, vc, data, len);
-		data += len;
 		break;
 	case MIPI_MAN_DCS_SHORT_WRITE_0_PARAM:
 		dsi_vc_dcs_write_0(intel_dsi, vc, *data);
-		data++;
 		break;
 	case MIPI_MAN_DCS_SHORT_WRITE_1_PARAM:
 		dsi_vc_dcs_write_1(intel_dsi, vc, *data, *(data + 1));
-		data += 2;
 		break;
 	case MIPI_MAN_DCS_READ_0_PARAM:
 		DRM_DEBUG_DRIVER("DCS Read not yet implemented or used\n");
 		break;
 	case MIPI_MAN_DCS_LONG_WRITE:
 		dsi_vc_dcs_write(intel_dsi, vc, data, len);
-		data += len;
 		break;
 	};
+
+	data += len;
 
 	return data;
 }
 
 static u8 *mipi_exec_delay(struct intel_dsi *intel_dsi, u8 *data)
 {
-	u32 delay = *data;
+	u32 delay = *((u32 *) data);
 
 	DRM_DEBUG_DRIVER("MIPI: executing delay element\n");
 	usleep_range(delay, delay + 10);
@@ -162,13 +159,26 @@ FN_MIPI_ELEM_EXEC exec_elem[] = {
  * We have already separated each seqence during bios parsing
  * Following is generic execution function for any sequence
  */
+
+static char *seq_name[] = {
+	"UNDEFINED",
+	"MIPI_SEQ_ASSERT_RESET",
+	"MIPI_SEQ_INIT_OTP",
+	"MIPI_SEQ_DISPLAY_ON",
+	"MIPI_SEQ_DISPLAY_OFF",
+	"MIPI_SEQ_DEASSERT_RESET"
+};
+
 static void generic_exec_sequence(struct intel_dsi *intel_dsi, char *sequence)
 {
 	u8 *data = sequence;
 	FN_MIPI_ELEM_EXEC mipi_elem_exec;
 	int index;
 
-	DRM_DEBUG_DRIVER("Starting MIPI sequence - %d\n", *data);
+	if (!sequence)
+		return;
+
+	DRM_DEBUG_DRIVER("Starting MIPI sequence - %s\n", seq_name[*data]);
 
 	/* go to the first element of the sequence */
 	data++;
@@ -472,9 +482,6 @@ void generic_panel_reset(struct intel_dsi_device *dsi)
 
 	char *sequence = dev_priv->mipi.sequence[MIPI_SEQ_ASSERT_RESET];
 
-	if (!sequence)
-		return;
-
 	generic_exec_sequence(intel_dsi, sequence);
 }
 
@@ -485,8 +492,6 @@ void generic_disable_panel_power(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	char *sequence = dev_priv->mipi.sequence[MIPI_SEQ_DEASSERT_RESET];
-	if (!sequence)
-		return;
 
 	generic_exec_sequence(intel_dsi, sequence);
 }
@@ -498,8 +503,6 @@ void generic_send_otp_cmds(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	char *sequence = dev_priv->mipi.sequence[MIPI_SEQ_INIT_OTP];
-	if (!sequence)
-		return;
 
 	generic_exec_sequence(intel_dsi, sequence);
 }
@@ -511,8 +514,6 @@ void generic_enable(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	char *sequence = dev_priv->mipi.sequence[MIPI_SEQ_DISPLAY_ON];
-	if (!sequence)
-		return;
 
 	generic_exec_sequence(intel_dsi, sequence);
 }
@@ -524,8 +525,6 @@ void generic_disable(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	char *sequence = dev_priv->mipi.sequence[MIPI_SEQ_DISPLAY_OFF];
-	if (!sequence)
-		return;
 
 	generic_exec_sequence(intel_dsi, sequence);
 }
