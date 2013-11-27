@@ -459,7 +459,18 @@ void generic_create_resources(struct intel_dsi_device *dsi) { }
 
 void generic_dpms(struct intel_dsi_device *dsi, bool enable)
 {
+	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
+
 	DRM_DEBUG_KMS("\n");
+
+	/* Basic code. Might need rework */
+	if (enable) {
+		dsi_vc_dcs_write_0(intel_dsi, 0, MIPI_DCS_EXIT_SLEEP_MODE);
+		dsi_vc_dcs_write_0(intel_dsi, 0, MIPI_DCS_SET_DISPLAY_ON);
+	} else {
+		dsi_vc_dcs_write_0(intel_dsi, 0, MIPI_DCS_SET_DISPLAY_OFF);
+		dsi_vc_dcs_write_0(intel_dsi, 0, MIPI_DCS_ENTER_SLEEP_MODE);
+	}
 }
 
 int generic_mode_valid(struct intel_dsi_device *dsi,
