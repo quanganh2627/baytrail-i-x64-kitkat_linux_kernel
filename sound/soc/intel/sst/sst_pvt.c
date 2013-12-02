@@ -282,13 +282,30 @@ static void sst_do_recovery(struct intel_sst_drv *sst)
 	kobject_uevent_env(&sst->dev->kobj, KOBJ_CHANGE, envp);
 	pr_err("Recovery Uevent Sent!!\n");
 
+	pr_err("reset the pvt id from val %d\n", sst_drv_ctx->pvt_id);
+	spin_lock(&sst_drv_ctx->pvt_id_lock);
+	sst_drv_ctx->pvt_id = 0;
+	spin_unlock(&sst_drv_ctx->pvt_id_lock);
+
 	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
 	if (list_empty(&sst->ipc_dispatch_list))
-		pr_err("List is Empty\n");
+		pr_err("ipc dispatch list is Empty\n");
 	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
 
 	list_for_each_entry_safe(m, _m, &sst->ipc_dispatch_list, node) {
-		pr_err("pending msg header %#x\n", m->header.full);
+		pr_err("ipc-dispatch:pending msg header %#x\n", m->header.full);
+		list_del(&m->node);
+		kfree(m->mailbox_data);
+		kfree(m);
+	}
+
+	spin_lock_irqsave(&sst->rx_msg_lock, irq_flags);
+	if (list_empty(&sst->rx_list))
+		pr_err("rx msg list is empty\n");
+	spin_unlock_irqrestore(&sst->rx_msg_lock, irq_flags);
+
+	list_for_each_entry_safe(m, _m, &sst->rx_list, node) {
+		pr_err("rx: pending msg header %#x\n", m->header.full);
 		list_del(&m->node);
 		kfree(m->mailbox_data);
 		kfree(m);
@@ -337,8 +354,8 @@ int sst_wait_timeout(struct intel_sst_drv *sst_drv_ctx, struct sst_block *block)
 	/* NOTE:
 	Observed that FW processes the alloc msg and replies even
 	before the alloc thread has finished execution */
-	pr_debug("sst: waiting for condition %x\n",
-		       block->condition);
+	pr_debug("sst: waiting for condition %x ipc %d drv_id %d\n",
+		       block->condition, block->msg_id, block->drv_id);
 	if (wait_event_timeout(sst_drv_ctx->wait_queue,
 				block->condition,
 				msecs_to_jiffies(SST_BLOCK_TIMEOUT))) {

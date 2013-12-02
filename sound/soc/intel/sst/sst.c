@@ -163,21 +163,22 @@ static irqreturn_t intel_sst_irq_thread_mfld(int irq, void *context)
 	if (list_empty(&drv->rx_list))
 		return IRQ_HANDLED;
 
+	spin_lock_irqsave(&drv->rx_msg_lock, irq_flags);
 	list_for_each_entry_safe(msg, __msg, &drv->rx_list, node) {
 
+		list_del(&msg->node);
+		spin_unlock_irqrestore(&drv->rx_msg_lock, irq_flags);
 		if (msg->is_process_reply)
 			drv->ops->process_message(msg);
 		else
 			drv->ops->process_reply(msg);
 
-		spin_lock_irqsave(&drv->rx_msg_lock, irq_flags);
-		list_del(&msg->node);
-		spin_unlock_irqrestore(&drv->rx_msg_lock, irq_flags);
-
 		if (msg->is_large)
 			kfree(msg->mailbox_data);
 		kfree(msg);
+		spin_lock_irqsave(&drv->rx_msg_lock, irq_flags);
 	}
+	spin_unlock_irqrestore(&drv->rx_msg_lock, irq_flags);
 	return IRQ_HANDLED;
 }
 /**
@@ -481,6 +482,41 @@ int sst_alloc_drv_context(struct device *dev)
 	return 0;
 }
 
+static ssize_t sst_sysfs_get_recovery(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n", ctx->sst_state);
+}
+
+
+static ssize_t sst_sysfs_set_recovery(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t len)
+{
+	long val;
+	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
+
+	if (kstrtol(buf, 0, &val))
+		return -EINVAL;
+
+	if (val == 1) {
+		if (!atomic_read(&ctx->pm_usage_count)) {
+			pr_debug("%s: set sst state to uninit...\n", __func__);
+			sst_set_fw_state_locked(ctx, SST_UN_INIT);
+		} else {
+			pr_debug("%s: not setting sst state... %d\n", __func__,
+					atomic_read(&ctx->pm_usage_count));
+			return -EPERM;
+		}
+	}
+
+	return len;
+}
+
+static DEVICE_ATTR(audio_recovery, S_IRUGO | S_IWUSR,
+			sst_sysfs_get_recovery, sst_sysfs_set_recovery);
+
 /*
 * intel_sst_probe - PCI probe function
 *
@@ -647,28 +683,43 @@ static int intel_sst_probe(struct pci_dev *pci,
 		goto do_unmap_iram;
 	pr_debug("DRAM Ptr %p\n", sst_drv_ctx->dram);
 
-	/* SSP Register */
-	if ((sst_pdata->pdata != NULL) && (sst_pdata->debugfs_data != NULL)) {
-
+	if ((sst_pdata->pdata != NULL) &&
+			(sst_pdata->debugfs_data != NULL)) {
 		if (sst_pdata->ssp_data != NULL) {
+			/* SSP Register */
 			ssp_base_add = sst_pdata->ssp_data->base_add;
-			len = sst_pdata->debugfs_data->ssp_reg_size * sst_pdata->debugfs_data->num_ssp;
-			sst_drv_ctx->debugfs.ssp = ioremap(ssp_base_add, len);
-			if (!sst_drv_ctx->debugfs.ssp)
-				goto do_unmap_dram;
+			len = sst_pdata->debugfs_data->ssp_reg_size;
+			for (i = 0; i < sst_pdata->debugfs_data->num_ssp; i++) {
+				sst_drv_ctx->debugfs.ssp[i] =
+					devm_ioremap(&pci->dev,
+						ssp_base_add + (len * i), len);
+				if (!sst_drv_ctx->debugfs.ssp[i]) {
+					pr_warn("ssp ioremap failed\n");
+					continue;
+				}
 
-			pr_debug("\n ssp io 0x%p ssp 0x%x size 0x%x",
-				sst_drv_ctx->debugfs.ssp, ssp_base_add, len);
+				pr_debug("\n ssp io 0x%p ssp 0x%x size 0x%x",
+					sst_drv_ctx->debugfs.ssp[i],
+						ssp_base_add, len);
+			}
 		}
-	/* DMA Register */
-	dma_base_add = sst_pdata->pdata->sst_dma_base[0];
-	len = sst_pdata->debugfs_data->dma_reg_size * sst_pdata->debugfs_data->num_dma;
-	sst_drv_ctx->debugfs.dma_reg = ioremap(dma_base_add, len);
-	if (!sst_drv_ctx->debugfs.dma_reg)
-		goto do_unmap_ssp;
 
-	pr_debug("\n dma io 0x%p ssp 0x%x size 0x%x",
-		sst_drv_ctx->debugfs.dma_reg, dma_base_add, len);
+		/* DMA Register */
+		dma_base_add = sst_pdata->pdata->sst_dma_base[0];
+		len = sst_pdata->debugfs_data->dma_reg_size;
+		for (i = 0; i < sst_pdata->debugfs_data->num_dma; i++) {
+			sst_drv_ctx->debugfs.dma_reg[i] =
+				devm_ioremap(&pci->dev,
+					dma_base_add + (len * i), len);
+			if (!sst_drv_ctx->debugfs.dma_reg[i]) {
+				pr_warn("dma ioremap failed\n");
+				continue;
+			}
+
+			pr_debug("\n dma io 0x%p ssp 0x%x size 0x%x",
+				sst_drv_ctx->debugfs.dma_reg[i],
+					dma_base_add, len);
+		}
 	}
 
 	/* Do not access iram/dram etc before LPE is reset */
@@ -679,7 +730,7 @@ static int intel_sst_probe(struct pci_dev *pci,
 	if (!sst_drv_ctx->dump_buf.iram_buf.buf) {
 		pr_err("%s: no memory\n", __func__);
 		ret = -ENOMEM;
-		goto do_unmap;
+		goto do_unmap_dram;
 	}
 
 	sst_drv_ctx->dump_buf.dram_buf.size = pci_resource_len(pci, 4);
@@ -792,9 +843,19 @@ static int intel_sst_probe(struct pci_dev *pci,
 	pm_qos_add_request(sst_drv_ctx->qos, PM_QOS_CPU_DMA_LATENCY,
 				PM_QOS_DEFAULT_VALUE);
 
+	ret = device_create_file(sst_drv_ctx->dev, &dev_attr_audio_recovery);
+	if (ret) {
+		pr_err("could not create sysfs %s file\n",
+			dev_attr_audio_recovery.attr.name);
+		goto do_free_qos;
+	}
+
 	pr_info("%s successfully done!\n", __func__);
 	return ret;
 
+do_free_qos:
+	pm_qos_remove_request(sst_drv_ctx->qos);
+	kfree(sst_drv_ctx->qos);
 do_free_misc:
 	misc_deregister(&lpe_ctrl);
 do_free_irq:
@@ -810,14 +871,6 @@ do_free_iram_buf:
 	if (sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
 		kfree(sst_drv_ctx->dump_buf.iram_buf.buf);
 #endif
-do_unmap:
-	/* FIXME: Support for other platforms after SSP Patch */
-	if (sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
-		iounmap(sst_drv_ctx->debugfs.dma_reg);
-do_unmap_ssp:
-	/* FIXME: Support for other platforms after SSP Patch */
-	if (sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
-		iounmap(sst_drv_ctx->debugfs.ssp);
 do_unmap_dram:
 	iounmap(sst_drv_ctx->dram);
 do_unmap_iram:
@@ -855,6 +908,7 @@ do_free_drv_ctx:
 */
 static void intel_sst_remove(struct pci_dev *pci)
 {
+	struct intel_sst_drv *sst_drv_ctx = pci_get_drvdata(pci);
 	sst_debugfs_exit(sst_drv_ctx);
 	pm_runtime_get_noresume(sst_drv_ctx->dev);
 	pm_runtime_forbid(sst_drv_ctx->dev);
@@ -864,8 +918,6 @@ static void intel_sst_remove(struct pci_dev *pci)
 	misc_deregister(&lpe_ctrl);
 	free_irq(pci->irq, sst_drv_ctx);
 
-	iounmap(sst_drv_ctx->debugfs.dma_reg);
-	iounmap(sst_drv_ctx->debugfs.ssp);
 	iounmap(sst_drv_ctx->dram);
 	iounmap(sst_drv_ctx->iram);
 	iounmap(sst_drv_ctx->mailbox);
@@ -879,6 +931,7 @@ static void intel_sst_remove(struct pci_dev *pci)
 	if (sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
 		kfree(sst_drv_ctx->probe_bytes);
 
+	device_remove_file(sst_drv_ctx->dev, &dev_attr_audio_recovery);
 	kfree(sst_drv_ctx->fw_cntx);
 	kfree(sst_drv_ctx->runtime_param.param.addr);
 	flush_scheduled_work();

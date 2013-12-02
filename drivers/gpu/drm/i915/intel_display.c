@@ -131,8 +131,6 @@ static const intel_limit_t intel_limits_i8xx_dac = {
 		.p2_slow = 4, .p2_fast = 2 },
 };
 
-struct drm_display_mode rot_mode;
-
 static const intel_limit_t intel_limits_i8xx_dvo = {
 	.dot = { .min = 25000, .max = 350000 },
 	.vco = { .min = 930000, .max = 1400000 },
@@ -2123,126 +2121,48 @@ unsigned long intel_gen4_compute_page_offset(int *x, int *y,
 	}
 }
 
-int i915_rotation_ffrd(const struct drm_device *dev,
-			const struct drm_crtc *crtc)
-{
-	u32 val;
-	int reg;
-	/* Rotate only for local display.
-	 * Hardcoded to be on pipe A.
-	 * ToDo - Generalize pipe for local display.
-	 */
-	int pipe = 0;
-	u32 sprctla;
-	u32 sprctlb;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_HDMI))
-		return 0;
-
-	reg = DSPCNTR(pipe);
-	val = I915_READ(reg);
-	sprctla = I915_READ(SPCNTR(pipe, 0));
-	sprctlb = I915_READ(SPCNTR(pipe, 1));
-	memcpy(&rot_mode, &(crtc->hwmode), sizeof(struct drm_display_mode));
-
-	if (i915_rotation) {
-		val |= DISPPLANE_180_ROTATION_ENABLE;
-		I915_WRITE(reg, val);
-
-		if (!(sprctla & DISPPLANE_180_ROTATION_ENABLE)) {
-			sprctla |= DISPPLANE_180_ROTATION_ENABLE;
-			I915_WRITE(SPCNTR(pipe, 0), sprctla);
-		}
-
-		if (!(sprctlb & DISPPLANE_180_ROTATION_ENABLE)) {
-			sprctlb |= DISPPLANE_180_ROTATION_ENABLE;
-			I915_WRITE(SPCNTR(pipe, 1), sprctlb);
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(i915_rotation_ffrd);
-
 int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 				struct drm_file *file)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_i915_plane_180_rotation *rotation = data;
-
-	bool rotate = (rotation->rotate & 0x1) ? true : false;
-	int reg;
-	u32 val;
-	u32 sprctla;
-	u32 sprctlb;
-	int ret = 1;
 	struct drm_mode_object *obj;
 	struct drm_crtc *crtc;
 	struct intel_crtc *intel_crtc;
-	int pipe;
+	struct drm_plane *plane;
+	struct intel_plane *intel_plane;
+	int ret = -EINVAL;
 
-	obj = drm_mode_object_find(dev, rotation->crtc_id,
-			DRM_MODE_OBJECT_CRTC);
+	if (rotation->obj_type == DRM_MODE_OBJECT_PLANE) {
+		obj = drm_mode_object_find(dev, rotation->obj_id,
+						DRM_MODE_OBJECT_PLANE);
+		if (!obj) {
+			DRM_DEBUG_DRIVER("Unknown PLANE ID %d\n",
+					rotation->obj_id);
+			return -EINVAL;
+		}
 
-	if (!obj) {
-		DRM_DEBUG_DRIVER("Unknown CRTC ID %d\n", rotation->crtc_id);
-		return -EINVAL;
-	}
+		plane = obj_to_plane(obj);
+		intel_plane = to_intel_plane(plane);
+		intel_plane->rotate180 = (rotation->rotate & 0x1) ?
+							true : false;
+		ret = 0;
+	} else if (rotation->obj_type == DRM_MODE_OBJECT_CRTC) {
+		obj = drm_mode_object_find(dev, rotation->obj_id,
+						DRM_MODE_OBJECT_CRTC);
+		if (!obj) {
+			DRM_DEBUG_DRIVER("Unknown CRTC ID %d\n",
+						rotation->obj_id);
+			return -EINVAL;
+		}
 
-	crtc = obj_to_crtc(obj);
-	DRM_DEBUG_DRIVER("[CRTC:%d]\n", crtc->base.id);
-	if (!crtc->enabled) {
-		DRM_ERROR("[CRTC:%d] not active\n", crtc->base.id);
-		return -EINVAL;
-	}
-
-	intel_crtc = to_intel_crtc(crtc);
-	pipe = intel_crtc->pipe;
-
-	DRM_DEBUG_DRIVER("pipe = %d\n", pipe);
-	memcpy(&rot_mode, &(crtc->hwmode), sizeof(struct drm_display_mode));
-	reg = DSPCNTR(pipe);
-	val = I915_READ(reg);
-	sprctla = I915_READ(SPCNTR(pipe, 0));
-	sprctlb = I915_READ(SPCNTR(pipe, 1));
-
-	/*Clear older rotation settings*/
-	if (val & DISPLAY_PLANE_ENABLE) {
-		val &= ~DISPPLANE_180_ROTATION_ENABLE;
-		I915_WRITE(reg, val);
+		crtc = obj_to_crtc(obj);
+		DRM_DEBUG_DRIVER("[CRTC:%d]\n", crtc->base.id);
+		intel_crtc = to_intel_crtc(crtc);
+		intel_crtc->rotate180 = (rotation->rotate & 0x1) ?
+							true : false;
 		ret = 0;
 	}
 
-	if (sprctla & DISPLAY_PLANE_ENABLE) {
-		sprctla &= ~DISPPLANE_180_ROTATION_ENABLE;
-		I915_WRITE(SPCNTR(pipe, 0), sprctla);
-		ret = 0;
-	}
-
-	if (sprctlb & DISPLAY_PLANE_ENABLE) {
-		sprctlb &= ~DISPPLANE_180_ROTATION_ENABLE;
-		I915_WRITE(SPCNTR(pipe, 1), sprctlb);
-		ret = 0;
-	}
-
-	if (rotate) {
-		if (val & DISPLAY_PLANE_ENABLE) {
-			val |= DISPPLANE_180_ROTATION_ENABLE;
-			I915_WRITE(reg, val);
-		}
-
-		if (sprctla & DISPLAY_PLANE_ENABLE) {
-			sprctla |= DISPPLANE_180_ROTATION_ENABLE;
-			I915_WRITE(SPCNTR(pipe, 0), sprctla);
-		}
-
-		if (sprctlb & DISPLAY_PLANE_ENABLE) {
-			sprctlb |= DISPPLANE_180_ROTATION_ENABLE;
-			I915_WRITE(SPCNTR(pipe, 1), sprctlb);
-		}
-	}
-
-	i9xx_update_plane(crtc, crtc->fb, 0, 0);
 	return ret;
 }
 
@@ -2255,14 +2175,13 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	struct intel_framebuffer *intel_fb;
 	struct drm_i915_gem_object *obj;
 	int plane = intel_crtc->plane;
+	int pipe = intel_crtc->pipe;
 	unsigned long linear_offset;
 	bool rotate = false;
 	u32 dspcntr;
 	u32 reg;
 	int pixel_size;
-	/* Called to enable 180 degree rotation */
-	if (i915_rotation)
-		i915_rotation_ffrd(dev, crtc);
+
 	switch (plane) {
 	case 0:
 	case 1:
@@ -2286,18 +2205,27 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		break;
 	case DRM_FORMAT_XRGB1555:
 	case DRM_FORMAT_ARGB1555:
-		dspcntr |= DISPPLANE_BGRX555;
+		if (intel_crtc->primary_alpha)
+			dspcntr |= DISPPLANE_BGRA555;
+		else
+			dspcntr |= DISPPLANE_BGRX555;
 		break;
 	case DRM_FORMAT_RGB565:
 		dspcntr |= DISPPLANE_BGRX565;
 		break;
 	case DRM_FORMAT_XRGB8888:
 	case DRM_FORMAT_ARGB8888:
-		dspcntr |= DISPPLANE_BGRX888;
+		if (intel_crtc->primary_alpha)
+			dspcntr |= DISPPLANE_BGRA888;
+		else
+			dspcntr |= DISPPLANE_BGRX888;
 		break;
 	case DRM_FORMAT_XBGR8888:
 	case DRM_FORMAT_ABGR8888:
-		dspcntr |= DISPPLANE_RGBX888;
+		if (intel_crtc->primary_alpha)
+			dspcntr |= DISPPLANE_RGBA888;
+		else
+			dspcntr |= DISPPLANE_RGBX888;
 		break;
 	case DRM_FORMAT_XRGB2101010:
 	case DRM_FORMAT_ARGB2101010:
@@ -2305,13 +2233,16 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		break;
 	case DRM_FORMAT_XBGR2101010:
 	case DRM_FORMAT_ABGR2101010:
-		dspcntr |= DISPPLANE_RGBX101010;
+		if (intel_crtc->primary_alpha)
+			dspcntr |= DISPPLANE_RGBA101010;
+		else
+			dspcntr |= DISPPLANE_RGBX101010;
 		break;
 	default:
 		BUG();
 	}
 
-	if (dspcntr & DISPPLANE_180_ROTATION_ENABLE)
+	if (!intel_crtc->rotate180 != !(i915_rotation && (pipe == 0)))
 		rotate = true;
 
 	if (INTEL_INFO(dev)->gen >= 4) {
@@ -2326,6 +2257,8 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 
 	if (rotate)
 		dspcntr |= DISPPLANE_180_ROTATION_ENABLE;
+	else
+		dspcntr &= ~DISPPLANE_180_ROTATION_ENABLE;
 
 	I915_WRITE(reg, dspcntr);
 
@@ -6473,12 +6406,11 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 
 	if (intel_crtc->config.has_pch_encoder) {
 		pll = intel_crtc_to_shared_dpll(intel_crtc);
-
-	}
-	if (pll == NULL) {
-		DRM_DEBUG_DRIVER("failed to find PLL for pipe %c\n",
-				pipe_name(pipe));
-		return -EINVAL;
+		if (pll == NULL) {
+			DRM_DEBUG_DRIVER("failed to find PLL for pipe %c\n",
+					pipe_name(pipe));
+			return -EINVAL;
+		}
 	}
 
 	intel_set_pipe_timings(intel_crtc);
@@ -9615,6 +9547,11 @@ check_shared_dpll_state(struct drm_device *dev)
 void
 intel_modeset_check_state(struct drm_device *dev)
 {
+	drm_i915_private_t *dev_priv = dev->dev_private;
+
+	if (dev_priv->is_suspending)
+		return;
+
 	check_connector_state(dev);
 	check_encoder_state(dev);
 	check_crtc_state(dev);
@@ -10250,7 +10187,12 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc;
-	int ret;
+
+	dev_priv->is_suspending = true;
+
+	dev_priv->audio_suspended = mid_hdmi_audio_suspend(dev);
+	if (!dev_priv->audio_suspended)
+		DRM_ERROR("Audio active, CRTC will not be suspended\n");
 
 	/* Force a re-detection on Hot-pluggable displays */
 	i915_simulate_hpd(dev, false);
@@ -10263,6 +10205,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	drm_kms_helper_poll_disable(dev);
 	display_save_restore_hotplug(dev, SAVEHPD);
 	display_disable_wq(dev);
+	mutex_lock(&dev->mode_config.mutex);
 	dev_priv->s0ixstat = true;
 
 	/* If KMS is active, we do the leavevt stuff here */
@@ -10272,17 +10215,17 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 		 * Disable CRTCs directly since we want to preserve sw state
 		 * for _thaw.
 		 */
-		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
+		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+			struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+			if ((intel_crtc->pipe == PIPE_B) &&
+				(!dev_priv->audio_suspended))
+				continue;
 			dev_priv->display.crtc_disable(crtc);
-
+		}
 	}
 
-	/* TODO: uncomment after HDMI dependancies are merged */
-	ret = mid_hdmi_audio_suspend(dev);
-	if (ret != true)
-		DRM_ERROR("Error suspending HDMI audio\n");
-
 	dev_priv->s0ixstat = false;
+	mutex_unlock(&dev->mode_config.mutex);
 	i915_rpm_put_disp(dev);
 	return 0;
 }
@@ -10297,8 +10240,6 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	/* Re-detect hot pluggable displays */
 	i915_simulate_hpd(dev, true);
 
-	drm_kms_helper_poll_enable(dev);
-	display_save_restore_hotplug(dev, RESTOREHPD);
 	dev_priv->s0ixstat = true;
 	dev_priv->late_resume = true;
 	/* KMS EnterVT equivalent */
@@ -10317,11 +10258,16 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 		/* Config may have changed between suspend and resume */
 		intel_resume_hotplug(dev);
 	}
-	dev_priv->late_resume = true;
+	drm_kms_helper_poll_enable(dev);
+	display_save_restore_hotplug(dev, RESTOREHPD);
+
 	mid_hdmi_audio_resume(dev);
 	/* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
 	if (!intel_restore_clr_mgr_status(dev))
 		DRM_ERROR("Restore Color manager status failed");
+
+	dev_priv->late_resume = false;
+	dev_priv->is_resuming = false;
 	dev_priv->s0ixstat = false;
 	return 0;
 }
@@ -10360,9 +10306,13 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 
 	dev_priv->s0ixstat = false; /* Keep the s0ixstat false initially */
 	intel_crtc->s0ix_suspend_state = false;
+	intel_crtc->rotate180 = false;
 
 	drm_crtc_helper_add(&intel_crtc->base, &intel_helper_funcs);
 
+	intel_crtc->primary_alpha = false;
+	intel_crtc->sprite0_alpha = true;
+	intel_crtc->sprite1_alpha = true;
 }
 
 int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
@@ -11119,8 +11069,6 @@ static void intel_enable_pipe_a(struct drm_device *dev)
 
 	if (intel_get_load_detect_pipe(crt, NULL, &load_detect_temp))
 		intel_release_load_detect_pipe(crt, &load_detect_temp);
-
-
 }
 
 static bool
@@ -11389,6 +11337,8 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 	struct drm_plane *plane;
 	struct intel_crtc *crtc;
 	struct intel_encoder *encoder;
+	struct drm_encoder *drm_encoder = NULL;
+	struct drm_encoder_helper_funcs *encoder_funcs = NULL;
 	int i;
 
 	intel_modeset_readout_hw_state(dev);
@@ -11412,6 +11362,10 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 	/* HW state is read out, now we need to sanitize this mess. */
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list,
 			    base.head) {
+		if (encoder->type == INTEL_OUTPUT_HDMI) {
+			drm_encoder = &encoder->base;
+			encoder_funcs = drm_encoder->helper_private;
+		}
 		intel_sanitize_encoder(encoder);
 	}
 
@@ -11442,6 +11396,13 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 			struct drm_crtc *crtc =
 				dev_priv->pipe_to_crtc_mapping[pipe];
 
+			if ((drm_encoder != NULL) && (pipe == 1)) {
+				struct drm_encoder_helper_funcs *encoder_funcs =
+					drm_encoder->helper_private;
+					if (encoder_funcs->inuse(
+						drm_encoder))
+						continue;
+			}
 			__intel_set_mode(crtc, &crtc->mode, crtc->x, crtc->y,
 					 crtc->fb);
 		}

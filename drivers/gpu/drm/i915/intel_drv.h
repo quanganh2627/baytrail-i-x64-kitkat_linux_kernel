@@ -297,6 +297,7 @@ struct intel_crtc {
 	struct drm_crtc base;
 	enum pipe pipe;
 	enum plane plane;
+	bool rotate180;
 	u8 lut_r[256], lut_g[256], lut_b[256];
 	/*
 	 * Whether the crtc and the connected output pipeline is active. Implies
@@ -327,6 +328,9 @@ struct intel_crtc {
 	struct intel_crtc_config config;
 
 	uint32_t ddi_pll_sel;
+	bool primary_alpha;
+	bool sprite0_alpha;
+	bool sprite1_alpha;
 
 	/* reset counter value when the last flip was submitted */
 	unsigned int reset_counter;
@@ -350,6 +354,7 @@ struct intel_plane {
 	struct drm_i915_gem_object *obj, *old_obj;
 	bool can_scale;
 	int max_downscale;
+	bool rotate180;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
 	int crtc_x, crtc_y;
 	unsigned int crtc_w, crtc_h;

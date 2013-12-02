@@ -1200,6 +1200,14 @@ struct intel_wm_level {
 	uint32_t fbc_val;
 };
 
+struct i915_perfmon {
+	int rc6_user_disable_count;
+	int max_freq_enable_count;
+	bool interrupt_enabled;
+	wait_queue_head_t buffer_queue;
+	atomic_t buffer_interrupts;
+};
+
 /*
  * This struct tracks the state needed for the Package C8+ feature.
  *
@@ -1320,7 +1328,10 @@ typedef struct drm_i915_private {
 	u32 irq_mask;
 	u32 hotplugstat;
 	bool s0ixstat;
+	bool audio_suspended;
 	bool late_resume;
+	bool is_suspending;
+	bool is_resuming;
 	u32 gt_irq_mask;
 	u32 pm_irq_mask;
 
@@ -1363,7 +1374,8 @@ typedef struct drm_i915_private {
 	int fence_reg_start; /* 4 if userland hasn't ioctl'd us yet */
 	int num_fence_regs; /* 8 on pre-965, 16 otherwise */
 
-	unsigned int fsb_freq, mem_freq, is_ddr3;
+	unsigned int fsb_freq, mem_freq, is_ddr3, gpll;
+	unsigned int cck_freq;
 
 	struct workqueue_struct *wq;
 	struct workqueue_struct *flipwq;
@@ -1531,6 +1543,8 @@ typedef struct drm_i915_private {
 #endif
 
 	uint32_t watchdog_threshold[I915_NUM_RINGS];
+
+	struct i915_perfmon perfmon;
 } drm_i915_private_t;
 
 static inline struct drm_i915_private *to_i915(const struct drm_device *dev)
@@ -1809,6 +1823,11 @@ struct drm_i915_file_private {
 #ifdef CONFIG_DRM_VXD_BYT
 	struct psb_fpriv *pPriv;
 #endif
+
+	struct {
+		int max_freq;
+		int rc6_disable;
+	} perfmon_override_counter;
 };
 
 #define INTEL_INFO(dev)	(to_i915(dev)->info)
@@ -1942,7 +1961,6 @@ struct drm_i915_file_private {
 #define INTEL_RC6pp_ENABLE			(1<<2)
 
 extern struct drm_ioctl_desc i915_ioctls[];
-extern struct drm_display_mode rot_mode;
 extern int i915_max_ioctl;
 extern unsigned int i915_fbpercrtc __always_unused;
 extern int i915_panel_ignore_lid __read_mostly;
@@ -2540,8 +2558,6 @@ extern int valleyview_rps_min_freq(struct drm_i915_private *dev_priv);
 extern void intel_detect_pch(struct drm_device *dev);
 extern int intel_trans_dp_port_sel(struct drm_crtc *crtc);
 extern int intel_enable_rc6(const struct drm_device *dev);
-extern int i915_rotation_ffrd(const struct drm_device *dev,
-			const struct drm_crtc *crtc);
 extern void valleyview_enable_rps(struct drm_device *dev);
 extern void valleyview_disable_rps(struct drm_device *dev);
 
@@ -2633,9 +2649,14 @@ int intel_flisdsi_read32(struct drm_i915_private *dev_priv, u32 reg, u32 *val);
 int intel_flisdsi_write32(struct drm_i915_private *dev_priv, u32 reg, u32 val);
 int intel_flisdsi_write32_bits(struct drm_i915_private *dev_priv, u32 reg, 
 								u32 val, u32 mask);
+/* i915_perfmon.c */
+int i915_perfmon_ioctl(struct drm_device *dev,
+				void *data, struct drm_file *file);
+void i915_perfmon_init(struct drm_file *file);
+void i915_perfmon_close(struct drm_device *dev, struct drm_file *file);
 
-int vlv_gpu_freq(int ddr_freq, int val);
-int vlv_freq_opcode(int ddr_freq, int val);
+int vlv_gpu_freq(struct drm_i915_private *dev_priv, int val);
+int vlv_freq_opcode(struct drm_i915_private *dev_priv, int val);
 
 /* runtime power management related */
 int i915_rpm_init(struct drm_device *dev);

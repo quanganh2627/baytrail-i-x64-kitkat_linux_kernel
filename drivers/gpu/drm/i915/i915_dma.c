@@ -1879,6 +1879,8 @@ int i915_driver_open(struct drm_device *dev, struct drm_file *file)
 
 	idr_init(&file_priv->context_idr);
 
+	i915_perfmon_init(file);
+
 #ifdef CONFIG_DRM_VXD_BYT
 	{
 		drm_i915_private_t *dev_priv = dev->dev_private;
@@ -1930,6 +1932,7 @@ void i915_driver_lastclose(struct drm_device * dev)
 
 void i915_driver_preclose(struct drm_device * dev, struct drm_file *file_priv)
 {
+	i915_perfmon_close(dev, file_priv);
 	i915_gem_context_close(dev, file_priv);
 	i915_gem_release(dev, file_priv);
 }
@@ -2013,6 +2016,7 @@ struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_DPST_CONTEXT, i915_dpst_context, DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_GET_RESET_STATS, i915_get_reset_stats_ioctl,
 					DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_PERFMON, i915_perfmon_ioctl, DRM_UNLOCKED),
 };
 
 int i915_max_ioctl = DRM_ARRAY_SIZE(i915_ioctls);

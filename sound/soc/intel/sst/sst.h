@@ -342,8 +342,8 @@ struct sst_debugfs {
 	struct dentry		*root;
 #endif
 	int			runtime_pm_status;
-	void __iomem            *ssp;
-	void __iomem            *dma_reg;
+	void __iomem            *ssp[SST_MAX_SSP_PORTS];
+	void __iomem            *dma_reg[SST_MAX_DMA];
 };
 
 struct lpe_log_buf_hdr {
@@ -651,7 +651,7 @@ int sst_wait_timeout(struct intel_sst_drv *sst_drv_ctx,
 			struct sst_block *block);
 int sst_create_ipc_msg(struct ipc_post **arg, bool large);
 int sst_download_fw(void);
-void free_stream_context(unsigned int str_id);
+int free_stream_context(unsigned int str_id);
 void sst_clean_stream(struct stream_info *stream);
 int intel_sst_register_compress(struct intel_sst_drv *sst);
 int intel_sst_remove_compress(struct intel_sst_drv *sst);
