@@ -121,59 +121,75 @@ int mmc_io_rw_direct(struct mmc_card *card, int write, unsigned fn,
 int mmc_io_rw_extended(struct mmc_card *card, int write, unsigned fn,
 	unsigned addr, int incr_addr, u8 *buf, unsigned blocks, unsigned blksz)
 {
-	struct mmc_request mrq = {NULL};
-	struct mmc_command cmd = {0};
-	struct mmc_data data = {0};
+	struct mmc_host *host = card->host;
+	struct mmc_request *mrq = &host->sdiomrq;
+	struct mmc_command *cmd = &host->sdiocmd;
+	struct mmc_data *data = &host->sdiodata;
+	struct mmc_request sdiomrq;
+	struct mmc_command sdiocmd;
+	struct mmc_data sdiodata;
 	struct scatterlist sg;
 
 	BUG_ON(!card);
 	BUG_ON(fn > 7);
+	BUG_ON(mrq->cmd);
+	BUG_ON(mrq->data);
 	WARN_ON(blksz == 0);
 
 	/* sanity check */
 	if (addr & ~0x1FFFF)
 		return -EINVAL;
 
-	mrq.cmd = &cmd;
-	mrq.data = &data;
+	/* mark the stack */
+	memset(&sdiomrq, 0x1, sizeof(struct mmc_request));
+	mrq->cmd = cmd;
+	mrq->data = data;
 
-	cmd.opcode = SD_IO_RW_EXTENDED;
-	cmd.arg = write ? 0x80000000 : 0x00000000;
-	cmd.arg |= fn << 28;
-	cmd.arg |= incr_addr ? 0x04000000 : 0x00000000;
-	cmd.arg |= addr << 9;
+	/* mark the stack */
+	memset(&sdiocmd, 0x2, sizeof(struct mmc_command));
+	cmd->opcode = SD_IO_RW_EXTENDED;
+	cmd->arg = write ? 0x80000000 : 0x00000000;
+	cmd->arg |= fn << 28;
+	cmd->arg |= incr_addr ? 0x04000000 : 0x00000000;
+	cmd->arg |= addr << 9;
 	if (blocks == 0)
-		cmd.arg |= (blksz == 512) ? 0 : blksz;	/* byte mode */
+		cmd->arg |= (blksz == 512) ? 0 : blksz;	/* byte mode */
 	else
-		cmd.arg |= 0x08000000 | blocks;		/* block mode */
-	cmd.flags = MMC_RSP_SPI_R5 | MMC_RSP_R5 | MMC_CMD_ADTC;
+		cmd->arg |= 0x08000000 | blocks;	/* block mode */
+	cmd->flags = MMC_RSP_SPI_R5 | MMC_RSP_R5 | MMC_CMD_ADTC;
 
-	data.blksz = blksz;
+	/* mark the stack */
+	memset(&sdiodata, 0x3, sizeof(struct mmc_data));
+	data->blksz = blksz;
 	/* Code in host drivers/fwk assumes that "blocks" always is >=1 */
-	data.blocks = blocks ? blocks : 1;
-	data.flags = write ? MMC_DATA_WRITE : MMC_DATA_READ;
-	data.sg = &sg;
-	data.sg_len = 1;
+	data->blocks = blocks ? blocks : 1;
+	data->flags = write ? MMC_DATA_WRITE : MMC_DATA_READ;
+	data->sg = &sg;
+	data->sg_len = 1;
 
-	sg_init_one(&sg, buf, data.blksz * data.blocks);
+	sg_init_one(&sg, buf, data->blksz * data->blocks);
 
-	mmc_set_data_timeout(&data, card);
+	mmc_set_data_timeout(data, card);
 
-	mmc_wait_for_req(card->host, &mrq);
+	mmc_wait_for_req(card->host, mrq);
 
-	if (cmd.error)
-		return cmd.error;
-	if (data.error)
-		return data.error;
+	memset(mrq, 0, sizeof(struct mmc_request));
+	memset(cmd, 0, sizeof(struct mmc_command));
+	memset(data, 0, sizeof(struct mmc_data));
+
+	if (cmd->error)
+		return cmd->error;
+	if (data->error)
+		return data->error;
 
 	if (mmc_host_is_spi(card->host)) {
 		/* host driver already reported errors */
 	} else {
-		if (cmd.resp[0] & R5_ERROR)
+		if (cmd->resp[0] & R5_ERROR)
 			return -EIO;
-		if (cmd.resp[0] & R5_FUNCTION_NUMBER)
+		if (cmd->resp[0] & R5_FUNCTION_NUMBER)
 			return -EINVAL;
-		if (cmd.resp[0] & R5_OUT_OF_RANGE)
+		if (cmd->resp[0] & R5_OUT_OF_RANGE)
 			return -ERANGE;
 	}
 
