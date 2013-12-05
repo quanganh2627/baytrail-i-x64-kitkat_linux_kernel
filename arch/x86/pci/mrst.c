@@ -45,6 +45,14 @@
 #define PCI_FIXED_BAR_4_SIZE	0x14
 #define PCI_FIXED_BAR_5_SIZE	0x1c
 
+/* In BYT platform for all internal PCI devices d3 delay
+ * of 3 ms is sufficient. Default value of 10 ms is overkill.
+ */
+#define INTERNAL_PCI_PM_D3_WAIT		3
+
+#define ISP_SUB_CLASS			0x80
+#define SUB_CLASS_MASK			0xFF00
+
 static int pci_soc_mode = 0;
 
 /**
@@ -250,11 +258,38 @@ int __init intel_mid_pci_init(void)
 	return 1;
 }
 
+static bool is_south_complex_device(struct pci_dev *dev)
+{
+	unsigned base_class = dev->class >> 16;
+	unsigned sub_class  = (dev->class & SUB_CLASS_MASK) >> 8;
+
+	/* other than camera, pci bridges and display,
+	 * everything else are south complex devices.
+	 */
+	if (((base_class == PCI_BASE_CLASS_MULTIMEDIA) &&
+				(sub_class == ISP_SUB_CLASS)) ||
+		(base_class == PCI_BASE_CLASS_BRIDGE) ||
+		((base_class == PCI_BASE_CLASS_DISPLAY) && !sub_class))
+		return false;
+	else
+		return true;
+}
+
 /* Langwell devices are not true pci devices, they are not subject to 10 ms
  * d3 to d0 delay required by pci spec.
+ * Also in BYT platform, d3_delay for internal south complex devices,
+ * are not subject to 10 ms d3 to d0 delay required by pci spec.
  */
 static void __devinit pci_d3delay_fixup(struct pci_dev *dev)
 {
+	if (platform_is(INTEL_ATOM_BYT)) {
+		if (dev->bus->number == 0 && is_south_complex_device(dev)) {
+			dev->d3_delay = INTERNAL_PCI_PM_D3_WAIT;
+			dev->d3cold_delay = INTERNAL_PCI_PM_D3_WAIT;
+		}
+		return;
+	}
+
 	/* PCI fixups are effectively decided compile time. If we have a dual
 	   SoC/non-SoC kernel we don't want to mangle d3 on non SoC devices */
         if (!pci_soc_mode)
@@ -265,10 +300,8 @@ static void __devinit pci_d3delay_fixup(struct pci_dev *dev)
 	if (type1_access_ok(dev->bus->number, dev->devfn, PCI_DEVICE_ID))
 		return;
 
-	if (!platform_is(INTEL_ATOM_BYT)) {
-		dev->d3_delay = 0;
-		dev->d3cold_delay = 0;
-	}
+	dev->d3_delay = 0;
+	dev->d3cold_delay = 0;
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, PCI_ANY_ID, pci_d3delay_fixup);
 
