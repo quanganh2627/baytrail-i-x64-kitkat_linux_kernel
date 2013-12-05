@@ -172,7 +172,7 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 	struct i2c_client *client = chip->client;
 	static bool notify_otg, notify_charger;
 	static char *cable;
-	int stat, devtype, ohm_code, cntl, ret;
+	int stat, devtype, ohm_code, cntl, intmask, ret;
 	u8 w_man_sw, w_man_chg_cntl;
 	bool discon_evt = false, drive_vbus = false;
 	int vbus_mask = 0;
@@ -276,9 +276,32 @@ static int fsa9285_detect_dev(struct fsa9285_chip *chip)
 	}
 
 	/* VBUS control */
-	if (drive_vbus)
+	if (drive_vbus) {
+		intmask = fsa9285_read_reg(client, FSA9285_REG_INTR_MASK);
+		if (intmask < 0)
+			goto dev_det_i2c_failed;
+
+		/* disable VBUS interrupt */
+		ret = fsa9285_write_reg(client, FSA9285_REG_INTR_MASK,
+						intmask | INTR_VBUS_CHANGE);
+		if (ret < 0)
+			goto dev_det_i2c_failed;
+
 		ret = chip->pdata->enable_vbus();
-	else
+
+		/* clear interrupt */
+		ret = fsa9285_read_reg(client, FSA9285_REG_INTR);
+		if (ret < 0)
+			dev_err(&chip->client->dev,
+				"i2c read failed:%d\n", ret);
+
+		/* enable VBUS interrupt */
+		ret = fsa9285_write_reg(client, FSA9285_REG_INTR_MASK,
+						intmask);
+		if (ret < 0)
+			goto dev_det_i2c_failed;
+
+	} else
 		ret = chip->pdata->disable_vbus();
 	if (ret < 0)
 		dev_warn(&chip->client->dev,
@@ -353,30 +376,20 @@ static irqreturn_t fsa9285_irq_handler(int irq, void *data)
 
 	pm_runtime_get_sync(&chip->client->dev);
 
-	/* mask the interrupts */
-	ret = fsa9285_write_reg(client, FSA9285_REG_CTRL,
-					chip->cntl | CTRL_INT_MASK);
-	if (ret < 0)
+	/* clear interrupt */
+	ret = fsa9285_read_reg(client, FSA9285_REG_INTR);
+	if (ret <= 0) {
+		dev_info(&client->dev, "invalid intr:%x\n", ret);
 		goto isr_ret;
+	} else
+		dev_info(&client->dev, "clear intr:%x\n", ret);
 
 	mdelay(10);
-
 	/* device detection */
 	ret = fsa9285_detect_dev(chip);
 	if (ret < 0)
-		goto isr_ret;
-
-	/* clear interrupt */
-	ret = fsa9285_read_reg(client, FSA9285_REG_INTR);
-	if (ret < 0)
-		dev_err(&chip->client->dev, "i2c read failed:%d\n", ret);
-	else
-		dev_info(&client->dev, "intr:%x\n", ret);
-
-	/* unmask the interrupts */
-	ret = fsa9285_write_reg(client, FSA9285_REG_CTRL,
-					chip->cntl & ~CTRL_INT_MASK);
-	mdelay(10);
+		dev_err(&chip->client->dev,
+				"fsa9285 detecting devices failed:%d\n", ret);
 isr_ret:
 	pm_runtime_put_sync(&chip->client->dev);
 	return IRQ_HANDLED;
@@ -445,7 +458,7 @@ static int fsa9285_irq_init(struct fsa9285_chip *chip)
 	if (client->irq) {
 		ret = request_threaded_irq(client->irq, NULL,
 				fsa9285_irq_handler,
-				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				"fsa9285", chip);
 		if (ret) {
 			dev_err(&client->dev, "failed to reqeust IRQ\n");

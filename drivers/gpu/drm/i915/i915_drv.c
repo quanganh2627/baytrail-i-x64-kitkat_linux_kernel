@@ -1163,7 +1163,8 @@ static int i915_suspend_common(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
+	if ((drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
+		|| i915_is_device_suspended(dev_priv->dev))
 		return 0;
 
 	error = dev_priv->pm.drm_freeze(drm_dev);
