@@ -599,6 +599,7 @@ typedef struct drm_i915_private {
 
 	/* MIPI panel info */
 	struct mipi_info mipi;
+	u8 need_dsi_clear_ready;
 	/* Is DPST enabled only for video play back on 18bpp */
 	bool bpp18_video_dpst;
 	/* Store the type of local panel attached to board */
