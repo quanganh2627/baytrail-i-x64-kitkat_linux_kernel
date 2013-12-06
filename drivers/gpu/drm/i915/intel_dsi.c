@@ -351,16 +351,11 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 /* Encoder dpms must, add functionality later */
 void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
-	struct drm_connector *connector = container_of(\
-			encoder, struct drm_connector, encoder);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 	struct drm_device *dev = encoder->dev;
 
-	DRM_DEBUG_KMS("\n");
-
 	if (mode != DRM_MODE_DPMS_ON)
 		mode = DRM_MODE_DPMS_OFF;
-	connector->dpms = mode;
 
 	/* FIXME - Just in case this function */
 	/* gets called when device is in D0i3? */
