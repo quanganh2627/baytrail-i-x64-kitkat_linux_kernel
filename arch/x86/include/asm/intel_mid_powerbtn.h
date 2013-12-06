@@ -11,4 +11,13 @@ struct intel_msic_power_btn_platform_data {
 #define MSIC_PB_LEN	1
 #define MSIC_PWRBTNM	(1 << 0)
 
+#define BCOVE_PBIRQ		0x02
+#define BCOVE_PBIRQMASK		0x0d
+
+#define SCOVE_PBIRQ		0x1002
+#define SCOVE_PBIRQMASK		0x100d
+#define SCOVE_PB_STAT_REG	0x1027
+#define SCOVE_CHIP_ID		0x1000
+#define SCOVE_CHIP_ID_REV_MASK	0x3F
+
 #endif

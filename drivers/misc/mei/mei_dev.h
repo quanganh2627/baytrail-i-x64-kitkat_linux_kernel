@@ -411,6 +411,7 @@ struct mei_device {
 	struct file *iamthif_file_object;
 	struct mei_cl iamthif_cl;
 	struct mei_cl_cb *iamthif_current_cb;
+	long iamthif_open_count;
 	int iamthif_mtu;
 	unsigned long iamthif_timer;
 	u32 iamthif_stall_timer;
@@ -451,6 +452,16 @@ static inline unsigned long mei_secs_to_jiffies(unsigned long sec)
 static inline u32 mei_data2slots(size_t length)
 {
 	return DIV_ROUND_UP(sizeof(struct mei_msg_hdr) + length, 4);
+}
+
+/**
+ * mei_slots2data- get data in slots - bytes from slots
+ * @slots -  number of available slots
+ * returns  - number of bytes in slots
+ */
+static inline u32 mei_slots2data(int slots)
+{
+	return slots * 4;
 }
 
 /*
@@ -508,7 +519,7 @@ int mei_amthif_irq_read(struct mei_device *dev, s32 *slots);
  * NFC functions
  */
 int mei_nfc_host_init(struct mei_device *dev);
-void mei_nfc_host_exit(void);
+void mei_nfc_host_exit(struct mei_device *dev);
 
 /*
  * NFC Client UUID

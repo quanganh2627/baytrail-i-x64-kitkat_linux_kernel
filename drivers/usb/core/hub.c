@@ -139,7 +139,7 @@ struct usb_hub *usb_hub_to_struct_hub(struct usb_device *hdev)
 	return usb_get_intfdata(hdev->actconfig->interface[0]);
 }
 
-static int usb_device_supports_lpm(struct usb_device *udev)
+int usb_device_supports_lpm(struct usb_device *udev)
 {
 	/* USB 2.1 (and greater) devices indicate LPM support through
 	 * their USB 2.0 Extended Capabilities BOS descriptor.
@@ -160,6 +160,11 @@ static int usb_device_supports_lpm(struct usb_device *udev)
 				"Power management will be impacted.\n");
 		return 0;
 	}
+
+	/* udev is root hub */
+	if (!udev->parent)
+		return 1;
+
 	if (udev->parent->lpm_capable)
 		return 1;
 
@@ -1585,7 +1590,6 @@ static int hub_configure(struct usb_hub *hub,
 
 fail:
 	hdev->maxchild = 0;
-
 fail_keep_maxchild:
 	dev_err (hub_dev, "config failed, %s (err %d)\n",
 			message, ret);
@@ -3471,6 +3475,9 @@ static int usb_req_set_sel(struct usb_device *udev, enum usb3_link_state state)
 	unsigned long long u2_pel;
 	int ret;
 
+	if (udev->state != USB_STATE_CONFIGURED)
+		return 0;
+
 	/* Convert SEL and PEL stored in ns to us */
 	u1_sel = DIV_ROUND_UP(udev->u1_params.sel, 1000);
 	u1_pel = DIV_ROUND_UP(udev->u1_params.pel, 1000);
@@ -5133,6 +5140,12 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 		return -EISDIR;
 	}
 	parent_hub = usb_hub_to_struct_hub(parent_hdev);
+
+	/* Disable USB2 hardware LPM.
+	 * It will be re-enabled by the enumeration process.
+	 */
+	if (udev->usb2_hw_lpm_enabled == 1)
+		usb_set_usb2_hardware_lpm(udev, 0);
 
 	/* Disable LPM and LTM while we reset the device and reinstall the alt
 	 * settings.  Device-initiated LPM settings, and system exit latency

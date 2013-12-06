@@ -499,7 +499,8 @@ static int mei_txe_readiness_wait(struct mei_device *dev)
 		return 0;
 	mutex_unlock(&dev->device_lock);
 	err = wait_event_interruptible_timeout(dev->wait_hw_ready,
-			dev->recvd_hw_ready, SEC_READY_WAIT_TIMEOUT);
+			dev->recvd_hw_ready,
+			msecs_to_jiffies(SEC_READY_WAIT_TIMEOUT));
 	mutex_lock(&dev->device_lock);
 	if (!err && !dev->recvd_hw_ready) {
 		dev_dbg(&dev->pdev->dev,
@@ -959,7 +960,7 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 	mei_irq_compl_handler(dev, &complete_list);
 
 out:
-	dev_dbg(&dev->pdev->dev, "irq thread end rets = %d\n", rets);
+	dev_dbg(&dev->pdev->dev, "irq thread end\n");
 
 	mei_enable_interrupts(dev);
 	return IRQ_HANDLED;

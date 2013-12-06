@@ -339,6 +339,9 @@
 #define   PIPE_CONTROL_DEPTH_CACHE_FLUSH		(1<<0)
 #define   PIPE_CONTROL_GLOBAL_GTT (1<<2) /* in addr dword */
 
+#define GFX_OP_3DPRIMITIVE()              \
+	((0x3<<29)|(0x3<<27)|(0x3<<24)|       \
+	 (0x0<<16)|(0x0<<10)|(0x0<<8)|(7-2))
 
 /*
  * Reset registers
@@ -975,24 +978,41 @@
 
 /* These are all the "old" interrupts */
 #define ILK_BSD_USER_INTERRUPT				(1<<5)
+#define I915_PM_INTERRUPT				(1<<31)
+#define I915_ISP_INTERRUPT				(1<<22)
+#define I915_MIPIB_INTERRUPT				(1<<19)
+#define I915_MIPIA_INTERRUPT				(1<<18)
 #define I915_PIPE_CONTROL_NOTIFY_INTERRUPT		(1<<18)
 #define I915_DISPLAY_PORT_INTERRUPT			(1<<17)
+#define I915_DISPLAY_PIPE_C_HBLANK_INTERRUPT		(1<<16)
+#define I915_MASTER_ERROR_INTERRUPT			(1<<15)
 #define I915_RENDER_COMMAND_PARSER_ERROR_INTERRUPT	(1<<15)
+#define I915_DISPLAY_PIPE_B_HBLANK_INTERRUPT		(1<<14)
 #define I915_GMCH_THERMAL_SENSOR_EVENT_INTERRUPT	(1<<14) /* p-state */
+#define I915_DISPLAY_PIPE_A_HBLANK_INTERRUPT		(1<<13)
 #define I915_HWB_OOM_INTERRUPT				(1<<13)
+#define I915_LPE_PIPE_C_INTERRUPT			(1<<12)
 #define I915_SYNC_STATUS_INTERRUPT			(1<<12)
+#define I915_MISC_INTERRUPT				(1<<11)
 #define I915_DISPLAY_PLANE_A_FLIP_PENDING_INTERRUPT	(1<<11)
+#define I915_DISPLAY_PIPE_C_VBLANK_INTERRUPT		(1<<10)
 #define I915_DISPLAY_PLANE_B_FLIP_PENDING_INTERRUPT	(1<<10)
+#define I915_DISPLAY_PIPE_C_EVENT_INTERRUPT		(1<<9)
 #define I915_OVERLAY_PLANE_FLIP_PENDING_INTERRUPT	(1<<9)
+#define I915_DISPLAY_PIPE_C_DPBM_INTERRUPT		(1<<8)
 #define I915_DISPLAY_PLANE_C_FLIP_PENDING_INTERRUPT	(1<<8)
 #define I915_DISPLAY_PIPE_A_VBLANK_INTERRUPT		(1<<7)
 #define I915_DISPLAY_PIPE_A_EVENT_INTERRUPT		(1<<6)
 #define I915_DISPLAY_PIPE_B_VBLANK_INTERRUPT		(1<<5)
 #define I915_DISPLAY_PIPE_B_EVENT_INTERRUPT		(1<<4)
+#define I915_DISPLAY_PIPE_A_DPBM_INTERRUPT		(1<<3)
+#define I915_DISPLAY_PIPE_B_DPBM_INTERRUPT		(1<<2)
 #define I915_DEBUG_INTERRUPT				(1<<2)
+#define I915_WINVALID_INTERRUPT				(1<<1)
 #define I915_USER_INTERRUPT				(1<<1)
 #define I915_ASLE_INTERRUPT				(1<<0)
-#define I915_BSD_USER_INTERRUPT				(1 << 25)
+#define I915_BSD_USER_INTERRUPT				(1<<25)
+
 /* Added for HDMI Audio */
 /* HDMI AUDIO INTERRUPT TYPE */
 #define I915_LPE_AUDIO_HDMI_STATUS_A	(dev_priv->info->display_mmio_offset + 0x65064)
@@ -1208,9 +1228,12 @@
 #define   GMBUS_HW_RDY_EN	(1<<0)
 #define GMBUS5			0x5120 /* byte index */
 #define   GMBUS_2BYTE_INDEX_EN	(1<<31)
-#define GMBUSFREQ		0x6510
-#define CD_CZ_CLOCK_FREQ_REG	0x6508	/* CZ Clock, CD Clock Frequency
-					 * Ratio register */
+#define GMBUSFREQ		(VLV_DISPLAY_BASE + 0x6510)
+
+/* CZ Clock, CD Clock Frequency ratio register */
+#define CD_CZ_CLOCK_FREQ_REG	(VLV_DISPLAY_BASE + 0x6508)
+
+#define GCI_CONTROL	(VLV_DISPLAY_BASE + 0x650C)  /* GCI Control reg */
 
 /*
  * Clock control & power management
@@ -3198,7 +3221,7 @@ EDP_PSR_SW_TIMER
 #define   PIPEA_HBLANK_INT_EN_VLV		(1UL<<16)
 #define   PIPE_OVERLAY_UPDATED_ENABLE		(1UL<<16)
 #define   SPRITE1_FLIPDONE_INT_STATUS_VLV	(1UL<<15)
-#define   SPRITE0_FLIPDONE_INT_STATUS_VLV	(1UL<<14)
+#define   SPRITE_FLIPDONE_INT_STATUS_VLV	(1UL<<14)
 #define   PIPE_CRC_ERROR_INTERRUPT_STATUS	(1UL<<13)
 #define   PIPE_CRC_DONE_INTERRUPT_STATUS	(1UL<<12)
 #define   PIPE_GMBUS_INTERRUPT_STATUS		(1UL<<11)
@@ -3231,12 +3254,19 @@ EDP_PSR_SW_TIMER
 #define   SPRITED_FLIPDONE_INT_EN		(1<<26)
 #define   SPRITEC_FLIPDONE_INT_EN		(1<<25)
 #define   PLANEB_FLIPDONE_INT_EN		(1<<24)
+#define   PIPE_PSR_INT_EN			(1<<22)
 #define   PIPEA_LINE_COMPARE_INT_EN		(1<<21)
 #define   PIPEA_HLINE_INT_EN			(1<<20)
 #define   PIPEA_VBLANK_INT_EN			(1<<19)
 #define   SPRITEB_FLIPDONE_INT_EN		(1<<18)
 #define   SPRITEA_FLIPDONE_INT_EN		(1<<17)
 #define   PLANEA_FLIPDONE_INT_EN		(1<<16)
+#define   PIPEC_LINE_COMPARE_INT_EN		(1<<13)
+#define   PIPEC_HLINE_INT_EN			(1<<12)
+#define   PIPEC_VBLANK_INT_EN			(1<<11)
+#define   SPRITEF_FLIPDONE_INT_EN		(1<<10)
+#define   SPRITEE_FLIPDONE_INT_EN		(1<<9)
+#define   PLANEC_FLIPDONE_INT_EN		(1<<8)
 
 #define DPINVGTT				(VLV_DISPLAY_BASE + 0x7002c) /* VLV only */
 #define   CURSORB_INVALID_GTT_INT_EN		(1<<23)
@@ -3248,6 +3278,7 @@ EDP_PSR_SW_TIMER
 #define   SPRITEA_INVALID_GTT_INT_EN		(1<<17)
 #define   PLANEA_INVALID_GTT_INT_EN		(1<<16)
 #define   DPINVGTT_EN_MASK			0xff0000
+#define   DPINVGTT_EN_MASK_CHV			0xfff0000
 #define   CURSORB_INVALID_GTT_STATUS		(1<<7)
 #define   CURSORA_INVALID_GTT_STATUS		(1<<6)
 #define   SPRITED_INVALID_GTT_STATUS		(1<<5)
@@ -3257,6 +3288,7 @@ EDP_PSR_SW_TIMER
 #define   SPRITEA_INVALID_GTT_STATUS		(1<<1)
 #define   PLANEA_INVALID_GTT_STATUS		(1<<0)
 #define   DPINVGTT_STATUS_MASK			0xff
+#define   DPINVGTT_STATUS_MASK_CHV		0xfff
 
 #define DSPARB			0x70030
 #define   DSPARB_CSTART_MASK	(0x7f << 7)
@@ -3326,6 +3358,7 @@ EDP_PSR_SW_TIMER
 #define   DSPFW7_VLV		0x040F040F
 
 /* drain latency register values*/
+#define	VLV_DDL(pipe)			_PIPE(pipe, VLV_DDL1, VLV_DDL2)
 #define DRAIN_LATENCY_PRECISION_64	64
 #define DRAIN_LATENCY_PRECISION_32	32
 #define VLV_DDL1			(VLV_DISPLAY_BASE + 0x70050)
@@ -3352,7 +3385,7 @@ EDP_PSR_SW_TIMER
 #define I915_FIFO_LINE_SIZE	64
 #define I830_FIFO_LINE_SIZE	32
 
-#define VALLEYVIEW_FIFO_SIZE	255
+#define VALLEYVIEW_FIFO_SIZE	511
 #define G4X_FIFO_SIZE		127
 #define I965_FIFO_SIZE		512
 #define I945_FIFO_SIZE		127
@@ -4073,6 +4106,73 @@ EDP_PSR_SW_TIMER
 #define GTIMR   0x44014
 #define GTIIR   0x44018
 #define GTIER   0x4401c
+
+#define  GEN8_MASTER_IRQ		0x44200
+#define  GEN8_PCU_IRQ			(1<<30)
+#define  GEN8_DE_PCH_IRQ		(1<<23)
+#define  GEN8_DE_MISC_IRQ		(1<<22)
+#define  GEN8_DE_PORT_IRQ		(1<<20)
+#define  GEN8_DE_PIPE_C_IRQ		(1<<18)
+#define  GEN8_DE_PIPE_B_IRQ		(1<<17)
+#define  GEN8_DE_PIPE_A_IRQ		(1<<16)
+#define  GEN8_GT_VECS_IRQ		(1<<6)
+#define  GEN8_GT_VCS2_IRQ		(1<<3)
+#define  GEN8_GT_VCS1_IRQ		(1<<2)
+#define  GEN8_GT_BCS_IRQ		(1<<1)
+#define  GEN8_GT_RCS_IRQ		(1<<0)
+/* Lazy definition */
+#define  GEN8_GT_IRQS			0x000000ff
+#define  GEN8_DE_IRQS			0x01ff0000
+#define  GEN8_RSVD_IRQS			0xB700ff00
+
+#define GEN8_GT_ISR(which) (0x44300 + (0x10 * (which)))
+#define GEN8_GT_IMR(which) (0x44304 + (0x10 * (which)))
+#define GEN8_GT_IIR(which) (0x44308 + (0x10 * (which)))
+#define GEN8_GT_IER(which) (0x4430c + (0x10 * (which)))
+#define GEN8_GT_CONTEXT_SWITCH_INTERRUPT	(1<<8)
+#define GEN8_GT_DW_NOTIFY_INTERRUPT		(1<<4)
+
+
+#define GEN8_BCS_IRQ_SHIFT 16
+#define GEN8_RCS_IRQ_SHIFT 0
+#define GEN8_VCS2_IRQ_SHIFT 16
+#define GEN8_VCS1_IRQ_SHIFT 0
+#define GEN8_VECS_IRQ_SHIFT 0
+
+#define GEN8_DE_PIPE_ISR(pipe) (0x44400 + (0x10 * (pipe)))
+#define GEN8_DE_PIPE_IMR(pipe) (0x44404 + (0x10 * (pipe)))
+#define GEN8_DE_PIPE_IIR(pipe) (0x44408 + (0x10 * (pipe)))
+#define GEN8_DE_PIPE_IER(pipe) (0x4440c + (0x10 * (pipe)))
+#define  _PIPE_UNDERRUN			(1 << 31)
+#define  _PIPE_CDCLK_CRC_ERROR		(1 << 29)
+#define  _PIPE_CURSOR_FAULT		(1 << 10)
+#define  _PIPE_SPRITE_FAULT		(1 << 9)
+#define  _PIPE_PRIMARY_FAULT		(1 << 8)
+#define  _PIPE_SPRITE_FLIP_DONE		(1 << 5)
+#define  _PIPE_FLIP_DONE		(1 << 4)
+#define  _PIPE_SCAN_LINE_EVENT		(1 << 3)
+#define  _PIPE_VBLANK			(1 << 0)
+#define GEN8_DE_PIPE_IRQ_ERRORS	 (_PIPE_UNDERRUN | _PIPE_CDCLK_CRC_ERROR | \
+				  _PIPE_CURSOR_FAULT | _PIPE_SPRITE_FAULT | \
+				  _PIPE_PRIMARY_FAULT)
+
+#define GEN8_DE_PORT_ISR 0x44440
+#define GEN8_DE_PORT_IMR 0x44444
+#define GEN8_DE_PORT_IIR 0x44448
+#define GEN8_DE_PORT_IER 0x4444c
+#define  _PORT_DP_A_HOTPLUG		(1 << 3)
+
+#define GEN8_DE_MISC_ISR 0x44460
+#define GEN8_DE_MISC_IMR 0x44464
+#define GEN8_DE_MISC_IIR 0x44468
+#define GEN8_DE_MISC_IER 0x4446c
+#define  GEN8_DE_MISC_GSE		(1 << 27)
+
+#define GEN8_PCU_ISR 0x444e0
+#define GEN8_PCU_IMR 0x444e4
+#define GEN8_PCU_IIR 0x444e8
+#define GEN8_PCU_IER 0x444ec
+
 
 #define ILK_DISPLAY_CHICKEN2	0x42004
 /* Required on all Ironlake and Sandybridge according to the B-Spec. */

@@ -1379,6 +1379,7 @@ typedef struct drm_i915_private {
 
 	struct workqueue_struct *wq;
 	struct workqueue_struct *flipwq;
+	struct workqueue_struct *rpswq;
 
 	/* Display functions */
 	struct drm_i915_display_funcs display;
@@ -1749,6 +1750,13 @@ struct drm_i915_gem_object {
 
 	/** Object datatype */
 	uint32_t datatype;
+
+	/**
+	* Number of crtcs where this object is currently the fb, but
+	* will be page flipped away on the next vblank.  When it
+	* reaches 0, dev_priv->pending_flip_queue will be woken up.
+	*/
+	atomic_t pending_flip;
 };
 
 struct i915_gem_userptr_object {
@@ -1857,6 +1865,7 @@ struct drm_i915_file_private {
 				 (dev)->pci_device == 0x0106 ||	\
 				 (dev)->pci_device == 0x010A)
 #define IS_VALLEYVIEW(dev)	(INTEL_INFO(dev)->is_valleyview)
+#define IS_CHERRYVIEW(dev)     (INTEL_INFO(dev)->is_valleyview && IS_GEN8(dev))
 #define IS_VALLEYVIEWP_M(dev)	((dev)->pci_device == 0x0F31)
 #define IS_HASWELL(dev)	(INTEL_INFO(dev)->is_haswell)
 #define IS_MOBILE(dev)		(INTEL_INFO(dev)->is_mobile)
@@ -1877,6 +1886,7 @@ struct drm_i915_file_private {
 #define IS_GEN5(dev)	(INTEL_INFO(dev)->gen == 5)
 #define IS_GEN6(dev)	(INTEL_INFO(dev)->gen == 6)
 #define IS_GEN7(dev)	(INTEL_INFO(dev)->gen == 7)
+#define IS_GEN8(dev)	(INTEL_INFO(dev)->gen == 8)
 
 #define HAS_BSD(dev)            (INTEL_INFO(dev)->has_bsd_ring)
 #define HAS_BLT(dev)            (INTEL_INFO(dev)->has_blt_ring)

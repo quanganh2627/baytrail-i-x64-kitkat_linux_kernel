@@ -2195,6 +2195,8 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	intel_fb = to_intel_framebuffer(fb);
 	obj = intel_fb->obj;
 
+	intel_update_watermarks(dev);
+
 	reg = DSPCNTR(plane);
 	dspcntr = I915_READ(reg);
 	/* Mask out pixel format bits in case we change it */
@@ -2437,15 +2439,20 @@ void intel_display_handle_reset(struct drm_device *dev)
 
 		intel_prepare_page_flip(dev, plane);
 		intel_finish_page_flip_plane(dev, plane);
+
+		intel_prepare_sprite_page_flip(dev, intel_crtc->pipe);
+		intel_finish_sprite_page_flip(dev, intel_crtc->pipe);
 	}
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 
 		mutex_lock(&crtc->mutex);
-		if (intel_crtc->active)
-			dev_priv->display.update_plane(crtc, crtc->fb,
+		if (intel_crtc->active) {
+			if (!intel_crtc->primary_disabled)
+				dev_priv->display.update_plane(crtc, crtc->fb,
 						       crtc->x, crtc->y);
+		}
 		mutex_unlock(&crtc->mutex);
 	}
 }
@@ -3126,7 +3133,8 @@ static bool intel_crtc_has_pending_flip(struct drm_crtc *crtc)
 	bool pending;
 
 	spin_lock_irqsave(&dev->event_lock, flags);
-	pending = to_intel_crtc(crtc)->unpin_work != NULL;
+	pending = ((to_intel_crtc(crtc)->unpin_work != NULL) ||
+			(to_intel_crtc(crtc)->sprite_unpin_work != NULL));
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	return pending;
@@ -3146,6 +3154,8 @@ static void intel_crtc_wait_for_pending_flips(struct drm_crtc *crtc)
 		   !intel_crtc_has_pending_flip(crtc));
 
 	mutex_lock(&dev->struct_mutex);
+	if (to_intel_crtc(crtc)->sprite_unpin_work)
+		intel_finish_sprite_page_flip(dev, to_intel_crtc(crtc)->pipe);
 	intel_finish_fb(crtc->fb);
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -4278,8 +4288,6 @@ static void intel_connector_check_state(struct intel_connector *connector)
  * consider. */
 void intel_connector_dpms(struct drm_connector *connector, int mode)
 {
-	struct intel_encoder *encoder = intel_attached_encoder(connector);
-
 	/* All the simple cases only support two dpms states. */
 	if (mode != DRM_MODE_DPMS_ON)
 		mode = DRM_MODE_DPMS_OFF;
@@ -4290,10 +4298,8 @@ void intel_connector_dpms(struct drm_connector *connector, int mode)
 	connector->dpms = mode;
 
 	/* Only need to change hw state when actually enabled */
-	if (encoder->base.crtc)
-		intel_encoder_dpms(encoder, mode);
-	else
-		WARN_ON(encoder->connectors_active != false);
+	if (connector->encoder)
+		intel_encoder_dpms(to_intel_encoder(connector->encoder), mode);
 
 	intel_modeset_check_state(connector->dev);
 }
@@ -8138,19 +8144,24 @@ static void intel_crtc_destroy(struct drm_crtc *crtc)
 {
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
-	struct intel_unpin_work *work;
+	struct intel_unpin_work *work, *sprite_work;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 	work = intel_crtc->unpin_work;
+	sprite_work = intel_crtc->sprite_unpin_work;
 	intel_crtc->unpin_work = NULL;
+	intel_crtc->sprite_unpin_work = NULL;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	if (work) {
 		cancel_work_sync(&work->work);
 		kfree(work);
 	}
-
+	if (sprite_work) {
+		cancel_work_sync(&sprite_work->work);
+		kfree(sprite_work);
+	}
 	intel_crtc_cursor_set(crtc, NULL, 0, 0, 0);
 
 	drm_crtc_cleanup(crtc);
@@ -8679,7 +8690,7 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 		spin_unlock_irqrestore(&dev->event_lock, flags);
 		kfree(work);
 		drm_vblank_put(dev, intel_crtc->pipe);
-
+		intel_crtc->unpin_work = NULL;
 		DRM_DEBUG_DRIVER("flip queue: crtc already busy\n");
 		return -EBUSY;
 	}
@@ -10183,6 +10194,7 @@ static void display_save_restore_hotplug(struct drm_device *drm_dev, int flag)
 	} else if (flag == RESTOREHPD)
 		I915_WRITE(PORT_HOTPLUG_EN, dev_priv->hotplugstat);
 }
+
 ssize_t display_runtime_suspend(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -10193,6 +10205,10 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	dev_priv->audio_suspended = mid_hdmi_audio_suspend(dev);
 	if (!dev_priv->audio_suspended)
 		DRM_ERROR("Audio active, CRTC will not be suspended\n");
+
+	dev_priv->dpst.state = dev_priv->dpst.enabled;
+	if (dev_priv->dpst.state)
+		i915_dpst_disable_hist_interrupt(dev);
 
 	/* Force a re-detection on Hot-pluggable displays */
 	i915_simulate_hpd(dev, false);
@@ -10269,6 +10285,10 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	dev_priv->late_resume = false;
 	dev_priv->is_resuming = false;
 	dev_priv->s0ixstat = false;
+
+	if (dev_priv->dpst.state)
+		i915_dpst_enable_hist_interrupt(dev);
+
 	return 0;
 }
 
@@ -10309,6 +10329,7 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	intel_crtc->rotate180 = false;
 
 	drm_crtc_helper_add(&intel_crtc->base, &intel_helper_funcs);
+	intel_crtc->sprite_unpin_work = NULL;
 
 	intel_crtc->primary_alpha = false;
 	intel_crtc->sprite0_alpha = true;

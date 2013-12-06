@@ -193,7 +193,7 @@ struct  intel_ring_buffer {
 
 	uint32_t last_irq_seqno;
 
-#ifdef CONFIG_I915_HW_SYNC
+#ifdef CONFIG_DRM_I915_SYNC
 	struct i915_sync_timeline *timeline;
 	u32 tdr_seqno; /* Contains the failing seqno when signal called */
 #endif
@@ -273,6 +273,7 @@ intel_write_status_page(struct intel_ring_buffer *ring,
 #define I915_GEM_ACTIVE_SEQNO_INDEX     0x34
 
 
+u32 get_pipe_control_scratch_addr(struct intel_ring_buffer *ring);
 void intel_cleanup_ring_buffer(struct intel_ring_buffer *ring);
 
 int __must_check intel_ring_begin(struct intel_ring_buffer *ring, int n);
