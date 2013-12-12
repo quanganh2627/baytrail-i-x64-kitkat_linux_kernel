@@ -198,8 +198,6 @@ void lpm070w425b_enable(struct intel_dsi_device *dsi)
 void lpm070w425b_disable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	struct drm_device *dev = intel_dsi->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -211,10 +209,6 @@ void lpm070w425b_disable(struct intel_dsi_device *dsi)
 
 enum drm_connector_status lpm070w425b_detect(struct intel_dsi_device *dsi)
 {
-	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	struct drm_device *dev = intel_dsi->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	return connector_status_connected;
 }
 

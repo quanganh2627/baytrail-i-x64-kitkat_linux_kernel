@@ -4134,9 +4134,6 @@ static void i9xx_crtc_prepare(struct drm_crtc *crtc)
 
 static void i9xx_crtc_commit(struct drm_crtc *crtc)
 {
-	struct drm_device *dev = crtc->dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	i9xx_crtc_enable(crtc);
 }
 

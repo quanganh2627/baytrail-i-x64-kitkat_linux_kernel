@@ -80,7 +80,9 @@ static inline void insert_qcmd(struct uart_hsu_port *up, char cmd)
 	char *buf;
 	char last_cmd;
 
-	if (check_qcmd(up, &last_cmd) && last_cmd == cmd)
+	if (check_qcmd(up, &last_cmd) && last_cmd == cmd &&
+		cmd != qcmd_enable_irq && cmd != qcmd_port_irq &&
+		cmd != qcmd_dma_irq)
 		return;
 	up->qcmd_num++;
 	buf = circ->buf + circ->head;
@@ -411,6 +413,7 @@ static ssize_t hsu_dump_show(struct file *file, char __user *user_buf,
 	ssize_t ret;
 	struct irq_desc *dma_irqdesc = irq_to_desc(phsu->dma_irq);
 	struct irq_desc *port_irqdesc;
+	struct circ_buf *xmit;
 
 	buf = kzalloc(HSU_DBGFS_BUFSIZE, GFP_KERNEL);
 	if (!buf)
@@ -425,9 +428,14 @@ static ssize_t hsu_dump_show(struct file *file, char __user *user_buf,
 		up = phsu->port + i;
 		cfg = hsu_port_func_cfg + i;
 		port_irqdesc = irq_to_desc(up->port.irq);
+		xmit = &up->port.state->xmit;
 
 		len += snprintf(buf + len, HSU_DBGFS_BUFSIZE - len,
 			"HSU port[%d] %s:\n", up->index, cfg->name);
+		len += snprintf(buf + len, HSU_DBGFS_BUFSIZE - len,
+			"xmit empty[%d] xmit pending[%d]\n",
+			uart_circ_empty(xmit),
+			(int)uart_circ_chars_pending(xmit));
 		len += snprintf(buf + len, HSU_DBGFS_BUFSIZE - len,
 			"\tsuspend idle: %d\n", cfg->idle);
 		if (cfg->has_alt)
@@ -2095,6 +2103,11 @@ static void serial_hsu_command(struct uart_hsu_port *up)
 			if (!up->use_dma && (lsr & UART_LSR_THRE))
 				transmit_chars(up);
 
+			spin_lock_irqsave(&up->port.lock, flags);
+			serial_sched_cmd(up, qcmd_enable_irq);
+			spin_unlock_irqrestore(&up->port.lock, flags);
+			break;
+		case qcmd_enable_irq:
 			enable_irq(up->port.irq);
 			break;
 		case qcmd_dma_irq:

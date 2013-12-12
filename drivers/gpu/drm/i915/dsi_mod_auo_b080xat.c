@@ -150,8 +150,6 @@ void b080xat_disable_panel_power(struct intel_dsi_device *dsi)
 void b080xat_disable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	struct drm_device *dev = intel_dsi->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -161,10 +159,6 @@ void b080xat_disable(struct intel_dsi_device *dsi)
 
 enum drm_connector_status b080xat_detect(struct intel_dsi_device *dsi)
 {
-	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	struct drm_device *dev = intel_dsi->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	return connector_status_connected;
 }
 

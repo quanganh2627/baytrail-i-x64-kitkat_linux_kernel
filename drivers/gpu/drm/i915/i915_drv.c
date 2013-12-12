@@ -1203,6 +1203,24 @@ static int i915_rpm_suspend(struct device *dev)
 
 }
 
+
+static void display_disable(struct drm_device *drm_dev)
+{
+	struct drm_i915_private *dev_priv = drm_dev->dev_private;
+	struct drm_crtc *crtc;
+	struct intel_encoder *intel_encoder;
+
+	mutex_lock(&drm_dev->mode_config.mutex);
+	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
+		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+		for_each_encoder_on_crtc(drm_dev, crtc, intel_encoder)
+			intel_encoder_prepare(&intel_encoder->base);
+		i9xx_crtc_disable(crtc);
+	}
+	mutex_unlock(&drm_dev->mode_config.mutex);
+}
+
+
 static void i915_pm_shutdown(struct pci_dev *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1211,6 +1229,11 @@ static void i915_pm_shutdown(struct pci_dev *pdev)
 	dev_priv = drm_dev->dev_private;
 
 	dev_priv->shut_down_state = 1;
+
+	/* display might still be active, which might cause issue
+	 * as we power gate display power island during suspend
+	 */
+	display_disable(drm_dev);
 	i915_suspend_common(dev);
 }
 
