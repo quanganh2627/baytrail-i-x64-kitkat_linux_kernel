@@ -4084,14 +4084,6 @@ static void i9xx_crtc_prepare(struct drm_crtc *crtc)
 	u32 data = 0;
 	static bool do_once;
 
-	/* If device is resuming, no need of prepare.
-	 * ALready the pipe is off and inactive
-	 */
-	if (dev_priv->is_resuming == true) {
-		DRM_DEBUG("device is resuming. returning\n");
-		return;
-	}
-
 	i9xx_crtc_disable(crtc);
 
 	if ((pipe == 0) && (intel_pipe_has_type(crtc, INTEL_OUTPUT_DSI)
