@@ -775,6 +775,13 @@ int i915_reset(struct drm_device *dev)
 	if (!i915_try_reset)
 		return 0;
 
+	/* Wake up wells for handling reset if rc6 is enabled*/
+	if (IS_VALLEYVIEW(dev) && dev_priv->rc6.enabled)
+		vlv_force_wake_get(dev_priv, FORCEWAKE_ALL);
+
+	dev_priv->rps.state = dev_priv->rps.enabled;
+	dev_priv->rc6.state = dev_priv->rc6.enabled;
+
 	drm_halt(dev);
 
 	/* Wait for DRM to go idle.
@@ -938,7 +945,7 @@ i915_pci_remove(struct pci_dev *pdev)
 #define DRM_PSB_FILE_PAGE_OFFSET ((0x100000000ULL >> PAGE_SHIFT) * 18)
 #define VXD_TTM_MMAP_OFFSET_START DRM_PSB_FILE_PAGE_OFFSET
 #define VXD_TTM_MMAP_OFFSET_END (DRM_PSB_FILE_PAGE_OFFSET + 0x10000000)
-#define DRM_COMMAND_VXD_BASE 0x80
+#define DRM_COMMAND_VXD_BASE 0x90
 
 static int i915_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -995,7 +1002,7 @@ static long i915_ioctl(struct file *filp,
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	if ((nr >= DRM_COMMAND_VXD_BASE) &&
-		(nr < DRM_COMMAND_VXD_BASE + 0x20)) {
+		(nr < DRM_COMMAND_VXD_BASE + 0x10)) {
 		BUG_ON(!dev_priv->vxd_ioctl);
 		return dev_priv->vxd_ioctl(filp, cmd, arg);
 	} else

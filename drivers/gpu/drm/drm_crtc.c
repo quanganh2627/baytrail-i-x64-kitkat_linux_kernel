@@ -109,7 +109,9 @@ static const struct drm_prop_enum_list drm_dpms_enum_list[] =
 {	{ DRM_MODE_DPMS_ON, "On" },
 	{ DRM_MODE_DPMS_STANDBY, "Standby" },
 	{ DRM_MODE_DPMS_SUSPEND, "Suspend" },
-	{ DRM_MODE_DPMS_OFF, "Off" }
+	{ DRM_MODE_DPMS_OFF, "Off" },
+	{ DRM_MODE_DPMS_ASYNC_ON, "AsyncOn" },
+	{ DRM_MODE_DPMS_ASYNC_OFF, "AsyncOff" }
 };
 
 DRM_ENUM_NAME_FN(drm_get_dpms_name, drm_dpms_enum_list)
@@ -221,6 +223,19 @@ static const struct drm_prop_enum_list drm_encoder_enum_list[] =
 	{ DRM_MODE_ENCODER_VIRTUAL, "Virtual" },
 	{ DRM_MODE_ENCODER_DSI, "DSI" },
 };
+
+struct drm_mode_object *gobj;
+uint64_t gvalue;
+
+static void drm_dpms_execute(struct work_struct *work)
+{
+	struct delayed_work *delayed_work = to_delayed_work(work);
+	struct drm_device *dev = container_of(delayed_work,
+		struct drm_device, mode_config.dpms_work);
+	struct drm_connector *connector = obj_to_connector(gobj);
+	(*connector->funcs->dpms)(connector, (int)gvalue);
+}
+EXPORT_SYMBOL(drm_dpms_execute);
 
 const char *drm_get_encoder_name(const struct drm_encoder *encoder)
 {
@@ -625,6 +640,7 @@ int drm_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
 	crtc->invert_dimensions = false;
 
 	drm_modeset_lock_all(dev);
+	INIT_DELAYED_WORK(&dev->mode_config.dpms_work, drm_dpms_execute);
 	mutex_init(&crtc->mutex);
 	mutex_lock_nest_lock(&crtc->mutex, &dev->mode_config.mutex);
 
@@ -3235,12 +3251,27 @@ static int drm_mode_connector_set_obj_prop(struct drm_mode_object *obj,
 					   uint64_t value)
 {
 	int ret = -EINVAL;
+
 	struct drm_connector *connector = obj_to_connector(obj);
+	struct drm_device *dev = connector->dev;
+	gobj = obj;
+	if (value == DRM_MODE_DPMS_ASYNC_ON)
+		gvalue = DRM_MODE_DPMS_ON;
+	else if (value == DRM_MODE_DPMS_ASYNC_OFF)
+		gvalue = DRM_MODE_DPMS_OFF;
 
 	/* Do DPMS ourselves */
 	if (property == connector->dev->mode_config.dpms_property) {
-		if (connector->funcs->dpms)
-			(*connector->funcs->dpms)(connector, (int)value);
+		if (connector->funcs->dpms) {
+			if ((value == DRM_MODE_DPMS_ASYNC_ON) ||
+				(value == DRM_MODE_DPMS_ASYNC_OFF)) {
+				DRM_ERROR("ASYNC DPMS flag ON\n");
+				queue_delayed_work(system_nrt_wq,
+					&dev->mode_config.dpms_work, 0);
+			} else
+				(*connector->funcs->dpms)(connector,
+					(int)value);
+		}
 		ret = 0;
 	} else if (connector->funcs->set_property)
 		ret = connector->funcs->set_property(connector, property, value);
@@ -3248,6 +3279,7 @@ static int drm_mode_connector_set_obj_prop(struct drm_mode_object *obj,
 	/* store the property value if successful */
 	if (!ret)
 		drm_object_property_set_value(&connector->base, property, value);
+
 	return ret;
 }
 
@@ -3377,7 +3409,7 @@ int drm_mode_obj_set_property_ioctl(struct drm_device *dev, void *data,
 	switch (arg_obj->type) {
 	case DRM_MODE_OBJECT_CONNECTOR:
 		ret = drm_mode_connector_set_obj_prop(arg_obj, property,
-						      arg->value);
+				arg->value);
 		break;
 	case DRM_MODE_OBJECT_CRTC:
 		ret = drm_mode_crtc_set_obj_prop(arg_obj, property, arg->value);
@@ -3557,6 +3589,8 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	unsigned long flags;
 	int hdisplay, vdisplay;
 	int ret = -EINVAL;
+	struct drm_connector *connector = NULL;
+	uint64_t panel_fitter_en = 0;
 
 	if (page_flip->flags & ~DRM_MODE_PAGE_FLIP_FLAGS ||
 	    page_flip->reserved != 0)
@@ -3591,10 +3625,36 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	if (crtc->invert_dimensions)
 		swap(hdisplay, vdisplay);
 
-	if (hdisplay > fb->width ||
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (connector->encoder->crtc == crtc) {
+			int i;
+			for (i = 0; i < connector->properties.count; i++) {
+				struct drm_mode_object *obj;
+				struct drm_property *property;
+				obj = drm_mode_object_find(dev,
+						connector->properties.ids[i],
+						DRM_MODE_OBJECT_PROPERTY);
+				if (!obj) {
+					ret = -EINVAL;
+					goto out;
+				}
+				property = obj_to_property(obj);
+				if (!strcmp(property->name, "pfit")) {
+					drm_object_property_get_value(
+							&connector->base,
+							property,
+							&panel_fitter_en);
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	if ((hdisplay > fb->width ||
 	    vdisplay > fb->height ||
 	    crtc->x > fb->width - hdisplay ||
-	    crtc->y > fb->height - vdisplay) {
+	    crtc->y > fb->height - vdisplay) && !panel_fitter_en) {
 		DRM_DEBUG_KMS("Invalid fb size %ux%u for CRTC viewport %ux%u+%d+%d%s.\n",
 			      fb->width, fb->height, hdisplay, vdisplay, crtc->x, crtc->y,
 			      crtc->invert_dimensions ? " (inverted)" : "");

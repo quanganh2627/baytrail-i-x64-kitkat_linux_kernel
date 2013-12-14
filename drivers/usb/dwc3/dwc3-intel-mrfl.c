@@ -674,7 +674,8 @@ static int dwc3_intel_notify_charger_type(struct dwc_otg2 *otg,
 
 	if ((otg->charging_cap.chrg_type ==
 			POWER_SUPPLY_CHARGER_TYPE_USB_SDP) &&
-			((otg->charging_cap.ma != 100) &&
+			((otg->charging_cap.ma != 0) &&
+			 (otg->charging_cap.ma != 100) &&
 			 (otg->charging_cap.ma != 150) &&
 			 (otg->charging_cap.ma != 500) &&
 			 (otg->charging_cap.ma != 900))) {
@@ -710,7 +711,7 @@ static void dwc3_phy_soft_reset(struct dwc_otg2 *otg)
 	val |= GUSB2PHYCFG_PHYSOFTRST;
 	otg_write(otg, GUSB2PHYCFG0, val);
 
-	msleep(100);
+	msleep(50);
 
 	val = otg_read(otg, GUSB3PIPECTL0);
 	val &= ~GUSB3PIPECTL_PHYSOFTRST;
@@ -751,10 +752,6 @@ static enum power_supply_charger_cable_type
 	 */
 	enable_usb_phy(otg, true);
 	dwc3_phy_soft_reset(otg);
-
-	/* Wait 10ms (~5ms before PHY de-asserts DIR,
-	 * XXus for initial Link reg sync-up).*/
-	msleep(20);
 
 	if (is_basin_cove(otg)) {
 		/* Enable ACA:

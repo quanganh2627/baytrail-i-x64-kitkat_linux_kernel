@@ -54,6 +54,7 @@
 struct i915_flip_data {
 	struct drm_crtc *crtc;
 	u32 seqno;
+	u32 ring_id;
 };
 struct i915_flip_work {
 	struct i915_flip_data flipdata;
@@ -1835,7 +1836,14 @@ static void intel_enable_pipe(struct drm_i915_private *dev_priv, enum pipe pipe,
 		return;
 
 	I915_WRITE(reg, val | PIPECONF_ENABLE);
-	intel_wait_for_vblank(dev_priv->dev, pipe);
+	/* No need to wait in case of mipi.
+	 * Since data will flow only when port is enabled.
+	 * wait for vblank will time out for mipi
+	 */
+	if (!dsi)
+		intel_wait_for_vblank(dev_priv->dev, pipe);
+	else
+		POSTING_READ(reg);
 }
 
 /**
@@ -1904,6 +1912,7 @@ static void intel_enable_plane(struct drm_i915_private *dev_priv,
 {
 	int reg;
 	u32 val;
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
 
 	/* If the pipe isn't enabled, we can't pump pixels and may hang */
 	assert_pipe_enabled(dev_priv, pipe);
@@ -1915,7 +1924,14 @@ static void intel_enable_plane(struct drm_i915_private *dev_priv,
 
 	I915_WRITE(reg, val | DISPLAY_PLANE_ENABLE);
 	intel_flush_display_plane(dev_priv, plane);
-	intel_wait_for_vblank(dev_priv->dev, pipe);
+	/* No need to wait in case of mipi.
+	 * Since data will flow only when port is enabled.
+	 * wait for vblank will time out for mipi
+	 */
+	if (!intel_pipe_has_type(crtc, INTEL_OUTPUT_DSI))
+		intel_wait_for_vblank(dev_priv->dev, pipe);
+	else
+		POSTING_READ(reg);
 }
 
 /**
@@ -2195,8 +2211,6 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	intel_fb = to_intel_framebuffer(fb);
 	obj = intel_fb->obj;
 
-	intel_update_watermarks(dev);
-
 	reg = DSPCNTR(plane);
 	dspcntr = I915_READ(reg);
 	/* Mask out pixel format bits in case we change it */
@@ -2275,6 +2289,10 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	} else {
 		intel_crtc->dspaddr_offset = linear_offset;
 	}
+
+	if (BYT_CR_CONFIG)
+		I915_WRITE(PIPESRC(plane),
+			((fb->width - 1) << 16) | (fb->height - 1));
 
 	I915_WRITE(DSPSTRIDE(plane), fb->pitches[0]);
 	if (INTEL_INFO(dev)->gen >= 4) {
@@ -3144,18 +3162,48 @@ static void intel_crtc_wait_for_pending_flips(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct drm_i915_gem_object *obj;
+	unsigned long flags;
 
 	if (crtc->fb == NULL)
 		return;
 
 	WARN_ON(waitqueue_active(&dev_priv->pending_flip_queue));
 
-	wait_event(dev_priv->pending_flip_queue,
-		   !intel_crtc_has_pending_flip(crtc));
+	/* flush pending flip to avoid wait_pending_flips stuck later */
+	flush_workqueue(dev_priv->flipwq);
+
+	obj = to_intel_framebuffer(crtc->fb)->obj;
+	if (wait_event_timeout(dev_priv->pending_flip_queue,
+		!intel_crtc_has_pending_flip(crtc), 5) == 0) {
+		DRM_DEBUG_DRIVER("flip wait timed out.\n");
+
+		/* cleanup */
+		if (intel_crtc->unpin_work) {
+			intel_unpin_work_fn(&intel_crtc->unpin_work->work);
+			atomic_clear_mask(1 << intel_crtc->plane,
+					&obj->pending_flip.counter);
+
+			spin_lock_irqsave(&dev->event_lock, flags);
+			intel_crtc->unpin_work = NULL;
+			spin_unlock_irqrestore(&dev->event_lock, flags);
+		}
+
+		if (intel_crtc->sprite_unpin_work) {
+			intel_unpin_sprite_work_fn(
+				&intel_crtc->sprite_unpin_work->work);
+			obj = intel_crtc->sprite_unpin_work->old_fb_obj;
+			atomic_clear_mask(1 << intel_crtc->plane,
+				&obj->pending_flip.counter);
+
+			spin_lock_irqsave(&dev->event_lock, flags);
+			intel_crtc->sprite_unpin_work = NULL;
+			spin_unlock_irqrestore(&dev->event_lock, flags);
+		}
+	}
 
 	mutex_lock(&dev->struct_mutex);
-	if (to_intel_crtc(crtc)->sprite_unpin_work)
-		intel_finish_sprite_page_flip(dev, to_intel_crtc(crtc)->pipe);
 	intel_finish_fb(crtc->fb);
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -4999,6 +5047,22 @@ static void intel_set_pipe_timings(struct intel_crtc *intel_crtc)
 	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	uint32_t vsyncshift, crtc_vtotal, crtc_vblank_end;
 
+	if (BYT_CR_CONFIG) {
+		struct intel_encoder *encoder;
+		struct intel_dsi *intel_dsi;
+
+		for_each_encoder_on_crtc(dev, &intel_crtc->base, encoder) {
+			switch (encoder->type) {
+			case INTEL_OUTPUT_DSI:
+			intel_dsi = enc_to_intel_dsi(&encoder->base);
+			mode = intel_dsi->attached_connector->panel.fixed_mode;
+			adjusted_mode =
+				intel_dsi->attached_connector->panel.fixed_mode;
+				break;
+			}
+
+		}
+	}
 	/* We need to be careful not to changed the adjusted mode, for otherwise
 	 * the hw state checker will get angry at the mismatch. */
 	crtc_vtotal = adjusted_mode->crtc_vtotal;
@@ -5414,6 +5478,12 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 			break;
 		case INTEL_OUTPUT_DSI:
 			is_dsi = true;
+			if (BYT_CR_CONFIG) {
+				struct intel_dsi *intel_dsi;
+				intel_dsi = enc_to_intel_dsi(&encoder->base);
+				mode =
+				intel_dsi->attached_connector->panel.fixed_mode;
+			}
 			break;
 		}
 
@@ -8169,7 +8239,7 @@ static void intel_crtc_destroy(struct drm_crtc *crtc)
 	kfree(intel_crtc);
 }
 
-static void intel_unpin_work_fn(struct work_struct *__work)
+void intel_unpin_work_fn(struct work_struct *__work)
 {
 	struct intel_unpin_work *work =
 		container_of(__work, struct intel_unpin_work, work);
@@ -8461,7 +8531,8 @@ static void intel_gen7_queue_mmio_flip_work(struct work_struct *__work)
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_ring_buffer *ring = &dev_priv->ring[RCS];
+	struct intel_ring_buffer *ring =
+			&dev_priv->ring[flipwork->flipdata.ring_id];
 
 	if (dev_priv->ums.mm_suspended || (ring->obj == NULL)) {
 		DRM_ERROR("flip attempted while the ring is not ready\n");
@@ -8478,8 +8549,9 @@ static void intel_gen7_queue_mmio_flip_work(struct work_struct *__work)
 		ret = __wait_seqno(ring, flipwork->flipdata.seqno,
 						reset_counter, true, NULL);
 		if (ret)
-			DRM_ERROR("wait_seqno failed on seqno 0x%x\n",
-				flipwork->flipdata.seqno);
+			DRM_ERROR("wait_seqno failed on seqno 0x%x(%d)\n",
+				flipwork->flipdata.seqno,
+				flipwork->flipdata.ring_id);
 	}
 
 	intel_mark_page_flip_active(intel_crtc);
@@ -8498,11 +8570,10 @@ static int intel_gen7_queue_mmio_flip(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct intel_ring_buffer *ring = &dev_priv->ring[RCS];
 	struct i915_flip_work *work = &flip_works[intel_crtc->plane];
 	int ret;
 
-	ret = intel_pin_and_fence_fb_obj(dev, obj, ring);
+	ret = intel_pin_and_fence_fb_obj(dev, obj, obj->ring);
 	if (ret)
 		goto err;
 
@@ -8518,7 +8589,25 @@ static int intel_gen7_queue_mmio_flip(struct drm_device *dev,
 	}
 
 	work->flipdata.crtc  = crtc;
-	work->flipdata.seqno = obj->last_read_seqno;
+	work->flipdata.seqno = obj->last_write_seqno;
+	work->flipdata.ring_id = RCS;
+
+	if (obj->last_write_seqno > 0) {
+		if (obj->ring) {
+			work->flipdata.ring_id = obj->ring->id;
+			/* Check if there is a need to add the request
+			 * in the ring to emit the seqno for this fb obj */
+			ret = i915_gem_check_olr(obj->ring,
+						obj->last_write_seqno);
+			if (ret)
+				goto err_unpin;
+		} else {
+			DRM_ERROR("NULL ring for active obj with seqno %x\n",
+				obj->last_write_seqno);
+			ret = -EINVAL;
+			goto err_unpin;
+		}
+	}
 
 	INIT_WORK(&work->work, intel_gen7_queue_mmio_flip_work);
 
@@ -8644,7 +8733,7 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 	intel_new_fb = to_intel_framebuffer(fb);
 
 	/* Avoid flip operation if shutdown is in progress */
-	if (dev_priv->pm.shutdown_in_progress)
+	if (dev_priv->pm.shutdown_in_progress || !intel_crtc->active)
 		return -EINVAL;
 
 	/* Can't change pixel format via MI display flips. */
@@ -10221,7 +10310,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	drm_kms_helper_poll_disable(dev);
 	display_save_restore_hotplug(dev, SAVEHPD);
 	display_disable_wq(dev);
-	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock_all(dev);
 	dev_priv->s0ixstat = true;
 
 	/* If KMS is active, we do the leavevt stuff here */
@@ -10241,7 +10330,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	}
 
 	dev_priv->s0ixstat = false;
-	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_unlock_all(dev);
 	i915_rpm_put_disp(dev);
 	return 0;
 }

@@ -31,11 +31,32 @@
 #include "core.h"
 #include "otg.h"
 
+#define WAIT_DISC_EVENT_COMPLETE_TIMEOUT 5 /* 100ms */
+
 static int otg_irqnum;
 
 static int dwc3_start_host(struct usb_hcd *hcd);
 static int dwc3_stop_host(struct usb_hcd *hcd);
 static struct platform_driver dwc3_xhci_driver;
+
+static void xhci_dwc3_quirks(struct device *dev, struct xhci_hcd *xhci)
+{
+	/*
+	 * As of now platform drivers don't provide MSI support so we ensure
+	 * here that the generic code does not try to make a pci_dev from our
+	 * dev struct in order to setup MSI
+	 *
+	 * Synopsys DWC3 controller will generate PLC when link transfer to
+	 * compliance/loopback mode.
+	 */
+	xhci->quirks |= XHCI_PLAT | XHCI_COMP_PLC_QUIRK;
+}
+
+/* called during probe() after chip reset completes */
+static int xhci_dwc3_setup(struct usb_hcd *hcd)
+{
+	return xhci_gen_setup(hcd, xhci_dwc3_quirks);
+}
 
 static int xhci_dwc_bus_resume(struct usb_hcd *hcd)
 {
@@ -62,7 +83,7 @@ static const struct hc_driver xhci_dwc_hc_driver = {
 	/*
 	 * basic lifecycle operations
 	 */
-	.reset =		xhci_plat_setup,
+	.reset =		xhci_dwc3_setup,
 	.start =		xhci_run,
 	.stop =			xhci_stop,
 	.shutdown =		xhci_shutdown,
@@ -344,6 +365,7 @@ dealloc_usb2_hcd:
 
 static int dwc3_stop_host(struct usb_hcd *hcd)
 {
+	int count = 0;
 	struct xhci_hcd *xhci;
 	struct usb_hcd *xhci_shared_hcd;
 
@@ -354,6 +376,18 @@ static int dwc3_stop_host(struct usb_hcd *hcd)
 
 	pm_runtime_get_sync(hcd->self.controller);
 
+	/* When plug out micro A cable, there will be two flows be executed.
+	 * The first one is xHCI controller get disconnect event. The
+	 * second one is PMIC get ID change event. During these events
+	 * handling, they both try to call usb_disconnect. Then met some
+	 * conflicts and cause kernel panic.
+	 * So treat disconnect event as first priority, handle the ID change
+	 * event until disconnect event handled done.*/
+	while (if_usb_devices_connected(xhci)) {
+		msleep(20);
+		if (count++ > WAIT_DISC_EVENT_COMPLETE_TIMEOUT)
+			break;
+	};
 	dwc3_xhci_driver.shutdown = NULL;
 
 	if (xhci->shared_hcd) {
@@ -640,8 +674,14 @@ static int dwc_hcd_runtime_resume(struct device *dev)
 static int dwc_hcd_suspend(struct device *dev)
 {
 	int retval;
+	struct platform_device      *pdev = to_platform_device(dev);
+	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
 
 	retval = dwc_hcd_suspend_common(dev);
+
+	if (retval)
+		dwc_xhci_enable_phy_auto_resume(
+			hcd, false);
 
 	dev_dbg(dev, "hcd_pci_runtime_suspend: %d\n", retval);
 	return retval;
@@ -650,6 +690,11 @@ static int dwc_hcd_suspend(struct device *dev)
 static int dwc_hcd_resume(struct device *dev)
 {
 	int retval;
+	struct platform_device      *pdev = to_platform_device(dev);
+	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
+
+	dwc_xhci_enable_phy_auto_resume(
+			hcd, false);
 
 	retval = dwc_hcd_resume_common(dev);
 	dev_dbg(dev, "hcd_pci_runtime_resume: %d\n", retval);

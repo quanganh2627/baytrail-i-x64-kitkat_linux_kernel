@@ -2,6 +2,10 @@
 # Makefile for linux/drivers/platform/x86
 # x86 Platform-Specific Drivers
 #
+CFLAGS_intel_scu_fw_update.o := -Werror
+CFLAGS_intel_scu_ipcutil.o := -Werror
+CFLAGS_intel_modem_nvram.o := -Werror
+
 obj-$(CONFIG_ASUS_LAPTOP)	+= asus-laptop.o
 obj-$(CONFIG_ASUS_WMI)		+= asus-wmi.o
 obj-$(CONFIG_ASUS_NB_WMI)	+= asus-nb-wmi.o
@@ -60,3 +64,4 @@ obj-$(CONFIG_PVPANIC)           += pvpanic.o
 obj-$(CONFIG_INTEL_BYT_EC)	+= intel_byt_ec.o
 obj-$(CONFIG_INTEL_BYT_M_BTN)	+= intel_byt_buttons.o
 obj-$(CONFIG_INTEL_CRYSTALCOVE_PAGE0)	+= intel_crystalcove_page0.o
+obj-$(CONFIG_INTEL_BYTCR_BOOST_CNTL)	+= intel_bytcr_bcntl.o
