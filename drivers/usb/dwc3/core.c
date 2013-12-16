@@ -121,6 +121,7 @@ void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 void dwc3_core_soft_reset(struct dwc3 *dwc)
 {
 	u32		reg;
+	struct usb_phy	*phy;
 
 	/* Before Resetting PHY, put Core in Reset */
 	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
@@ -137,6 +138,10 @@ void dwc3_core_soft_reset(struct dwc3 *dwc)
 	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 
+	phy = usb_get_transceiver();
+	if (phy)
+		usb_phy_init(phy);
+	usb_put_transceiver(phy);
 	mdelay(100);
 
 	/* Clear USB3 PHY reset */
@@ -335,13 +340,6 @@ int dwc3_core_init(struct dwc3 *dwc)
 	}
 	dwc->revision = reg;
 
-	dwc3_core_soft_reset(dwc);
-
-	/* Delay 1 ms Before DCTL soft reset to make it safer from hitting
-	 * Tx-CMD PHY hang issue.
-	 */
-	mdelay(1);
-
 	/* issue device SoftReset too */
 	timeout = jiffies + msecs_to_jiffies(500);
 	dwc3_writel(dwc->regs, DWC3_DCTL, DWC3_DCTL_CSFTRST);
@@ -358,6 +356,8 @@ int dwc3_core_init(struct dwc3 *dwc)
 
 		cpu_relax();
 	} while (true);
+
+	dwc3_core_soft_reset(dwc);
 
 	/* DCTL core soft reset may cause PHY hang, delay 1 ms and check ulpi */
 	mdelay(1);
