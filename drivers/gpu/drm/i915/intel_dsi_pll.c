@@ -372,22 +372,26 @@ int intel_enable_dsi_pll(struct intel_dsi *intel_dsi)
 	int pipe = intel_crtc->pipe;
 	u32 val;
 
+	/* program rcomp for compliance
+	 * reduce form 50 ohms to 45 ohms */
+	intel_flisdsi_write32(dev_priv, 0x04, 0x0004);
+
 	/* bandgap reset */
 	intel_flisdsi_write32(dev_priv, 0x08, 0x0001);
 	intel_flisdsi_write32(dev_priv, 0x0F, 0x0005);
 	intel_flisdsi_write32(dev_priv, 0x0F, 0x0025);
-	udelay(150);
+	udelay(500);
 	intel_flisdsi_write32(dev_priv, 0x0F, 0x0000);
 	intel_flisdsi_write32(dev_priv, 0x08, 0x0000);
 
 	/* Disable DPOunit clock gating, can stall pipe */
-	val = I915_READ(DSPCLK_GATE_D);
-	val |= VSUNIT_CLOCK_GATE_DISABLE;
-	I915_WRITE(DSPCLK_GATE_D, val);
-
 	val = I915_READ(DPLL(pipe));
 	val |= DPLL_RESERVED_BIT;
 	I915_WRITE(DPLL(pipe), val);
+
+	val = I915_READ(DSPCLK_GATE_D);
+	val |= VSUNIT_CLOCK_GATE_DISABLE;
+	I915_WRITE(DSPCLK_GATE_D, val);
 
 	/* enable DPLL ref clock */
 	I915_WRITE_BITS(_DPLL_A, DPLL_REFA_CLK_ENABLE_VLV,
