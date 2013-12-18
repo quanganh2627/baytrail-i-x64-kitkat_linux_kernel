@@ -2029,7 +2029,7 @@ static void intel_disable_plane(struct drm_i915_private *dev_priv,
 		for (i = 0; i < VLV_NUM_SPRITES; i++) {
 			val = I915_READ(SPCNTR(pipe, i));
 			if ((val & SP_ENABLE) == 0)
-				break;
+				continue;
 
 			I915_WRITE(SPCNTR(pipe, i), (val & ~SP_ENABLE));
 			/* Activate double buffered register update */
