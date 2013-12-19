@@ -58,6 +58,9 @@
 #define DSI_HFP_PACKET_EXTRA_SIZE 6
 #define DSI_EOTP_PACKET_SIZE 4
 
+#define PMIC_PANEL_EN	0x52
+#define PMIC_PWM_EN	0x51
+
 struct intel_dsi_device {
 	unsigned short panel_id;
 	const char *name;
@@ -66,6 +69,7 @@ struct intel_dsi_device {
 	const struct intel_dsi_dev_ops *dev_ops;
 	void *dev_priv;
 	u8 eotp_pkt;
+	u8 clock_stop;
 	u16 dsi_clock_freq;
 	u8 operation_mode;
 	u8 video_mode_type;
@@ -78,18 +82,23 @@ struct intel_dsi_device {
 	u8 turn_arnd_val;
 	u16 init_count;
 	u16 rst_timer_val;
-	u16 hs_to_lp_count;
-	u16 lp_byte_clk;
+	u32 hs_to_lp_count;
+	u32 lp_byte_clk;
 	u32 bw_timer;
-	u16 clk_lp_to_hs_count;
-	u16 clk_hs_to_lp_count;
+	u32 clk_lp_to_hs_count;
+	u32 clk_hs_to_lp_count;
 	u32 video_frmt_cfg_bits;
 	u32 dphy_reg;
 
-	u8 backlight_off_delay; /*in ms*/
-	u8 backlight_on_delay; /*in ms*/
+	/* all delays in ms */
+	u8 backlight_off_delay;
+	u8 backlight_on_delay;
+	u8 panel_on_delay;
+	u8 panel_off_delay;
+	u8 panel_pwr_cycle_delay;
+
 	bool send_shutdown;
-	u8 shutdown_pkt_delay; /*in ms*/
+	u8 shutdown_pkt_delay;
 
 };
 

@@ -185,6 +185,8 @@ static void drm_dpms_execute(struct work_struct *work)
 		struct drm_device, mode_config.dpms_work);
 	struct drm_connector *connector = obj_to_connector(gobj);
 	(*connector->funcs->dpms)(connector, (int)gvalue);
+	drm_connector_property_set_value(connector,
+		connector->dev->mode_config.dpms_property, gvalue);
 }
 EXPORT_SYMBOL(drm_dpms_execute);
 

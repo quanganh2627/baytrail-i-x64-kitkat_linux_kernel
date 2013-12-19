@@ -3877,7 +3877,6 @@ static void i9xx_crtc_enable(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct intel_encoder *encoder;
 	int pipe = intel_crtc->pipe;
 	int plane = intel_crtc->plane;
 
@@ -3890,17 +3889,6 @@ static void i9xx_crtc_enable(struct drm_crtc *crtc)
 
 	if (!intel_pipe_has_type(crtc, INTEL_OUTPUT_DSI))
 		intel_enable_pll(dev_priv, pipe);
-
-	else{
-		for_each_encoder_on_crtc(dev, crtc, encoder) {
-			if (encoder->type == INTEL_OUTPUT_DSI) {
-				intel_enable_dsi_pll(enc_to_intel_dsi(
-						&encoder->base));
-				intel_dsi_device_ready(encoder);
-				break;
-			}
-		}
-	}
 
 	intel_enable_pipe(dev_priv, pipe, false);
 	intel_enable_plane(dev_priv, plane, pipe);
@@ -3930,7 +3918,10 @@ void i9xx_crtc_disable(struct drm_crtc *crtc)
 	static bool do_once;
 	int val;
 
-	if (!intel_crtc->active)
+	if (dev_priv->need_dsi_clear_ready && !intel_crtc->active) {
+		DRM_DEBUG_DRIVER("Need DSI device clear\n");
+		dev_priv->need_dsi_clear_ready = 0;
+	} else if (!intel_crtc->active)
 		return;
 
 	/* Give the overlay scaler a chance to disable if it's on this pipe */

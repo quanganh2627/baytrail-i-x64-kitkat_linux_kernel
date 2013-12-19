@@ -367,6 +367,10 @@ int intel_enable_dsi_pll(struct intel_dsi *intel_dsi)
 {
 	struct drm_i915_private *dev_priv =
 			intel_dsi->base.base.dev->dev_private;
+	struct intel_encoder *encoder = &intel_dsi->base;
+	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+	int pipe = intel_crtc->pipe;
+	u32 val;
 
 	/* bandgap reset */
 	intel_flisdsi_write32(dev_priv, 0x08, 0x0001);
@@ -375,6 +379,15 @@ int intel_enable_dsi_pll(struct intel_dsi *intel_dsi)
 	udelay(150);
 	intel_flisdsi_write32(dev_priv, 0x0F, 0x0000);
 	intel_flisdsi_write32(dev_priv, 0x08, 0x0000);
+
+	/* Disable DPOunit clock gating, can stall pipe */
+	val = I915_READ(DSPCLK_GATE_D);
+	val |= VSUNIT_CLOCK_GATE_DISABLE;
+	I915_WRITE(DSPCLK_GATE_D, val);
+
+	val = I915_READ(DPLL(pipe));
+	val |= DPLL_RESERVED_BIT;
+	I915_WRITE(DPLL(pipe), val);
 
 	/* enable DPLL ref clock */
 	I915_WRITE_BITS(_DPLL_A, DPLL_REFA_CLK_ENABLE_VLV,

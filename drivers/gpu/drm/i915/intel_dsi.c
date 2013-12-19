@@ -87,7 +87,9 @@
 #include <drm/i915_drm.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
+#ifdef CONFIG_CRYSTAL_COVE
 #include "linux/mfd/intel_mid_pmic.h"
+#endif
 #include "i915_drv.h"
 #include "intel_drv.h"
 #include "intel_dsi.h"
@@ -151,6 +153,15 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 
 	DRM_DEBUG_KMS("\n");
 
+#ifdef CONFIG_CRYSTAL_COVE
+	/* Panel Enable */
+	intel_mid_pmic_writeb(PMIC_PANEL_EN, 0x01);
+#else
+	/* need to code for BYT-CR for example where things have changed */
+	DRM_ERROR("PANEL Enable to supported yet\n");
+#endif
+	msleep(intel_dsi->dev.panel_on_delay);
+
 	if (intel_dsi->dev.dev_ops->panel_reset)
 		intel_dsi->dev.dev_ops->panel_reset(&intel_dsi->dev);
 
@@ -177,7 +188,6 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 
 	if (intel_dsi->dev.dev_ops->send_otp_cmds)
 		intel_dsi->dev.dev_ops->send_otp_cmds(&intel_dsi->dev);
-
 }
 
 void intel_dsi_enable(struct intel_encoder *encoder)
@@ -215,15 +225,15 @@ void intel_dsi_enable(struct intel_encoder *encoder)
 			I915_WRITE(MIPI_INTR_STAT(pipe),
 					SPL_PKT_SENT_INTERRUPT);
 
+		if (intel_dsi->dev.dev_ops->enable)
+			intel_dsi->dev.dev_ops->enable(&intel_dsi->dev);
+
 		temp = I915_READ(MIPI_PORT_CTRL(pipe));
 		temp = temp | intel_dsi->dev.port_bits;
 		I915_WRITE(MIPI_PORT_CTRL(pipe), temp | DPI_ENABLE);
 		usleep_range(2000, 2500);
 	} else {
 	}
-
-	if (intel_dsi->dev.dev_ops->enable)
-		intel_dsi->dev.dev_ops->enable(&intel_dsi->dev);
 
 	/* Adjust backlight timing for specific panel */
 	if (intel_dsi->dev.backlight_on_delay >= 20)
@@ -267,8 +277,8 @@ void intel_dsi_disable(struct intel_encoder *encoder)
 			return;
 		}
 
-		if (wait_for((I915_READ(MIPI_GEN_FIFO_STAT(pipe)),
-						DPI_FIFO_EMPTY) == 0, 100)) {
+		if (wait_for((I915_READ(MIPI_GEN_FIFO_STAT(pipe)) &
+						DPI_FIFO_EMPTY), 100)) {
 				DRM_DEBUG_KMS("DPI FIFO not empty\n");
 		}
 
@@ -316,9 +326,11 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 	struct drm_i915_private *dev_priv = encoder->base.dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
-	int pipe = intel_crtc->pipe;
+	int val, pipe = intel_crtc->pipe;
 
 	DRM_DEBUG_KMS("\n");
+
+	intel_dsi_disable(encoder);
 
 	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_ENTER,
 							ULPS_STATE_MASK);
@@ -344,32 +356,45 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 
 	intel_disable_dsi_pll(intel_dsi);
 
+	val = I915_READ(DSPCLK_GATE_D);
+	val &= ~VSUNIT_CLOCK_GATE_DISABLE;
+	I915_WRITE(DSPCLK_GATE_D, val);
+
 	if (intel_dsi->dev.dev_ops->disable_panel_power)
 		intel_dsi->dev.dev_ops->disable_panel_power(&intel_dsi->dev);
+
+#ifdef CONFIG_CRYSTAL_COVE
+	/* Disable Panel */
+	intel_mid_pmic_writeb(PMIC_PANEL_EN, 0x00);
+#else
+	/* need to code for BYT-CR for example where things have changed */
+	DRM_ERROR("PANEL Disable to supported yet\n");
+#endif
+	msleep(intel_dsi->dev.panel_off_delay);
+	msleep(intel_dsi->dev.panel_pwr_cycle_delay);
 }
 
 /* Encoder dpms must, add functionality later */
 void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
-	struct drm_connector *connector = container_of(\
-			encoder, struct drm_connector, encoder);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 	struct drm_device *dev = encoder->dev;
-
-	DRM_DEBUG_KMS("\n");
+	struct intel_encoder *intel_encoder = &intel_dsi->base;
 
 	if (mode != DRM_MODE_DPMS_ON)
 		mode = DRM_MODE_DPMS_OFF;
-	connector->dpms = mode;
 
 	/* FIXME - Just in case this function */
 	/* gets called when device is in D0i3? */
 	i915_rpm_get_callback(dev);
 
 	if (mode == DRM_MODE_DPMS_ON) {
+		intel_enable_dsi_pll(intel_dsi);
+		intel_dsi_device_ready(intel_encoder);
 		intel_dsi_enable(&intel_dsi->base);
 	} else {
-		intel_dsi_disable(&intel_dsi->base);
+		/* disable is already done in i9xx_crtc_disable
+		 * messy code in 3.4. This is fixed in 3.10 */
 	}
 
 	i915_rpm_put_callback(dev);
@@ -435,8 +460,8 @@ static void intel_dsi_mode_prepare(struct drm_encoder *encoder)
 {
 	struct drm_device *dev = encoder->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
-	struct intel_encoder *intel_encoder = &intel_dsi->base;
+	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->crtc);
+	int pipe = intel_crtc->pipe;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -448,7 +473,10 @@ static void intel_dsi_mode_prepare(struct drm_encoder *encoder)
 		return;
 	}
 
-	intel_dsi_disable(intel_encoder);
+	if (I915_READ(MIPI_PORT_CTRL(pipe)) && DPI_ENABLE)
+		dev_priv->need_dsi_clear_ready = 1;
+	else
+		dev_priv->need_dsi_clear_ready = 0;
 }
 
 static void intel_dsi_commit(struct drm_encoder *encoder)
@@ -464,13 +492,10 @@ static void intel_dsi_commit(struct drm_encoder *encoder)
 /* return pixels in terms of txbyteclkhs */
 static u32 txbyteclkhs(u32 pixels, int bpp, int lane_count)
 {
-	u32 pixel_bytes;
-
 	/* For 18bpp packed pixel format need to make sure the extra bit counts
 	 * will be aligned to the next byte.
 	 */
-	pixel_bytes =  ((pixels * bpp) / 8) + (((pixels * bpp) % 8) && 1);
-	return (pixel_bytes / lane_count) + ((pixel_bytes % lane_count) && 1);
+	return DIV_ROUND_UP(pixels * bpp, 8 * lane_count);
 }
 
 static void set_dsi_timings(struct drm_encoder *encoder,
@@ -562,11 +587,17 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
+	struct intel_encoder *intel_encoder = to_intel_encoder(encoder);
 	int pipe = intel_crtc->pipe;
 	unsigned int bpp = intel_crtc->bpp;
 	u32 val;
 
 	DRM_DEBUG_KMS("\n");
+
+	intel_enable_dsi_pll(intel_dsi);
+	intel_dsi_device_ready(intel_encoder);
+
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
 
 	dsi_config(encoder);
 
@@ -577,11 +608,6 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 					intel_dsi->dev.rst_timer_val);
 	/* in terms of low power clock */
 	I915_WRITE(MIPI_INIT_COUNT(pipe), intel_dsi->dev.init_count);
-
-	if (intel_dsi->dev.eotp_pkt)
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), 0);
-	else
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), 1);
 
 	I915_WRITE(MIPI_HIGH_LOW_SWITCH_COUNT(pipe), \
 					intel_dsi->dev.hs_to_lp_count);
@@ -598,8 +624,6 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 		I915_WRITE(MIPI_DPI_RESOLUTION(pipe),
 			(adjusted_mode->vdisplay << VERTICAL_ADDRESS_SHIFT) |
 			(adjusted_mode->hdisplay << HORIZONTAL_ADDRESS_SHIFT));
-
-		set_dsi_timings(encoder, adjusted_mode);
 
 		val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
 			intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
@@ -625,9 +649,8 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 				   adjusted_mode->htotal,
 				   bpp, intel_dsi->dev.lane_count));
 
-		I915_WRITE(MIPI_VIDEO_MODE_FORMAT(pipe),
-					intel_dsi->dev.video_frmt_cfg_bits | \
-						intel_dsi->dev.video_mode_type);
+		I915_WRITE(MIPI_VIDEO_MODE_FORMAT(pipe), 0);
+		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 	} else {
 		val = intel_dsi->channel << CMD_MODE_CHANNEL_NUMBER_SHIFT |
 			intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
@@ -641,6 +664,32 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 
 		I915_WRITE(MIPI_DBI_BW_CTRL(pipe), intel_dsi->dev.bw_timer);
 	}
+
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
+
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
+	set_dsi_timings(encoder, adjusted_mode);
+
+	/* Some panels might have resolution which is not a multiple of
+	 * 64 like 1366 x 768. Enable RANDOM resolution support for such
+	 * panels by default */
+	I915_WRITE(MIPI_VIDEO_MODE_FORMAT(pipe),
+				intel_dsi->dev.video_frmt_cfg_bits |
+				intel_dsi->dev.video_mode_type |
+				RANDOM_DPI_DISPLAY_RESOLUTION);
+
+	val = 0;
+	if (intel_dsi->dev.eotp_pkt == 0)
+		val |= EOT_DISABLE;
+
+	if (intel_dsi->dev.clock_stop)
+		val |= CLOCKSTOP;
+
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
+
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
+
+	I915_WRITE(MIPI_INTR_STAT(pipe), 0xFFFFFFFF);
 
 	/*
 	 * Enabling panel fitter produces banding effect in non 24 bit
@@ -875,6 +924,7 @@ bool intel_dsi_init(struct drm_device *dev)
 		return false;
 	}
 
+	dev_priv->need_dsi_clear_ready = 0;
 	intel_encoder = &intel_dsi->base;
 	encoder = &intel_encoder->base;
 
