@@ -766,6 +766,7 @@ struct dwc3 {
 	unsigned		needs_fifo_resize:1;
 	unsigned		resize_fifos:1;
 	unsigned		pullups_connected:1;
+	unsigned		quirks_disable_irqthread:1;
 
 	enum dwc3_ep0_next	ep0_next_event;
 	enum dwc3_ep0_state	ep0state;
@@ -796,6 +797,8 @@ struct dwc3 {
 
 	/* delayed work for handling Link State Change */
 	struct delayed_work	link_work;
+
+	u8			is_ebc;
 
 	struct dwc3_scratchpad_array	*scratch_array;
 	dma_addr_t		scratch_array_dma;

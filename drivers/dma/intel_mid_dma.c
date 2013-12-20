@@ -47,6 +47,8 @@
 #define INTEL_BYT_LPIO1_DMAC_ID		0x0F06
 #define INTEL_BYT_LPIO2_DMAC_ID		0x0F40
 #define INTEL_BYT_DMAC0_ID		0x0F28
+#define INTEL_CHT_LPIO1_DMAC_ID		0x2286
+#define INTEL_CHT_LPIO2_DMAC_ID		0x22C0
 
 #define LNW_PERIPHRAL_MASK_SIZE		0x20
 #define ENABLE_PARTITION_UPDATE		(BIT(26))
@@ -89,7 +91,9 @@ static int get_ch_index(int status, unsigned int base)
 static inline bool is_byt_lpio_dmac(struct middma_device *mid)
 {
 	return (mid->pci_id == INTEL_BYT_LPIO1_DMAC_ID ||
-		mid->pci_id == INTEL_BYT_LPIO2_DMAC_ID);
+		mid->pci_id == INTEL_BYT_LPIO2_DMAC_ID ||
+		mid->pci_id == INTEL_CHT_LPIO1_DMAC_ID ||
+		mid->pci_id == INTEL_CHT_LPIO2_DMAC_ID);
 }
 
 static void dump_dma_reg(struct dma_chan *chan)
@@ -677,26 +681,33 @@ static inline void dma_wait_for_suspend(struct dma_chan *chan, unsigned int mask
 	struct middma_device	*mid = to_middma_device(chan->device);
 	struct intel_mid_dma_chan	*midc = to_intel_mid_dma_chan(chan);
 	int i;
+	const int max_loops = 100;
 
 	/* Suspend channel */
 	cfg_lo.cfg_lo = ioread32(midc->ch_regs + CFG_LOW);
 	cfg_lo.cfg_lo |= mask;
 	iowrite32(cfg_lo.cfg_lo, midc->ch_regs + CFG_LOW);
 	/* wait till FIFO gets empty */
-	/* FIFO should be cleared in couple of milli secs */
-	for (i = 0; i < 40; i++) {
+	/* FIFO should be cleared in a couple of milli secs,
+	   but most of the time after a 'cpu_relax' */
+	for (i = 0; i < max_loops; i++) {
 		cfg_lo.cfg_lo = ioread32(midc->ch_regs + CFG_LOW);
 		if (cfg_lo.cfgx.fifo_empty)
 			break;
-		/* use delay since this might called from atomic context */
-		udelay(100);
+		/* use udelay since this might called from atomic context,
+		   and use incremental backoff time */
+		if (i)
+			udelay(i);
+		else
+			cpu_relax();
 	}
 
-	if (i == 40)
-		pr_info("Waited 4ms for chan[%d] FIFO to get empty\n",
+	if (i == max_loops)
+		pr_info("Waited 5 ms for chan[%d] FIFO to get empty\n",
 			chan->chan_id);
 	else
-		pr_debug("waited for %d us for FIFO to get empty", i*100);
+		pr_debug("waited for %d loops for chan[%d] FIFO to get empty",
+			i, chan->chan_id);
 
 	iowrite32(DISABLE_CHANNEL(midc->ch_id), mid->dma_base + DMA_CHAN_EN);
 
@@ -1708,7 +1719,7 @@ static struct intel_mid_dma_ops v1_dma_ops = {
 	.dma_chan_suspend		= intel_mid_dma_chan_suspend_v1,
 };
 
-/* v2 ops will be used in Merrifield and beyond plantforms */
+/* v2 ops will be used in Merrifield and beyond platforms */
 static struct intel_mid_dma_ops v2_dma_ops = {
 	.device_alloc_chan_resources    = intel_mid_dma_alloc_chan_resources,
 	.device_free_chan_resources     = intel_mid_dma_free_chan_resources,
@@ -2096,6 +2107,14 @@ static struct pci_device_id intel_mid_dma_ids[] = {
 		INFO(6, 0, 2047, 0, 0, 1, 0, INTEL_BYT_LPIO1_DMAC_ID, &v1_dma_ops)},
 	{ PCI_VDEVICE(INTEL, INTEL_BYT_LPIO2_DMAC_ID),
 		INFO(6, 0, 2047, 0, 0, 1, 0, INTEL_BYT_LPIO2_DMAC_ID, &v1_dma_ops)},
+	/* Cherryview Low Speed Peripheral DMA */
+	{ PCI_VDEVICE(INTEL, INTEL_CHT_LPIO1_DMAC_ID),
+		INFO(6, 0, 2047, 0, 0, 1, 0, INTEL_CHT_LPIO1_DMAC_ID,
+			&v1_dma_ops)},
+	{ PCI_VDEVICE(INTEL, INTEL_CHT_LPIO2_DMAC_ID),
+		INFO(6, 0, 2047, 0, 0, 1, 0, INTEL_CHT_LPIO2_DMAC_ID,
+			&v1_dma_ops)},
+
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, intel_mid_dma_ids);
@@ -2110,6 +2129,42 @@ struct intel_mid_dma_probe_info dma_byt_info = {
 	.pimr_offset = 0x10,
 	.pci_id = INTEL_BYT_DMAC0_ID,
 	.pdma_ops = &v2_dma_ops,
+};
+
+struct intel_mid_dma_probe_info dma_byt1_info = {
+	.max_chan = 6,
+	.ch_base = 0,
+	.block_size = 2047,
+	.pimr_mask = 0,
+	.pimr_base = 0,
+	.dword_trf = 1,
+	.pimr_offset = 0,
+	.pci_id = INTEL_BYT_LPIO1_DMAC_ID,
+	.pdma_ops = &v1_dma_ops,
+};
+
+struct intel_mid_dma_probe_info dma_cht1_info = {
+	.max_chan = 6,
+	.ch_base = 0,
+	.block_size = 2047,
+	.pimr_mask = 0,
+	.pimr_base = 0,
+	.dword_trf = 1,
+	.pimr_offset = 0,
+	.pci_id = INTEL_CHT_LPIO1_DMAC_ID,
+	.pdma_ops = &v1_dma_ops,
+};
+
+struct intel_mid_dma_probe_info dma_cht2_info = {
+	.max_chan = 6,
+	.ch_base = 0,
+	.block_size = 2047,
+	.pimr_mask = 0,
+	.pimr_base = 0,
+	.dword_trf = 1,
+	.pimr_offset = 0,
+	.pci_id = INTEL_CHT_LPIO2_DMAC_ID,
+	.pdma_ops = &v1_dma_ops,
 };
 
 static const struct dev_pm_ops intel_mid_dma_pm = {
@@ -2146,6 +2201,9 @@ struct intel_mid_dma_probe_info *mid_get_acpi_driver_data(const char *hid)
 }
 static const struct acpi_device_id dma_acpi_ids[] = {
 	{ "DMA0F28", (kernel_ulong_t)&dma_byt_info },
+	{ "INTL9C60", (kernel_ulong_t)&dma_byt1_info },
+	{ "80862286", (kernel_ulong_t)&dma_cht1_info },
+	{ "808622C0", (kernel_ulong_t)&dma_cht2_info },
 	{ },
 };
 

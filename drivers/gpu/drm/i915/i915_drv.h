@@ -45,6 +45,8 @@
 #include <linux/pm_qos.h>
 #include "hdmi_audio_if.h"
 #include <linux/mmu_notifier.h>
+#include <asm/spid.h>
+
 /* General customization:
  */
 
@@ -88,6 +90,10 @@ enum port {
 	PORT_E,
 	I915_MAX_PORTS
 };
+
+#define  BYT_CR_CONFIG (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, CRV2) || \
+			INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, CRV2))
+
 #define port_name(p) ((p) + 'A')
 
 enum intel_display_power_domain {
@@ -467,7 +473,7 @@ struct intel_device_info {
 #undef DEFINE_FLAG
 #undef SEP_SEMICOLON
 
-enum hdmi_panel_fitter {
+enum panel_fitter {
 	PFIT_OFF,
 	AUTOSCALE,
 	PILLARBOX,

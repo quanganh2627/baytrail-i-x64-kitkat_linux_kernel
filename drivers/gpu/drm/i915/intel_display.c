@@ -1227,12 +1227,22 @@ bool is_cursor_enabled(struct drm_i915_private *dev_priv,
 
 bool is_maxfifo_needed(struct drm_i915_private *dev_priv)
 {
-	if (!(is_plane_enabled(dev_priv, PLANE_A) &&
-		is_plane_enabled(dev_priv, PLANE_B)) &&
-		!(is_sprite_enabled(dev_priv, PIPE_A, PLANE_A) ||
-		is_sprite_enabled(dev_priv, PIPE_A, PLANE_B) ||
-		is_sprite_enabled(dev_priv, PIPE_B, PLANE_A) ||
-		is_sprite_enabled(dev_priv, PIPE_B, PLANE_B)))
+	int cnt = 0;
+
+	if (is_plane_enabled(dev_priv, PLANE_A))
+		cnt++;
+	if (is_plane_enabled(dev_priv, PLANE_B))
+		cnt++;
+	if (is_sprite_enabled(dev_priv, PIPE_A, PLANE_A))
+		cnt++;
+	if (is_sprite_enabled(dev_priv, PIPE_A, PLANE_B))
+		cnt++;
+	if (is_sprite_enabled(dev_priv, PIPE_B, PLANE_A))
+		cnt++;
+	if (is_sprite_enabled(dev_priv, PIPE_B, PLANE_B))
+		cnt++;
+
+	if (cnt == 1)
 		return true;
 	else
 		return false;
@@ -1953,6 +1963,11 @@ static void intel_disable_plane(struct drm_i915_private *dev_priv,
 	if ((val & DISPLAY_PLANE_ENABLE) == 0)
 		return;
 
+	/* If MAX FIFO enabled disable */
+	if (I915_READ(FW_BLC_SELF_VLV) & FW_CSPWRDWNEN)
+		I915_WRITE(FW_BLC_SELF_VLV,
+			   I915_READ(FW_BLC_SELF_VLV) & ~FW_CSPWRDWNEN);
+
 	I915_WRITE(reg, val & ~DISPLAY_PLANE_ENABLE);
 	intel_flush_display_plane(dev_priv, plane);
 	intel_wait_for_vblank(dev_priv->dev, pipe);
@@ -2291,6 +2306,10 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	} else {
 		intel_crtc->dspaddr_offset = linear_offset;
 	}
+
+	if (BYT_CR_CONFIG)
+		I915_WRITE(PIPESRC(plane),
+			((fb->width - 1) << 16) | (fb->height - 1));
 
 	I915_WRITE(DSPSTRIDE(plane), fb->pitches[0]);
 	if (INTEL_INFO(dev)->gen >= 4) {
@@ -3160,6 +3179,9 @@ static void intel_crtc_wait_for_pending_flips(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct drm_i915_gem_object *obj;
+	unsigned long flags;
 
 	if (crtc->fb == NULL)
 		return;
@@ -3169,12 +3191,36 @@ static void intel_crtc_wait_for_pending_flips(struct drm_crtc *crtc)
 	/* flush pending flip to avoid wait_pending_flips stuck later */
 	flush_workqueue(dev_priv->flipwq);
 
-	wait_event(dev_priv->pending_flip_queue,
-		   !intel_crtc_has_pending_flip(crtc));
+	obj = to_intel_framebuffer(crtc->fb)->obj;
+	if (wait_event_timeout(dev_priv->pending_flip_queue,
+		!intel_crtc_has_pending_flip(crtc), 5) == 0) {
+		DRM_DEBUG_DRIVER("flip wait timed out.\n");
+
+		/* cleanup */
+		if (intel_crtc->unpin_work) {
+			intel_unpin_work_fn(&intel_crtc->unpin_work->work);
+			atomic_clear_mask(1 << intel_crtc->plane,
+					&obj->pending_flip.counter);
+
+			spin_lock_irqsave(&dev->event_lock, flags);
+			intel_crtc->unpin_work = NULL;
+			spin_unlock_irqrestore(&dev->event_lock, flags);
+		}
+
+		if (intel_crtc->sprite_unpin_work) {
+			intel_unpin_sprite_work_fn(
+				&intel_crtc->sprite_unpin_work->work);
+			obj = intel_crtc->sprite_unpin_work->old_fb_obj;
+			atomic_clear_mask(1 << intel_crtc->plane,
+				&obj->pending_flip.counter);
+
+			spin_lock_irqsave(&dev->event_lock, flags);
+			intel_crtc->sprite_unpin_work = NULL;
+			spin_unlock_irqrestore(&dev->event_lock, flags);
+		}
+	}
 
 	mutex_lock(&dev->struct_mutex);
-	if (to_intel_crtc(crtc)->sprite_unpin_work)
-		intel_finish_sprite_page_flip(dev, to_intel_crtc(crtc)->pipe);
 	intel_finish_fb(crtc->fb);
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -5018,6 +5064,22 @@ static void intel_set_pipe_timings(struct intel_crtc *intel_crtc)
 	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	uint32_t vsyncshift, crtc_vtotal, crtc_vblank_end;
 
+	if (BYT_CR_CONFIG) {
+		struct intel_encoder *encoder;
+		struct intel_dsi *intel_dsi;
+
+		for_each_encoder_on_crtc(dev, &intel_crtc->base, encoder) {
+			switch (encoder->type) {
+			case INTEL_OUTPUT_DSI:
+			intel_dsi = enc_to_intel_dsi(&encoder->base);
+			mode = intel_dsi->attached_connector->panel.fixed_mode;
+			adjusted_mode =
+				intel_dsi->attached_connector->panel.fixed_mode;
+				break;
+			}
+
+		}
+	}
 	/* We need to be careful not to changed the adjusted mode, for otherwise
 	 * the hw state checker will get angry at the mismatch. */
 	crtc_vtotal = adjusted_mode->crtc_vtotal;
@@ -5433,6 +5495,12 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 			break;
 		case INTEL_OUTPUT_DSI:
 			is_dsi = true;
+			if (BYT_CR_CONFIG) {
+				struct intel_dsi *intel_dsi;
+				intel_dsi = enc_to_intel_dsi(&encoder->base);
+				mode =
+				intel_dsi->attached_connector->panel.fixed_mode;
+			}
 			break;
 		}
 
@@ -7636,7 +7704,7 @@ static void intel_crtc_gamma_set(struct drm_crtc *crtc, u16 *red, u16 *green,
 /* VESA 640x480x72Hz mode to set on the pipe */
 static struct drm_display_mode load_detect_mode = {
 	DRM_MODE("640x480", DRM_MODE_TYPE_DEFAULT, 31500, 640, 664,
-		 704, 832, 0, 480, 489, 491, 520, 0, DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC),
+		 704, 832, 0, 480, 489, 491, 520, 0, DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC, 0),
 };
 
 static struct drm_framebuffer *
@@ -8188,7 +8256,7 @@ static void intel_crtc_destroy(struct drm_crtc *crtc)
 	kfree(intel_crtc);
 }
 
-static void intel_unpin_work_fn(struct work_struct *__work)
+void intel_unpin_work_fn(struct work_struct *__work)
 {
 	struct intel_unpin_work *work =
 		container_of(__work, struct intel_unpin_work, work);

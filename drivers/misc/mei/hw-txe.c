@@ -159,9 +159,8 @@ static bool mei_txe_aliveness_set(struct mei_device *dev, u32 req)
 
 	dev_dbg(&dev->pdev->dev, "Aliveness current=%d request=%d\n",
 				hw->aliveness, req);
-
 	if (do_req) {
-		hw->recvd_aliv_resp = false;
+		dev->pg_event = MEI_PG_EVENT_WAIT;
 		mei_txe_br_reg_write(hw, SICR_HOST_ALIVENESS_REQ_REG, req);
 	}
 	return do_req;
@@ -209,6 +208,7 @@ static int mei_txe_aliveness_poll(struct mei_device *dev, u32 expected)
 	do {
 		hw->aliveness = mei_txe_aliveness_get(dev);
 		if (hw->aliveness == expected) {
+			dev->pg_event = MEI_PG_EVENT_IDLE;
 			dev_dbg(&dev->pdev->dev,
 				"aliveness settled after %d msec\n", t);
 			return t;
@@ -219,8 +219,9 @@ static int mei_txe_aliveness_poll(struct mei_device *dev, u32 expected)
 		t += MSEC_PER_SEC / 5;
 	} while (t < SEC_ALIVENESS_WAIT_TIMEOUT);
 
+	dev->pg_event = MEI_PG_EVENT_IDLE;
 	dev_err(&dev->pdev->dev, "aliveness timed out\n");
-	return -ETIMEDOUT;
+	return -ETIME;
 }
 
 /**
@@ -236,30 +237,30 @@ static long mei_txe_aliveness_wait(struct mei_device *dev, u32 expected)
 	const unsigned long timeout =
 			msecs_to_jiffies(SEC_ALIVENESS_WAIT_TIMEOUT);
 	long err;
+	int ret;
 
 	hw->aliveness = mei_txe_aliveness_get(dev);
 	if (hw->aliveness == expected)
 		return 0;
 
 	mutex_unlock(&dev->device_lock);
-
 	err = wait_event_timeout(hw->wait_aliveness_resp,
-			hw->recvd_aliv_resp, timeout);
-
+			dev->pg_event == MEI_PG_EVENT_RECEIVED, timeout);
 	mutex_lock(&dev->device_lock);
 
 	hw->aliveness = mei_txe_aliveness_get(dev);
+	ret = hw->aliveness == expected ? 0 : -ETIME;
 
-	if (err <= 0 || !hw->recvd_aliv_resp) {
-		dev_warn(&dev->pdev->dev, "aliveness timed out = %ld aliveness =%d\n",
-			err, hw->aliveness);
-	} else {
-		dev_dbg(&dev->pdev->dev, "aliveness settled after %d msec\n",
-			jiffies_to_msecs(timeout - err));
-	}
+	if (ret)
+		dev_warn(&dev->pdev->dev, "aliveness timed out = %ld aliveness = %d event = %d\n",
+			err, hw->aliveness, dev->pg_event);
+	else
+		dev_dbg(&dev->pdev->dev, "aliveness settled after = %d msec aliveness = %d event = %d\n",
+			jiffies_to_msecs(timeout - err),
+			hw->aliveness, dev->pg_event);
 
-	hw->recvd_aliv_resp = false;
-	return hw->aliveness == expected ? 0 : -ETIME;
+	dev->pg_event = MEI_PG_EVENT_IDLE;
+	return ret;
 }
 
 /**
@@ -272,6 +273,19 @@ int mei_txe_aliveness_set_sync(struct mei_device *dev, u32 req)
 	if (mei_txe_aliveness_set(dev, req))
 		return mei_txe_aliveness_wait(dev, req);
 	return 0;
+}
+
+/**
+ * mei_txe_pg_state  - translate aliveness register value
+ *   to the mei power gating state
+ *
+ * @dev: the device structure
+ * returns: MEI_PG_OFF if alivenss is on and MEI_PG_ON otherwise
+ */
+static inline enum mei_pg_state mei_txe_pg_state(struct mei_device *dev)
+{
+	struct mei_txe_hw *hw = to_txe_hw(dev);
+	return hw->aliveness ? MEI_PG_OFF : MEI_PG_ON;
 }
 
 /**
@@ -913,10 +927,9 @@ irqreturn_t mei_txe_irq_thread_handler(int irq, void *dev_id)
 		/* Clear the interrupt cause */
 		dev_dbg(&dev->pdev->dev,
 			"Aliveness Interrupt: Status: %d\n", hw->aliveness);
-		if (waitqueue_active(&hw->wait_aliveness_resp)) {
-			hw->recvd_aliv_resp = true;
+		dev->pg_event = MEI_PG_EVENT_RECEIVED;
+		if (waitqueue_active(&hw->wait_aliveness_resp))
 			wake_up(&hw->wait_aliveness_resp);
-		}
 	}
 
 
@@ -969,6 +982,8 @@ out:
 
 
 static const struct mei_hw_ops mei_txe_hw_ops = {
+
+	.pg_state = mei_txe_pg_state,
 
 	.host_is_ready = mei_txe_host_is_ready,
 

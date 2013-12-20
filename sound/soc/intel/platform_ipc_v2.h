@@ -402,7 +402,7 @@ struct snd_sst_tstamp {
 	u64 bytes_copied;
 	u32 sampling_frequency;
 	u32 channel_peak[8];
-};
+} __packed;
 
 /* SST to IA memory read debug message  */
 struct ipc_sst_ia_dbg_mem_rw  {
@@ -564,7 +564,7 @@ struct snd_sst_alloc_mrfld {
 	u8 sg_count;
 	struct sst_address_info ring_buf_info[8];
 	u32 frag_size;
-	struct snd_sst_tstamp *ts;
+	u32 ts;
 	struct snd_sst_stream_params codec_params;
 } __packed;
 

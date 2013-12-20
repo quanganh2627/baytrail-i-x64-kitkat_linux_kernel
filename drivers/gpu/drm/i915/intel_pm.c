@@ -1473,6 +1473,13 @@ static void valleyview_update_wm(struct drm_device *dev)
 		      planeb_wm, cursorb_wm,
 		      plane_sr, cursor_sr);
 #endif
+	if (is_maxfifo_needed(dev_priv)) {
+		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
+	} else if (I915_READ(FW_BLC_SELF_VLV) & FW_CSPWRDWNEN &&
+	    !is_maxfifo_needed(dev_priv)) {
+		I915_WRITE(FW_BLC_SELF_VLV,
+			   I915_READ(FW_BLC_SELF_VLV) & ~FW_CSPWRDWNEN);
+	}
 
 	I915_WRITE(DSPFW1,
 		   (DSPFW_SR_VAL << DSPFW_SR_SHIFT) |
@@ -3129,6 +3136,14 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 	enable.plane_enabled = false;
 	enable.cursor_enabled = false;
 	enable.sprite_enabled = enabled;
+
+	if (is_maxfifo_needed(dev_priv)) {
+		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
+	} else if (I915_READ(FW_BLC_SELF_VLV) & FW_CSPWRDWNEN &&
+	    !is_maxfifo_needed(dev_priv)) {
+		I915_WRITE(FW_BLC_SELF_VLV,
+			   I915_READ(FW_BLC_SELF_VLV) & ~FW_CSPWRDWNEN);
+	}
 
 	if (intel_plane->plane == 0) {
 		mask = 0x0000ff00;
@@ -6265,23 +6280,9 @@ int vlv_freq_opcode(struct drm_i915_private *dev_priv, int val)
 	return opcode;
 }
 
-void program_pfi_credits(struct drm_i915_private *dev_priv)
-{
-	int cd_clk, cz_clk;
-
-	intel_get_cd_cz_clk(dev_priv, &cd_clk, &cz_clk);
-	if (cd_clk >= cz_clk)
-		I915_WRITE(GCI_CONTROL, 0x78000000);
-	else
-		DRM_ERROR("cd clk < cz clk");
-}
-
 void intel_pm_init(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	if (IS_VALLEYVIEW(dev))
-		program_pfi_credits(dev_priv);
 
 	INIT_DELAYED_WORK(&dev_priv->rps.delayed_resume_work,
 			  intel_gen6_powersave_work);

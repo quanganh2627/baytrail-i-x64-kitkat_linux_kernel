@@ -401,9 +401,11 @@ void dump_word_array(const char *name, const u32 *the_array,
  * @client_ctx:	 The client context object
  *
  */
-static inline u64 alloc_crypto_ctx_id(struct sep_client_ctx
-						       *client_ctx)
+static inline struct crypto_ctx_uid alloc_crypto_ctx_id(
+	struct sep_client_ctx *client_ctx)
 {
+	struct crypto_ctx_uid uid;
+
 	/* Assuming 32 bit atomic counter is large enough to never wrap
 	 * during a lifetime of a process...
 	 * Someone would laugh (or cry) on this one day */
@@ -414,9 +416,11 @@ static inline u64 alloc_crypto_ctx_id(struct sep_client_ctx
 		BUG();
 	}
 #endif
-	return (((u64) (unsigned long)client_ctx) <<
-		CRYPTO_CTX_ID_CLIENT_SHIFT) |
-	    (u64) atomic_inc_return(&client_ctx->uid_cntr);
+
+	uid.addr = (uintptr_t)client_ctx;
+	uid.cntr = (u32)atomic_inc_return(&client_ctx->uid_cntr);
+
+	return uid;
 }
 
 /**
@@ -557,5 +561,26 @@ int wait_for_sep_op_result(struct sep_op_ctx *op_ctx);
  * Returns int
  */
 int crypto_op_completion_cleanup(struct sep_op_ctx *op_ctx);
+
+
+/*!
+ * IOCTL entry point
+ *
+ * \param filp
+ * \param cmd
+ * \param arg
+ *
+ * \return int
+ * \retval 0 Operation succeeded (but SeP return code may indicate an error)
+ * \retval -ENOTTY  : Unknown IOCTL command
+ * \retval -ENOSYS  : Unsupported/not-implemented (known) operation
+ * \retval -EINVAL  : Invalid parameters
+ * \retval -EFAULT  : Bad pointers for given user memory space
+ * \retval -EPERM   : Not enough permissions for given command
+ * \retval -ENOMEM,-EAGAIN: when not enough resources available for given op.
+ * \retval -EIO     : SeP HW error or another internal error
+ *                    (probably operation timed out or unexpected behavior)
+ */
+long sep_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 #endif				/* _DX_DRIVER_H_ */

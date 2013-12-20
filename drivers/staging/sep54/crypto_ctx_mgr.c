@@ -34,13 +34,14 @@
 #include <linux/pagemap.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
+#include <linux/sched.h>
 #define SEP_LOG_CUR_COMPONENT SEP_LOG_MASK_CTX_MGR
 #include "sep_log.h"
 #include "dx_driver.h"
 #include "crypto_ctx_mgr.h"
 
 struct ctxmgr_cache_entry {
-	u64 ctx_id;/* Allocated context ID or CTX_INVALID_ID */
+	struct crypto_ctx_uid ctx_id;/* Allocated context ID or CTX_INVALID_ID */
 	unsigned long lru_time;	/* Monotonically incrementing counter for LRU */
 };
 
@@ -408,10 +409,9 @@ int ctxmgr_map_kernel_ctx(struct client_crypto_ctx_info *ctx_info,
 	   contiguous for SeP DMA access) */
 	if ((((unsigned long)sep_ctx_p + sizeof(struct sep_ctx_cache_entry))
 	     >> PAGE_SHIFT) != ((unsigned long)sep_ctx_p >> PAGE_SHIFT)) {
-		pr_err(
-			    "SeP context cross page boundary (start=0x%08lX len=0x%04X\n",
-			    (unsigned long)sep_ctx_p,
-			    sizeof(struct sep_ctx_cache_entry));
+		pr_err("SeP context cross page boundary start=0x%x len=0x%zX\n",
+		       (unsigned long)sep_ctx_p,
+		       sizeof(struct sep_ctx_cache_entry));
 		return -EINVAL;
 	}
 
@@ -620,7 +620,7 @@ enum host_ctx_state ctxmgr_get_ctx_state(const struct client_crypto_ctx_info
  * (Assumes invoked within session mutex so no need for counter protection)
  */
 void ctxmgr_set_ctx_id(struct client_crypto_ctx_info *ctx_info,
-		       const u64 ctx_id)
+		       const struct crypto_ctx_uid ctx_id)
 {
 
 #ifdef DEBUG
@@ -632,7 +632,8 @@ void ctxmgr_set_ctx_id(struct client_crypto_ctx_info *ctx_info,
 		      ctx_id, (ctx_info->user_ptr == NULL) ?
 		      (void *)ctx_info->ctx_kptr : (void *)ctx_info->user_ptr);
 #endif
-	ctx_info->ctx_kptr->uid = ctx_id;
+	memcpy(&ctx_info->ctx_kptr->uid, &ctx_id,
+		sizeof(struct crypto_ctx_uid));
 }
 
 /**
@@ -641,7 +642,7 @@ void ctxmgr_set_ctx_id(struct client_crypto_ctx_info *ctx_info,
  *
  * Returns Allocated ID (or CTX_ID_INVALID if none)
  */
-u64 ctxmgr_get_ctx_id(struct client_crypto_ctx_info *ctx_info)
+struct crypto_ctx_uid ctxmgr_get_ctx_id(struct client_crypto_ctx_info *ctx_info)
 {
 
 #ifdef DEBUG
@@ -662,7 +663,7 @@ u64 ctxmgr_get_ctx_id(struct client_crypto_ctx_info *ctx_info)
  * in a manner that can allow access to a session of another process
  * Returns u32
  */
-u32 ctxmgr_get_session_id(struct client_crypto_ctx_info *ctx_info)
+u64 ctxmgr_get_session_id(struct client_crypto_ctx_info *ctx_info)
 {
 #ifdef DEBUG
 	if (ctx_info->ctx_kptr == NULL) {
@@ -671,7 +672,7 @@ u32 ctxmgr_get_session_id(struct client_crypto_ctx_info *ctx_info)
 	}
 #endif
 	/* session ID is the 32 MS-bits of the context ID */
-	return (u32) (ctx_info->ctx_kptr->uid >> 32);
+	return ctx_info->ctx_kptr->uid.addr;
 }
 
 /**
@@ -869,12 +870,10 @@ bool ctxmgr_is_valid_size(struct client_crypto_ctx_info *ctx_info,
 				if (host_ctx_p->props.
 				    alg_specific.aes_xts.
 				    data_unit_size != data_unit_size) {
-					pr_err(
-						"Data unit mismatch. was %lu. now %lu.\n",
-						host_ctx_p->props.alg_specific.
-						aes_xts.
-						data_unit_size,
-						data_unit_size);
+					pr_err("Data unit mismatch. was %u. now %lu.\n",
+					       host_ctx_p->props.alg_specific.
+					       aes_xts.data_unit_size,
+					       data_unit_size);
 					return false;
 				}
 			}
@@ -2433,7 +2432,7 @@ void *ctxmgr_sep_cache_create(int num_of_entries)
 
 	/* Initialize */
 	for (i = 0; i < num_of_entries; i++)
-		new_cache->entries[i].ctx_id = CTX_ID_INVALID;
+		new_cache->entries[i].ctx_id.addr = CTX_ID_INVALID;
 
 	new_cache->cache_size = num_of_entries;
 
@@ -2478,7 +2477,7 @@ int ctxmgr_sep_cache_get_size(void *sep_cache)
  * Returns cache index
  */
 int ctxmgr_sep_cache_alloc(void *sep_cache,
-			   u64 ctx_id, int *load_required_p)
+			   struct crypto_ctx_uid ctx_id, int *load_required_p)
 {
 	struct sep_ctx_cache *this_cache = (struct sep_ctx_cache *)sep_cache;
 	int i;
@@ -2488,7 +2487,8 @@ int ctxmgr_sep_cache_alloc(void *sep_cache,
 
 	/* First search for given ID or free/older entry  */
 	for (i = 0; i < this_cache->cache_size; i++) {
-		if (this_cache->entries[i].ctx_id == ctx_id) {
+		if (this_cache->entries[i].ctx_id.addr == ctx_id.addr
+		    && this_cache->entries[i].ctx_id.cntr == ctx_id.cntr) {
 			/* if found */
 			chosen_idx = i;
 			*load_required_p = 0;
@@ -2496,8 +2496,10 @@ int ctxmgr_sep_cache_alloc(void *sep_cache,
 		}
 		/* else... if no free entry, replace candidate with invalid
 		   or older entry */
-		if (this_cache->entries[chosen_idx].ctx_id != CTX_ID_INVALID) {
-			if ((this_cache->entries[i].ctx_id == CTX_ID_INVALID) ||
+		if (this_cache->entries[chosen_idx].ctx_id.addr
+			!= CTX_ID_INVALID) {
+			if ((this_cache->entries[i].ctx_id.addr
+				== CTX_ID_INVALID) ||
 			    (this_cache->entries[chosen_idx].lru_time >
 			     this_cache->entries[i].lru_time)) {
 				/* Found free OR older entry */
@@ -2507,7 +2509,8 @@ int ctxmgr_sep_cache_alloc(void *sep_cache,
 	}
 
 	/* Record allocation + update LRU "timestamp" */
-	this_cache->entries[chosen_idx].ctx_id = ctx_id;
+	this_cache->entries[chosen_idx].ctx_id.addr = ctx_id.addr;
+	this_cache->entries[chosen_idx].ctx_id.cntr = ctx_id.cntr;
 	this_cache->entries[chosen_idx].lru_time = this_cache->lru_clk++;
 
 #ifdef DEBUG
@@ -2541,7 +2544,7 @@ int ctxmgr_sep_cache_alloc(void *sep_cache,
  * Returns void
  */
 void ctxmgr_sep_cache_invalidate(void *sep_cache,
-				 u64 ctx_id,
+				 struct crypto_ctx_uid ctx_id,
 				 u64 id_mask)
 {
 	struct sep_ctx_cache *this_cache = (struct sep_ctx_cache *)sep_cache;
@@ -2549,8 +2552,14 @@ void ctxmgr_sep_cache_invalidate(void *sep_cache,
 
 	/* Search for given ID */
 	for (i = 0; i < this_cache->cache_size; i++) {
-		if ((this_cache->entries[i].ctx_id & id_mask) == ctx_id)
-			this_cache->entries[i].ctx_id = CTX_ID_INVALID;
+		if ((this_cache->entries[i].ctx_id.addr) == ctx_id.addr) {
+			/* When invalidating single, check also counter */
+			if (id_mask == CRYPTO_CTX_ID_SINGLE_MASK
+			    && this_cache->entries[i].ctx_id.cntr
+			       != ctx_id.cntr)
+				continue;
+			this_cache->entries[i].ctx_id.addr = CTX_ID_INVALID;
+		}
 	}
 
 }

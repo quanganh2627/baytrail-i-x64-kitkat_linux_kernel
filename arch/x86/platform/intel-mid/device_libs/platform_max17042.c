@@ -30,6 +30,7 @@
 #include <linux/acpi_gpio.h>
 #include "platform_max17042.h"
 #include "platform_bq24192.h"
+#include "platform_smb347.h"
 
 #define MRFL_SMIP_SRAM_ADDR		0xFFFCE000
 #define MRFL_PLATFORM_CONFIG_OFFSET	0x3B3
@@ -307,6 +308,7 @@ static int byt_get_vbatt_max(void)
 	return BYT_BATT_MAX_VOLT;
 }
 
+
 static bool is_mapped;
 static void __iomem *smip;
 int get_smip_plat_config(int offset)
@@ -326,11 +328,13 @@ int get_smip_plat_config(int offset)
 static void init_tgain_toff(struct max17042_platform_data *pdata)
 {
 	if (INTEL_MID_BOARD(2, TABLET, MFLD, SLP, ENG) ||
-		INTEL_MID_BOARD(2, TABLET, MFLD, SLP, PRO) ||
-		INTEL_MID_BOARD(1, PHONE, MRFL) ||
-		INTEL_MID_BOARD(1, TABLET, MRFL)) {
+		INTEL_MID_BOARD(2, TABLET, MFLD, SLP, PRO)) {
 		pdata->tgain = NTC_10K_B3435K_TDK_TGAIN;
 		pdata->toff = NTC_10K_B3435K_TDK_TOFF;
+	} else if (INTEL_MID_BOARD(1, PHONE, MRFL) ||
+		INTEL_MID_BOARD(1, TABLET, MRFL)) {
+		pdata->tgain = NTC_10K_MURATA_TGAIN;
+		pdata->toff = NTC_10K_MURATA_TOFF;
 	} else if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR0) ||
 		INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, 8PR0) ||
 		INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1) ||
@@ -395,10 +399,10 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 		pdata->get_vmin_threshold = mrfl_get_vsys_min;
 		pdata->get_vmax_threshold = mrfl_get_volt_max;
 	} else if (INTEL_MID_BOARD(1, TABLET, BYT)) {
+		pdata->battery_health = smb34x_get_bat_health;
 		pdata->get_vmin_threshold = byt_get_vsys_min;
 		pdata->get_vmax_threshold = byt_get_vbatt_max;
 		pdata->is_volt_shutdown = 1;
-		pdata->en_temp_alert = true;
 		pdata->reset_chip = true;
 		pdata->temp_min_lim = 0;
 		pdata->temp_max_lim = 55;
@@ -407,6 +411,15 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 	}
 
 	pdata->reset_i2c_lines = max17042_i2c_reset_workaround;
+}
+
+static bool max17042_is_valid_batid(void)
+{
+	bool ret = true;
+#ifdef CONFIG_CHARGER_SMB347
+	ret = smb347_is_valid_batid();
+#endif
+	return ret;
 }
 
 static void init_platform_params(struct max17042_platform_data *pdata)
@@ -459,13 +472,19 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 			pdata->soc_intr_mode_enabled = true;
 		}
 	} else if (INTEL_MID_BOARD(1, TABLET, BYT)) {
-		char byt_t_ffrd8_batt_str[] = "INTN0001";
-		pdata->enable_current_sense = true;
-		pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+		if (max17042_is_valid_batid()) {
+			snprintf(pdata->battid, (BATTID_LEN + 1),
+						"%s", "INTN0001");
+			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+			pdata->enable_current_sense = true;
+		} else {
+			snprintf(pdata->battid, (BATTID_LEN + 1),
+						"%s", "UNKNOWNB");
+			pdata->technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+			pdata->enable_current_sense = false;
+		}
 		pdata->file_sys_storage_enabled = 1;
 		pdata->soc_intr_mode_enabled = true;
-		snprintf(pdata->battid, (BATTID_LEN + 1),
-					"%s", byt_t_ffrd8_batt_str);
 		snprintf(pdata->model_name, (MODEL_NAME_LEN + 1),
 					"%s", pdata->battid);
 		snprintf(pdata->serial_num, (SERIAL_NUM_LEN + 1), "%s",

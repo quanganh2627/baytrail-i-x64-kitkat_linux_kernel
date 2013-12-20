@@ -42,9 +42,7 @@ struct mei_txe_hw {
 	void __iomem *mem_addr[NUM_OF_MEM_BARS];
 	u32 aliveness;
 	u32 hhier;
-	bool recvd_aliv_resp;
 	wait_queue_head_t wait_aliveness_resp;
-	struct work_struct reset_work;
 
 	u32 readiness_state;
 	unsigned long intr_cause;

@@ -62,6 +62,7 @@ static struct cfg_match cfg_assoc_tbl[] = {
 	{"XMM7160_CONF_2", "XMM_7160_REV4", INTEL_MID_CPU_CHIP_TANGIER},
 	/* Saltbay PR2 7260 */
 	{"XMM7260_CONF_2", "XMM_7260_REV1", INTEL_MID_CPU_CHIP_TANGIER},
+	{"XMM7260_CONF_5", "XMM_7260_REV2", INTEL_MID_CPU_CHIP_TANGIER},
 	/* Baytrail FFRD8 */
 	{"XMM7160_CONF_3", "XMM_7160", INTEL_MID_CPU_CHIP_VALLEYVIEW2},
 	/* CTP 7160 */
@@ -373,8 +374,8 @@ int mcd_get_pmic_ver(void)
 	case INTEL_BYT_PHONE:
 	case INTEL_BYT_TABLET:
 		return PMIC_BYT;
-	case INTEL_MOOR_PHONE:
-	case INTEL_MOOR_TABLET:
+	case INTEL_MOFD_PHONE:
+	case INTEL_MOFD_TABLET:
 		return PMIC_MOOR;
 	default:
 		return PMIC_UNSUP;
