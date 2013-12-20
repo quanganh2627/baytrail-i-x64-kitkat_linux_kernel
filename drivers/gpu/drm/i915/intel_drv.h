@@ -389,9 +389,9 @@ struct vlv_MA_component_enabled {
 	union {
 		u8 component;
 		struct {
-			u8 EnPlane:1;
-			u8 EnSprite:1;
-			u8 EnCursor:1;
+			u8 plane_enabled:1;
+			u8 sprite_enabled:1;
+			u8 cursor_enabled:1;
 			u8 reserved:5;
 		};
 	};
@@ -435,7 +435,7 @@ struct intel_hdmi {
 	bool has_hdmi_sink;
 	bool has_audio;
 	enum hdmi_force_audio force_audio;
-	enum panel_fitter pfit;
+	enum hdmi_panel_fitter pfit;
 	bool rgb_quant_range_selectable;
 	struct edid *edid;
 	uint32_t edid_mode_count;
@@ -457,7 +457,6 @@ struct intel_dp {
 	uint8_t  link_configuration[DP_LINK_CONFIGURATION_SIZE];
 	bool has_audio;
 	enum hdmi_force_audio force_audio;
-	enum panel_fitter pfit;
 	uint32_t color_range;
 	bool color_range_auto;
 	uint8_t link_bw;
@@ -883,7 +882,4 @@ bool is_sprite_enabled(struct drm_i915_private *dev_priv,
 bool is_cursor_enabled(struct drm_i915_private *dev_priv,
 			enum pipe pipe);
 bool is_maxfifo_needed(struct drm_i915_private *dev_priv);
-
-extern void intel_unpin_work_fn(struct work_struct *__work);
-extern void intel_unpin_sprite_work_fn(struct work_struct *__work);
 #endif /* __INTEL_DRV_H__ */

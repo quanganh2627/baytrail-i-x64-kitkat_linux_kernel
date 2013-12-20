@@ -1233,6 +1233,8 @@
 /* CZ Clock, CD Clock Frequency ratio register */
 #define CD_CZ_CLOCK_FREQ_REG	(VLV_DISPLAY_BASE + 0x6508)
 
+#define GCI_CONTROL	(VLV_DISPLAY_BASE + 0x650C)  /* GCI Control reg */
+
 /*
  * Clock control & power management
  */
@@ -2366,7 +2368,6 @@ EDP_PSR_SW_TIMER
 /* Panel fitting */
 #define PFIT_CONTROL	(dev_priv->info->display_mmio_offset + 0x61230)
 #define   PFIT_ENABLE		(1 << 31)
-#define	  PFIT_DISABLE		(0 << 31)
 #define   PFIT_PIPE_MASK	(3 << 29)
 #define   PFIT_PIPE_SHIFT	29
 #define   VERT_INTERP_DISABLE	(0 << 10)
@@ -2384,7 +2385,6 @@ EDP_PSR_SW_TIMER
 #define   PFIT_SCALING_PILLAR	(2 << 26)
 #define   PFIT_SCALING_LETTER	(3 << 26)
 #define PFIT_PGM_RATIOS	(dev_priv->info->display_mmio_offset + 0x61234)
-#define	PFIT_SIZE_LIMIT		2000
 /* Pre-965 */
 #define		PFIT_VERT_SCALE_SHIFT		20
 #define		PFIT_VERT_SCALE_MASK		0xfff00000
@@ -3358,6 +3358,7 @@ EDP_PSR_SW_TIMER
 #define   DSPFW7_VLV		0x040F040F
 
 /* drain latency register values*/
+#define	VLV_DDL(pipe)			_PIPE(pipe, VLV_DDL1, VLV_DDL2)
 #define DRAIN_LATENCY_PRECISION_64	64
 #define DRAIN_LATENCY_PRECISION_32	32
 #define VLV_DDL1			(VLV_DISPLAY_BASE + 0x70050)
