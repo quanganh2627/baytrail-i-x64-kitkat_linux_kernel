@@ -1767,7 +1767,7 @@ free_dma_res:
 		sst_do_memcpy(&sst->libmemcpy_list);
 		sst_memcpy_free_lib_resources();
 	}
-	pr_debug("download lib complete");
+	pr_info("download lib complete");
 	return retval;
 }
 
@@ -1799,7 +1799,7 @@ static int sst_request_lib_elf(struct sst_module_info *mod_entry,
 
 	snprintf(name, sizeof(name), "%s%s%04x%s", mod_entry->name,
 			"_", pci_id, ".bin");
-	pr_debug("Requesting %s\n", name);
+	pr_info("Requesting %s\n", name);
 
 	retval = request_firmware(fw_lib, name, dev);
 	if (retval) {
