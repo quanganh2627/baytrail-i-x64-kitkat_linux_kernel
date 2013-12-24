@@ -1677,6 +1677,11 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		    !(present_state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
 			mrq->cmd->opcode != MMC_SEND_STATUS) {
 			if (mmc->card) {
+				/* Do not tuning for write CMD52 */
+				if (host->quirks2 & SDHCI_QUIRK2_NOT_TUNE &&
+				    IS_IO_RW_DIRECT_WRITE(mrq->cmd->opcode,
+				    mrq->cmd->arg))
+					goto end_tuning;
 				if ((mmc->card->ext_csd.part_config & 0x07) ==
 					EXT_CSD_PART_CONFIG_ACC_RPMB)
 					goto end_tuning;
