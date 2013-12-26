@@ -401,6 +401,7 @@ static int mfd_sdio_probe_slot(struct sdhci_pci_slot *slot)
 	slot->host->mmc->caps |= MMC_CAP_POWER_OFF_CARD | MMC_CAP_NONREMOVABLE;
 	switch (slot->chip->pdev->device) {
 	case PCI_DEVICE_ID_INTEL_BYT_SDIO:
+		slot->host->mmc->caps2 |= MMC_CAP2_LOCAL_WAKEUP;
 		/* add a delay after runtime resuming back from D0i3 */
 		slot->chip->pdev->d3_delay = 10;
 		/* reduce the auto suspend delay for SDIO to be 500ms */

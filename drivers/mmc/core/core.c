@@ -285,6 +285,48 @@ static int __mmc_start_req(struct mmc_host *host, struct mmc_request *mrq)
 	return 0;
 }
 
+static inline long __sched
+mmc_do_wait_for_common(struct mmc_host *host, struct completion *x,
+		long timeout, int state)
+{
+	if (!x->done) {
+		wait_queue_t wait;
+		BUG_ON(host->wait.private);
+		init_waitqueue_entry(&host->wait, current);
+
+		__add_wait_queue_tail_exclusive(&x->wait, &host->wait);
+		do {
+			if (signal_pending_state(state, current)) {
+				timeout = -ERESTARTSYS;
+				break;
+			}
+			__set_current_state(state);
+			spin_unlock_irq(&x->wait.lock);
+			/* mark the stack */
+			memset(&wait, 0x12, sizeof(wait_queue_t));
+			timeout = schedule_timeout(timeout);
+			spin_lock_irq(&x->wait.lock);
+		} while (!x->done && timeout);
+		__remove_wait_queue(&x->wait, &host->wait);
+		if (!x->done)
+			return timeout;
+	}
+	x->done--;
+	return timeout ?: 1;
+}
+
+static void __sched mmc_wait_for_completion(struct mmc_host *host,
+		struct completion *x)
+{
+	might_sleep();
+
+	spin_lock_irq(&x->wait.lock);
+	mmc_do_wait_for_common(host, x, MAX_SCHEDULE_TIMEOUT,
+			TASK_UNINTERRUPTIBLE);
+	spin_unlock_irq(&x->wait.lock);
+	memset(&host->wait, 0, sizeof(wait_queue_t));
+}
+
 static void mmc_wait_for_req_done(struct mmc_host *host,
 				  struct mmc_request *mrq)
 {
@@ -293,7 +335,10 @@ static void mmc_wait_for_req_done(struct mmc_host *host,
 	int data_err;
 
 	while (1) {
-		wait_for_completion(&mrq->completion);
+		if (host->caps2 & MMC_CAP2_LOCAL_WAKEUP)
+			mmc_wait_for_completion(host, &mrq->completion);
+		else
+			wait_for_completion(&mrq->completion);
 
 		cmd = mrq->cmd;
 		data = mrq->data;

@@ -283,6 +283,7 @@ struct mei_cl_cb *mei_cl_find_read_cb(struct mei_cl *cl)
 int mei_cl_link(struct mei_cl *cl, int id)
 {
 	struct mei_device *dev;
+	long open_handle_count;
 
 	if (WARN_ON(!cl || !cl->dev))
 		return -EINVAL;
@@ -296,7 +297,14 @@ int mei_cl_link(struct mei_cl *cl, int id)
 
 	if (id >= MEI_CLIENTS_MAX) {
 		dev_err(&dev->pdev->dev, "id exceded %d", MEI_CLIENTS_MAX) ;
-		return -ENOENT;
+		return -EMFILE;
+	}
+
+	open_handle_count = dev->open_handle_count + dev->iamthif_open_count;
+	if (open_handle_count >= MEI_MAX_OPEN_HANDLE_COUNT) {
+		dev_err(&dev->pdev->dev, "open_handle_count exceded %d",
+			MEI_MAX_OPEN_HANDLE_COUNT);
+		return -EMFILE;
 	}
 
 	dev->open_handle_count++;
@@ -320,7 +328,6 @@ int mei_cl_link(struct mei_cl *cl, int id)
 int mei_cl_unlink(struct mei_cl *cl)
 {
 	struct mei_device *dev;
-	struct mei_cl *pos, *next;
 
 	/* don't shout on error exit path */
 	if (!cl)
@@ -332,14 +339,21 @@ int mei_cl_unlink(struct mei_cl *cl)
 
 	dev = cl->dev;
 
-	list_for_each_entry_safe(pos, next, &dev->file_list, link) {
-		if (cl->host_client_id == pos->host_client_id) {
-			cl_dbg(dev, cl, "remove host client = %d, ME client = %d\n",
-				pos->host_client_id, pos->me_client_id);
-			list_del_init(&pos->link);
-			break;
-		}
-	}
+	cl_dbg(dev, cl, "unlink client");
+
+	if (dev->open_handle_count > 0)
+		dev->open_handle_count--;
+
+	/* never clear the 0 bit */
+	if (cl->host_client_id)
+		clear_bit(cl->host_client_id, dev->host_clients_map);
+
+	list_del_init(&cl->link);
+
+	cl->state = MEI_FILE_INITIALIZING;
+
+	list_del_init(&cl->link);
+
 	return 0;
 }
 
@@ -352,17 +366,6 @@ void mei_host_client_init(struct work_struct *work)
 	int i;
 
 	mutex_lock(&dev->device_lock);
-
-	bitmap_zero(dev->host_clients_map, MEI_CLIENTS_MAX);
-	dev->open_handle_count = 0;
-
-	/*
-	 * Reserving the first three client IDs
-	 * 0: Reserved for MEI Bus Message communications
-	 * 1: Reserved for Watchdog
-	 * 2: Reserved for AMTHI
-	 */
-	bitmap_set(dev->host_clients_map, 0, 3);
 
 	for (i = 0; i < dev->me_clients_num; i++) {
 		client_props = &dev->me_clients[i].props;
@@ -677,12 +680,6 @@ int mei_cl_read_start(struct mei_cl *cl, size_t length)
 
 	dev = cl->dev;
 
-	if (cl->state != MEI_FILE_CONNECTED)
-		return -ENODEV;
-
-	if (dev->dev_state != MEI_DEV_ENABLED)
-		return -ENODEV;
-
 	cl_dbg(dev, cl, "length=%zu\n", length);
 
 	if (cl->read_cb) {
@@ -700,6 +697,14 @@ int mei_cl_read_start(struct mei_cl *cl, size_t length)
 		pm_runtime_put_noidle(&dev->pdev->dev);
 		cl_err(dev, cl, "rpm: get failed %d\n", rets);
 		return rets;
+	}
+
+	cb = NULL;
+
+	/* we might hit reset while mutex is lifted */
+	if (!mei_cl_is_connected(cl)) {
+		rets = -ENODEV;
+		goto out;
 	}
 
 	cb = mei_io_cb_init(cl, NULL);
@@ -864,6 +869,12 @@ int mei_cl_write(struct mei_cl *cl, struct mei_cl_cb *cb, bool blocking)
 		pm_runtime_put_noidle(&dev->pdev->dev);
 		cl_err(dev, cl, "rpm: get failed %d\n", rets);
 		return rets;
+	}
+
+	/* we might hit reset while mutex is lifted */
+	if (!mei_cl_is_connected(cl)) {
+		rets = -ENODEV;
+		goto err;
 	}
 
 	cb->fop_type = MEI_FOP_WRITE;
