@@ -101,8 +101,6 @@ enum sst_states {
 #define SPI_MODE_ENABLE_BASE_ADDR 0xffae4000
 #define FW_SIGNATURE_SIZE	4
 
-#define SST_MAX_BIN_BYTES	1024
-
 /* stream states */
 enum sst_stream_states {
 	STREAM_UN_INIT	= 0,	/* Freed/Not used stream */
@@ -554,6 +552,12 @@ struct intel_sst_drv {
 	struct sst_mem_mgr      lib_mem_mgr;
 	/* Contains the cached vtsv files*/
 	struct sst_vtsv_cache	vcache;
+	/* Pointer to device ID, now for same PCI_ID, HID will be
+	 * will be different for FDK and EDK2. This will be used
+	 * for devices where PCI or ACPI id is same but HID is
+	 * different
+	 */
+	const char *hid;
 };
 
 extern struct intel_sst_drv *sst_drv_ctx;

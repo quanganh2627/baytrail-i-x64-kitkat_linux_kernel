@@ -30,6 +30,7 @@
 #include <linux/acpi_gpio.h>
 #include "platform_max17042.h"
 #include "platform_bq24192.h"
+#include "platform_smb347.h"
 
 #define MRFL_SMIP_SRAM_ADDR		0xFFFCE000
 #define MRFL_PLATFORM_CONFIG_OFFSET	0x3B3
@@ -38,6 +39,8 @@
 
 #define MRFL_VOLT_SHUTDOWN_MASK (1 << 1)
 #define MRFL_NFC_RESV_MASK	(1 << 3)
+
+#define BYT_TEMP_HYSTERESIS	3
 
 void max17042_i2c_reset_workaround(void)
 {
@@ -92,7 +95,7 @@ static bool msic_battery_check(struct max17042_platform_data *pdata)
 					"PG000001", (BATTID_LEN)) == 0) {
 					snprintf(pdata->battid,
 						(BATTID_LEN + 1),
-							"%s", mrfl_batt_str);
+						"%s", mrfl_batt_str);
 				} else {
 					snprintf(pdata->battid,
 						(BATTID_LEN + 1),
@@ -307,12 +310,15 @@ static int byt_get_vbatt_max(void)
 	return BYT_BATT_MAX_VOLT;
 }
 
+
 static bool is_mapped;
 static void __iomem *smip;
 int get_smip_plat_config(int offset)
 {
 	if (INTEL_MID_BOARD(1, PHONE, MRFL) ||
-		INTEL_MID_BOARD(1, TABLET, MRFL)) {
+		INTEL_MID_BOARD(1, TABLET, MRFL) ||
+		INTEL_MID_BOARD(1, PHONE, MOFD) ||
+		INTEL_MID_BOARD(1, TABLET, MOFD)) {
 		if (!is_mapped) {
 			smip = ioremap_nocache(MRFL_SMIP_SRAM_ADDR +
 				MRFL_PLATFORM_CONFIG_OFFSET, 8);
@@ -330,7 +336,9 @@ static void init_tgain_toff(struct max17042_platform_data *pdata)
 		pdata->tgain = NTC_10K_B3435K_TDK_TGAIN;
 		pdata->toff = NTC_10K_B3435K_TDK_TOFF;
 	} else if (INTEL_MID_BOARD(1, PHONE, MRFL) ||
-		INTEL_MID_BOARD(1, TABLET, MRFL)) {
+		INTEL_MID_BOARD(1, TABLET, MRFL) ||
+		INTEL_MID_BOARD(1, PHONE, MOFD) ||
+		INTEL_MID_BOARD(1, TABLET, MOFD)) {
 		pdata->tgain = NTC_10K_MURATA_TGAIN;
 		pdata->toff = NTC_10K_MURATA_TOFF;
 	} else if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR0) ||
@@ -390,7 +398,9 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 		pdata->battery_pack_temp = ctp_get_battery_temp;
 		pdata->is_volt_shutdown_enabled = ctp_is_volt_shutdown_enabled;
 	} else if (INTEL_MID_BOARD(1, PHONE, MRFL)
-			|| INTEL_MID_BOARD(1, TABLET, MRFL)) {
+			|| INTEL_MID_BOARD(1, TABLET, MRFL)
+			|| INTEL_MID_BOARD(1, PHONE, MOFD)
+			|| INTEL_MID_BOARD(1, TABLET, MOFD)) {
 		/* MRFL Phones and tablets*/
 		pdata->battery_health = mrfl_get_bat_health;
 		pdata->battery_pack_temp = pmic_get_battery_pack_temp;
@@ -401,13 +411,28 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 		pdata->get_vmax_threshold = byt_get_vbatt_max;
 		pdata->is_volt_shutdown = 1;
 		pdata->reset_chip = true;
-		pdata->temp_min_lim = 0;
-		pdata->temp_max_lim = 55;
+		if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1) ||
+			INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, 8PR1)) {
+			pdata->temp_min_lim = 0 + BYT_TEMP_HYSTERESIS;
+			pdata->temp_max_lim = 55 - BYT_TEMP_HYSTERESIS;
+		} else {
+			pdata->temp_min_lim = 0;
+			pdata->temp_max_lim = 55;
+		}
 		pdata->volt_min_lim = 3400;
 		pdata->volt_max_lim = 4400;
 	}
 
 	pdata->reset_i2c_lines = max17042_i2c_reset_workaround;
+}
+
+static bool max17042_is_valid_batid(void)
+{
+	bool ret = true;
+#ifdef CONFIG_CHARGER_SMB347
+	ret = smb347_is_valid_batid();
+#endif
+	return ret;
 }
 
 static void init_platform_params(struct max17042_platform_data *pdata)
@@ -422,9 +447,11 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 		if (msic_battery_check(pdata)) {
 			pdata->enable_current_sense = true;
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+			pdata->valid_battery = true;
 		} else {
 			pdata->enable_current_sense = false;
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+			pdata->valid_battery = false;
 		}
 	} else if (INTEL_MID_BOARD(2, TABLET, MFLD, YKB, ENG) ||
 		INTEL_MID_BOARD(2, TABLET, MFLD, YKB, PRO)) {
@@ -432,9 +459,11 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 		if (msic_battery_check(pdata)) {
 			pdata->enable_current_sense = true;
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+			pdata->valid_battery = true;
 		} else {
 			pdata->enable_current_sense = false;
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+			pdata->valid_battery = false;
 		}
 	} else if (INTEL_MID_BOARD(2, TABLET, MFLD, RR, ENG) ||
 			INTEL_MID_BOARD(2, TABLET, MFLD, RR, PRO) ||
@@ -443,6 +472,7 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 		/* MFLD  Redridge and Salitpa Tablets */
 		pdata->enable_current_sense = true;
 		pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+		pdata->valid_battery = true;
 	} else if (INTEL_MID_BOARD(1, PHONE, CLVTP) ||
 				INTEL_MID_BOARD(1, TABLET, CLVT)) {
 		if (msic_battery_check(pdata)) {
@@ -450,23 +480,35 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
 			pdata->file_sys_storage_enabled = 1;
 			pdata->soc_intr_mode_enabled = true;
+			pdata->valid_battery = true;
 		}
 	} else if (INTEL_MID_BOARD(1, PHONE, MRFL) ||
-				INTEL_MID_BOARD(1, TABLET, MRFL)) {
+				INTEL_MID_BOARD(1, TABLET, MRFL) ||
+				INTEL_MID_BOARD(1, PHONE, MOFD) ||
+				INTEL_MID_BOARD(1, TABLET, MOFD)) {
 		if (msic_battery_check(pdata)) {
 			pdata->enable_current_sense = true;
 			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
 			pdata->file_sys_storage_enabled = 1;
 			pdata->soc_intr_mode_enabled = true;
+			pdata->valid_battery = true;
 		}
 	} else if (INTEL_MID_BOARD(1, TABLET, BYT)) {
-		char byt_t_ffrd8_batt_str[] = "INTN0001";
-		pdata->enable_current_sense = true;
-		pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+		if (max17042_is_valid_batid()) {
+			snprintf(pdata->battid, (BATTID_LEN + 1),
+						"%s", "INTN0001");
+			pdata->technology = POWER_SUPPLY_TECHNOLOGY_LION;
+			pdata->enable_current_sense = true;
+			pdata->valid_battery = true;
+		} else {
+			snprintf(pdata->battid, (BATTID_LEN + 1),
+						"%s", "UNKNOWNB");
+			pdata->technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+			pdata->enable_current_sense = false;
+			pdata->valid_battery = false;
+		}
 		pdata->file_sys_storage_enabled = 1;
 		pdata->soc_intr_mode_enabled = true;
-		snprintf(pdata->battid, (BATTID_LEN + 1),
-					"%s", byt_t_ffrd8_batt_str);
 		snprintf(pdata->model_name, (MODEL_NAME_LEN + 1),
 					"%s", pdata->battid);
 		snprintf(pdata->serial_num, (SERIAL_NUM_LEN + 1), "%s",
@@ -492,7 +534,9 @@ static void init_platform_thresholds(struct max17042_platform_data *pdata)
 		pdata->volt_min_lim = 3200;
 		pdata->volt_max_lim = 4350;
 	} else if (INTEL_MID_BOARD(1, PHONE, MRFL) ||
-			INTEL_MID_BOARD(1, TABLET, MRFL)) {
+			INTEL_MID_BOARD(1, TABLET, MRFL) ||
+			INTEL_MID_BOARD(1, PHONE, MOFD) ||
+			INTEL_MID_BOARD(1, TABLET, MOFD)) {
 		/* Bit 1 of shutdown method determines if voltage based
 		 * shutdown in enabled.
 		 * Bit 3 specifies if capacity for NFC should be reserved.

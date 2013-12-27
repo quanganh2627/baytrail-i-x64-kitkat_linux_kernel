@@ -22,6 +22,9 @@
 #include <linux/proc_fs.h>
 #include <asm/intel_mid_rpmsg.h>
 
+#include <asm/hypervisor.h>
+#include <asm/xen/hypercall.h>
+
 #ifdef CONFIG_DRM_INTEL_MID
 #define GFX_ENABLE
 #endif
@@ -218,15 +221,16 @@ int _pmu2_wait_not_busy(void)
 
 static int _pmu2_wait_not_busy_yield(void)
 {
-	int pmu_busy_retry = 50000; /* 500msec minimum */
+	int pmu_busy_retry = PMU2_BUSY_TIMEOUT;
 
-	/* wait for the latest pmu command finished */
+	/* wait max 500ms that the latest pmu command finished */
 	do {
-		usleep_range(10, 500);
-
-		if (!_pmu_read_status(PMU_BUSY_STATUS))
+		if (_pmu_read_status(PMU_BUSY_STATUS) == 0)
 			return 0;
-	} while (--pmu_busy_retry);
+
+		usleep_range(10, 12);
+		pmu_busy_retry -= 11;
+	} while (pmu_busy_retry > 0);
 
 	WARN(1, "pmu2 busy!");
 
@@ -257,7 +261,8 @@ void log_wakeup_irq(void)
 
 	for (offset = (FIRST_EXTERNAL_VECTOR/32);
 	offset < (NR_VECTORS/32); offset++) {
-		irr = apic_read(APIC_IRR + (offset * 0x10));
+		irr = apic->read(APIC_IRR + (offset * 0x10));
+
 		while (irr) {
 			vector = __ffs(irr);
 			irr &= ~(1 << vector);
@@ -1816,6 +1821,15 @@ mid_pmu_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 	struct mrst_pmu_reg __iomem *pmu;
 	u32 data;
 
+	u32 dc_islands = (OSPM_DISPLAY_A_ISLAND |
+			  OSPM_DISPLAY_B_ISLAND |
+			  OSPM_DISPLAY_C_ISLAND |
+			  OSPM_MIPI_ISLAND);
+	u32 gfx_islands = (APM_VIDEO_DEC_ISLAND |
+			   APM_VIDEO_ENC_ISLAND |
+			   APM_GL3_CACHE_ISLAND |
+			   APM_GRAPHICS_ISLAND);
+
 	mid_pmu_cxt->pmu_wake_lock =
 				wakeup_source_register("pmu_wake_lock");
 
@@ -1904,7 +1918,11 @@ mid_pmu_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 	if (platform_is(INTEL_ATOM_MRFLD) && !enable_s3)
 		__pm_stay_awake(mid_pmu_cxt->pmu_wake_lock);
 #endif
-
+#ifdef CONFIG_XEN
+	/* Force gfx subsystem to be powered up */
+	pmu_nc_set_power_state(dc_islands, OSPM_ISLAND_UP, OSPM_REG_TYPE);
+	pmu_nc_set_power_state(gfx_islands, OSPM_ISLAND_UP, APM_REG_TYPE);
+#endif
 	return 0;
 
 out_err5:
@@ -1983,10 +2001,13 @@ static int standby_enter(void)
 	/* time stamp for end of s3 entry */
 	time_stamp_for_sleep_state_latency(s3_state, false, true);
 
+#ifdef CONFIG_XEN
+	HYPERVISOR_mwait_op(mid_pmu_cxt->s3_hint, 1, (void *) &temp, 1);
+#else
 	__monitor((void *) &temp, 0, 0);
 	smp_mb();
 	__mwait(mid_pmu_cxt->s3_hint, 1);
-
+#endif
 	/* time stamp for start of s3 exit */
 	time_stamp_for_sleep_state_latency(s3_state, true, false);
 
