@@ -94,7 +94,6 @@ struct smb347_charger_platform_data {
 	bool		use_mains;
 	bool		use_usb;
 	bool		show_battery;
-	bool		is_valid_battery;
 	int		irq_gpio;
 	unsigned int	termination_current;
 	enum smb347_chg_enable enable_control;
@@ -119,7 +118,6 @@ struct smb347_charger_platform_data {
 extern int smb347_get_charging_status(void);
 extern int smb347_enable_charger(void);
 extern int smb347_disable_charger(void);
-extern int smb34x_get_bat_health(void);
 #else
 static int smb347_get_charging_status(void)
 {
@@ -133,9 +131,6 @@ static int smb347_disable_charger(void)
 {
 	return 0;
 }
-int smb34x_get_bat_health(void)
-{
-	return 0;
-}
-#endif /* SMB347_CHARGER_H */
 #endif
+
+#endif /* SMB347_CHARGER_H */

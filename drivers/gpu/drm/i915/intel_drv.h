@@ -442,8 +442,6 @@ struct intel_plane {
 	 * for the watermark calculations. Currently only Haswell uses this.
 	 */
 	struct intel_plane_wm_parameters wm;
-	/* Added for deffered plane disable*/
-	struct work_struct work;
 
 	void (*update_plane)(struct drm_plane *plane,
 			     struct drm_crtc *crtc,

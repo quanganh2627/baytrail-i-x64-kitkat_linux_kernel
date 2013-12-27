@@ -114,13 +114,7 @@
 
 /* Interrupt Status registers */
 #define IRQSTAT_A				0x35
-#define IRQSTAT_A_HOT_HARD_STAT		BIT(6)
-#define IRQSTAT_A_HOT_HARD_IRQ			BIT(7)
-#define IRQSTAT_A_COLD_HARD_STAT		BIT(4)
-#define IRQSTAT_A_COLD_HARD_IRQ		BIT(5)
 #define IRQSTAT_B				0x36
-#define IRQSTAT_B_BATOVP_STAT			BIT(6)
-#define IRQSTAT_B_BATOVP_IRQ			BIT(7)
 #define IRQSTAT_C				0x37
 #define IRQSTAT_C_TERMINATION_STAT		BIT(0)
 #define IRQSTAT_C_TERMINATION_IRQ		BIT(1)
@@ -299,8 +293,6 @@ struct smb347_charger {
 	bool			charging_enabled;
 	bool			running;
 	bool			is_smb349;
-	bool			drive_vbus;
-	bool			a_bus_enable;
 	struct dentry		*dentry;
 	struct usb_phy		*otg;
 	struct notifier_block	otg_nb;
@@ -898,43 +890,6 @@ static void smb347_otg_drive_vbus(struct smb347_charger *smb, bool enable)
 	}
 }
 
-int smb34x_get_bat_health()
-{
-	struct smb347_charger *smb = smb347_dev;
-	int ret;
-
-	if (!smb)
-		return POWER_SUPPLY_HEALTH_UNKNOWN;
-
-	/* For unknown battery, health cannot be predected */
-	if (!smb->pdata->is_valid_battery) {
-		dev_info(&smb->client->dev,
-			"Invalid Battery Detected.\n");
-		return POWER_SUPPLY_HEALTH_UNKNOWN;
-	}
-	ret = smb347_read(smb, IRQSTAT_A);
-	if (ret < 0)
-		return POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
-
-	if (ret &
-		(IRQSTAT_A_HOT_HARD_STAT|IRQSTAT_A_COLD_HARD_STAT)) {
-		dev_info(&smb->client->dev, "overtemperature detected");
-		return POWER_SUPPLY_HEALTH_OVERHEAT;
-	}
-
-	ret = smb347_read(smb, IRQSTAT_B);
-	if (ret < 0)
-		return POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
-
-	if (ret & IRQSTAT_B_BATOVP_STAT) {
-		dev_info(&smb->client->dev, "BAT OVP occurred");
-		return POWER_SUPPLY_HEALTH_OVERVOLTAGE;
-	}
-
-	return POWER_SUPPLY_HEALTH_GOOD;
-}
-EXPORT_SYMBOL(smb34x_get_bat_health);
-
 #ifdef CONFIG_POWER_SUPPLY_CHARGER
 static void smb347_full_worker(struct work_struct *work)
 {
@@ -1162,34 +1117,6 @@ static int sm347_reload_setting(struct smb347_charger *smb)
 	return ret;
 }
 
-
-static void smb347_usb_otg_enable(struct usb_phy *phy)
-{
-	struct smb347_charger *smb = smb347_dev;
-
-	if (!smb)
-		return;
-
-	dev_info(&smb->client->dev, "%s:%d", __func__, __LINE__);
-
-	if (phy->vbus_state == VBUS_DISABLED) {
-		dev_info(&smb->client->dev, "OTG Disable");
-		smb->a_bus_enable = false;
-		if (smb->drive_vbus) {
-			smb347_otg_disable(smb);
-			__otg_connect = false;
-		}
-	} else {
-		dev_info(&smb->client->dev, "OTG Enable");
-		smb->a_bus_enable = true;
-		if (smb->drive_vbus) {
-			smb347_otg_enable(smb);
-			__otg_connect = true;
-		}
-	}
-}
-
-
 static int smb347_hw_init(struct smb347_charger *smb)
 {
 	int ret, loopCount, i;
@@ -1227,8 +1154,6 @@ static int smb347_hw_init(struct smb347_charger *smb)
 			INIT_LIST_HEAD(&smb->otg_queue);
 			spin_lock_init(&smb->otg_queue_lock);
 
-			smb->a_bus_enable = true;
-			smb->otg->a_bus_drop = smb347_usb_otg_enable;
 			smb->otg_nb.notifier_call = smb347_otg_notifier;
 			ret = usb_register_notifier(smb->otg, &smb->otg_nb);
 			if (ret < 0) {
@@ -1348,17 +1273,6 @@ static irqreturn_t smb347_interrupt(int irq, void *data)
 		ret = IRQ_HANDLED;
 	}
 
-	if (irqstat_a & (IRQSTAT_A_HOT_HARD_IRQ|IRQSTAT_A_COLD_HARD_IRQ)) {
-		dev_info(&smb->client->dev, "exterme temperature interrupt");
-		if (smb->pdata->use_usb)
-			power_supply_changed(&smb->usb);
-	}
-
-	if (irqstat_b & IRQSTAT_B_BATOVP_IRQ) {
-		dev_info(&smb->client->dev, "BATOVP interrupt");
-		if (smb->pdata->use_usb)
-			power_supply_changed(&smb->usb);
-	}
 	/*
 	 * If we reached the termination current the battery is charged and
 	 * we can update the status now. Charging is automatically
@@ -1470,15 +1384,12 @@ static irqreturn_t smb347_interrupt(int irq, void *data)
 		dev_info(&smb->client->dev, "stat_b = %x", ret);
 		if (ret < 0)
 			dev_err(&smb->client->dev, "i2c error %d", ret);
-		else if (ret & 0x10) {
-			smb->drive_vbus = true;
+		else if (ret & 0x1E) {
 			gpio_direction_output(smb->pdata->gpio_mux, 0);
-			if (smb->a_bus_enable) {
-				smb347_otg_enable(smb);
-				__otg_connect = true;
-			}
+			smb347_otg_enable(smb);
+			__otg_connect = true;
 		} else {
-			smb->drive_vbus = false;
+			gpio_direction_output(smb->pdata->gpio_mux, 1);
 			smb347_otg_disable(smb);
 			__otg_connect = false;
 		}
@@ -2534,7 +2445,7 @@ static int __init smb347_init(void)
 {
 	return i2c_add_driver(&smb347_driver);
 }
-late_initcall(smb347_init);
+module_init(smb347_init);
 
 static void __exit smb347_exit(void)
 {
