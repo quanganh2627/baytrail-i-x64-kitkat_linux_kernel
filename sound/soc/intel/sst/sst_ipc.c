@@ -186,6 +186,9 @@ void sst_post_message_mrfld(struct work_struct *work)
 	spin_unlock_irqrestore(&sst_drv_ctx->ipc_spin_lock, irq_flags);
 	pr_debug("sst: Post message: header = %x\n",
 					msg->mrfld_header.p.header_high.full);
+	pr_info("sst: Post message: header = %#x payload %#x\n",
+					msg->mrfld_header.p.header_high.full,
+					msg->mrfld_header.p.header_low_payload);
 	kfree(msg->mailbox_data);
 	kfree(msg);
 	return;
@@ -318,6 +321,9 @@ int sst_sync_post_message_mrfld(struct ipc_post *msg)
 	pr_debug("sst: Post message: header = %x\n",
 					msg->mrfld_header.p.header_high.full);
 	pr_debug("sst: size = 0x%x\n", msg->mrfld_header.p.header_low_payload);
+	pr_info("sst: Post message: sync: header = %#x payload %#x\n",
+					msg->mrfld_header.p.header_high.full,
+					msg->mrfld_header.p.header_low_payload);
 	if (msg->mrfld_header.p.header_high.part.large)
 		memcpy_toio(sst_drv_ctx->mailbox + SST_MAILBOX_SEND,
 			msg->mailbox_data, msg->mrfld_header.p.header_low_payload);
@@ -482,7 +488,7 @@ static int process_fw_init(struct ipc_post *msg)
 		(struct ipc_header_fw_init *)msg->mailbox_data;
 	int retval = 0;
 
-	pr_debug("*** FW Init msg came***\n");
+	pr_info("*** FW Init msg came***\n");
 	if (sst_drv_ctx->pci_id == SST_CLV_PCI_ID) {
 		if (init->result) {
 			sst_drv_ctx->sst_state =  SST_ERROR;
@@ -592,7 +598,7 @@ void sst_process_message_mrfld(struct ipc_post *msg)
 
 	str_id = msg->mrfld_header.p.header_high.part.drv_id;
 
-	pr_debug("IPC process message header %x payload %x\n",
+	pr_info("sst: process message header %#x payload %#x\n",
 			msg->mrfld_header.p.header_high.full,
 			msg->mrfld_header.p.header_low_payload);
 
@@ -711,6 +717,11 @@ void sst_process_reply_mrfld(struct ipc_post *msg)
 
 	if (!msg_high.part.large)
 		msg_id = msg_low & SST_ASYNC_MSG_MASK;
+
+	if (msg_id != IPC_SST_PERIOD_ELAPSED_MRFLD)
+		pr_info("sst: process reply header %#x payload %#x\n",
+			msg->mrfld_header.p.header_high.full,
+			msg->mrfld_header.p.header_low_payload);
 
 	if ((msg_id == IPC_SST_PERIOD_ELAPSED_MRFLD) &&
 		(msg_high.part.msg_id == IPC_CMD)) {
