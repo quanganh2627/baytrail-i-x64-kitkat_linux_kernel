@@ -185,9 +185,6 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 				DEVICE_READY | ULPS_STATE_MASK);
 		usleep_range(2000, 2500);
 	}
-
-	if (intel_dsi->dev.dev_ops->send_otp_cmds)
-		intel_dsi->dev.dev_ops->send_otp_cmds(&intel_dsi->dev);
 }
 
 void intel_dsi_enable(struct intel_encoder *encoder)
@@ -208,12 +205,10 @@ void intel_dsi_enable(struct intel_encoder *encoder)
 			I915_WRITE(MIPI_INTR_STAT(pipe),
 					SPL_PKT_SENT_INTERRUPT);
 
-		/* XXX: fix the bits with constants */
-		I915_WRITE(MIPI_DPI_CONTROL(pipe), ((0x1 << 1) &
-				~(0x1 << 0) & ~(0x1 << 6)));
-		I915_WRITE(MIPI_DPI_CONTROL(pipe), 0x2);
-
-		udelay(500);
+		/* send TURN ON command to panel in LP mode */
+		intel_dsi->hs = 0;
+		dpi_send_cmd(intel_dsi, TURN_ON);
+		usleep_range(1000, 1500);
 
 		/* Wait till SPL Packet Sent status bit is not set */
 		if (wait_for(I915_READ(MIPI_INTR_STAT(pipe)) &
@@ -247,13 +242,12 @@ void intel_dsi_enable(struct intel_encoder *encoder)
 
 void intel_dsi_disable(struct intel_encoder *encoder)
 {
-	struct drm_encoder *drm_encoder = &encoder->base;
-	struct drm_device *dev = drm_encoder->dev;
+	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = encoder->base.dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
 	int pipe = intel_crtc->pipe;
-	int intr_stat, dpi_ctrl;
+	u32 tmp;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -265,55 +259,32 @@ void intel_dsi_disable(struct intel_encoder *encoder)
 			(intel_dsi->dev.backlight_off_delay * 1000) + 500);
 
 	if (intel_dsi->dev.operation_mode == DSI_VIDEO_MODE) {
-		intr_stat = I915_READ(MIPI_INTR_STAT(pipe));
-		if (intr_stat & SPL_PKT_SENT_INTERRUPT)
-			I915_WRITE(MIPI_INTR_STAT(pipe),
-					SPL_PKT_SENT_INTERRUPT);
-
-		dpi_ctrl = I915_READ(MIPI_DPI_CONTROL(pipe));
-
-		if (!(dpi_ctrl & TURN_ON)) {
-			DRM_DEBUG_KMS("DPI already shutdown\n");
-			return;
-		}
-
-		if (wait_for((I915_READ(MIPI_GEN_FIFO_STAT(pipe)) &
-						DPI_FIFO_EMPTY), 100)) {
-				DRM_DEBUG_KMS("DPI FIFO not empty\n");
-		}
-
-		if (intel_dsi->dev.send_shutdown == true) {
-			I915_WRITE(MIPI_DPI_CONTROL(pipe), SHUTDOWN);
-
-			/* Wait for special packet sent interrupt */
-			if (wait_for(I915_READ(MIPI_INTR_STAT(pipe)) &
-						SPL_PKT_SENT_INTERRUPT, 50))
-				DRM_ERROR("Special packet not sent!\n");
-			else {
-				intr_stat = I915_READ(MIPI_INTR_STAT(pipe));
-				if (intr_stat & SPL_PKT_SENT_INTERRUPT)
-					I915_WRITE(MIPI_INTR_STAT(pipe),
-							SPL_PKT_SENT_INTERRUPT);
-			}
-
-			if (intel_dsi->dev.shutdown_pkt_delay >= 20)
-				msleep(intel_dsi->dev.shutdown_pkt_delay);
-			else
-				usleep_range(
-					intel_dsi->dev.shutdown_pkt_delay *
-					1000,
-					intel_dsi->dev.shutdown_pkt_delay *
-					1000 + 500);
-		}
-
-
-		/* If DPI is disabled before sending shutdown command then
-		 * sending shutdown special packet fails */
-		I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, DPI_ENABLE);
+		/* Send Shutdown command to the panel in LP mode */
+		intel_dsi->hs = 0;
+		dpi_send_cmd(intel_dsi, SHUTDOWN);
 		usleep_range(1000, 1500);
-	} else {
-		/* TBD: Command mode handling */
+
+		I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, DPI_ENABLE);
+		POSTING_READ(MIPI_PORT_CTRL(pipe));
+		usleep_range(2000, 2500);
 	}
+
+	/* Panel commands can be sent when clock is in LP11 */
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
+
+	tmp = I915_READ(MIPI_CTRL(pipe));
+	tmp &= ~ESCAPE_CLOCK_DIVIDER_MASK;
+	I915_WRITE(MIPI_CTRL(pipe), tmp |
+			intel_dsi->dev.escape_clk_div <<
+			ESCAPE_CLOCK_DIVIDER_SHIFT);
+
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+
+	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
+	tmp &= ~VID_MODE_FORMAT_MASK;
+	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
+
+	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
 
 	/* if disable packets are sent before sending shutdown packet then in
 	 * some next enable sequence send turn on packet error is observed */
@@ -377,12 +348,18 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 /* Encoder dpms must, add functionality later */
 void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
-	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 	struct drm_device *dev = encoder->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 	struct intel_encoder *intel_encoder = &intel_dsi->base;
+	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->crtc);
+	int pipe = intel_crtc->pipe;
+	u32 val;
 
 	if (mode != DRM_MODE_DPMS_ON)
 		mode = DRM_MODE_DPMS_OFF;
+
+	DRM_DEBUG_DRIVER("DPMS mode = %d\n", mode);
 
 	/* FIXME - Just in case this function */
 	/* gets called when device is in D0i3? */
@@ -391,6 +368,36 @@ void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 	if (mode == DRM_MODE_DPMS_ON) {
 		intel_enable_dsi_pll(intel_dsi);
 		intel_dsi_device_ready(intel_encoder);
+
+		/* need to resend OTP as panel off was done in
+		 * DPMS off */
+
+		/* Clock needs to be in LP11 mode before we can send
+		 * commands to panel */
+
+		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
+		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+
+		val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
+		val &= ~VID_MODE_FORMAT_MASK;
+		I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), val);
+
+		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
+
+		if (intel_dsi->dev.dev_ops->send_otp_cmds)
+			intel_dsi->dev.dev_ops->send_otp_cmds(&intel_dsi->dev);
+
+		/* Now we need to restore MIPI_DSI_FUNC_PRG to needed value */
+		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
+
+		val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
+		intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
+		intel_dsi->dev.pixel_format;
+		I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), val);
+
+		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
+
+		/* Enable the device */
 		intel_dsi_enable(&intel_dsi->base);
 	} else {
 		/* disable is already done in i9xx_crtc_disable
@@ -613,8 +620,6 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 					intel_dsi->dev.hs_to_lp_count);
 	I915_WRITE(MIPI_LP_BYTECLK(pipe), intel_dsi->dev.lp_byte_clk);
 
-	I915_WRITE(MIPI_MAX_RETURN_PKT_SIZE(pipe), 0x64);
-
 	I915_WRITE(MIPI_CLK_LANE_SWITCH_TIME_CNT(pipe),
 		((u32)intel_dsi->dev.clk_lp_to_hs_count
 		<< LP_HS_SSW_CNT_SHIFT) |
@@ -625,11 +630,6 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 			(adjusted_mode->vdisplay << VERTICAL_ADDRESS_SHIFT) |
 			(adjusted_mode->hdisplay << HORIZONTAL_ADDRESS_SHIFT));
 
-		val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
-			intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
-			intel_dsi->dev.pixel_format;
-		I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), val);
-
 		/*
 		 * With AUO B080XAT mipi panel HS transmitter timeout issue
 		 * is observed. The timeout could be because there is not
@@ -637,20 +637,15 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 		 * HS mode but HS TX timer timed out. As a work around
 		 * increase the HS TX timeout value.
 		 */
-		if (intel_dsi->dev.video_mode_type == DSI_VIDEO_BURST &&
-				dev_priv->mipi.panel_id !=
-						MIPI_DSI_AUO_B080XAT_PANEL_ID)
+		if (intel_dsi->dev.video_mode_type == DSI_VIDEO_BURST)
 			I915_WRITE(MIPI_HS_TX_TIMEOUT(pipe),
-				txbyteclkhs(adjusted_mode->htotal + 1, bpp,
-				intel_dsi->dev.lane_count));
+				txbyteclkhs(adjusted_mode->htotal, bpp,
+				intel_dsi->dev.lane_count) + 1);
 		else
 			I915_WRITE(MIPI_HS_TX_TIMEOUT(pipe),
 			   txbyteclkhs(adjusted_mode->vtotal *
 				   adjusted_mode->htotal,
-				   bpp, intel_dsi->dev.lane_count));
-
-		I915_WRITE(MIPI_VIDEO_MODE_FORMAT(pipe), 0);
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+				   bpp, intel_dsi->dev.lane_count) + 1);
 	} else {
 		val = intel_dsi->channel << CMD_MODE_CHANNEL_NUMBER_SHIFT |
 			intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
@@ -659,13 +654,22 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 
 		I915_WRITE(MIPI_HS_TX_TIMEOUT(pipe),
 			txbyteclkhs(adjusted_mode->hdisplay *
-			adjusted_mode->vdisplay + 1,
-			bpp, intel_dsi->dev.lane_count));
+			adjusted_mode->vdisplay,
+			bpp, intel_dsi->dev.lane_count) + 1);
 
 		I915_WRITE(MIPI_DBI_BW_CTRL(pipe), intel_dsi->dev.bw_timer);
 	}
 
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+
+	val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
+	val &= ~VID_MODE_FORMAT_MASK;
+	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), val);
+
 	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
+
+	if (intel_dsi->dev.dev_ops->send_otp_cmds)
+		intel_dsi->dev.dev_ops->send_otp_cmds(&intel_dsi->dev);
 
 	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
 	set_dsi_timings(encoder, adjusted_mode);
@@ -676,6 +680,7 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 	I915_WRITE(MIPI_VIDEO_MODE_FORMAT(pipe),
 				intel_dsi->dev.video_frmt_cfg_bits |
 				intel_dsi->dev.video_mode_type |
+				IP_TG_CONFIG |
 				RANDOM_DPI_DISPLAY_RESOLUTION);
 
 	val = 0;
@@ -686,6 +691,11 @@ static void intel_dsi_mode_set(struct drm_encoder *encoder,
 		val |= CLOCKSTOP;
 
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
+
+	val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
+		intel_dsi->dev.lane_count << DATA_LANES_PRG_REG_SHIFT |
+		intel_dsi->dev.pixel_format;
+	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), val);
 
 	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
 

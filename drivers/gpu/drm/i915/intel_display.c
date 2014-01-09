@@ -2029,7 +2029,7 @@ static void intel_disable_plane(struct drm_i915_private *dev_priv,
 		for (i = 0; i < VLV_NUM_SPRITES; i++) {
 			val = I915_READ(SPCNTR(pipe, i));
 			if ((val & SP_ENABLE) == 0)
-				break;
+				continue;
 
 			I915_WRITE(SPCNTR(pipe, i), (val & ~SP_ENABLE));
 			/* Activate double buffered register update */
@@ -4083,14 +4083,6 @@ static void i9xx_crtc_prepare(struct drm_crtc *crtc)
 	int pipe = intel_crtc->pipe;
 	u32 data = 0;
 	static bool do_once;
-
-	/* If device is resuming, no need of prepare.
-	 * ALready the pipe is off and inactive
-	 */
-	if (dev_priv->is_resuming == true) {
-		DRM_DEBUG("device is resuming. returning\n");
-		return;
-	}
 
 	i9xx_crtc_disable(crtc);
 

@@ -381,7 +381,7 @@ bool generic_init(struct intel_dsi_device *dsi)
 	/* B044 */
 	dsi->hs_to_lp_count =
 		ceil_div(
-			4 * tlpx_ui + mipi_config->prepare_cnt * 2 +
+			4 * tlpx_ui + prepare_cnt * 2 +
 			exit_zero_cnt * 2 + 10,
 			8);
 
@@ -398,7 +398,7 @@ bool generic_init(struct intel_dsi_device *dsi)
 	 */
 	dsi->clk_lp_to_hs_count =
 		ceil_div(
-			4 * tlpx_ui + mipi_config->prepare_cnt * 2 +
+			4 * tlpx_ui + prepare_cnt * 2 +
 			clk_zero_cnt * 2,
 			8);
 
