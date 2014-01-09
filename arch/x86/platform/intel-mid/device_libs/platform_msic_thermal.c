@@ -146,17 +146,17 @@ static struct intel_mid_thermal_platform_data pdata[] = {
 	[mfld_thermal] = {
 		.num_sensors = 4,
 		.sensors = mfld_sensors,
-		.gpu_cooling = false,
+		.soc_cooling = false,
 	},
 	[ctp_thermal] = {
 		.num_sensors = 4,
 		.sensors = ctp_sensors,
-		.gpu_cooling = true,
+		.soc_cooling = true,
 	},
 	[lex_thermal] = {
 		.num_sensors = 4,
 		.sensors = lex_sensors,
-		.gpu_cooling = false,
+		.soc_cooling = false,
 	},
 };
 

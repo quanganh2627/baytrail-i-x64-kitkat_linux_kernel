@@ -189,8 +189,7 @@ static struct smb347_charger_platform_data byt_t_ffrd8_pr1_pdata = {
 						0x03, 0xED,
 				/* enable Auto recharge, Turbo charge+ */
 						0x04, 0x3D,
-					/* disable safety timer */
-						0x05, 0x0F,
+						0x05, 0x05,
 				/* enable APSD interrupt along with others */
 						0x06, 0x06,
 						0x07, 0x85,

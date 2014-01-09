@@ -116,7 +116,10 @@ static void mfld_pmu_wakeup(void)
 
 static void mfld_pmu_remove(void)
 {
-	/* Do nothing */
+	/* Freeing up memory allocated for PMU1 & PMU2 */
+	iounmap(mid_pmu_cxt->base_addr.offload_reg);
+	mid_pmu_cxt->base_addr.offload_reg = NULL;
+
 }
 
 static pci_power_t mfld_pmu_choose_state(int device_lss)
@@ -144,19 +147,22 @@ static pci_power_t mfld_pmu_choose_state(int device_lss)
 
 static int mfld_pmu_init(void)
 {
+	int ret = PMU_SUCCESS;
+
 	/* Map the memory of offload_reg */
 	mid_pmu_cxt->base_addr.offload_reg =
-		devm_ioremap_nocache(&mid_pmu_cxt->pmu_dev->dev,
-			C6_OFFLOAD_REG_ADDR, 4);
-	if (!mid_pmu_cxt->base_addr.offload_reg) {
+				ioremap_nocache(C6_OFFLOAD_REG_ADDR, 4);
+	if (mid_pmu_cxt->base_addr.offload_reg == NULL) {
 		dev_dbg(&mid_pmu_cxt->pmu_dev->dev,
 		"Unable to map the offload_reg address space\n");
-		return -ENOMEM;
+		ret = PMU_FAILED;
+		goto out_err;
 	}
 
 	mid_pmu_cxt->s3_hint = C6_HINT;
 
-	return 0;
+out_err:
+	return ret;
 }
 
 /**

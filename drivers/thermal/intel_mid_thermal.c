@@ -45,7 +45,7 @@
 #define DRIVER_NAME "msic_thermal"
 
 /* Cooling device attributes */
-#define GPU_IPC_COMMAND		0xCF
+#define SOC_IPC_COMMAND		0xCF
 
 enum {
 	NORMAL = 0,
@@ -55,11 +55,11 @@ enum {
 } thermal_state;
 
 enum {
-	GPU_SKIN_NORMAL = 0,
-	GPU_SKIN_WARM = 2,
-	GPU_SKIN_PROCHOT,
-	GPU_MAX_STATES
-} gpu_skin_state;
+	SOC_SKIN_NORMAL = 0,
+	SOC_SKIN_WARM = 2,
+	SOC_SKIN_PROCHOT,
+	SOC_MAX_STATES
+} soc_skin_state;
 
 /* MSIC die attributes */
 #define MSIC_DIE_ADC_MIN	488
@@ -86,12 +86,12 @@ struct ts_cache_info {
 	unsigned long last_updated;
 };
 
-struct gpu_cooling_device_info {
-	unsigned long gpu_state;
+struct soc_cooling_device_info {
+	unsigned long soc_state;
 	struct mutex lock_cool_state;
 };
 
-static struct gpu_cooling_device_info gpu_cdev_info;
+static struct soc_cooling_device_info soc_cdev_info;
 
 struct platform_info {
 	struct platform_device *pdev;
@@ -99,9 +99,9 @@ struct platform_info {
 	struct ts_cache_info cacheinfo;
 	/* ADC handle used to read sensor temperature values */
 	void *therm_adc_handle;
-	struct thermal_cooling_device *gpu_cdev;
+	struct thermal_cooling_device *soc_cdev;
 	int num_sensors;
-	int gpu_cooling;
+	int soc_cooling;
 	struct intel_mid_thermal_sensor *sensors;
 };
 
@@ -111,37 +111,37 @@ struct thermal_device_info {
 	struct intel_mid_thermal_sensor *sensor;
 };
 
-/* GPU cooling device callbacks */
-static int gpu_get_max_state(struct thermal_cooling_device *cdev,
+/* SoC cooling device callbacks */
+static int soc_get_max_state(struct thermal_cooling_device *cdev,
 				unsigned long *state)
 {
-	/* GPU has 4 levels of throttling from 0 to 3 */
-	*state = GPU_MAX_STATES - 1;
+	/* SoC has 4 levels of throttling from 0 to 3 */
+	*state = SOC_MAX_STATES - 1;
 	return 0;
 }
 
-static int gpu_get_cur_state(struct thermal_cooling_device *cdev,
+static int soc_get_cur_state(struct thermal_cooling_device *cdev,
 				unsigned long *state)
 {
-	mutex_lock(&gpu_cdev_info.lock_cool_state);
-	*state = gpu_cdev_info.gpu_state;
-	mutex_unlock(&gpu_cdev_info.lock_cool_state);
+	mutex_lock(&soc_cdev_info.lock_cool_state);
+	*state = soc_cdev_info.soc_state;
+	mutex_unlock(&soc_cdev_info.lock_cool_state);
 	return 0;
 }
 
-static int gpu_set_cur_state(struct thermal_cooling_device *cdev,
+static int soc_set_cur_state(struct thermal_cooling_device *cdev,
 				unsigned long state)
 {
 	int ret;
-
-	if (state > GPU_MAX_STATES - 1) {
-		pr_err("Invalid GPU throttle state:%ld\n", state);
+	if (state > SOC_MAX_STATES - 1) {
+		pr_err("Invalid SoC throttle state:%ld\n", state);
 		return -EINVAL;
 	}
 
 	switch (state) {
-	case NORMAL:	/* GPU De-Throttle */
-		ret = GPU_SKIN_NORMAL;
+	/* SoC De-Throttle */
+	case NORMAL:
+		state = SOC_SKIN_NORMAL;
 		break;
 	case WARNING:
 		/*
@@ -150,51 +150,48 @@ static int gpu_set_cur_state(struct thermal_cooling_device *cdev,
 		 * State 0 to 1 means skin WARM.
 		 * state 2 to 1 means skin no longer PROCHOT but WARM
 		 */
-		ret = GPU_SKIN_WARM;
+		state = SOC_SKIN_WARM;
 		break;
-	case ALERT:	/* GPU Throttle, PROCHOT */
+	/* SoC Throttle, PROCHOT */
+	case ALERT:
 	case CRITICAL:
-		ret = GPU_SKIN_PROCHOT;
+		state = SOC_SKIN_PROCHOT;
 		break;
-	default:
-		ret = GPU_SKIN_NORMAL;
 	}
-
-	/* Send IPC command to throttle GPU */
-	mutex_lock(&gpu_cdev_info.lock_cool_state);
-
-	ret = rpmsg_send_generic_command(GPU_IPC_COMMAND, 0,
-			(u8 *) &ret, 4, NULL, 0);
+	/* Send IPC command to throttle SoC */
+	mutex_lock(&soc_cdev_info.lock_cool_state);
+	ret = rpmsg_send_generic_command(SOC_IPC_COMMAND, 0,
+			(u8 *) &state, 4, NULL, 0);
 	if (ret)
 		pr_err("IPC_COMMAND failed: %d\n", ret);
 	else
-		gpu_cdev_info.gpu_state = state;
+		soc_cdev_info.soc_state = state;
 
-	mutex_unlock(&gpu_cdev_info.lock_cool_state);
+	mutex_unlock(&soc_cdev_info.lock_cool_state);
 	return ret;
 }
 
-static struct thermal_cooling_device_ops gpu_cooling_ops = {
-	.get_max_state = gpu_get_max_state,
-	.get_cur_state = gpu_get_cur_state,
-	.set_cur_state = gpu_set_cur_state,
+static struct thermal_cooling_device_ops soc_cooling_ops = {
+	.get_max_state = soc_get_max_state,
+	.get_cur_state = soc_get_cur_state,
+	.set_cur_state = soc_set_cur_state,
 };
 
-static int register_gpu_as_cdev(void)
+static int register_soc_as_cdev(void)
 {
 	int ret = 0;
-	platforminfo->gpu_cdev = thermal_cooling_device_register(
-				"gpu_dvfs", NULL, &gpu_cooling_ops);
-	if (IS_ERR(platforminfo->gpu_cdev)) {
-		ret = PTR_ERR(platforminfo->gpu_cdev);
-		platforminfo->gpu_cdev = NULL;
+	platforminfo->soc_cdev = thermal_cooling_device_register("SoC", NULL,
+						&soc_cooling_ops);
+	if (IS_ERR(platforminfo->soc_cdev)) {
+		ret = PTR_ERR(platforminfo->soc_cdev);
+		platforminfo->soc_cdev = NULL;
 	}
 	return ret;
 }
 
-static void unregister_gpu_as_cdev(void)
+static void unregister_soc_as_cdev(void)
 {
-	thermal_cooling_device_unregister(platforminfo->gpu_cdev);
+	thermal_cooling_device_unregister(platforminfo->soc_cdev);
 }
 
 /**
@@ -532,7 +529,7 @@ static int mid_thermal_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	platforminfo->num_sensors = pdata->num_sensors;
-	platforminfo->gpu_cooling = pdata->gpu_cooling;
+	platforminfo->soc_cooling = pdata->soc_cooling;
 	platforminfo->sensors = pdata->sensors;
 
 	platforminfo->tzd = kzalloc(
@@ -558,8 +555,8 @@ static int mid_thermal_probe(struct platform_device *pdev)
 	mutex_init(&platforminfo->cacheinfo.lock);
 
 
-	if (platforminfo->gpu_cooling)
-		mutex_init(&gpu_cdev_info.lock_cool_state);
+	if (platforminfo->soc_cooling)
+		mutex_init(&soc_cdev_info.lock_cool_state);
 
 	for (i = 0; i < platforminfo->num_sensors; i++)
 		adc_channel_info[i] = platforminfo->sensors[i].adc_channel;
@@ -587,13 +584,13 @@ static int mid_thermal_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, platforminfo);
 
-	/* Register GPU as a cooling device */
-	if (platforminfo->gpu_cooling) {
-		ret = register_gpu_as_cdev();
+	/* Register SoC as a cooling device */
+	if (platforminfo->soc_cooling) {
+		ret = register_soc_as_cdev();
 		/* Log this, but keep the driver loaded */
 		if (ret) {
 			dev_err(&pdev->dev,
-				"register_gpu_as_cdev failed:%d\n", ret);
+				"register_soc_as_cdev failed:%d\n", ret);
 		}
 	}
 
@@ -630,9 +627,9 @@ static int mid_thermal_remove(struct platform_device *pdev)
 	for (i = 0; i < platforminfo->num_sensors; i++)
 		thermal_zone_device_unregister(platforminfo->tzd[i]);
 
-	/* Unregister GPU as cooling device */
-	if (platforminfo->gpu_cooling)
-		unregister_gpu_as_cdev();
+	/* Unregister SoC as cooling device */
+	if (platforminfo->soc_cooling)
+		unregister_soc_as_cdev();
 
 	/* Free the allocated ADC channels */
 	if (platforminfo->therm_adc_handle)

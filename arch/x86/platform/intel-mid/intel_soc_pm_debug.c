@@ -231,31 +231,35 @@ void s0ix_lat_stat_init(void)
 	if (!platform_is(INTEL_ATOM_CLV))
 		return;
 
-	lat_stat = devm_kzalloc(&mid_pmu_cxt->pmu_dev->dev,
-			sizeof(struct latency_stat), GFP_KERNEL);
+	lat_stat = kzalloc(sizeof(struct latency_stat), GFP_KERNEL);
 	if (unlikely(!lat_stat)) {
 		pr_err("Failed to allocate memory for s0ix latency!\n");
-		goto out_err;
+		goto out_err0;
 	}
 
 	lat_stat->scu_s0ix_lat_addr =
-		devm_ioremap_nocache(&mid_pmu_cxt->pmu_dev->dev,
-			S0IX_LAT_SRAM_ADDR_CLVP, S0IX_LAT_SRAM_SIZE_CLVP);
+		ioremap_nocache(S0IX_LAT_SRAM_ADDR_CLVP,
+					S0IX_LAT_SRAM_SIZE_CLVP);
 	if (unlikely(!lat_stat->scu_s0ix_lat_addr)) {
 		pr_err("Failed to map SCU_S0IX_LAT_ADDR!\n");
-		goto out_err;
+		goto out_err1;
 	}
 
 	lat_stat->dentry = debugfs_create_file("s0ix_latency",
 			S_IFREG | S_IRUGO, NULL, NULL, &s0ix_latency_ops);
 	if (unlikely(!lat_stat->dentry)) {
 		pr_err("Failed to create debugfs for s0ix latency!\n");
-		goto out_err;
+		goto out_err2;
 	}
 
 	return;
 
-out_err:
+out_err2:
+	iounmap(lat_stat->scu_s0ix_lat_addr);
+out_err1:
+	kfree(lat_stat);
+	lat_stat = NULL;
+out_err0:
 	pr_err("%s: Initialization failed\n", __func__);
 }
 
@@ -267,8 +271,14 @@ void s0ix_lat_stat_finish(void)
 	if (unlikely(!lat_stat))
 		return;
 
+	if (likely(lat_stat->scu_s0ix_lat_addr))
+		iounmap(lat_stat->scu_s0ix_lat_addr);
+
 	if (likely(lat_stat->dentry))
 		debugfs_remove(lat_stat->dentry);
+
+	kfree(lat_stat);
+	lat_stat = NULL;
 }
 
 void time_stamp_in_suspend_flow(int mark, bool start)

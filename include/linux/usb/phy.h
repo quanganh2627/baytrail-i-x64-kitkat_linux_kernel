@@ -28,12 +28,6 @@ enum usb_phy_type {
 	USB_PHY_TYPE_USB3,
 };
 
-/* usb2 phy interface type */
-enum usb_phy_intf {
-	USB2_PHY_ULPI,
-	USB2_PHY_UTMI,
-};
-
 /* OTG defines lots of enumeration states before device reset */
 enum usb_otg_state {
 	OTG_STATE_UNDEFINED = 0,
@@ -81,7 +75,6 @@ struct usb_phy {
 	unsigned int		 flags;
 
 	enum usb_phy_type	type;
-	enum usb_phy_intf	intf;
 	enum usb_otg_state	state;
 	enum usb_phy_events	last_event;
 
