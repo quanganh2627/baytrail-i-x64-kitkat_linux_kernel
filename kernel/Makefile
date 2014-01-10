@@ -167,6 +167,15 @@ ifndef CONFIG_MODULE_SIG_HASH
 $(error Could not determine digest type to use from kernel config)
 endif
 
+PRE_GEN_MODSECKEY = ./signing_key.priv
+PRE_GEN_MODPUBKEY = ./signing_key.x509
+
+ifeq ($(wildcard $(PRE_GEN_MODSECKEY))+$(wildcard $(PRE_GEN_MODPUBKEY)),$(PRE_GEN_MODSECKEY)+$(PRE_GEN_MODPUBKEY))
+signing_key.x509: signing_key.x509
+	@echo "###"
+	@echo "### Use pre-generated X.509 key pair for signing modules."
+	@echo "###"
+else
 signing_key.priv signing_key.x509: x509.genkey
 	@echo "###"
 	@echo "### Now generating an X.509 key pair to be used for signing modules."
@@ -183,7 +192,7 @@ signing_key.priv signing_key.x509: x509.genkey
 	@echo "###"
 	@echo "### Key pair generated."
 	@echo "###"
-
+endif
 x509.genkey:
 	@echo Generating X.509 key generation config
 	@echo  >x509.genkey "[ req ]"
