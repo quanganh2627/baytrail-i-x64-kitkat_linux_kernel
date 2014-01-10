@@ -50,6 +50,25 @@ static int is_basin_cove(struct dwc_otg2 *otg)
 	return data->pmic_type == BASIN_COVE;
 }
 
+static int is_utmi_phy(struct dwc_otg2 *otg)
+{
+	if (!otg || !otg->otg_data)
+		return -EINVAL;
+
+	return otg->usb2_phy.intf == USB2_PHY_UTMI;
+}
+
+void dwc3_switch_mode(struct dwc_otg2 *otg, u32 mode)
+{
+	u32 reg;
+
+	reg = otg_read(otg, GCTL);
+	reg &= ~(GCTL_PRT_CAP_DIR_OTG << GCTL_PRT_CAP_DIR_SHIFT);
+	reg |= mode << GCTL_PRT_CAP_DIR_SHIFT;
+	otg_write(otg, GCTL, reg);
+}
+
+
 static int is_hybridvp(struct dwc_otg2 *otg)
 {
 	struct intel_dwc_otg_pdata *data;
@@ -283,18 +302,24 @@ static void set_sus_phy(struct dwc_otg2 *otg, int bit)
 
 int dwc3_intel_platform_init(struct dwc_otg2 *otg)
 {
-	u32 gctl;
 	int retval;
+	struct intel_dwc_otg_pdata *data;
+
+	data = (struct intel_dwc_otg_pdata *)otg->otg_data;
 
 	/* Init a_bus_drop callback */
 	otg->usb2_phy.a_bus_drop = dwc_a_bus_drop;
 	otg->usb2_phy.vbus_state = VBUS_ENABLED;
+	/* Get usb2 phy type */
+	otg->usb2_phy.intf = data->usb2_phy_type;
 
-	otg_info(otg, "De-assert USBRST# to enable PHY\n");
-	retval = intel_scu_ipc_iowrite8(PMIC_USBPHYCTRL,
-			PMIC_USBPHYCTRL_D0);
-	if (retval)
-		otg_err(otg, "Fail to de-assert USBRST#\n");
+	if (!is_utmi_phy(otg)) {
+		otg_info(otg, "De-assert USBRST# to enable PHY\n");
+		retval = intel_scu_ipc_iowrite8(PMIC_USBPHYCTRL,
+				PMIC_USBPHYCTRL_D0);
+		if (retval)
+			otg_err(otg, "Fail to de-assert USBRST#\n");
+	}
 
 	/* Don't let phy go to suspend mode, which
 	 * will cause FS/LS devices enum failed in host mode.
@@ -311,9 +336,8 @@ int dwc3_intel_platform_init(struct dwc_otg2 *otg)
 	otg_dbg(otg, "\n");
 	otg_write(otg, OEVTEN, 0);
 	otg_write(otg, OCTL, 0);
-	gctl = otg_read(otg, GCTL);
-	gctl |= GCTL_PRT_CAP_DIR_OTG << GCTL_PRT_CAP_DIR_SHIFT;
-	otg_write(otg, GCTL, gctl);
+
+	dwc3_switch_mode(otg, GCTL_PRT_CAP_DIR_OTG);
 
 	return 0;
 }
@@ -334,6 +358,10 @@ static void disable_phy_auto_resume(struct dwc_otg2 *otg)
 static int enable_usb_phy(struct dwc_otg2 *otg, bool on_off)
 {
 	int ret;
+
+	/* UTMI phy have no power control so far. So can't disable it. */
+	if (is_utmi_phy(otg))
+		return 0;
 
 	if (on_off) {
 		ret = intel_scu_ipc_update_register(PMIC_VLDOCNT,
@@ -490,7 +518,7 @@ int shady_cove_get_id(struct dwc_otg2 *otg)
 	 * 61.2k to 74.8kΩ: ACA-B detected
 	 * 32.85k to 40.15kΩ: ACA-C detected
 	 * else: Unknown detected */
-	do_div(rid, 1000UL);
+	rid /= 1000;
 
 	if ((rid > 111500) && (rid < 136400))
 		return RID_A;
@@ -531,13 +559,9 @@ int dwc3_intel_b_idle(struct dwc_otg2 *otg)
 	otg_write(otg, OEVTEN, 0);
 	tmp = otg_read(otg, OEVT);
 	otg_write(otg, OEVT, tmp);
-	otg_write(otg, OCTL, OCTL_PERI_MODE);
 
-	/* Force config to device mode as default */
-	gctl = otg_read(otg, GCTL);
-	gctl &= ~GCTL_PRT_CAP_DIR;
-	gctl |= GCTL_PRT_CAP_DIR_DEV << GCTL_PRT_CAP_DIR_SHIFT;
-	otg_write(otg, GCTL, gctl);
+	/* Force config to otg mode as default. */
+	dwc3_switch_mode(otg, GCTL_PRT_CAP_DIR_OTG);
 
 	if (!is_hybridvp(otg)) {
 		dwc_otg_charger_hwdet(false);
@@ -662,8 +686,9 @@ static int dwc3_intel_notify_charger_type(struct dwc_otg2 *otg,
 	unsigned long flags;
 
 	if (!charger_detect_enable(otg) &&
-		(otg->charging_cap.chrg_type !=
-		POWER_SUPPLY_CHARGER_TYPE_USB_SDP))
+		((otg->charging_cap.chrg_type !=
+		POWER_SUPPLY_CHARGER_TYPE_USB_SDP) ||
+		 event == POWER_SUPPLY_CHARGER_EVENT_DISCONNECT))
 		return 0;
 
 	if (event > POWER_SUPPLY_CHARGER_EVENT_DISCONNECT) {
@@ -967,6 +992,13 @@ static int dwc3_intel_handle_notification(struct notifier_block *nb,
 		state = NOTIFY_OK;
 		break;
 	case USB_EVENT_VBUS:
+		/* WA for EM driver which should not sent VBUS event
+		 * if UTMI PHY selected. */
+		if (!charger_detect_enable(otg)) {
+			state = NOTIFY_OK;
+			goto done;
+		}
+
 		if (*(int *)data) {
 			otg->otg_events |= OEVT_B_DEV_SES_VLD_DET_EVNT;
 			otg->otg_events &= ~OEVT_A_DEV_SESS_END_DET_EVNT;
@@ -982,10 +1014,24 @@ static int dwc3_intel_handle_notification(struct notifier_block *nb,
 			goto done;
 		}
 		cap = (struct power_supply_cable_props *)data;
+		/* Do WA for EM driver which should only send ACA-DOCK */
+		if (cap->chrg_type == POWER_SUPPLY_CHARGER_TYPE_USB_ACA)
+			if (dwc3_intel_get_id(otg) == RID_A)
+				cap->chrg_type = POWER_SUPPLY_CHARGER_TYPE_ACA_DOCK;
+
 		if (!(cap->chrg_type & valid_chrg_type)) {
 			otg_err(otg, "Invalid charger type!\n");
 			state = NOTIFY_BAD;
+			goto done;
 		}
+
+		/* Ignore the events which send by USB driver itself. */
+		if (cap->chrg_evt == POWER_SUPPLY_CHARGER_EVENT_CONNECT)
+			if (cap_record.chrg_type == POWER_SUPPLY_CHARGER_TYPE_USB_SDP) {
+				state = NOTIFY_DONE;
+				goto done;
+			}
+
 		if (cap->chrg_evt == POWER_SUPPLY_CHARGER_EVENT_CONNECT) {
 			otg->otg_events |= OEVT_B_DEV_SES_VLD_DET_EVNT;
 			otg->otg_events &= ~OEVT_A_DEV_SESS_END_DET_EVNT;
@@ -1010,8 +1056,8 @@ static int dwc3_intel_handle_notification(struct notifier_block *nb,
 		state = NOTIFY_DONE;
 	}
 
-done:
 	dwc3_wakeup_otg_thread(otg);
+done:
 	spin_unlock_irqrestore(&otg->lock, flags);
 
 	return state;
@@ -1020,6 +1066,8 @@ done:
 
 int dwc3_intel_prepare_start_host(struct dwc_otg2 *otg)
 {
+	dwc3_switch_mode(otg, GCTL_PRT_CAP_DIR_HOST);
+
 	if (!is_hybridvp(otg)) {
 		enable_usb_phy(otg, true);
 		usb2phy_eye_optimization(otg);
@@ -1070,9 +1118,32 @@ int dwc3_intel_suspend(struct dwc_otg2 *otg)
 int dwc3_intel_resume(struct dwc_otg2 *otg)
 {
 	struct pci_dev *pci_dev;
+	u32 data;
 
 	if (!otg)
 		return 0;
+
+	/* After resume from D0i3cold. The UTMI PHY D+ drive issue
+	 * reproduced due to all setting be reseted. So switch to OTG
+	 * mode avoid D+ drive too early.
+	 */
+	if (otg->state == DWC_STATE_B_IDLE &&
+			is_utmi_phy(otg)) {
+		otg_write(otg, OEVTEN, 0);
+		otg_write(otg, OCTL, 0);
+		dwc3_switch_mode(otg, GCTL_PRT_CAP_DIR_OTG);
+	}
+
+	/* This is one SCU WA. SCU should set GUSB2PHYCFG0
+	 * bit 4 for ULPI setting. But SCU haven't do that.
+	 * So do WA first until SCU fix.
+	 */
+	data = otg_read(otg, GUSB2PHYCFG0);
+	if (is_utmi_phy(otg))
+		data &= ~(1 << 4);
+	else
+		data |= (1 << 4);
+	otg_write(otg, GUSB2PHYCFG0, data);
 
 	pci_dev = to_pci_dev(otg->dev);
 

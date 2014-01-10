@@ -111,7 +111,7 @@ int sst_download_fw(void)
 	retval = sst_load_fw();
 	if (retval)
 		return retval;
-	pr_debug("fw loaded successful!!!\n");
+	pr_info("fw loaded successful!!!\n");
 
 	if (sst_drv_ctx->ops->restore_dsp_context)
 		sst_drv_ctx->ops->restore_dsp_context();
