@@ -210,8 +210,8 @@ static struct drm_conn_prop_enum_list drm_connector_enum_list[] =
 	{ DRM_MODE_CONNECTOR_HDMIB, "HDMI-B" },
 	{ DRM_MODE_CONNECTOR_TV, "TV" },
 	{ DRM_MODE_CONNECTOR_eDP, "eDP" },
-	{ DRM_MODE_CONNECTOR_VIRTUAL, "Virtual" },
 	{ DRM_MODE_CONNECTOR_DSI, "DSI" },
+	{ DRM_MODE_CONNECTOR_VIRTUAL, "Virtual" },
 };
 
 static const struct drm_prop_enum_list drm_encoder_enum_list[] =
@@ -220,8 +220,8 @@ static const struct drm_prop_enum_list drm_encoder_enum_list[] =
 	{ DRM_MODE_ENCODER_TMDS, "TMDS" },
 	{ DRM_MODE_ENCODER_LVDS, "LVDS" },
 	{ DRM_MODE_ENCODER_TVDAC, "TV" },
-	{ DRM_MODE_ENCODER_VIRTUAL, "Virtual" },
 	{ DRM_MODE_ENCODER_DSI, "DSI" },
+	{ DRM_MODE_ENCODER_VIRTUAL, "Virtual" },
 };
 
 struct drm_mode_object *gobj;
@@ -1279,7 +1279,9 @@ static void drm_crtc_convert_to_umode(struct drm_mode_modeinfo *out,
 	out->vrefresh = in->vrefresh;
 	out->flags = in->flags;
 	out->type = in->type;
+#if defined(CONFIG_DRM_I915)
 	out->picture_aspect_ratio = in->picture_aspect_ratio;
+#endif
 	strncpy(out->name, in->name, DRM_DISPLAY_MODE_LEN);
 	out->name[DRM_DISPLAY_MODE_LEN-1] = 0;
 }
@@ -1315,7 +1317,9 @@ static int drm_crtc_convert_umode(struct drm_display_mode *out,
 	out->vrefresh = in->vrefresh;
 	out->flags = in->flags;
 	out->type = in->type;
+#if defined(CONFIG_DRM_I915)
 	out->picture_aspect_ratio = in->picture_aspect_ratio;
+#endif
 	strncpy(out->name, in->name, DRM_DISPLAY_MODE_LEN);
 	out->name[DRM_DISPLAY_MODE_LEN-1] = 0;
 

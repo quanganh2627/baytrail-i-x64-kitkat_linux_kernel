@@ -130,8 +130,8 @@ static struct mdm_ctrl_pmic_data pmic_mrfl = {
 };
 
 static struct mdm_ctrl_pmic_data pmic_moor = {
-	.chipctrl = 0x1031,
-	.chipctrlon = 0x1,
+	.chipctrl = 0x31,
+	.chipctrlon = 0x2,
 	.chipctrloff = 0x0,
 	.chipctrl_mask = 0xFC,
 	.early_pwr_on = false,
@@ -178,7 +178,7 @@ void *cpu_data[] = {
 	&cpu_generic,		/* CPU_CLVIEW */
 	&cpu_tangier,		/* CPU_TANGIER */
 	&cpu_generic,		/* CPU_VVIEW */
-	&cpu_generic,		/* CPU_ANNIEDALE */
+	&cpu_tangier,		/* CPU_ANNIEDALE */
 };
 
 /*
@@ -270,8 +270,11 @@ void mcd_register_finalize(struct mcd_base_info const *info)
 			    get_gpio_by_name(cpu_data->gpio_pwr_on_name);
 			cpu_data->gpio_rst_bbn =
 			    get_gpio_by_name(cpu_data->gpio_rst_bbn_name);
-			cpu_data->gpio_cdump =
-			    get_gpio_by_name(cpu_data->gpio_cdump_name);
+			if (info->cpu_ver == CPU_ANNIEDALE)
+				cpu_data->gpio_cdump = 162;
+			else
+				cpu_data->gpio_cdump =
+					get_gpio_by_name(cpu_data->gpio_cdump_name);
 			break;
 		}
 	}
@@ -419,6 +422,9 @@ void *modem_platform_data(void *data)
 
 	pr_info("SFI %s cpu: %d mdm: %d pmic: %d.\n", __func__,
 		mcd_info->cpu_ver, mcd_info->mdm_ver, mcd_info->pmic_ver);
+	pr_info("SFI %s cpu: %s, mdm: %s:, conf: %s\n", __func__,
+		cpu_name, mdm_name, config_name);
+
 
 	return mcd_info;
 }

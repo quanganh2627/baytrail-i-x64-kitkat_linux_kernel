@@ -104,24 +104,22 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_BROKEN_AUTO_CMD23			(1<<16)
 /* HC Reg High Speed must be set later than HC2 Reg 1.8v Signaling Enable */
 #define SDHCI_QUIRK2_HIGH_SPEED_SET_LATE		(1<<17)
-/* BRCM voltage support: advertise 2.0v support and force using 1.8v instead */
-#define SDHCI_QUIRK2_ADVERTISE_2V0_FORCE_1V8		(1<<18)
 /* to allow mmc_detect to detach the bus */
 #define SDHCI_QUIRK2_DISABLE_MMC_CAP_NONREMOVABLE	(1<<19)
 /* avoid detect/rescan/poweoff operations on suspend/resume. */
 #define SDHCI_QUIRK2_ENABLE_MMC_PM_IGNORE_PM_NOTIFY	(1<<20)
 /* Disable eMMC/SD card High speed feature. */
 #define SDHCI_QUIRK2_DISABLE_HIGH_SPEED			(1<<21)
-#define SDHCI_QUIRK2_CAN_VDD_300			(1<<22)
-#define SDHCI_QUIRK2_CAN_VDD_330			(1<<23)
+/* Fake VDD for device */
+#define SDHCI_QUIRK2_FAKE_VDD				(1<<22)
 #define SDHCI_QUIRK2_CARD_CD_DELAY			(1<<24)
 #define SDHCI_QUIRK2_WAIT_FOR_IDLE			(1<<25)
 /* BAD sd cd in HOST IC. This will cause system hang when removing SD */
 #define SDHCI_QUIRK2_BAD_SD_CD				(1<<26)
 #define SDHCI_QUIRK2_POWER_PIN_GPIO_MODE		(1<<27)
-#define SDHCI_QUIRK2_ADVERTISE_3V0_FORCE_1V8   (1<<28)
 #define SDHCI_QUIRK2_NON_STD_CIS   (1<<29)
 #define SDHCI_QUIRK2_TUNING_POLL			(1<<30)
+#define SDHCI_QUIRK2_NOT_TUNE				(1<<31)
 
 	int irq;		/* Device IRQ */
 	void __iomem *ioaddr;	/* Mapped address */

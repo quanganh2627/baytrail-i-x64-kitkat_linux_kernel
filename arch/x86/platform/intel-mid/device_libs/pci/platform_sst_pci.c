@@ -110,8 +110,9 @@ static const struct sst_info ctp_sst_info = {
 	.imr_start = 0,
 	.imr_end = 0,
 	.imr_use = false,
+	.mailbox_start = 0,
+	.lpe_viewpt_rqd = false,
 	.use_elf = false,
-	.dma_addr_ia_viewpt = true,
 	.max_streams = MAX_NUM_STREAMS_CTP,
 	.dma_max_len = (SST_MAX_DMA_LEN * 4),
 	.num_probes = 1,
@@ -133,8 +134,9 @@ static const struct sst_info mrfld_sst_info = {
 	.imr_start = 0,
 	.imr_end = 0,
 	.imr_use = false,
+	.mailbox_start = 0,
 	.use_elf = true,
-	.dma_addr_ia_viewpt = true,
+	.lpe_viewpt_rqd = false,
 	.max_streams = MAX_NUM_STREAMS_MRFLD,
 	.dma_max_len = SST_MAX_DMA_LEN_MRFLD,
 	.num_probes = 16,
@@ -222,6 +224,7 @@ static struct sst_platform_info *get_sst_platform_data(struct pci_dev *pdev)
 		sst_pinfo = &sst_data;
 		break;
 	case PCI_DEVICE_ID_INTEL_SST_MRFLD:
+	case PCI_DEVICE_ID_INTEL_SST_MOOR:
 		set_mrfld_sst_config(&sst_data);
 		sst_pinfo = &sst_data;
 		break;
@@ -239,4 +242,6 @@ static void sst_pci_early_quirks(struct pci_dev *pci_dev)
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SST_CLV,
 							sst_pci_early_quirks);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SST_MRFLD,
+							sst_pci_early_quirks);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SST_MOOR,
 							sst_pci_early_quirks);

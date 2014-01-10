@@ -3035,7 +3035,8 @@ static int wm8994_aif3_hw_params(struct snd_pcm_substream *substream,
 	return snd_soc_update_bits(codec, aif1_reg, WM8994_AIF1_WL_MASK, aif1);
 }
 
-#if IS_ENABLED(CONFIG_SND_MRFLD_MACHINE)
+#if IS_ENABLED(CONFIG_SND_MRFLD_MACHINE) || \
+	IS_ENABLED(CONFIG_SND_MOOR_MACHINE)
 static int wm8994_aif_mute(struct snd_soc_dai *codec_dai, int mute)
 {
 	return 0;
@@ -4617,6 +4618,7 @@ static int wm8994_suspend(struct device *dev)
 	struct wm8994 *control = wm8994->wm8994;
 	struct snd_soc_codec *codec = wm8994->hubs.codec;
 	unsigned int reg;
+	int ret;
 
 
 	/* Drop down to power saving mode when system is suspended */
@@ -4633,7 +4635,17 @@ static int wm8994_suspend(struct device *dev)
 		dev_dbg(codec->dev, "%s: WM8958_MIC_DETECT_3 0x%x\n", __func__, reg);
 
 		if ((reg & WM8958_MICD_VALID) &&  !(reg & WM8958_MICD_STS)) {
+
+			dev_dbg(codec->dev, "Disable interrupt...\n");
 			snd_soc_write(codec, WM8994_INTERRUPT_CONTROL, 0x01);
+
+			ret = regcache_sync_region(wm8994->wm8994->regmap,
+					WM8994_INTERRUPT_CONTROL,
+					WM8994_INTERRUPT_CONTROL);
+			if (ret != 0)
+				dev_err(dev, "Failed to sync register: %d\n", ret);
+			synchronize_irq(control->irq);
+
 			dev_dbg(codec->dev, "Disable MIC Detection!!!\n");
 			snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 						WM8958_MICD_ENA, 0);

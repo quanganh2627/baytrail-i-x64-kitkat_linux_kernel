@@ -13,6 +13,7 @@
 #include <linux/device.h>
 #include <linux/mmc/core.h>
 #include <linux/mod_devicetable.h>
+#include <linux/mmc/sdio.h>
 
 struct mmc_cid {
 	unsigned int		manfid;

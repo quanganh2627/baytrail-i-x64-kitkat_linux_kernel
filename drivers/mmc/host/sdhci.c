@@ -1677,6 +1677,11 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		    !(present_state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
 			mrq->cmd->opcode != MMC_SEND_STATUS) {
 			if (mmc->card) {
+				/* Do not tuning for write CMD52 */
+				if (host->quirks2 & SDHCI_QUIRK2_NOT_TUNE &&
+				    IS_IO_RW_DIRECT_WRITE(mrq->cmd->opcode,
+				    mrq->cmd->arg))
+					goto end_tuning;
 				if ((mmc->card->ext_csd.part_config & 0x07) ==
 					EXT_CSD_PART_CONFIG_ACC_RPMB)
 					goto end_tuning;
@@ -1730,9 +1735,6 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 	u8 ctrl;
 
 	spin_lock_irqsave(&host->lock, flags);
-
-	if (host->quirks2 & SDHCI_QUIRK2_ADVERTISE_2V0_FORCE_1V8)
-		ios->vdd = 7;
 
 	if (host->flags & SDHCI_DEVICE_DEAD) {
 		spin_unlock_irqrestore(&host->lock, flags);
@@ -4106,11 +4108,6 @@ int sdhci_add_host(struct sdhci_host *host)
 		sdhci_readl(host, SDHCI_CAPABILITIES);
 
 
-	if (host->quirks2 & SDHCI_QUIRK2_CAN_VDD_300)
-		caps[0] |= SDHCI_CAN_VDD_300;
-	if (host->quirks2 & SDHCI_QUIRK2_CAN_VDD_330)
-		caps[0] |= SDHCI_CAN_VDD_330;
-
 	if (host->version >= SDHCI_SPEC_300)
 		caps[1] = (host->quirks & SDHCI_QUIRK_MISSING_CAPS) ?
 			host->caps1 :
@@ -4409,6 +4406,10 @@ int sdhci_add_host(struct sdhci_host *host)
 		}
 	}
 
+	if (host->quirks2 & SDHCI_QUIRK2_FAKE_VDD)
+		caps[0] |= SDHCI_CAN_VDD_330 | SDHCI_CAN_VDD_300 |
+			SDHCI_CAN_VDD_180;
+
 	if (caps[0] & SDHCI_CAN_VDD_330) {
 		ocr_avail |= MMC_VDD_32_33 | MMC_VDD_33_34;
 
@@ -4433,11 +4434,6 @@ int sdhci_add_host(struct sdhci_host *host)
 				   SDHCI_MAX_CURRENT_180_SHIFT) *
 				   SDHCI_MAX_CURRENT_MULTIPLIER;
 	}
-
-	if (host->quirks2 & SDHCI_QUIRK2_ADVERTISE_2V0_FORCE_1V8)
-		ocr_avail |= MMC_VDD_20_21;
-	if (host->quirks2 & SDHCI_QUIRK2_ADVERTISE_3V0_FORCE_1V8)
-		ocr_avail |= MMC_VDD_32_33;
 
 	mmc->ocr_avail = ocr_avail;
 	mmc->ocr_avail_sdio = ocr_avail;

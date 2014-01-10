@@ -40,8 +40,6 @@
 #define MRFL_VOLT_SHUTDOWN_MASK (1 << 1)
 #define MRFL_NFC_RESV_MASK	(1 << 3)
 
-#define BYT_TEMP_HYSTERESIS	3
-
 void max17042_i2c_reset_workaround(void)
 {
 /* toggle clock pin of I2C to recover devices from abnormal status.
@@ -411,16 +409,10 @@ static void init_callbacks(struct max17042_platform_data *pdata)
 		pdata->get_vmax_threshold = byt_get_vbatt_max;
 		pdata->is_volt_shutdown = 1;
 		pdata->reset_chip = true;
-		if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1) ||
-			INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, 8PR1)) {
-			pdata->temp_min_lim = 0 + BYT_TEMP_HYSTERESIS;
-			pdata->temp_max_lim = 55 - BYT_TEMP_HYSTERESIS;
-		} else {
-			pdata->temp_min_lim = 0;
-			pdata->temp_max_lim = 55;
-		}
+		pdata->temp_min_lim = 0;
+		pdata->temp_max_lim = 55;
 		pdata->volt_min_lim = 3400;
-		pdata->volt_max_lim = 4400;
+		pdata->volt_max_lim = 4350;
 	}
 
 	pdata->reset_i2c_lines = max17042_i2c_reset_workaround;
@@ -430,7 +422,9 @@ static bool max17042_is_valid_batid(void)
 {
 	bool ret = true;
 #ifdef CONFIG_CHARGER_SMB347
-	ret = smb347_is_valid_batid();
+	 if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1) ||
+		INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, 8PR1))
+		ret = smb347_is_valid_batid();
 #endif
 	return ret;
 }
@@ -507,6 +501,7 @@ static void init_platform_params(struct max17042_platform_data *pdata)
 			pdata->enable_current_sense = false;
 			pdata->valid_battery = false;
 		}
+		pdata->en_vmax_intr = true;
 		pdata->file_sys_storage_enabled = 1;
 		pdata->soc_intr_mode_enabled = true;
 		snprintf(pdata->model_name, (MODEL_NAME_LEN + 1),

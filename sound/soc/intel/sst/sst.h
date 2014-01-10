@@ -43,6 +43,7 @@
 #define SST_CLV_PCI_ID	0x08E7
 #define SST_MRFLD_PCI_ID 0x119A
 #define SST_BYT_PCI_ID  0x0F28
+#define SST_CHT_PCI_ID 0x22A8
 
 #define PCI_ID_LENGTH 4
 #define SST_SUSPEND_DELAY 2000
@@ -342,6 +343,8 @@ struct sst_debugfs {
 	int			runtime_pm_status;
 	void __iomem            *ssp[SST_MAX_SSP_PORTS];
 	void __iomem            *dma_reg[SST_MAX_DMA];
+	unsigned char get_params_data[1024];
+	ssize_t get_params_len;
 };
 
 struct lpe_log_buf_hdr {
@@ -477,6 +480,7 @@ struct sst_vtsv_cache {
  */
 struct intel_sst_drv {
 	int			sst_state;
+	int			irq_num;
 	unsigned int		pci_id;
 	bool			use_32bit_ops;
 	void __iomem		*ddr;
@@ -561,8 +565,9 @@ struct intel_sst_drv {
 };
 
 extern struct intel_sst_drv *sst_drv_ctx;
-extern struct sst_platform_info byt_ffrd10_platform_data;
+extern struct sst_platform_info byt_rvp_platform_data;
 extern struct sst_platform_info byt_ffrd8_platform_data;
+extern struct sst_platform_info cht_platform_data;
 
 /* misc definitions */
 #define FW_DWNL_ID 0xFF
@@ -590,6 +595,7 @@ struct intel_sst_ops {
 	void (*restore_dsp_context) (void);
 	int (*alloc_stream) (char *params, struct sst_block *block);
 	void (*post_download)(struct intel_sst_drv *sst);
+	void (*do_recovery)(struct intel_sst_drv *sst);
 };
 
 int sst_alloc_stream(char *params, struct sst_block *block);
@@ -662,7 +668,6 @@ int intel_sst_remove_compress(struct intel_sst_drv *sst);
 void sst_cdev_fragment_elapsed(int str_id);
 int vibra_pwm_configure(unsigned int enable);
 int sst_send_sync_msg(int ipc, int str_id);
-int sst_send_ipc_msg_nowait(struct ipc_post **msg);
 int sst_get_num_channel(struct snd_sst_params *str_param);
 int sst_get_wdsize(struct snd_sst_params *str_param);
 int sst_get_sfreq(struct snd_sst_params *str_param);
@@ -690,6 +695,9 @@ int sst_acpi_remove(struct platform_device *pdev);
 void sst_save_shim64(struct intel_sst_drv *ctx, void __iomem *shim,
 		     struct sst_shim_regs64 *shim_regs);
 int sst_send_vtsv_data_to_fw(struct intel_sst_drv *ctx);
+
+void sst_do_recovery_mrfld(struct intel_sst_drv *sst);
+void sst_do_recovery(struct intel_sst_drv *sst);
 
 static inline int sst_pm_runtime_put(struct intel_sst_drv *sst_drv)
 {
@@ -928,5 +936,15 @@ static inline u32 relocate_imr_addr_mrfld(u32 base_addr)
 	/* relocate the base */
 	base_addr = MRFLD_FW_VIRTUAL_BASE + (base_addr % (512 * 1024 * 1024));
 	return base_addr;
+}
+
+static inline void sst_add_to_dispatch_list_and_post(struct intel_sst_drv *sst,
+						struct ipc_post *msg)
+{
+	unsigned long irq_flags;
+	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
+	list_add_tail(&msg->node, &sst->ipc_dispatch_list);
+	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
+	sst->ops->post_message(&sst->ipc_post_msg_wq);
 }
 #endif

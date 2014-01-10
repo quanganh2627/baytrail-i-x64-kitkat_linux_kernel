@@ -1522,6 +1522,19 @@ typedef struct drm_i915_private {
 		uint16_t cur_latency[5];
 	} wm;
 
+	/* Kernel managed batch buffer objects */
+	struct {
+		struct list_head inactive_list;
+		struct list_head active_list;
+	} batch_pool[I915_NUM_RINGS];
+
+	/* Command parser */
+	struct drm_i915_cmd_table *append_cmd_table[I915_NUM_RINGS];
+	struct {
+		unsigned int *table;
+		int count;
+	} append_reg[I915_NUM_RINGS];
+
 	struct i915_package_c8 pc8;
 
 	/* Old dri1 support infrastructure, beware the dragons ya fools entering
@@ -1614,6 +1627,9 @@ struct drm_i915_gem_object {
 	/** Stolen memory for this object, instead of being backed by shmem. */
 	struct drm_mm_node *stolen;
 	struct list_head global_list;
+
+	/** This object's place in the ring batch pool */
+	struct list_head ring_batch_pool_list;
 
 	struct list_head ring_list;
 	/** Used in execbuf to temporarily hold a ref */
@@ -1818,8 +1834,11 @@ struct drm_i915_gem_request {
 	/** Context related to this request */
 	struct i915_hw_context *ctx;
 
-	/** Batch buffer related to this request if any */
+	/** Batch buffer (user copy) related to this request if any */
 	struct drm_i915_gem_object *batch_obj;
+
+	/** Batch buffer (kernel copy) related to this request if any */
+	struct drm_i915_gem_object *krn_batch_obj;
 
 	/** Time at which this request was emitted, in jiffies. */
 	unsigned long emitted_jiffies;
@@ -1849,6 +1868,19 @@ struct drm_i915_file_private {
 		int max_freq;
 		int rc6_disable;
 	} perfmon_override_counter;
+};
+
+struct drm_i915_cmd_descriptor;
+
+/**
+ * A table of commands requiring special handling by the command parser.
+ *
+ * Each ring has an array of tables. Each table consists of an array of command
+ * descriptors, which must be sorted with command opcodes in ascending order.
+ */
+struct drm_i915_cmd_table {
+	const struct drm_i915_cmd_descriptor *table;
+	int count;
 };
 
 #define INTEL_INFO(dev)	(to_i915(dev)->info)
@@ -2013,6 +2045,8 @@ extern bool i915_fastboot __read_mostly;
 extern int i915_enable_pc8 __read_mostly;
 extern int i915_pc8_timeout __read_mostly;
 extern bool i915_prefault_disable __read_mostly;
+extern int i915_enable_kernel_batch_copy __read_mostly;
+extern int i915_enable_cmd_parser __read_mostly;
 
 extern int i915_suspend(struct drm_device *dev, pm_message_t state);
 extern int i915_resume(struct drm_device *dev);
@@ -2129,6 +2163,7 @@ void i915_gem_object_init(struct drm_i915_gem_object *obj,
 			 const struct drm_i915_gem_object_ops *ops);
 struct drm_i915_gem_object *i915_gem_alloc_object(struct drm_device *dev,
 						  size_t size);
+void *i915_gem_object_vmap(struct drm_i915_gem_object *obj);
 void i915_gem_free_object(struct drm_gem_object *obj);
 struct i915_vma *i915_gem_vma_create(struct drm_i915_gem_object *obj,
 				     struct i915_address_space *vm);
@@ -2468,6 +2503,15 @@ int i915_verify_lists(struct drm_device *dev);
 #else
 #define i915_verify_lists(dev) 0
 #endif
+
+/* i915_cmd_parser.c */
+int i915_parse_cmds(struct intel_ring_buffer *ring,
+		    u32 batch_start_offset,
+		    u32 *batch_base,
+		    u32 batch_obj_size);
+int i915_cmd_parser_append_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv);
+void i915_cmd_parser_cleanup(drm_i915_private_t *dev_priv);
 
 /* i915_debugfs.c */
 int i915_debugfs_init(struct drm_minor *minor);
