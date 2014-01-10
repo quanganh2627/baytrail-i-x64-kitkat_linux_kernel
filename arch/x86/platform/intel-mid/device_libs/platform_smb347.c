@@ -189,7 +189,8 @@ static struct smb347_charger_platform_data byt_t_ffrd8_pr1_pdata = {
 						0x03, 0xED,
 				/* enable Auto recharge, Turbo charge+ */
 						0x04, 0x3D,
-						0x05, 0x05,
+					/* disable safety timer */
+						0x05, 0x0F,
 				/* enable APSD interrupt along with others */
 						0x06, 0x06,
 						0x07, 0x85,
@@ -294,7 +295,7 @@ bool smb347_is_valid_batid(void)
 		 * between 0x40 to 0x60. This is workaround to check
 		 * the valid batid with actual battery.
 		 */
-		if ((val <= 0x60)
+		if ((val >= 0x30 && val <= 0x60)
 			|| (val > BYT_FFD8_PR1_BATID_LL
 			&& val < BYT_FFD8_PR1_BATID_UL))
 			is_valid = true;
