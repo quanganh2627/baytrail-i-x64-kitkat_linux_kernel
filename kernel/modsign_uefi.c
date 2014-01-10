@@ -1,3 +1,4 @@
+#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
