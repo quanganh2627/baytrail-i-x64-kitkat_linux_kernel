@@ -47,7 +47,7 @@ struct i2c_hid_hw_data {
 	int (*hw_resume)(struct i2c_client *client);
 };
 
-#ifdef CONFIG_I2C_HIDHW
+#if ((CONFIG_I2C_HIDHW == m) || (CONFIG_I2C_HIDHW == y))
 int i2c_set_hwdata(struct i2c_client *client, struct i2c_hid_hw_data *ihid);
 #else
 inline int i2c_set_hwdata(struct i2c_client *client, struct i2c_hid_hw_data *ihid) { return 0; }
