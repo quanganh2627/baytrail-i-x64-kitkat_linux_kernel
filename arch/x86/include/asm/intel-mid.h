@@ -39,6 +39,8 @@
 #define INTEL_MID_SSN_SIZE	32
 
 extern struct soft_platform_id spid;
+extern int board_id __read_mostly;
+#define BOARD_ID_BAYROCK 5
 extern char intel_mid_ssn[INTEL_MID_SSN_SIZE + 1];
 extern int intel_mid_pci_init(void);
 extern int get_gpio_by_name(const char *name);

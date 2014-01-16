@@ -1296,13 +1296,13 @@ sub ERROR {
 }
 sub WARN {
 	if (report("WARNING", $_[0], $_[1])) {
-		our $clean = 0;
+		#our $clean = 0;
 		our $cnt_warn++;
 	}
 }
 sub CHK {
 	if ($check && report("CHECK", $_[0], $_[1])) {
-		our $clean = 0;
+		#our $clean = 0;
 		our $cnt_chk++;
 	}
 }
@@ -1768,7 +1768,7 @@ sub process {
 		    $line =~ /^\+\s*"[^"]*"\s*(?:\s*|,|\)\s*;)\s*$/) &&
 		    $length > 80)
 		{
-			WARN("LONG_LINE",
+			CHK("LONG_LINE",
 			     "line over 80 characters\n" . $herecurr);
 		}
 

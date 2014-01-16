@@ -1479,6 +1479,26 @@ static int dwc_otg_handle_notification(struct notifier_block *nb,
 	return state;
 }
 
+static int dwc_phy_init(struct usb_phy *x)
+{
+	struct dwc_otg2 *otg = container_of(x, struct dwc_otg2, phy);
+
+	if (otg->otg_data->is_byt && otg->otg_data->gpio_cs
+		&& otg->otg_data->gpio_reset) {
+		/* Turn ON PHY via CS pin */
+		gpio_direction_output(otg->otg_data->gpio_cs, 1);
+		udelay(200);
+
+		/* Do PHY reset after enable the PHY */
+		gpio_direction_output(otg->otg_data->gpio_reset, 0);
+		udelay(200);
+		gpio_set_value(otg->otg_data->gpio_reset, 1);
+		mdelay(30);
+	}
+
+	return 0;
+}
+
 /* This function will control VUSBPHY to power gate/ungate USBPHY */
 static int enable_usb_phy(struct dwc_otg2 *otg, bool on_off)
 {
@@ -1885,6 +1905,7 @@ static int dwc_otg_probe(struct pci_dev *pdev,
 	otg->phy.host_release   = dwc_otg2_received_host_release;
 	otg->phy.set_power	= dwc_otg_set_power;
 	otg->phy.io_ops	= &dwc_otg_io_ops;
+	otg->phy.init		= dwc_phy_init;
 	otg->phy.get_chr_status	= dwc_otg_get_chr_status;
 	otg->otg.set_host	= dwc_otg2_set_host;
 	otg->otg.set_peripheral	= dwc_otg2_set_peripheral;
