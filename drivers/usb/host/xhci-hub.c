@@ -946,6 +946,10 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				xhci_dbg(xhci, "Invalide test case!\n");
 				goto error;
 			}
+			/* prevent controller enters Low power state in Test mode.
+			 * some controller will exit Test mode once enter low power
+			 * mode */
+			pm_runtime_get(hcd->self.controller);
 			temp = xhci_readl(xhci, status_reg);
 			temp |= selector << 28;
 			xhci_writel(xhci, temp, status_reg);
@@ -1236,6 +1240,10 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 				xhci_set_link_state(xhci, port_array,
 						port_index, XDEV_RESUME);
 
+				/* need 1ms delay between access to USB2 PORTSC
+				 * and USB3 PORTSC to avoid Fabric Error.
+				 * */
+				mdelay(1);
 				spin_unlock_irqrestore(&xhci->lock, flags);
 				msleep(20);
 				spin_lock_irqsave(&xhci->lock, flags);

@@ -59,6 +59,7 @@ MODULE_PARM_DESC(dmapool, "dma pool size (default=4M)");
 
 static DEFINE_PCI_DEVICE_TABLE(mei_txe_pci_tbl) = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0F18)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x2298)},
 	{0, }
 };
 MODULE_DEVICE_TABLE(pci, mei_txe_pci_tbl);
@@ -162,7 +163,7 @@ static int mei_alloc_dma(struct mei_device *dev)
 	if (hw->pool_size == 0)
 		return 0;
 
-	/*  Limmit pools size to satt max range */
+	/*  Limit pools size to satt max range */
 	hw->pool_size = min_t(size_t, hw->pool_size, SATT_RANGE_MAX);
 
 	hw->pool_vaddr = dma_alloc_coherent(&dev->pdev->dev, hw->pool_size,

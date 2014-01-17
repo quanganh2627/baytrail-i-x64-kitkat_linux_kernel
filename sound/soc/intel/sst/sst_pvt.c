@@ -199,7 +199,6 @@ static void dump_sst_crash_area(void)
  * @iram		: true if iram dump else false
  * This function dumps the iram dram data into the respective buffers
  */
-#if IS_ENABLED(CONFIG_SND_INTEL_SST_RECOVERY)
 static void dump_ram_area(struct intel_sst_drv *sst,
 			struct sst_dump_buf *dump_buf, enum sst_ram_type type)
 {
@@ -229,10 +228,66 @@ static void sst_stream_recovery(struct intel_sst_drv *sst)
 	}
 }
 
-static void sst_do_recovery(struct intel_sst_drv *sst)
+static void sst_dump_lists(struct intel_sst_drv *sst)
 {
 	struct ipc_post *m, *_m;
 	unsigned long irq_flags;
+
+	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
+	if (list_empty(&sst->ipc_dispatch_list))
+		pr_err("ipc dispatch list is Empty\n");
+
+	list_for_each_entry_safe(m, _m, &sst->ipc_dispatch_list, node) {
+		pr_err("ipc-dispatch:pending msg header %#x\n", m->header.full);
+		list_del(&m->node);
+		kfree(m->mailbox_data);
+		kfree(m);
+	}
+	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
+
+	spin_lock_irqsave(&sst->rx_msg_lock, irq_flags);
+	if (list_empty(&sst->rx_list))
+		pr_err("rx msg list is empty\n");
+
+	list_for_each_entry_safe(m, _m, &sst->rx_list, node) {
+		pr_err("rx: pending msg header %#x\n", m->header.full);
+		list_del(&m->node);
+		kfree(m->mailbox_data);
+		kfree(m);
+	}
+	spin_unlock_irqrestore(&sst->rx_msg_lock, irq_flags);
+}
+
+/* num_dwords: should be multiple of 4 */
+static void dump_buffer_fromio(void __iomem *from,
+				     unsigned int num_dwords)
+{
+	int i;
+	u32 val[4];
+
+	if (num_dwords % 4) {
+		pr_err("%s: num_dwords %d not multiple of 4\n",
+				__func__, num_dwords);
+		return;
+	}
+
+	pr_err("****** Start *******\n");
+	pr_err("Dump %d dwords, from location %p\n", num_dwords, from);
+
+	for (i = 0; i < num_dwords; ) {
+		val[0] = ioread32(from + (i++ * 4));
+		val[1] = ioread32(from + (i++ * 4));
+		val[2] = ioread32(from + (i++ * 4));
+		val[3] = ioread32(from + (i++ * 4));
+		pr_err("%.8x %.8x %.8x %.8x\n", val[0], val[1], val[2], val[3]);
+	}
+	pr_err("****** End *********\n\n\n");
+}
+
+#define SRAM_OFFSET_MRFLD	0xc00
+#define NUM_DWORDS		256
+void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
+{
 	char iram_event[30], dram_event[30], ddr_imr_event[65];
 	char *envp[4];
 	int env_offset = 0;
@@ -245,10 +300,6 @@ static void sst_do_recovery(struct intel_sst_drv *sst)
 	pr_err("Audio: Intel SST engine encountered an unrecoverable error\n");
 	pr_err("Audio: trying to reset the dsp now\n");
 
-	if (sst->sst_state == SST_FW_RUNNING &&
-		sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
-		dump_sst_crash_area();
-
 	mutex_lock(&sst->sst_lock);
 	sst->sst_state = SST_UN_INIT;
 	sst_stream_recovery(sst);
@@ -258,6 +309,12 @@ static void sst_do_recovery(struct intel_sst_drv *sst)
 	dump_stack();
 	dump_sst_shim(sst);
 	reset_sst_shim(sst);
+
+	/* dump mailbox and sram */
+	pr_err("Dumping Mailbox...\n");
+	dump_buffer_fromio(sst->mailbox, NUM_DWORDS);
+	pr_err("Dumping SRAM...\n");
+	dump_buffer_fromio(sst->mailbox + SRAM_OFFSET_MRFLD, NUM_DWORDS);
 
 	if (sst_drv_ctx->ops->set_bypass) {
 
@@ -289,41 +346,12 @@ static void sst_do_recovery(struct intel_sst_drv *sst)
 	sst_drv_ctx->pvt_id = 0;
 	spin_unlock(&sst_drv_ctx->pvt_id_lock);
 
-	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
-	if (list_empty(&sst->ipc_dispatch_list))
-		pr_err("ipc dispatch list is Empty\n");
-	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
-
-	list_for_each_entry_safe(m, _m, &sst->ipc_dispatch_list, node) {
-		pr_err("ipc-dispatch:pending msg header %#x\n", m->header.full);
-		list_del(&m->node);
-		kfree(m->mailbox_data);
-		kfree(m);
-	}
-
-	spin_lock_irqsave(&sst->rx_msg_lock, irq_flags);
-	if (list_empty(&sst->rx_list))
-		pr_err("rx msg list is empty\n");
-	spin_unlock_irqrestore(&sst->rx_msg_lock, irq_flags);
-
-	list_for_each_entry_safe(m, _m, &sst->rx_list, node) {
-		pr_err("rx: pending msg header %#x\n", m->header.full);
-		list_del(&m->node);
-		kfree(m->mailbox_data);
-		kfree(m);
-	}
+	sst_dump_lists(sst_drv_ctx);
 }
-#else
-static void sst_do_recovery(struct intel_sst_drv *sst)
-{
-	struct ipc_post *m, *_m;
-	unsigned long irq_flags;
 
-	if ((sst->pci_id == SST_MRFLD_PCI_ID) ||
-		(sst->pci_id == PCI_DEVICE_ID_INTEL_SST_MOOR)) {
-		dump_stack();
-		return;
-	}
+void sst_do_recovery(struct intel_sst_drv *sst)
+{
+	pr_err("Audio: Intel SST engine encountered an unrecoverable error\n");
 
 	dump_stack();
 	dump_sst_shim(sst);
@@ -332,14 +360,8 @@ static void sst_do_recovery(struct intel_sst_drv *sst)
 		sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
 		dump_sst_crash_area();
 
-	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
-	if (list_empty(&sst->ipc_dispatch_list))
-		pr_err("List is Empty\n");
-	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
-	list_for_each_entry_safe(m, _m, &sst->ipc_dispatch_list, node)
-		pr_err("pending msg header %#x\n", m->header.full);
+	sst_dump_lists(sst_drv_ctx);
 }
-#endif
 
 /*
  * sst_wait_timeout - wait on event for timeout
@@ -376,7 +398,8 @@ int sst_wait_timeout(struct intel_sst_drv *sst_drv_ctx, struct sst_block *block)
 			pr_err("reseting fw state to unint...\n");
 			sst_drv_ctx->sst_state = SST_UN_INIT;
 		} else {
-			sst_do_recovery(sst_drv_ctx);
+			if (sst_drv_ctx->ops->do_recovery)
+				sst_drv_ctx->ops->do_recovery(sst_drv_ctx);
 		}
 
 		retval = -EBUSY;

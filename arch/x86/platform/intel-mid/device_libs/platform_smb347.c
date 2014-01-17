@@ -55,7 +55,7 @@ static struct smb347_charger_platform_data smb347_rr_pdata = {
 						0x0B, 0x5A,
 						0x0C, 0xC1,
 						0x0D, 0x46,
-						0x00, 0x00,
+						0xFF, 0xFF
 					},
 };
 
@@ -90,7 +90,8 @@ static struct smb347_charger_platform_data smb347_ev05_pdata = {
 						0x0C, 0x81,
 						0x0D, 0x02,
 						0x0E, 0x20,
-						0x10, 0x7F
+						0x10, 0x7F,
+						0xFF, 0xFF
 					},
 };
 
@@ -124,7 +125,8 @@ static struct smb347_charger_platform_data smb347_ev10_pdata = {
 						0x0C, 0x8D,
 						0x0D, 0x00,
 						0x0E, 0x20,
-						0x10, 0x7F
+						0x10, 0x7F,
+						0xFF, 0xFF
 					},
 };
 
@@ -162,7 +164,8 @@ static struct smb347_charger_platform_data byt_t_ffrd8_pr0_pdata = {
 						0x10, 0x40,
 			/* disable suspend as charging didnot start*/
 						0x30, 0x42,  /*orig:0x46*/
-						0x31, 0x00
+						0x31, 0x00,
+						0xFF, 0xFF
 					},
 };
 
@@ -203,6 +206,7 @@ static struct smb347_charger_platform_data byt_t_ffrd8_pr1_pdata = {
 						0x0D, 0xF4,
 						0x10, 0x40,
 						0x31, 0x01,
+						0xFF, 0xFF
 					},
 };
 
@@ -239,6 +243,7 @@ static struct smb347_charger_platform_data byt_t_cr_crb_pdata = {
 						0x10, 0x40,
 						0x30, 0x42,
 						0x31, 0x00,
+						0xFF, 0xFF
 					},
 };
 
@@ -295,7 +300,7 @@ bool smb347_is_valid_batid(void)
 		 * between 0x40 to 0x60. This is workaround to check
 		 * the valid batid with actual battery.
 		 */
-		if ((val >= 0x30 && val <= 0x60)
+		if ((val <= 0x60)
 			|| (val > BYT_FFD8_PR1_BATID_LL
 			&& val < BYT_FFD8_PR1_BATID_UL))
 			is_valid = true;

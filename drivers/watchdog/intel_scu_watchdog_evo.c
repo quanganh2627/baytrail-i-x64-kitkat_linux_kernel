@@ -554,7 +554,7 @@ static int reboot_notifier(struct notifier_block *this,
 
 #ifdef CONFIG_DEBUG_FS
 /* This code triggers a Security Watchdog */
-int open_security(struct inode *i, struct file *f)
+int write_security(struct inode *i, struct file *f)
 {
 	int ret = 0;
 	void __iomem *ptr;
@@ -577,7 +577,9 @@ error:
 }
 
 static const struct file_operations security_watchdog_fops = {
-	.open = open_security,
+	.open = nonseekable_open,
+	.write = write_security,
+	.llseek = no_llseek,
 };
 
 static int kwd_trigger_write(struct file *file, const char __user *buff,
@@ -589,9 +591,9 @@ static int kwd_trigger_write(struct file *file, const char __user *buff,
 }
 
 static const struct file_operations kwd_trigger_fops = {
-	.open		= nonseekable_open,
-	.write		= kwd_trigger_write,
-	.llseek		= no_llseek,
+	.open = nonseekable_open,
+	.write = kwd_trigger_write,
+	.llseek = no_llseek,
 };
 
 static int kwd_reset_type_release(struct inode *inode, struct file *file)
@@ -747,7 +749,7 @@ static int create_debugfs_entries(void)
 
 	/* /sys/kernel/debug/watchdog/security_watchdog/trigger */
 	dev->dfs_secwd_trigger = debugfs_create_file("trigger",
-				    S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
+				    S_IFREG | S_IWUSR | S_IWGRP,
 				    dev->dfs_secwd, NULL,
 				    &security_watchdog_fops);
 
@@ -776,7 +778,7 @@ static int create_debugfs_entries(void)
 	}
 
 	/* /sys/kernel/debug/watchdog/kernel_watchdog/reset_type */
-	dev->dfs_kwd_trigger = debugfs_create_file("reset_type",
+	dev->dfs_kwd_reset_type = debugfs_create_file("reset_type",
 				    S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
 				    dev->dfs_kwd, NULL,
 				    &kwd_reset_type_fops);
@@ -1185,6 +1187,37 @@ static int handle_mrfl_dev_ioapic(int irq)
 	return ret;
 }
 
+/* tasklet for configuring watchdog timers on panic */
+static void watchdog_panic_tasklet_body(unsigned long data)
+{
+	int ret = 0;
+
+	/* trigger reset after RESET_ON_PANIC_TIMEOUT, we set timeout and pretimeout */
+	/* to the same value, and restart counters */
+	ret = watchdog_config_and_start(RESET_ON_PANIC_TIMEOUT, RESET_ON_PANIC_TIMEOUT);
+	if (ret)
+		pr_err("can't start timer\n");
+}
+
+/* This is the callback function launched when kernel panic() function */
+/* is executed. In that case we force the SCU to reset due to kernel   */
+/* watchdog after RESET_ON_PANIC_TIMEOUT and we bypass the warning     */
+/* interrupt  mechanism.                                               */
+static int watchdog_panic_handler(struct notifier_block *this,
+				  unsigned long         event,
+				  void                  *unused)
+{
+	tasklet_schedule(&watchdog_device.panic_tasklet);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block watchdog_panic_notifier = {
+	.notifier_call	= watchdog_panic_handler,
+	.next		= NULL,
+	.priority	= 150	/* priority: INT_MAX >= x >= 0 */
+};
+
 /* Init code */
 static int intel_scu_watchdog_init(void)
 {
@@ -1216,6 +1249,13 @@ static int intel_scu_watchdog_init(void)
 		goto error_stop_timer;
 	}
 
+	ret = atomic_notifier_chain_register(&panic_notifier_list,
+			&watchdog_panic_notifier);
+	if (ret) {
+		pr_crit("cannot register panic notifier %d\n", ret);
+		goto error_reboot_notifier;
+	}
+
 	/* Do not publish the watchdog device when disable (TO BE REMOVED) */
 	if (!disable_kernel_watchdog) {
 		watchdog_device.miscdev.minor = WATCHDOG_MINOR;
@@ -1226,7 +1266,7 @@ static int intel_scu_watchdog_init(void)
 		if (ret) {
 			pr_crit("Cannot register miscdev %d err =%d\n",
 				WATCHDOG_MINOR, ret);
-			goto error_reboot_notifier;
+			goto error_panic_notifier;
 		}
 	}
 
@@ -1242,6 +1282,10 @@ static int intel_scu_watchdog_init(void)
 		pr_err("error value returned is %d\n", ret);
 		goto error_misc_register;
 	}
+
+	/* set up the tasklet for handling panic duties */
+	tasklet_init(&watchdog_device.panic_tasklet,
+		watchdog_panic_tasklet_body, (unsigned long)0);
 
 #ifdef CONFIG_INTEL_SCU_SOFT_LOCKUP
 	init_timer(&softlock_timer);
@@ -1284,6 +1328,10 @@ error_debugfs_entry:
 error_misc_register:
 	misc_deregister(&watchdog_device.miscdev);
 
+error_panic_notifier:
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+						 &watchdog_panic_notifier);
+
 error_reboot_notifier:
 	unregister_reboot_notifier(&watchdog_device.reboot_notifier);
 
@@ -1312,6 +1360,8 @@ static void intel_scu_watchdog_exit(void)
 
 	misc_deregister(&watchdog_device.miscdev);
 	unregister_reboot_notifier(&watchdog_device.reboot_notifier);
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+						 &watchdog_panic_notifier);
 }
 
 static int watchdog_rpmsg_probe(struct rpmsg_channel *rpdev)
@@ -1376,7 +1426,8 @@ static struct rpmsg_driver watchdog_rpmsg = {
 
 static int __init watchdog_rpmsg_init(void)
 {
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER)
+	if ((intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER) ||
+		(intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE))
 		return register_rpmsg_driver(&watchdog_rpmsg);
 	else {
 		pr_err("%s: watchdog driver: bad platform\n", __func__);

@@ -27,10 +27,10 @@
 #define PMU_HW_PEN1 0x10C
 
 /* Port Inactivity Duratoin is default value for L2 suspend */
-#define HSIC_PORT_INACTIVITYDURATION              150
+#define HSIC_PORT_INACTIVITYDURATION              500
 /* This is the default value for L2 autosuspend enable */
 #define HSIC_AUTOSUSPEND                          0
-#define HSIC_BUS_INACTIVITYDURATION               5
+#define HSIC_BUS_INACTIVITYDURATION               500
 #define HSIC_REMOTEWAKEUP                         1
 
 enum wlock_state {
@@ -98,7 +98,7 @@ struct hsic_tangier_priv {
 	struct usb_device           *rh_dev;
 	struct usb_device           *modem_dev;
 	struct workqueue_struct     *work_queue;
-	struct work_struct          wakeup_work;
+	struct delayed_work         wakeup_work;
 	struct notifier_block       hsic_pm_nb;
 	struct notifier_block       hsic_s3_entry_nb;
 	struct wake_lock            resume_wake_lock;
