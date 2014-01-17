@@ -942,8 +942,6 @@ static int intel_moor_sdio_probe_slot(struct sdhci_pci_slot *slot)
 		if (slot->data->platform_quirks & PLFM_QUIRK_NO_HOST_CTRL_HW)
 			ret = -ENODEV;
 
-	slot->host->quirks2 |= SDHCI_QUIRK2_NOT_TUNE;
-
 	return ret;
 }
 

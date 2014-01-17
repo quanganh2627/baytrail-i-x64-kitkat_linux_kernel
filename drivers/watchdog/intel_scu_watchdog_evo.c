@@ -554,7 +554,7 @@ static int reboot_notifier(struct notifier_block *this,
 
 #ifdef CONFIG_DEBUG_FS
 /* This code triggers a Security Watchdog */
-int write_security(struct inode *i, struct file *f)
+int open_security(struct inode *i, struct file *f)
 {
 	int ret = 0;
 	void __iomem *ptr;
@@ -577,9 +577,7 @@ error:
 }
 
 static const struct file_operations security_watchdog_fops = {
-	.open = nonseekable_open,
-	.write = write_security,
-	.llseek = no_llseek,
+	.open = open_security,
 };
 
 static int kwd_trigger_write(struct file *file, const char __user *buff,
@@ -591,9 +589,9 @@ static int kwd_trigger_write(struct file *file, const char __user *buff,
 }
 
 static const struct file_operations kwd_trigger_fops = {
-	.open = nonseekable_open,
-	.write = kwd_trigger_write,
-	.llseek = no_llseek,
+	.open		= nonseekable_open,
+	.write		= kwd_trigger_write,
+	.llseek		= no_llseek,
 };
 
 static int kwd_reset_type_release(struct inode *inode, struct file *file)
@@ -749,7 +747,7 @@ static int create_debugfs_entries(void)
 
 	/* /sys/kernel/debug/watchdog/security_watchdog/trigger */
 	dev->dfs_secwd_trigger = debugfs_create_file("trigger",
-				    S_IFREG | S_IWUSR | S_IWGRP,
+				    S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
 				    dev->dfs_secwd, NULL,
 				    &security_watchdog_fops);
 
@@ -778,7 +776,7 @@ static int create_debugfs_entries(void)
 	}
 
 	/* /sys/kernel/debug/watchdog/kernel_watchdog/reset_type */
-	dev->dfs_kwd_reset_type = debugfs_create_file("reset_type",
+	dev->dfs_kwd_trigger = debugfs_create_file("reset_type",
 				    S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
 				    dev->dfs_kwd, NULL,
 				    &kwd_reset_type_fops);
