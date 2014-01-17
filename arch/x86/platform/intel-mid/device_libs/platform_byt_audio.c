@@ -12,7 +12,11 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sfi.h>
+#include <linux/platform_device.h>
+#include <asm/intel-mid.h>
 #include <asm/platform_sst_audio.h>
+#include <asm/platform_byt_audio.h>
 
 static int __init byt_audio_platform_init(void)
 {
@@ -24,6 +28,19 @@ static int __init byt_audio_platform_init(void)
 	ret = add_sst_platform_device();
 	if (ret < 0) {
 		pr_err("%s failed to sst_platform device\n", __func__);
+		return 0;
+	}
+
+	pdev = platform_device_alloc("hdmi-audio", -1);
+	if (!pdev) {
+		pr_err("failed to allocate hdmi-audio platform device\n");
+		return 0;
+	}
+
+	ret = platform_device_add(pdev);
+	if (ret) {
+		pr_err("failed to add hdmi-audio platform device\n");
+		platform_device_put(pdev);
 		return 0;
 	}
 
