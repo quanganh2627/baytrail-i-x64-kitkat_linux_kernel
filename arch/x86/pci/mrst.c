@@ -217,7 +217,7 @@ static int intel_mid_pci_irq_enable(struct pci_dev *dev)
 	 */
 	irq_attr.ioapic = mp_find_ioapic(dev->irq);
 	if (irq_attr.ioapic < 0)
-		return -1;
+		return -EINVAL;
 	irq_attr.ioapic_pin = dev->irq;
 	irq_attr.trigger = 1; /* level */
 	if ((intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER) ||

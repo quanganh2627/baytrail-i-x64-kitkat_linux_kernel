@@ -47,6 +47,7 @@
 #define INTEL_BYT_LPIO1_DMAC_ID		0x0F06
 #define INTEL_BYT_LPIO2_DMAC_ID		0x0F40
 #define INTEL_BYT_DMAC0_ID		0x0F28
+#define INTEL_CHT_DMAC0_ID             0x22A8
 #define INTEL_CHT_LPIO1_DMAC_ID		0x2286
 #define INTEL_CHT_LPIO2_DMAC_ID		0x22C0
 
@@ -2102,6 +2103,15 @@ static struct pci_device_id intel_mid_dma_ids[] = {
 		INFO(4, 0, SST_MAX_DMA_LEN_MRFLD, 0, 0, 0, 0, INTEL_MRFLD_GP_DMAC2_ID, &v2_dma_ops)},
 	{ PCI_VDEVICE(INTEL, INTEL_MRFLD_DMAC0_ID),
 		INFO(2, 6, SST_MAX_DMA_LEN_MRFLD, 0xFF0000, 0xFF340018, 0, 0x10, INTEL_MRFLD_DMAC0_ID, &v2_dma_ops)},
+
+	/* Moorfield */
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_GP_DMAC2_MOOR),
+		INFO(4, 0, SST_MAX_DMA_LEN_MRFLD, 0, 0, 0, 0,
+				PCI_DEVICE_ID_INTEL_GP_DMAC2_MOOR, &v2_dma_ops)},
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_AUDIO_DMAC0_MOOR),
+		INFO(2, 6, SST_MAX_DMA_LEN_MRFLD, 0xFF0000, 0xFF340018, 0, 0x10,
+				PCI_DEVICE_ID_INTEL_AUDIO_DMAC0_MOOR, &v2_dma_ops)},
+
 	/* Baytrail Low Speed Peripheral DMA */
 	{ PCI_VDEVICE(INTEL, INTEL_BYT_LPIO1_DMAC_ID),
 		INFO(6, 0, 2047, 0, 0, 1, 0, INTEL_BYT_LPIO1_DMAC_ID, &v1_dma_ops)},
@@ -2141,6 +2151,19 @@ struct intel_mid_dma_probe_info dma_byt1_info = {
 	.pimr_offset = 0,
 	.pci_id = INTEL_BYT_LPIO1_DMAC_ID,
 	.pdma_ops = &v1_dma_ops,
+};
+
+
+struct intel_mid_dma_probe_info dma_cht_info = {
+	.max_chan = 4,
+	.ch_base = 4,
+	.block_size = 131071,
+	.pimr_mask = 0x00FF0000,
+	.pimr_base = 0, /* get base addr from device table */
+	.dword_trf = 0,
+	.pimr_offset = 0x10,
+	.pci_id = INTEL_CHT_DMAC0_ID,
+	.pdma_ops = &v2_dma_ops,
 };
 
 struct intel_mid_dma_probe_info dma_cht1_info = {
@@ -2205,6 +2228,7 @@ static const struct acpi_device_id dma_acpi_ids[] = {
 	{ "INTL9C60", (kernel_ulong_t)&dma_byt1_info },
 	{ "80862286", (kernel_ulong_t)&dma_cht1_info },
 	{ "808622C0", (kernel_ulong_t)&dma_cht2_info },
+	{ "ADMA22A8", (kernel_ulong_t)&dma_cht_info },
 	{ },
 };
 

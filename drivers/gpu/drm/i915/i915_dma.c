@@ -1015,6 +1015,9 @@ static int i915_getparam(struct drm_device *dev, void *data,
 	case I915_PARAM_HAS_DPST:
 		value = 1;
 		break;
+	case I915_PARAM_HAS_CMD_PARSER:
+		value = 1;
+		break;
 	default:
 		DRM_DEBUG("Unknown parameter %d\n", param->param);
 		return -EINVAL;
@@ -1450,6 +1453,54 @@ static void i915_dump_device_info(struct drm_i915_private *dev_priv)
 #undef SEP_COMMA
 }
 
+static void
+i915_batch_pool_init(drm_i915_private_t *dev_priv)
+{
+	int i;
+
+	for (i = 0; i < I915_NUM_RINGS; i++) {
+		INIT_LIST_HEAD(&dev_priv->batch_pool[i].active_list);
+		INIT_LIST_HEAD(&dev_priv->batch_pool[i].inactive_list);
+	}
+}
+
+static void
+i915_batch_pool_cleanup(drm_i915_private_t *dev_priv)
+{
+	int i;
+	struct list_head *iter;
+	struct drm_i915_gem_object *obj;
+	struct list_head *inactive_list;
+	struct list_head *active_list;
+
+	/* The driver only calls this function after idling the
+	 * hardware and the driver is being unloaded, so the
+	 * following statements must be true:
+	 *
+	 * 1) The active list should be empty
+	 * 2) All items on the inactive list should be unpinned already
+	 *    (this is true in general; we unpin when moving to inactive)
+	 *
+	 */
+
+	for (i = 0; i < I915_NUM_RINGS; i++) {
+		active_list = &dev_priv->batch_pool[i].active_list;
+		inactive_list = &dev_priv->batch_pool[i].inactive_list;
+
+		BUG_ON(!list_empty(active_list));
+
+		if (!list_empty(inactive_list)) {
+			list_for_each(iter, inactive_list) {
+				obj = list_entry(inactive_list->next,
+						struct drm_i915_gem_object,
+						ring_batch_pool_list);
+				BUG_ON(obj->pin_count != 0);
+				drm_gem_object_unreference(&obj->base);
+			}
+		}
+	}
+}
+
 /**
  * i915_driver_load - setup chip and create an initial config
  * @dev: DRM device
@@ -1686,6 +1737,8 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 			(unsigned long) &dev_priv->hangcheck[i]);
 	}
 
+	i915_batch_pool_init(dev_priv);
+
 	/* On the 945G/GM, the chipset reports the MSI capability on the
 	 * integrated graphics even though the support isn't actually there
 	 * according to the published specs.  It doesn't appear to function
@@ -1838,6 +1891,8 @@ int i915_driver_unload(struct drm_device *dev)
 
 	intel_opregion_fini(dev);
 
+	i915_batch_pool_cleanup(dev_priv);
+
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		/* Flush any outstanding unpin_work. */
 		flush_workqueue(dev_priv->wq);
@@ -1872,6 +1927,8 @@ int i915_driver_unload(struct drm_device *dev)
 
 	if (dev_priv->slab)
 		kmem_cache_destroy(dev_priv->slab);
+
+	i915_cmd_parser_cleanup(dev_priv);
 
 	pci_dev_put(dev_priv->bridge_dev);
 	kfree(dev->dev_private);
@@ -2033,6 +2090,8 @@ struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_GET_RESET_STATS, i915_get_reset_stats_ioctl,
 					DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_PERFMON, i915_perfmon_ioctl, DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_CMD_PARSER_APPEND, i915_cmd_parser_append_ioctl,
+			  DRM_UNLOCKED|DRM_ROOT_ONLY),
 };
 
 int i915_max_ioctl = DRM_ARRAY_SIZE(i915_ioctls);
