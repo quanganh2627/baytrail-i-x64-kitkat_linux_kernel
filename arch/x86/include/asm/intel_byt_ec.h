@@ -8,6 +8,7 @@
  * has to notify the corresponding consumer driver.
  */
 #define BYT_EC_SCI_SMB			0x01	/* SMBus event notification */
+#define BYT_EC_LSTE			0x03    /* LID Switch state */
 #define BYT_EC_SCI_DEVINSERTION		0x20	/* Device bay insertion SCI */
 #define BYT_EC_SCI_DEVREMOVAL		0x21	/* Device bay removal SCI */
 #define BYT_EC_SCI_NEWCARD		0x22/* NewCard insertion event SCI */

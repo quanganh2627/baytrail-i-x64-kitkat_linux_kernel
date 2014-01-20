@@ -378,6 +378,7 @@ static void byt_disable_acpi_mode(struct ec_chip_info *chip)
 /* EC buttons platform data */
 static struct byt_keys_button byt_m_nrpt_buttons[] = {
 	{ KEY_POWER,		EV_KEY,	"Power_btn", 1 },
+	{ SW_LID,		EV_SW,	"Lid_sw", 1 },
 	{ },
 };
 
@@ -390,7 +391,7 @@ static struct byt_keys_button byt_m_rpt_buttons[] = {
 static struct byt_keys_platform_data byt_key_pdata[2] = {
 	{
 		.buttons = byt_m_nrpt_buttons,
-		.nbuttons = 1,
+		.nbuttons = 2,
 		.rep = 0,
 	}, {
 		.buttons = byt_m_rpt_buttons,

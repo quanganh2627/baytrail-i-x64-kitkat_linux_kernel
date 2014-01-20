@@ -42,6 +42,7 @@
 #define VOLUP_BTN_STAT_MASK	(1 << 1)
 #define VOLDOWN_BTN_STAT_MASK	(1 << 2)
 #define HOME_BTN_STAT_MASK	(1 << 3)
+#define LID_SW_STAT_MASK	(1 << 6)
 
 struct byt_buttons_priv {
 	struct input_dev *input;
@@ -50,6 +51,22 @@ struct byt_buttons_priv {
 	u8 last_stat;
 	struct mutex btn_mutex;
 };
+
+static int send_lid_state(struct input_dev *input)
+{
+	u8 stat;
+	int ret;
+	ret = byt_ec_read_byte(BYT_EC_LSTE, &stat);
+	if (ret) {
+		dev_err(&input->dev,
+			"Query button status failed\n");
+		return ret;
+	}
+	input_event(input, EV_SW,
+		SW_LID, !(stat & LID_SW_STAT_MASK));
+	input_sync(input);
+	return ret;
+}
 
 static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 					unsigned long event, void *data)
@@ -101,6 +118,14 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 
 		mutex_unlock(&priv->btn_mutex);
 		break;
+	case BYT_EC_SCI_LID:
+	case BYT_EC_SCI_RESUME:
+		mutex_lock(&priv->btn_mutex);
+		ret = send_lid_state(priv->input);
+		if (ret)
+			ret = NOTIFY_DONE;
+		mutex_unlock(&priv->btn_mutex);
+		break;
 	default:
 		dev_err(&priv->input->dev, "Invalid event\n");
 		ret = NOTIFY_DONE;
@@ -141,8 +166,8 @@ static int byt_buttons_probe(struct platform_device *pdev)
 
 	for (i = 0; i < pdata->nbuttons; i++) {
 		button = &pdata->buttons[i];
-		input_set_capability(input, button->type ?: EV_KEY,
-					button->code);
+		input_set_capability(input, (button->type == EV_KEY) ?
+			EV_KEY : EV_SW, button->code);
 	}
 
 	ret = input_register_device(input);
@@ -151,6 +176,9 @@ static int byt_buttons_probe(struct platform_device *pdev)
 			"unable to register input dev, error %d\n", ret);
 		goto err;
 	}
+
+	if (test_bit(SW_LID, input->swbit))
+		send_lid_state(input);
 
 	priv->buttons = pdata->buttons;
 	priv->last_stat = POWER_BTN_STAT_MASK |
