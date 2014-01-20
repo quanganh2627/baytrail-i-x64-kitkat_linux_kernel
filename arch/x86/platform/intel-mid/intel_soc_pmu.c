@@ -1807,6 +1807,86 @@ out_err1:
 	return status;
 }
 
+static int mid_suspend_begin(suspend_state_t state)
+{
+	mid_pmu_cxt->suspend_started = true;
+	pmu_s3_stats_update(1);
+
+	/* Restrict to C6 during suspend */
+	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+					(CSTATE_EXIT_LATENCY_S0i1-1));
+	return 0;
+}
+
+static int mid_suspend_valid(suspend_state_t state)
+{
+	int ret = 0;
+
+	switch (state) {
+	case PM_SUSPEND_ON:
+	case PM_SUSPEND_MEM:
+		/* check if we are ready */
+		if (likely(pmu_initialized))
+			ret = 1;
+	break;
+	}
+
+	return ret;
+}
+
+static int mid_suspend_prepare(void)
+{
+	return 0;
+}
+
+static int mid_suspend_prepare_late(void)
+{
+	return 0;
+}
+
+static int mid_suspend_enter(suspend_state_t state)
+{
+	int ret;
+
+	if (state != PM_SUSPEND_MEM)
+		return -EINVAL;
+
+	/* one last check before entering standby */
+	if (pmu_ops->check_nc_sc_status) {
+		if (!(pmu_ops->check_nc_sc_status())) {
+			trace_printk("Device d0ix status check failed! Aborting Standby entry!\n");
+			WARN_ON(1);
+		}
+	}
+
+	trace_printk("s3_entry\n");
+	ret = standby_enter();
+	trace_printk("s3_exit %d\n", ret);
+	if (ret != 0)
+		dev_dbg(&mid_pmu_cxt->pmu_dev->dev,
+				"Failed to enter S3 status: %d\n", ret);
+
+	return ret;
+}
+
+static void mid_suspend_end(void)
+{
+	/* allow s0ix now */
+	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
+					PM_QOS_DEFAULT_VALUE);
+
+	pmu_s3_stats_update(0);
+	mid_pmu_cxt->suspend_started = false;
+}
+
+static const struct platform_suspend_ops mid_suspend_ops = {
+	.begin = mid_suspend_begin,
+	.valid = mid_suspend_valid,
+	.prepare = mid_suspend_prepare,
+	.prepare_late = mid_suspend_prepare_late,
+	.enter = mid_suspend_enter,
+	.end = mid_suspend_end,
+};
 /**
  * mid_pmu_probe - This is the function where most of the PMU driver
  *		   initialization happens.
@@ -1894,6 +1974,8 @@ mid_pmu_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 		ret = -ENOENT;
 		goto out_err3;
 	}
+
+	suspend_set_ops(&mid_suspend_ops);
 
 	/* call pmu init() for initialization of pmu interface */
 	ret = pmu_init();
@@ -2014,87 +2096,6 @@ static int standby_enter(void)
 	return 0;
 }
 
-static int mid_suspend_begin(suspend_state_t state)
-{
-	mid_pmu_cxt->suspend_started = true;
-	pmu_s3_stats_update(1);
-
-	/* Restrict to C6 during suspend */
-	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
-					(CSTATE_EXIT_LATENCY_S0i1-1));
-	return 0;
-}
-
-static int mid_suspend_valid(suspend_state_t state)
-{
-	int ret = 0;
-
-	switch (state) {
-	case PM_SUSPEND_ON:
-	case PM_SUSPEND_MEM:
-		/* check if we are ready */
-		if (likely(pmu_initialized))
-			ret = 1;
-	break;
-	}
-
-	return ret;
-}
-
-static int mid_suspend_prepare(void)
-{
-	return 0;
-}
-
-static int mid_suspend_prepare_late(void)
-{
-	return 0;
-}
-
-static int mid_suspend_enter(suspend_state_t state)
-{
-	int ret;
-
-	if (state != PM_SUSPEND_MEM)
-		return -EINVAL;
-
-	/* one last check before entering standby */
-	if (pmu_ops->check_nc_sc_status) {
-		if (!(pmu_ops->check_nc_sc_status())) {
-			trace_printk("Device d0ix status check failed! Aborting Standby entry!\n");
-			WARN_ON(1);
-		}
-	}
-
-	trace_printk("s3_entry\n");
-	ret = standby_enter();
-	trace_printk("s3_exit %d\n", ret);
-	if (ret != 0)
-		dev_dbg(&mid_pmu_cxt->pmu_dev->dev,
-				"Failed to enter S3 status: %d\n", ret);
-
-	return ret;
-}
-
-static void mid_suspend_end(void)
-{
-	/* allow s0ix now */
-	pm_qos_update_request(mid_pmu_cxt->s3_restrict_qos,
-					PM_QOS_DEFAULT_VALUE);
-
-	pmu_s3_stats_update(0);
-	mid_pmu_cxt->suspend_started = false;
-}
-
-static const struct platform_suspend_ops mid_suspend_ops = {
-	.begin = mid_suspend_begin,
-	.valid = mid_suspend_valid,
-	.prepare = mid_suspend_prepare,
-	.prepare_late = mid_suspend_prepare_late,
-	.enter = mid_suspend_enter,
-	.end = mid_suspend_end,
-};
-
 /**
  * mid_pci_register_init - register the PMU driver as PCI device
  */
@@ -2128,7 +2129,6 @@ static int __init mid_pci_register_init(void)
 
 	/* registering PCI device */
 	ret = pci_register_driver(&driver);
-	suspend_set_ops(&mid_suspend_ops);
 
 	return ret;
 }

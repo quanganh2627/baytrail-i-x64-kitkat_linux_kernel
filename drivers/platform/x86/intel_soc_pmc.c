@@ -644,8 +644,10 @@ static const struct platform_suspend_ops pmc_suspend_ops = {
 };
 
 static DEFINE_PCI_DEVICE_TABLE(pmc_pci_tbl) = {
+#ifndef CONFIG_ENABLE_S3
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0F1C)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x229C)},
+#endif
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, pmc_pci_tbl);
