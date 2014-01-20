@@ -1057,14 +1057,14 @@ static int i2c_hid_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 	struct i2c_hid_hw_data *hw_data = &ihid->hw_data;
-	if (hw_data->hw_suspend) {
-		ret = hw_data->hw_suspend(client);
-		if (ret)
-			return ret;
-	}
 
 	if (device_may_wakeup(&client->dev))
 		enable_irq_wake(client->irq);
+
+	if (hw_data->hw_suspend) {
+		ret = hw_data->hw_suspend(client);
+		return ret;
+	}
 
 	/* Save some power */
 	i2c_hid_set_power(client, I2C_HID_PWR_SLEEP);
@@ -1079,18 +1079,17 @@ static int i2c_hid_resume(struct device *dev)
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 	struct i2c_hid_hw_data *hw_data = &ihid->hw_data;
 
+	if (device_may_wakeup(&client->dev))
+		disable_irq_wake(client->irq);
+
 	if (hw_data->hw_resume) {
 		ret = hw_data->hw_resume(client);
-		if (ret)
-			return ret;
+		return ret;
 	}
 
 	ret = i2c_hid_hwreset(client);
 	if (ret)
 		return ret;
-
-	if (device_may_wakeup(&client->dev))
-		disable_irq_wake(client->irq);
 
 	return 0;
 }
