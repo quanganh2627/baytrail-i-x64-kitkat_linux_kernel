@@ -1063,7 +1063,9 @@ static int i2c_hid_suspend(struct device *dev)
 
 	if (hw_data->hw_suspend) {
 		ret = hw_data->hw_suspend(client);
+#ifndef CONFIG_ENABLE_S3
 		return ret;
+#endif
 	}
 
 	/* Save some power */
@@ -1082,9 +1084,23 @@ static int i2c_hid_resume(struct device *dev)
 	if (device_may_wakeup(&client->dev))
 		disable_irq_wake(client->irq);
 
+#ifdef CONFIG_ENABLE_S3
+	/*
+	 * This is in case the platform device needs a reset
+	 * to come out of suspend state. If your device does
+	 * not need a reset of f/w, keep this null
+	 */
+	if (hw_data->hw_reset) {
+		ret = hw_data->hw_reset(client);
+		if (ret)
+			return ret;
+	}
+#endif
 	if (hw_data->hw_resume) {
 		ret = hw_data->hw_resume(client);
+#ifndef CONFIG_ENABLE_S3
 		return ret;
+#endif
 	}
 
 	ret = i2c_hid_hwreset(client);
