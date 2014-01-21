@@ -466,6 +466,8 @@ static int mrfld_8958_init(struct snd_soc_pcm_runtime *runtime)
 	struct snd_soc_card *card = runtime->card;
 	struct snd_soc_dai *aif1_dai = card->rtd[0].codec_dai;
 	struct mrfld_8958_mc_private *ctx = snd_soc_card_get_drvdata(card);
+	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
+	struct wm8994 *control = wm8994->wm8994;
 
 	pr_debug("Entry %s\n", __func__);
 
@@ -520,6 +522,12 @@ static int mrfld_8958_init(struct snd_soc_pcm_runtime *runtime)
 
 	wm8958_mic_detect(codec, &ctx->jack, NULL, NULL,
 			  wm8958_custom_mic_id, codec);
+
+	ret = enable_irq_wake(control->irq);
+	if (ret != 0) {
+		pr_err("Can't enable IRQ as wake source: %d\n",
+			ret);
+	}
 
 	wm8958_micd_set_custom_rate(codec, wm8958_custom_micd_set_rate, codec);
 
