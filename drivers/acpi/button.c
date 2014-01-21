@@ -68,8 +68,6 @@ MODULE_LICENSE("GPL");
 static const struct acpi_device_id button_device_ids[] = {
 	{ACPI_BUTTON_HID_SLEEP,  0},
 	{ACPI_BUTTON_HID_SLEEPF, 0},
-	{ACPI_BUTTON_HID_POWER,  0},
-	{ACPI_BUTTON_HID_POWERF, 0},
 	{"", 0},
 };
 MODULE_DEVICE_TABLE(acpi, button_device_ids);
