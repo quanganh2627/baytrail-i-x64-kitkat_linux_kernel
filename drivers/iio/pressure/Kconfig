@@ -1,0 +1,16 @@
+#
+# Pressure sensors
+#
+menu "Pressure sensors"
+
+config HID_SENSOR_PRES
+	depends on HID_SENSOR_HUB
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	select HID_SENSOR_IIO_COMMON
+	tristate "HID PRES"
+	help
+	  Say yes here to build support for the HID SENSOR
+	  Ambient light sensor.
+
+endmenu

@@ -3561,6 +3561,10 @@ CONFIG_IIO=y
 #
 # CONFIG_AK8975 is not set
 # CONFIG_IIO_ST_MAGN_3AXIS is not set
+
+#
+# Pressure sensors
+#
 # CONFIG_NTB is not set
 # CONFIG_VME_BUS is not set
 CONFIG_PWM=y
