@@ -42,6 +42,7 @@ static int __init bluetooth_init(void)
 
 	/* Get the GPIO numbers from the SFI table */
 
+#ifndef CONFIG_ACPI
 	bcm_bt_lpm_pdata.gpio_enable = get_gpio_by_name("BT-reset");
 	if (!gpio_is_valid(bcm_bt_lpm_pdata.gpio_enable)) {
 		pr_err("%s: gpio %s not found\n", __func__, "BT-reset");
@@ -68,6 +69,7 @@ static int __init bluetooth_init(void)
 		bcm_bt_lpm_pdata.gpio_wake, bcm_bt_lpm_pdata.gpio_host_wake);
 #endif
 
+#endif
 	error_reg = platform_device_register(&bcm_bt_lpm_device);
 	if (error_reg < 0) {
 		pr_err("%s: platform_device_register for %s failed\n",
