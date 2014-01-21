@@ -107,6 +107,11 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 	struct intel_sst_drv *drv = (struct intel_sst_drv *) context;
 	irqreturn_t retval = IRQ_HANDLED;
 
+	if (drv->sst_state == SST_SUSPENDED) {
+		WARN(1, "get sst irq after sst is suspended!\n");
+		return IRQ_HANDLED;
+	}
+
 	/* Interrupt arrived, check src */
 	isr.full = sst_shim_read64(drv->shim, SST_ISRX);
 	if (isr.part.done_interrupt) {
@@ -172,6 +177,11 @@ static irqreturn_t intel_sst_irq_thread_mfld(int irq, void *context)
 	if (list_empty(&drv->rx_list))
 		return IRQ_HANDLED;
 
+	if (drv->sst_state == SST_SUSPENDED) {
+		WARN(1, "get sst irq after sst is suspended!\n");
+		return IRQ_HANDLED;
+	}
+
 	spin_lock_irqsave(&drv->rx_msg_lock, irq_flags);
 	list_for_each_entry_safe(msg, __msg, &drv->rx_list, node) {
 
@@ -208,6 +218,11 @@ static irqreturn_t intel_sst_intr_mfld(int irq, void *context)
 	struct ipc_post *msg = NULL;
 	unsigned int size = 0;
 	struct intel_sst_drv *drv = (struct intel_sst_drv *) context;
+
+	if (drv->sst_state == SST_SUSPENDED) {
+		WARN(1, "get sst irq after sst is suspended!\n");
+		return IRQ_HANDLED;
+	}
 
 	/* Interrupt arrived, check src */
 	isr.full = sst_shim_read(drv->shim, SST_ISRX);
@@ -784,6 +799,7 @@ static int intel_sst_probe(struct pci_dev *pci,
 	}
 
 	sst_set_fw_state_locked(sst_drv_ctx, SST_UN_INIT);
+	sst_drv_ctx->irq_num = pci->irq;
 	/* Register the ISR */
 	ret = request_threaded_irq(pci->irq, sst_drv_ctx->ops->interrupt,
 		sst_drv_ctx->ops->irq_thread, 0, SST_DRV_NAME,
@@ -1030,7 +1046,7 @@ static int intel_sst_runtime_suspend(struct device *dev)
 	int ret = 0;
 	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
 
-	pr_debug("runtime_suspend called\n");
+	pr_err("runtime_suspend called\n");
 	if (ctx->sst_state == SST_UN_INIT) {
 		pr_debug("LPE is already in UNINIT state, No action");
 		return 0;
@@ -1051,6 +1067,8 @@ static int intel_sst_runtime_suspend(struct device *dev)
 	sst_set_fw_state_locked(ctx, SST_SUSPENDED);
 
 	flush_workqueue(ctx->post_msg_wq);
+	flush_workqueue(ctx->mad_wq);
+	synchronize_irq(ctx->irq_num);
 	if (ctx->pci_id == SST_BYT_PCI_ID || ctx->pci_id == SST_CHT_PCI_ID) {
 		/* save the shim registers because PMC doesn't save state */
 		sst_save_shim64(ctx, ctx->shim, ctx->shim_regs64);
@@ -1064,7 +1082,7 @@ static int intel_sst_runtime_resume(struct device *dev)
 	int ret = 0;
 	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
 
-	pr_debug("runtime_resume called\n");
+	pr_err("runtime_resume begin\n");
 
 	if (ctx->pci_id == SST_BYT_PCI_ID || ctx->pci_id == SST_CHT_PCI_ID) {
 		/* wait for device power up a/c to PCI spec */
@@ -1107,6 +1125,7 @@ static int intel_sst_runtime_resume(struct device *dev)
 		sst_load_fw_rams(ctx);
 		ctx->context.saved = 0;
 	}
+	pr_err("runtime_resume end\n");
 
 	return ret;
 }
