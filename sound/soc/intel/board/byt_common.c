@@ -338,6 +338,10 @@ const struct dev_pm_ops snd_byt_common_pm_ops = {
 
 
 static const struct acpi_device_id byt_common_acpi_ids[] = {
+/* TODO
+for ACPI FW engineer to provide new APCI match id
+*/
+	{ "AMCR0F29", (kernel_ulong_t) &byt_bl_alc5645_ops},
 
 	{},
 };

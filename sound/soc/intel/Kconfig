@@ -85,6 +85,7 @@ config SND_BYT_MACHINE
 	tristate "SOC Machine Audio driver for Intel Baytrail MID platform"
 	depends on X86
 	select SND_SOC_RT5640
+	select SND_SOC_RT5645
 	select SND_SOC_TLV320AIC31XX
 	select SND_SST_PLATFORM
 	select SND_SST_MACHINE
@@ -96,7 +97,6 @@ config SND_BYT_MACHINE
           used as alsa device in audio substem in Intel(R) MID devices
           Say Y if you have such a device
           If unsure select "N".
-
 
 config SND_CHT_MACHINE
 	tristate "SOC Machine Audio driver for Intel Cherrytrail MID platform"

@@ -47,6 +47,7 @@ struct byt_machine_ops {
 	int  (*jack_detection)(void);
 };
 
+extern struct byt_machine_ops byt_bl_alc5645_ops;
 
 
 /* data for drivers */
