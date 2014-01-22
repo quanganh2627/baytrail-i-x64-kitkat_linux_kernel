@@ -64,6 +64,7 @@
 #include <asm/platform_mrfld_audio.h>
 #include <asm/platform_ctp_audio.h>
 #include "device_libs/platform_mrfl_thermal.h"
+#include "device_libs/platform_moor_thermal.h"
 #include "device_libs/platform_scu_log.h"
 
 /*
@@ -109,6 +110,7 @@
 #include "device_libs/platform_ov2722.h"
 #include "device_libs/platform_lm3559.h"
 #include "device_libs/platform_ov8830.h"
+#include "device_libs/platform_ov5693.h"
 #include "device_libs/platform_wm5102.h"
 #include "device_libs/platform_ap1302.h"
 
@@ -165,6 +167,7 @@ struct devs_id __initconst device_ids[] = {
 	{"synaptics_3202", SFI_DEV_TYPE_I2C, 0, &rmi4_platform_data, NULL},
 	{"syn_3400_cgs", SFI_DEV_TYPE_I2C, 0, &rmi4_platform_data, NULL},
 	{"syn_3400_igzo", SFI_DEV_TYPE_I2C, 0, &rmi4_platform_data, NULL},
+	{"synaptics_3402", SFI_DEV_TYPE_I2C, 0, &rmi4_platform_data, NULL},
 
 	/* I2C devices*/
 	{"max17042", SFI_DEV_TYPE_I2C, 1, &max17042_platform_data, NULL},
@@ -208,6 +211,8 @@ struct devs_id __initconst device_ids[] = {
 	{"bcove_adc", SFI_DEV_TYPE_IPC, 1, &bcove_adc_platform_data,
 					&ipc_device_handler},
 	{"bcove_thrm", SFI_DEV_TYPE_IPC, 1, &mrfl_thermal_platform_data,
+					&ipc_device_handler},
+	{"scove_thrm", SFI_DEV_TYPE_IPC, 1, &moor_thermal_platform_data,
 					&ipc_device_handler},
 	{"scuLog", SFI_DEV_TYPE_IPC, 1, &scu_log_platform_data,
 					&ipc_device_handler},
@@ -253,11 +258,15 @@ struct devs_id __initconst device_ids[] = {
 					&intel_register_i2c_camera_device},
 	{"ov8830", SFI_DEV_TYPE_I2C, 0, &ov8830_platform_data,
 					&intel_register_i2c_camera_device},
+	{"ov5693", SFI_DEV_TYPE_I2C, 0, &ov5693_platform_data,
+					&intel_register_i2c_camera_device},
 	{"ov5640", SFI_DEV_TYPE_I2C, 0, &ov5640_platform_data,
 					&intel_register_i2c_camera_device},
 	{"imx175", SFI_DEV_TYPE_I2C, 0, &imx175_platform_data,
 					&intel_register_i2c_camera_device},
 	{"imx135", SFI_DEV_TYPE_I2C, 0, &imx135_platform_data,
+					&intel_register_i2c_camera_device},
+	{"imx135fuji", SFI_DEV_TYPE_I2C, 0, &imx135_platform_data,
 					&intel_register_i2c_camera_device},
 	{"imx134", SFI_DEV_TYPE_I2C, 0, &imx134_platform_data,
 					&intel_register_i2c_camera_device},
@@ -270,6 +279,8 @@ struct devs_id __initconst device_ids[] = {
 	{"ov2722", SFI_DEV_TYPE_I2C, 0, &ov2722_platform_data,
 					&intel_register_i2c_camera_device},
 	{"lm3559", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,
+					&intel_register_i2c_camera_device},
+	{"lm3560", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,
 					&intel_register_i2c_camera_device},
 	{"ap1302", SFI_DEV_TYPE_I2C, 0, &ap1302_platform_data,
 					&intel_register_i2c_camera_device},

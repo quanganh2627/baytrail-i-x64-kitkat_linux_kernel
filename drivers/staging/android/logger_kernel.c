@@ -117,7 +117,7 @@ static void flush_to_bottom_log(struct logger_log *log,
 
 	/* send this segment's payload to the plugins */
 	list_for_each_entry(plugin, &log->plugins, list)
-		plugin->write_seg(buf,
+		plugin->write_seg((void *)buf,
 				  header.len - sizeof(extendedtag) - 1,
 				  false, /* not from user */
 				  true,  /* start of msg */
@@ -294,12 +294,10 @@ console_initcall(logger_console_init);
 static int __init logger_kernel_init(void)
 {
 	int ret;
+	if (!(logger_console.flags & CON_ENABLED))
+		return 0;
 
 	ret = create_log(LOGGER_LOG_KERNEL, 256*1024);
-	if (unlikely(ret))
-		goto out;
-
-out:
 	return ret;
 }
 device_initcall(logger_kernel_init);

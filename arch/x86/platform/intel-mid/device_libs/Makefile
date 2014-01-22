@@ -33,6 +33,7 @@ else
 obj-$(subst m,y,$(CONFIG_INTEL_BYT_EC_THERMAL)) += platform_byt_thermal.o
 endif
 obj-$(subst m,y,$(CONFIG_SENSORS_THERMAL_MRFLD)) += platform_mrfl_thermal.o
+obj-$(subst m,y,$(CONFIG_INTEL_MOOR_THERMAL)) += platform_moor_thermal.o
 obj-$(subst m,y,$(CONFIG_INTEL_SCU_FLIS)) += platform_scu_flis.o
 
 # I2C Devices
@@ -97,11 +98,13 @@ obj-$(subst m,y,$(CONFIG_VIDEO_IMX))					+= platform_imx134.o
 obj-$(subst m,y,$(CONFIG_VIDEO_S5K8AAY))				+= platform_s5k8aay.o
 obj-$(subst m,y,$(CONFIG_VIDEO_OV9724))					+= platform_ov9724.o
 obj-$(subst m,y,$(CONFIG_VIDEO_OV2722))					+= platform_ov2722.o
+obj-$(subst m,y,$(CONFIG_VIDEO_OV5693))					+= platform_ov5693.o
 obj-$(subst m,y,$(CONFIG_VIDEO_LM3554))					+= platform_lm3554.o
 obj-$(subst m,y,$(CONFIG_VIDEO_LM3559))					+= platform_lm3559.o
 obj-$(subst m,y,$(CONFIG_VIDEO_AP1302))					+= platform_ap1302.o
 endif
 
+obj-$(subst m,y,$(CONFIG_EXTCON_USB))					+= platform_extcon_usb.o
 ifdef CONFIG_BATTERY_MAX17042
 obj-$(subst m,y,$(CONFIG_BATTERY_MAX17042)) += platform_max17042.o
 else
