@@ -85,7 +85,6 @@ static struct sfi_gpio_table_entry byt_gpio_table[] = {
 	/*{cntl_name, pin_no, pin_name}*/
 };
 
-int board_id __read_mostly = -1;
 static struct sfi_table_header *get_oem_b_table(void)
 {
 	struct sfi_table_header *sfi_oemb_table = NULL;
@@ -103,10 +102,6 @@ static struct sfi_table_header *get_oem_b_table(void)
 		sfi_oemb_table = (struct sfi_table_header *)
 			&byt_oemb_table_pr1;
 
-	if (strstr(saved_command_line, "androidboot.boardid=05")) {
-		board_id = BOARD_ID_BAYROCK;
-		pr_info("Bayrock board with ID %d\n", board_id);
-	}
 
 	return sfi_oemb_table;
 }
