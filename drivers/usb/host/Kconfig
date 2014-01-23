@@ -39,6 +39,16 @@ config USB_XHCI_HCD_DEBUGGING
 
 	  If unsure, say N.
 
+config USB_XHCI_HSIC
+	bool "XHCI HSIC support"
+	default n
+	---help---
+	  Say 'Y' to turn on HSIC support for the XHCI host controller driver.
+	  HSIC can be used to increase usb external ports by using a hub or
+	  it can be used to connect wifi/bt or modem chip.
+
+	  If unsure, say N.
+
 endif # USB_XHCI_HCD
 
 config USB_EHCI_HCD
