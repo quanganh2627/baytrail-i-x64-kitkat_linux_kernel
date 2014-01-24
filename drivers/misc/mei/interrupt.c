@@ -26,7 +26,6 @@
 
 #include "mei_dev.h"
 #include "hbm.h"
-#include "hw-me.h"
 #include "client.h"
 
 
@@ -344,9 +343,12 @@ int mei_irq_read_handler(struct mei_device *dev,
 
 	/*  HBM message */
 	if (mei_hdr->host_addr == 0 && mei_hdr->me_addr == 0) {
-		mei_hbm_dispatch(dev, mei_hdr);
-		ret = 0;
-		dev_dbg(&dev->pdev->dev, "mei_hbm_dispatch.\n");
+		ret = mei_hbm_dispatch(dev, mei_hdr);
+		if (ret) {
+			dev_dbg(&dev->pdev->dev, "mei_hbm_dispatch failed ret = %d\n",
+					ret);
+			goto end;
+		}
 		goto reset_slots;
 	}
 
@@ -550,7 +552,6 @@ EXPORT_SYMBOL_GPL(mei_irq_write_handler);
  *
  * @work: pointer to the work_struct structure
  *
- * NOTE: This function is called by timer interrupt work
  */
 void mei_timer(struct work_struct *work)
 {
@@ -565,24 +566,30 @@ void mei_timer(struct work_struct *work)
 
 
 	mutex_lock(&dev->device_lock);
-	if (dev->dev_state != MEI_DEV_ENABLED) {
-		if (dev->dev_state == MEI_DEV_INIT_CLIENTS) {
-			if (dev->init_clients_timer) {
-				if (--dev->init_clients_timer == 0) {
-					dev_err(&dev->pdev->dev, "reset: init clients timeout hbm_state = %d.\n",
-						dev->hbm_state);
-					mei_reset(dev, 1);
-				}
+
+	/* Catch interrupt stalls during HBM init handshake */
+	if (dev->dev_state == MEI_DEV_INIT_CLIENTS &&
+	    dev->hbm_state != MEI_HBM_IDLE) {
+
+		if (dev->init_clients_timer) {
+			if (--dev->init_clients_timer == 0) {
+				dev_err(&dev->pdev->dev, "timer: init clients timeout hbm_state = %d.\n",
+					dev->hbm_state);
+				mei_reset(dev);
+				goto out;
 			}
 		}
-		goto out;
 	}
+
+	if (dev->dev_state != MEI_DEV_ENABLED)
+		goto out;
+
 	/*** connect/disconnect timeouts ***/
 	list_for_each_entry_safe(cl_pos, cl_next, &dev->file_list, link) {
 		if (cl_pos->timer_count) {
 			if (--cl_pos->timer_count == 0) {
-				dev_err(&dev->pdev->dev, "reset: connect/disconnect timeout.\n");
-				mei_reset(dev, 1);
+				dev_err(&dev->pdev->dev, "timer: connect/disconnect timeout.\n");
+				mei_reset(dev);
 				goto out;
 			}
 		}
@@ -590,8 +597,8 @@ void mei_timer(struct work_struct *work)
 
 	if (dev->iamthif_stall_timer) {
 		if (--dev->iamthif_stall_timer == 0) {
-			dev_err(&dev->pdev->dev, "reset: amthif  hanged.\n");
-			mei_reset(dev, 1);
+			dev_err(&dev->pdev->dev, "timer: amthif  hanged.\n");
+			mei_reset(dev);
 			dev->iamthif_msg_buf_size = 0;
 			dev->iamthif_msg_buf_index = 0;
 			dev->iamthif_canceled = false;
@@ -644,7 +651,8 @@ void mei_timer(struct work_struct *work)
 		}
 	}
 out:
-	schedule_delayed_work(&dev->timer_work, 2 * HZ);
+	if (dev->dev_state != MEI_DEV_DISABLED)
+		schedule_delayed_work(&dev->timer_work, 2 * HZ);
 	mutex_unlock(&dev->device_lock);
 }
 

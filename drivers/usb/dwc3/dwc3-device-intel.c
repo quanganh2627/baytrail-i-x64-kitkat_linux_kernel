@@ -23,6 +23,7 @@
 #include <linux/usb/dwc3-intel-mid.h>
 #include <linux/usb/phy.h>
 #include <linux/wakelock.h>
+#include <asm/spid.h>
 
 #include "core.h"
 #include "gadget.h"
@@ -146,7 +147,7 @@ static void dwc3_do_extra_change(struct dwc3 *dwc)
 	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 }
 
-static void dwc3_enable_hibernation(struct dwc3 *dwc)
+static void dwc3_enable_hibernation(struct dwc3 *dwc, bool on)
 {
 	u32 num, reg;
 
@@ -162,11 +163,16 @@ static void dwc3_enable_hibernation(struct dwc3 *dwc)
 		dev_err(dwc->dev, "number of scratchpad buffer: %d\n", num);
 
 	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
-	reg |= DWC3_GCTL_GBLHIBERNATIONEN;
-	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 
-	dwc3_send_gadget_generic_command(dwc, DWC3_DGCMD_SET_SCRATCH_ADDR_LO,
-		dwc->scratch_array_dma & 0xffffffffU);
+	if (on) {
+		dwc3_writel(dwc->regs, DWC3_GCTL,
+				reg | DWC3_GCTL_GBLHIBERNATIONEN);
+
+		dwc3_send_gadget_generic_command(dwc, DWC3_DGCMD_SET_SCRATCH_ADDR_LO,
+				dwc->scratch_array_dma & 0xffffffffU);
+	} else
+		dwc3_writel(dwc->regs, DWC3_GCTL,
+				reg & ~DWC3_GCTL_GBLHIBERNATIONEN);
 }
 
 /*
@@ -194,6 +200,12 @@ static irqreturn_t dwc3_quirks_process_event_buf(struct dwc3 *dwc, u32 buf)
 	* Can be removed after B0.
 	*/
 	if (dwc->is_otg && dwc->revision == DWC3_REVISION_210A)
+		udelay(4);
+
+	/* WORKAROUND: Add 4 us delay as moorfield seems to have memory
+	 * inconsistent issue
+	 */
+	if (INTEL_MID_BOARD(1, PHONE, MOFD))
 		udelay(4);
 
 	left = evt->count;
@@ -277,7 +289,7 @@ int dwc3_start_peripheral(struct usb_gadget *g)
 		spin_lock_irqsave(&dwc->lock, flags);
 
 		if (dwc->hiber_enabled)
-			dwc3_enable_hibernation(dwc);
+			dwc3_enable_hibernation(dwc, true);
 		dwc3_do_extra_change(dwc);
 		dwc3_event_buffers_setup(dwc);
 		ret = dwc3_init_for_enumeration(dwc);
@@ -326,6 +338,9 @@ int dwc3_stop_peripheral(struct usb_gadget *g)
 
 	mutex_lock(&_dev_data->mutex);
 	spin_lock_irqsave(&dwc->lock, flags);
+
+	/* Disable hibernation for D0i3cold */
+	dwc3_enable_hibernation(dwc, false);
 
 	dwc3_stop_active_transfers(dwc);
 
@@ -405,12 +420,14 @@ static int dwc3_device_gadget_pullup(struct usb_gadget *g, int is_on)
 
 	mutex_lock(&_dev_data->mutex);
 
-	if (dwc->soft_connected == is_on)
+	spin_lock_irqsave(&dwc->lock, flags);
+	if (dwc->soft_connected == is_on) {
+		spin_unlock_irqrestore(&dwc->lock, flags);
 		goto done;
+	}
 
 	dwc->soft_connected = is_on;
 
-	spin_lock_irqsave(&dwc->lock, flags);
 	if (dwc->pm_state == PM_DISCONNECTED) {
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		goto done;
@@ -428,7 +445,7 @@ static int dwc3_device_gadget_pullup(struct usb_gadget *g, int is_on)
 		spin_lock_irqsave(&dwc->lock, flags);
 
 		if (dwc->hiber_enabled)
-			dwc3_enable_hibernation(dwc);
+			dwc3_enable_hibernation(dwc, true);
 		dwc3_do_extra_change(dwc);
 		dwc3_event_buffers_setup(dwc);
 		dwc3_init_for_enumeration(dwc);

@@ -1392,11 +1392,36 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	unsigned long pfn;
 	int ret = 0, err = 0;
 	bool write = !!(vmf->flags & FAULT_FLAG_WRITE);
+	struct intel_ring_buffer *ring = NULL;
+	unsigned int reset_counter;
+	u32 seqno;
 
 	i915_rpm_get_callback(dev);
 	/* We don't use vmf->pgoff since that has the fake offset */
 	page_offset = ((unsigned long)vmf->virtual_address - vma->vm_start) >>
 		PAGE_SHIFT;
+
+	ret = i915_mutex_lock_interruptible(dev);
+	if (ret)
+		goto out;
+
+	ring = obj->ring;
+	seqno = !write ? obj->last_write_seqno : obj->last_read_seqno;
+	reset_counter = atomic_read(&dev_priv->gpu_error.reset_counter);
+
+	mutex_unlock(&dev->struct_mutex);
+
+	/* wait for GPU to finish first without acquiring struct_mutex.
+	   This will offload the mutex contention as subsequent wait for GPU
+	   while holding mutex in this routine will be as good as NOOP
+	*/
+	if (seqno != 0) {
+		ret = __wait_seqno(ring, seqno,
+				reset_counter, true, NULL);
+
+		if (ret)
+			goto out;
+	}
 
 	ret = i915_mutex_lock_interruptible(dev);
 	if (ret)
@@ -2838,6 +2863,7 @@ i915_gem_object_ggtt_unbind(struct drm_i915_gem_object *obj)
 {
 	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
 	struct i915_address_space *ggtt = &dev_priv->gtt.base;
+	struct i915_vma *vma_tmp;
 
 	if (!i915_gem_obj_ggtt_bound(obj))
 		return 0;
@@ -2847,7 +2873,18 @@ i915_gem_object_ggtt_unbind(struct drm_i915_gem_object *obj)
 
 	BUG_ON(obj->pages == NULL);
 
-	return i915_vma_unbind(i915_gem_obj_to_vma(obj, ggtt));
+	vma_tmp = i915_gem_obj_to_vma(obj, ggtt);
+	/*
+	 * Added this NULL check on the returned vma pointer
+	 * to avoid klocwork warning, otherwise it is not
+	 * really needed, as we already have an indirect check
+	 * for it through the i915_gem_obj_bound function
+	 */
+	WARN_ON(vma_tmp == NULL);
+	if (vma_tmp == NULL)
+		return 0;
+
+	return i915_vma_unbind(vma_tmp);
 }
 
 int i915_gpu_idle(struct drm_device *dev)

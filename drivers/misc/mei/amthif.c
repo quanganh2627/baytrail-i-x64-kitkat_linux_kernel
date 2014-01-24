@@ -35,7 +35,6 @@
 
 #include "mei_dev.h"
 #include "hbm.h"
-#include "hw-me.h"
 #include "client.h"
 
 const uuid_le mei_amthif_guid  = UUID_LE(0x12f80028, 0xb4b7, 0x4b2d,
@@ -253,8 +252,7 @@ int mei_amthif_read(struct mei_device *dev, struct file *file,
 	if (copy_to_user(ubuf, cb->response_buffer.data + *offset, length)) {
 		dev_err(&dev->pdev->dev, "failed to copy data to userland\n");
 		rets = -EFAULT;
-	}
-	else {
+	} else {
 		rets = length;
 		if ((*offset + length) < cb->buf_idx) {
 			*offset += length;

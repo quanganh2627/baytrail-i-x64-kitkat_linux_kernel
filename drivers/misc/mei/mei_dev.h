@@ -24,7 +24,6 @@
 #include <linux/mei_cl_bus.h>
 
 #include "hw.h"
-#include "hw-me-regs.h"
 #include "hbm.h"
 
 /*
@@ -54,6 +53,11 @@ extern const uuid_le mei_amthif_guid;
  * Number of Maximum MEI Clients
  */
 #define MEI_CLIENTS_MAX 256
+
+/*
+ * maximum number of consecutive resets
+ */
+#define MEI_MAX_CONSEC_RESET  3
 
 /*
  * Number of File descriptors/handles
@@ -349,6 +353,7 @@ enum mei_pg_state {
 /**
  * struct mei_device -  MEI private device struct
 
+ * @reset_count - limits the number of consecutive resets
  * @hbm_state - state of host bus message protocol
  *
  * @pg_event     - power gating event
@@ -394,6 +399,7 @@ struct mei_device {
 	/*
 	 * mei device  states
 	 */
+	unsigned long reset_count;
 	enum mei_dev_state dev_state;
 	enum mei_hbm_state hbm_state;
 	u16 init_clients_timer;
@@ -501,8 +507,9 @@ static inline u32 mei_slots2data(int slots)
  * mei init function prototypes
  */
 void mei_device_init(struct mei_device *dev);
-void mei_reset(struct mei_device *dev, int interrupts);
+int mei_reset(struct mei_device *dev);
 int mei_start(struct mei_device *dev);
+int mei_restart(struct mei_device *dev);
 void mei_stop(struct mei_device *dev);
 void mei_cancel_work(struct mei_device *dev);
 

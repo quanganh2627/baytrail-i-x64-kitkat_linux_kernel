@@ -43,8 +43,10 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/pm.h>
 #include <linux/mmc/sdhci.h>
+#include <linux/mmc/slot-gpio.h>
 
 #include <asm/spid.h>
+#include <asm/cpu_device_id.h>
 
 #include "sdhci.h"
 
@@ -79,8 +81,29 @@ struct sdhci_acpi_host {
 	const struct sdhci_acpi_slot	*slot;
 	struct platform_device		*pdev;
 	bool				use_runtime_pm;
+	unsigned int			autosuspend_delay;
 	int				cd_gpio;
 };
+
+#define INTEL_VLV_CPU	0x37
+#define INTEL_CHV_CPU	0x30
+static const struct x86_cpu_id intel_cpus[] = {
+	{ X86_VENDOR_INTEL, 6, INTEL_VLV_CPU, X86_FEATURE_ANY, 0 },
+	{ X86_VENDOR_INTEL, 6, INTEL_CHV_CPU, X86_FEATURE_ANY, 0 },
+	{}
+};
+
+static bool sdhci_intel_host(unsigned int *cpu)
+{
+	const struct x86_cpu_id *id;
+	if (!cpu)
+		return false;
+	id = x86_match_cpu(intel_cpus);
+	if (!id)
+		return false;
+	*cpu = id->model;
+	return true;
+}
 
 static inline bool sdhci_acpi_flag(struct sdhci_acpi_host *c, unsigned int flag)
 {
@@ -139,28 +162,6 @@ static int sdhci_acpi_power_up_host(struct sdhci_host *host)
 	return 0;
 }
 
-static int sdhci_acpi_get_cd(struct sdhci_host *host)
-{
-	bool present;
-	struct sdhci_acpi_host *c = sdhci_priv(host);
-
-	if (host->quirks2 & SDHCI_QUIRK2_BAD_SD_CD) {
-		/* present doesn't work */
-		if (gpio_is_valid(c->cd_gpio))
-			return gpio_get_value(c->cd_gpio) ? 0 : 1;
-	}
-
-	/* If nonremovable or polling, assume that the card is always present */
-	if ((host->mmc->caps & MMC_CAP_NONREMOVABLE) ||
-			(host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION))
-		present = true;
-	else
-		present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
-			SDHCI_CARD_PRESENT;
-
-	return present;
-}
-
 static int sdhci_acpi_get_tuning_count(struct sdhci_host *host)
 {
 	struct sdhci_acpi_host *c = sdhci_priv(host);
@@ -204,7 +205,6 @@ static void  sdhci_acpi_platform_reset_exit(struct sdhci_host *host, u8 mask)
 static const struct sdhci_ops sdhci_acpi_ops_dflt = {
 	.enable_dma = sdhci_acpi_enable_dma,
 	.power_up_host	= sdhci_acpi_power_up_host,
-	.get_cd		= sdhci_acpi_get_cd,
 	.get_tuning_count = sdhci_acpi_get_tuning_count,
 	.platform_reset_exit = sdhci_acpi_platform_reset_exit,
 };
@@ -222,6 +222,7 @@ static int sdhci_acpi_emmc_probe_slot(struct platform_device *pdev)
 {
 	struct sdhci_acpi_host *c = platform_get_drvdata(pdev);
 	struct sdhci_host *host;
+	unsigned int cpu;
 
 	if (!c || !c->host)
 		return 0;
@@ -232,8 +233,40 @@ static int sdhci_acpi_emmc_probe_slot(struct platform_device *pdev)
 			!INTEL_MID_BOARDV2(TABLET, BYT, BLB, ENG))
 		sdhci_alloc_panic_host(host);
 
+	if (!sdhci_intel_host(&cpu))
+		return 0;
+
+	switch (cpu) {
+	case INTEL_VLV_CPU:
+		host->mmc->qos = kzalloc(sizeof(struct pm_qos_request),
+				GFP_KERNEL);
+		pm_qos_add_request(host->mmc->qos, PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
+		break;
+	default:
+		break;
+	}
+
 	return 0;
 }
+
+
+static int sdhci_acpi_sdio_probe_slot(struct platform_device *pdev)
+{
+	struct sdhci_acpi_host *c = platform_get_drvdata(pdev);
+
+	if (!c)
+		return 0;
+
+	if (INTEL_MID_BOARDV1(PHONE, BYT) ||
+			 INTEL_MID_BOARDV1(TABLET, BYT)) {
+		/* increase the auto suspend delay for SDIO to be 500ms */
+		c->autosuspend_delay = 500;
+	}
+
+	return 0;
+}
+
 
 static const struct sdhci_acpi_slot sdhci_acpi_slot_int_emmc = {
 	.quirks2 = SDHCI_QUIRK2_CARD_CD_DELAY | SDHCI_QUIRK2_WAIT_FOR_IDLE |
@@ -254,6 +287,7 @@ static const struct sdhci_acpi_slot sdhci_acpi_slot_int_sdio = {
 	.flags   = SDHCI_ACPI_RUNTIME_PM,
 	.pm_caps = MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ |
 		MMC_PM_WAKE_SDIO_IRQ,
+	.probe_slot	= sdhci_acpi_sdio_probe_slot,
 };
 
 #define BYT_SD_1P8_EN	40
@@ -381,59 +415,6 @@ static const struct sdhci_acpi_slot *sdhci_acpi_get_slot(acpi_handle handle,
 	return slot;
 }
 
-#ifdef CONFIG_PM_RUNTIME
-
-static irqreturn_t sdhci_acpi_sd_cd(int irq, void *dev_id)
-{
-	mmc_detect_change(dev_id, msecs_to_jiffies(200));
-	return IRQ_HANDLED;
-}
-
-static int sdhci_acpi_add_own_cd(struct device *dev, int gpio,
-				 struct mmc_host *mmc)
-{
-	unsigned long flags;
-	int err, irq;
-
-	if (gpio < 0) {
-		err = gpio;
-		goto out;
-	}
-
-	err = devm_gpio_request_one(dev, gpio, GPIOF_DIR_IN, "sd_cd");
-	if (err)
-		goto out;
-
-	irq = gpio_to_irq(gpio);
-	if (irq < 0) {
-		err = irq;
-		goto out_free;
-	}
-
-	flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
-	err = devm_request_irq(dev, irq, sdhci_acpi_sd_cd, flags, "sd_cd", mmc);
-	if (err)
-		goto out_free;
-
-	return 0;
-
-out_free:
-	devm_gpio_free(dev, gpio);
-out:
-	dev_warn(dev, "failed to setup card detect wake up\n");
-	return err;
-}
-
-#else
-
-static int sdhci_acpi_add_own_cd(struct device *dev, int gpio,
-				 struct mmc_host *mmc)
-{
-	return 0;
-}
-
-#endif
-
 static int sdhci_acpi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -475,6 +456,7 @@ static int sdhci_acpi_probe(struct platform_device *pdev)
 	c->pdev = pdev;
 	c->use_runtime_pm = sdhci_acpi_flag(c, SDHCI_ACPI_RUNTIME_PM);
 	c->cd_gpio = -ENODEV;
+	c->autosuspend_delay = 0;
 
 	platform_set_drvdata(pdev, c);
 
@@ -532,14 +514,22 @@ static int sdhci_acpi_probe(struct platform_device *pdev)
 
 	if (sdhci_acpi_flag(c, SDHCI_ACPI_SD_CD) &&
 			c->cd_gpio != -ENODEV) {
-		if (sdhci_acpi_add_own_cd(dev, c->cd_gpio, host->mmc))
+		/*
+		 * WORKAROUND, can be removed when GPIO_CD
+		 * set to GPIO mode by default
+		 */
+		lnw_gpio_set_alt(c->cd_gpio, 0);
+		if (mmc_gpio_request_cd(host->mmc, c->cd_gpio))
 			c->use_runtime_pm = false;
 	}
 
 	if (c->use_runtime_pm) {
 		pm_runtime_set_active(dev);
 		pm_suspend_ignore_children(dev, 1);
-		pm_runtime_set_autosuspend_delay(dev, 50);
+		if (c->autosuspend_delay)
+			pm_runtime_set_autosuspend_delay(dev, c->autosuspend_delay);
+		else
+			pm_runtime_set_autosuspend_delay(dev, 50);
 		pm_runtime_use_autosuspend(dev);
 		pm_runtime_enable(dev);
 	}
