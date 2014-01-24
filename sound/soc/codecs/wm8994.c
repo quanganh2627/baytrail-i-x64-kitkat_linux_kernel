@@ -4636,6 +4636,9 @@ static int wm8994_suspend(struct device *dev)
 
 		if ((reg & WM8958_MICD_VALID) &&  !(reg & WM8958_MICD_STS)) {
 
+			dev_dbg(codec->dev, "Disable interrupt...\n");
+			snd_soc_write(codec, WM8994_INTERRUPT_CONTROL, 0x01);
+
 			ret = regcache_sync_region(wm8994->wm8994->regmap,
 					WM8994_INTERRUPT_CONTROL,
 					WM8994_INTERRUPT_CONTROL);
@@ -4674,6 +4677,7 @@ static int wm8994_resume(struct device *dev)
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 					WM8958_MICD_ENA, WM8958_MICD_ENA);
+		snd_soc_write(codec, WM8994_INTERRUPT_CONTROL, 0x00);
 	}
 
 	return 0;
