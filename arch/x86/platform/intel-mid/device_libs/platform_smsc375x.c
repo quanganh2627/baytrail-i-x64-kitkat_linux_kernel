@@ -56,8 +56,10 @@ void *smsc375x_platform_data(void)
 		pr_info("TI PMIC ACPI entry[INT33F5] found\n");
 		smsc_pdata.is_vbus_online = dc_ti_vbus_on_status;
 	} else {
+#ifdef CONFIG_INTEL_CRYSTALCOVE_PWRSRC
 		pr_info("default Crytsal Cove PMIC path\n");
 		smsc_pdata.is_vbus_online = crystal_cove_vbus_on_status;
+#endif
 	}
 
 	memset(&oem1_data, 0, sizeof(struct em_config_oem1_data));
