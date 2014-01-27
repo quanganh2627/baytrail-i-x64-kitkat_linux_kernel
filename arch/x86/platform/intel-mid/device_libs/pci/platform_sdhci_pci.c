@@ -335,6 +335,7 @@ static void mrfl_emmc_cleanup(struct sdhci_pci_data *data)
 		iounmap(data->flis_addr);
 }
 
+#ifdef CONFIG_INTEL_SCU_IPC
 /* Board specific setup related to SD goes here */
 static int mrfl_sd_setup(struct sdhci_pci_data *data)
 {
@@ -365,6 +366,12 @@ static int mrfl_sd_setup(struct sdhci_pci_data *data)
 
 	return 0;
 }
+#else
+static int mrfl_sd_setup(struct sdhci_pci_data *data)
+{
+	return 0;
+}
+#endif
 
 /* Board specific cleanup related to SD goes here */
 static void mrfl_sd_cleanup(struct sdhci_pci_data *data)

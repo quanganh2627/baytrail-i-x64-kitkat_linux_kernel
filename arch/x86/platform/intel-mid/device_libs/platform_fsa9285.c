@@ -42,9 +42,10 @@ void *fsa9285_platform_data(void)
 {
 	int ret = 0;
 
+#ifdef CONFIG_INTEL_CRYSTALCOVE_PWRSRC
 	fsa_pdata.enable_vbus = crystal_cove_enable_vbus;
 	fsa_pdata.disable_vbus = crystal_cove_disable_vbus;
-
+#endif
 	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR0) ||
 		INTEL_MID_BOARD(3, TABLET, BYT, BLK, ENG, 8PR0) ||
 		INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1) ||

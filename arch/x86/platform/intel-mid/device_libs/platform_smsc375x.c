@@ -28,7 +28,8 @@ void *smsc375x_platform_data(void)
 {
 	smsc_pdata.enable_vbus = intel_bytcr_boost_enable;
 	smsc_pdata.disable_vbus = intel_bytcr_boost_disable;
+#ifdef CONFIG_INTEL_CRYSTALCOVE_PWRSRC
 	smsc_pdata.is_vbus_online = crystal_cove_vbus_on_status;
-
+#endif
 	return &smsc_pdata;
 }
