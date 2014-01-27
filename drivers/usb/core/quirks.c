@@ -150,6 +150,9 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* INTEL VALUE SSD */
 	{ USB_DEVICE(0x8086, 0xf1a5), .driver_info = USB_QUIRK_RESET_RESUME },
 
+	/* SMSC USB HUB 4640 SDCARD COMBO */
+	{ USB_DEVICE(0x0424, 0x2640), .driver_info = USB_QUIRK_DISABLE_PORT1 },
+
 	{ }  /* terminating entry must be last */
 };
 

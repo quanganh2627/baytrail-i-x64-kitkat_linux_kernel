@@ -30,4 +30,7 @@
    descriptor */
 #define USB_QUIRK_DELAY_INIT		0x00000040
 
+/* disable power to first port on a hub */
+#define USB_QUIRK_DISABLE_PORT1		0x00000080
+
 #endif /* __LINUX_USB_QUIRKS_H */

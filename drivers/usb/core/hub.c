@@ -842,12 +842,18 @@ static unsigned hub_power_on(struct usb_hub *hub, bool do_delay)
 	else
 		dev_dbg(hub->intfdev, "trying to enable port power on "
 				"non-switchable hub\n");
-	for (port1 = 1; port1 <= hub->descriptor->bNbrPorts; port1++)
+	for (port1 = 1; port1 <= hub->descriptor->bNbrPorts; port1++) {
+#ifdef CONFIG_USB_XHCI_HSIC
+		/* Dont power up port 1 if the hub is usb4640 */
+		if ((hub->hdev->quirks & USB_QUIRK_DISABLE_PORT1) && port1 == 1)
+			continue;
+#endif
 		if (hub->ports[port1 - 1]->power_is_on)
 			set_port_feature(hub->hdev, port1, USB_PORT_FEAT_POWER);
 		else
 			usb_clear_port_feature(hub->hdev, port1,
 						USB_PORT_FEAT_POWER);
+	}
 
 	/* Wait at least 100 msec for power to become stable */
 	delay = max(pgood_delay, (unsigned) 100);
