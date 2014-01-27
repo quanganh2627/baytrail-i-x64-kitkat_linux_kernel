@@ -119,10 +119,12 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
 			pdev->device == PCI_DEVICE_ID_INTEL_BYT_USH) {
 		xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
+#ifndef CONFIG_USB_XHCI_HSIC
 		/* FIXME BYT USH Controller need to disable HSIC hub port,
 		 * so add this quirks here.
 		 */
 		xhci->quirks |= XHCI_PORT_DISABLE_QUIRK;
+#endif
 		/**
 		 * We found two USB Disk cannot pass Enumeration with LPM
 		 * token sent on BYT, so disable LPM here.
