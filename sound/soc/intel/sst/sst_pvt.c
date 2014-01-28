@@ -154,6 +154,8 @@ void dump_sst_shim(struct intel_sst_drv *sst)
 
 void reset_sst_shim(struct intel_sst_drv *sst)
 {
+	union config_status_reg_mrfld csr;
+
 	pr_err("Resetting few Shim registers\n");
 	write_shim_data(sst, sst->ipc_reg.ipcx, 0x0);
 	write_shim_data(sst, sst->ipc_reg.ipcd, 0x0);
@@ -164,6 +166,13 @@ void reset_sst_shim(struct intel_sst_drv *sst)
 	write_shim_data(sst, SST_ISRSC, 0x0);
 	write_shim_data(sst, SST_ISRLPESC, 0x0);
 	write_shim_data(sst, SST_PISR, 0x0);
+
+	/* Reset the CSR value to the default value. i.e 0x1e40001*/
+	csr.full = sst_shim_read64(sst_drv_ctx->shim, SST_CSR);
+	csr.part.xt_snoop = 0;
+	csr.full &= ~(0xf);
+	csr.full |= 0x01;
+	sst_shim_write64(sst_drv_ctx->shim, SST_CSR, csr.full);
 }
 
 static void dump_sst_crash_area(void)
@@ -308,7 +317,6 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 
 	dump_stack();
 	dump_sst_shim(sst);
-	reset_sst_shim(sst);
 
 	/* dump mailbox and sram */
 	pr_err("Dumping Mailbox...\n");
@@ -345,8 +353,8 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	spin_lock(&sst_drv_ctx->pvt_id_lock);
 	sst_drv_ctx->pvt_id = 0;
 	spin_unlock(&sst_drv_ctx->pvt_id_lock);
-
 	sst_dump_lists(sst_drv_ctx);
+	reset_sst_shim(sst);
 }
 
 void sst_do_recovery(struct intel_sst_drv *sst)
