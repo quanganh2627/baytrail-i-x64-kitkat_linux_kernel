@@ -195,23 +195,23 @@ static int acpi_fan_suspend(struct device *dev)
 {
 	if (!dev)
 		return -EINVAL;
-
+#ifndef CONFIG_ENABLE_S3
 	acpi_bus_set_power(to_acpi_device(dev)->handle, ACPI_STATE_D0);
-
+#endif
 	return AE_OK;
 }
 
 static int acpi_fan_resume(struct device *dev)
 {
-	int result;
+	int result = 0;
 
 	if (!dev)
 		return -EINVAL;
-
+#ifndef CONFIG_ENABLE_S3
 	result = acpi_bus_update_power(to_acpi_device(dev)->handle, NULL);
 	if (result)
 		printk(KERN_ERR PREFIX "Error updating fan power state\n");
-
+#endif
 	return result;
 }
 #endif
