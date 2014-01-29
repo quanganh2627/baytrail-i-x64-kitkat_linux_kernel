@@ -74,6 +74,8 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 	u8 stat;
 	u8 valid;
 	int ret = NOTIFY_OK;
+	int KEY_PRESSED = 1;
+	int KEY_RELEASED = 0;
 	struct byt_buttons_priv *priv;
 
 	priv = container_of(nb, struct byt_buttons_priv, nb);
@@ -121,6 +123,15 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 	case BYT_EC_SCI_LID:
 	case BYT_EC_SCI_RESUME:
 		mutex_lock(&priv->btn_mutex);
+		input_event(priv->input, EV_KEY, KEY_POWER,
+				KEY_PRESSED);
+		acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
+		input_sync(priv->input);
+
+		input_event(priv->input, EV_KEY, KEY_POWER,
+				KEY_RELEASED);
+		acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
+		input_sync(priv->input);
 		ret = send_lid_state(priv->input);
 		if (ret)
 			ret = NOTIFY_DONE;
