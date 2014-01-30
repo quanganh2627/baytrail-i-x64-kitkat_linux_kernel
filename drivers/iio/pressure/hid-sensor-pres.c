@@ -47,7 +47,7 @@ struct pres_state {
 static const struct iio_chan_spec pres_channels[] = {
 	{
 		.type = IIO_PRESSURE,
-		.modified = 1,
+		.modified = 0,
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_OFFSET) |
 		BIT(IIO_CHAN_INFO_SCALE) |
 		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
