@@ -101,6 +101,7 @@ struct mt_device {
 	unsigned last_slot_field;	/* the last field of a slot */
 	unsigned mt_report_id;	/* the report ID of the multitouch device */
 	unsigned pen_report_id;	/* the report ID of the pen device */
+	unsigned gd_report_id;	/* the report ID of the mouse(generic desktop) device */
 	__s16 inputmode;	/* InputMode HID feature, -1 if non-existent */
 	__s16 inputmode_index;	/* InputMode HID feature index in the report */
 	__s16 maxcontact_report_id;	/* Maximum Contact Number HID feature,
@@ -422,6 +423,105 @@ static void mt_pen_input_configured(struct hid_device *hdev,
 
 	/* force BTN_STYLUS to allow tablet matching in udev */
 	__set_bit(BTN_STYLUS, hi->input->keybit);
+}
+
+
+static int mt_gd_input_mapping(struct hid_device *hdev, struct hid_input *hi,
+		struct hid_field *field, struct hid_usage *usage,
+		unsigned long **bit, int *max)
+{
+	struct mt_device *td = hid_get_drvdata(hdev);
+	int code;
+	struct hid_usage *prev_usage = NULL;
+
+	td->gd_report_id = field->report->id;
+
+	if (usage->usage_index)
+		prev_usage = &field->usage[usage->usage_index - 1];
+
+	if (HID_UP_GENDESK == (usage->hid & HID_USAGE_PAGE)) {
+
+		switch (usage->hid) {
+		case HID_GD_X:
+			if (field->flags & HID_MAIN_ITEM_RELATIVE)
+				hid_map_usage(hi, usage, bit, max,
+					EV_REL, usage->hid & 0xf);
+			else
+				hid_map_usage(hi, usage, bit, max,
+					EV_ABS, usage->hid & 0xf);
+			return 1;
+		case HID_GD_Y:
+			if (field->flags & HID_MAIN_ITEM_RELATIVE)
+				hid_map_usage(hi, usage, bit, max,
+					EV_REL, usage->hid & 0xf);
+			else
+				hid_map_usage(hi, usage, bit, max,
+					EV_ABS, usage->hid & 0xf);
+			return 1;
+		default:
+			break;
+		}
+		return 0;
+	} else if(HID_UP_BUTTON == ((usage->hid & HID_USAGE_PAGE))) {
+		code = ((usage->hid - 1) & HID_USAGE);
+
+		switch (field->application) {
+		case HID_GD_MOUSE:
+		case HID_GD_POINTER:
+			code += BTN_MOUSE;
+			break;
+		default:
+			switch (field->physical) {
+			case HID_GD_MOUSE:
+			case HID_GD_POINTER:
+				code += BTN_MOUSE;
+				break;
+			default:
+				code += BTN_MISC;
+				break;
+			}
+		}
+
+		hid_map_usage(hi, usage, bit, max, EV_KEY, code);
+		input_set_capability(hi->input, EV_KEY, code);
+		return 1;
+	}
+	return 0;
+}
+
+static int mt_gd_input_mapped(struct hid_device *hdev, struct hid_input *hi,
+		struct hid_field *field, struct hid_usage *usage,
+		unsigned long **bit, int *max)
+{
+	/* let hid-input handle it */
+	return 0;
+}
+
+static int mt_gd_event(struct hid_device *hid, struct hid_field *field,
+				struct hid_usage *usage, __s32 value)
+{
+	/* let hid-input handle it */
+	return 0;
+}
+
+static void mt_gd_report(struct hid_device *hid, struct hid_report *report)
+{
+	struct hid_field *field = report->field[0];
+
+	input_sync(field->hidinput->input);
+}
+
+static void mt_gd_input_configured(struct hid_device *hdev,
+					struct hid_input *hi)
+{
+	char *name = kzalloc(strlen(hi->input->name) + 5, GFP_KERNEL);
+	if (name) {
+		sprintf(name, "%s Mouse", hi->input->name);
+		mt_free_input_name(hi);
+		hi->input->name = name;
+	}
+
+	__set_bit(BTN_TOOL_MOUSE, hi->input->keybit);
 }
 
 static int mt_touch_input_mapping(struct hid_device *hdev, struct hid_input *hi,
@@ -820,11 +920,15 @@ static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 	* such as Mouse that might have the same GenericDesktop usages. */
 	if (field->application != HID_DG_TOUCHSCREEN &&
 	    field->application != HID_DG_PEN &&
+	    field->application != HID_GD_MOUSE &&
 	    field->application != HID_DG_TOUCHPAD)
 		return -1;
 
 	if (field->physical == HID_DG_STYLUS)
 		return mt_pen_input_mapping(hdev, hi, field, usage, bit, max);
+
+	if (field->physical == HID_GD_POINTER)
+		return mt_gd_input_mapping(hdev, hi, field, usage, bit, max);
 
 	return mt_touch_input_mapping(hdev, hi, field, usage, bit, max);
 }
@@ -835,6 +939,9 @@ static int mt_input_mapped(struct hid_device *hdev, struct hid_input *hi,
 {
 	if (field->physical == HID_DG_STYLUS)
 		return mt_pen_input_mapped(hdev, hi, field, usage, bit, max);
+
+	if (field->physical == HID_GD_POINTER)
+		return mt_gd_input_mapped(hdev, hi, field, usage, bit, max);
 
 	return mt_touch_input_mapped(hdev, hi, field, usage, bit, max);
 }
@@ -850,6 +957,8 @@ static int mt_event(struct hid_device *hid, struct hid_field *field,
 	if (field->report->id == td->pen_report_id)
 		return mt_pen_event(hid, field, usage, value);
 
+	if (field->report->id == td->gd_report_id)
+		return mt_gd_event(hid, field, usage, value);
 	/* ignore other reports */
 	return 1;
 }
@@ -866,6 +975,9 @@ static void mt_report(struct hid_device *hid, struct hid_report *report)
 
 	if (report->id == td->pen_report_id)
 		mt_pen_report(hid, report);
+
+	if (report->id == td->gd_report_id)
+		mt_gd_report(hid, report);
 }
 
 static void mt_set_input_mode(struct hid_device *hdev)
@@ -955,6 +1067,9 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 
 	if (hi->report->id == td->pen_report_id)
 		mt_pen_input_configured(hdev, hi);
+
+	if (hi->report->id == td->gd_report_id)
+		mt_gd_input_configured(hdev, hi);
 	return ret;
 }
 
@@ -996,6 +1111,7 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	td->cc_index = -1;
 	td->mt_report_id = -1;
 	td->pen_report_id = -1;
+	td->gd_report_id = -1;
 	hid_set_drvdata(hdev, td);
 
 	td->fields = kzalloc(sizeof(struct mt_fields), GFP_KERNEL);
