@@ -1931,6 +1931,22 @@ static int sdhci_pci_get_tuning_count(struct sdhci_host *host)
 	return tuning_count;
 }
 
+static int sdhci_pci_get_timeout_timer_count(struct sdhci_host *host)
+{
+	struct sdhci_pci_slot *slot = sdhci_priv(host);
+	int timeout_timer_count = SDHCI_REQ_TIMEOUT_TIMER_CNT_MAX;
+
+	switch (slot->chip->pdev->device) {
+	case PCI_DEVICE_ID_INTEL_MRFL_MMC:
+		timeout_timer_count = 4; /* To avoid Android UI ANR error */
+		break;
+	default:
+		break;
+	}
+
+	return timeout_timer_count;
+}
+
 static int sdhci_gpio_buf_check(struct sdhci_host *host, unsigned int clk)
 {
 	int ret = -ENOSYS;
@@ -1964,6 +1980,7 @@ static const struct sdhci_ops sdhci_pci_ops = {
 	.get_tuning_count = sdhci_pci_get_tuning_count,
 	.gpio_buf_check = sdhci_gpio_buf_check,
 	.gpio_buf_dump = sdhci_gpio_buf_dump,
+	.get_timeout_timer_count = sdhci_pci_get_timeout_timer_count,
 };
 
 /*****************************************************************************\

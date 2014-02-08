@@ -1060,7 +1060,7 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		udelay(10);
 	}
 
-	mod_timer(&host->timer, jiffies + 10 * HZ);
+	mod_timer(&host->timer, jiffies + host->timeout_timer_cnt * HZ);
 
 	host->cmd = cmd;
 	host->r1b_busy_end = 0;
@@ -4362,6 +4362,11 @@ int sdhci_add_host(struct sdhci_host *host)
 	/* Re-tuning mode supported by the Host Controller */
 	host->tuning_mode = (caps[1] & SDHCI_RETUNING_MODE_MASK) >>
 			     SDHCI_RETUNING_MODE_SHIFT;
+
+	if (host->ops->get_timeout_timer_count)
+		host->timeout_timer_cnt = host->ops->get_timeout_timer_count(host);
+	else
+		host->timeout_timer_cnt = SDHCI_REQ_TIMEOUT_TIMER_CNT_MAX;
 
 	ocr_avail = 0;
 	spin_lock_init(&host->lock);
