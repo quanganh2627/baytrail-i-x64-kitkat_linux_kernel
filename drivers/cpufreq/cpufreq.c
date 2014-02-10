@@ -42,6 +42,8 @@
 static struct cpufreq_driver *cpufreq_driver;
 static DEFINE_PER_CPU(struct cpufreq_policy *, cpufreq_cpu_data);
 static DEFINE_PER_CPU(struct cpufreq_policy *, cpufreq_cpu_data_fallback);
+DEFINE_PER_CPU(struct cpufreq_cpu_shield_info, cpu_shield_data);
+
 #ifdef CONFIG_HOTPLUG_CPU
 /* This one keeps track of the previously set governor of a removed CPU */
 static DEFINE_PER_CPU(char[CPUFREQ_NAME_LEN], cpufreq_cpu_governor);
@@ -335,19 +337,28 @@ static int cpufreq_parse_governor(char *str_governor, unsigned int *policy,
 				struct cpufreq_governor **governor)
 {
 	int err = -EINVAL;
+	int cpu = raw_smp_processor_id();
 
 	if (!cpufreq_driver)
 		goto out;
+
+	/* reset the cpu utilization statistics */
+	per_cpu(cpu_shield_data, cpu).cpu_utilization = 0;
 
 	if (cpufreq_driver->setpolicy) {
 		if (!strnicmp(str_governor, "performance", CPUFREQ_NAME_LEN)) {
 			*policy = CPUFREQ_POLICY_PERFORMANCE;
 			err = 0;
+			per_cpu(cpu_shield_data, cpu).is_not_valid = -1;
 		} else if (!strnicmp(str_governor, "powersave",
 						CPUFREQ_NAME_LEN)) {
 			*policy = CPUFREQ_POLICY_POWERSAVE;
 			err = 0;
-		}
+			per_cpu(cpu_shield_data, cpu).is_not_valid = -1;
+		} else if (!strnicmp(str_governor, "userspace",
+						CPUFREQ_NAME_LEN))
+			per_cpu(cpu_shield_data, cpu).is_not_valid = -1;
+
 	} else if (cpufreq_driver->target) {
 		struct cpufreq_governor *t;
 
@@ -950,6 +961,10 @@ static int __cpufreq_add_dev(struct device *dev, struct subsys_interface *sif,
 
 	policy->cpu = cpu;
 	policy->governor = CPUFREQ_DEFAULT_GOVERNOR;
+
+	memset(&per_cpu(cpu_shield_data, cpu), 0,
+			sizeof(struct cpufreq_cpu_shield_info));
+
 	cpumask_copy(policy->cpus, cpumask_of(cpu));
 
 	/* Initially set CPU itself as the policy_cpu */

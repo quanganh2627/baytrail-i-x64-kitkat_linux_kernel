@@ -55,7 +55,6 @@ struct cpufreq_interactive_cpuinfo {
 };
 
 static DEFINE_PER_CPU(struct cpufreq_interactive_cpuinfo, cpuinfo);
-
 /* realtime thread handles frequency scaling */
 static struct task_struct *speedchange_task;
 static cpumask_t speedchange_cpumask;
@@ -391,6 +390,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	unsigned int index;
 	unsigned long flags;
 	bool boosted;
+	int cpu = raw_smp_processor_id();
 
 	if (!down_read_trylock(&pcpu->enable_sem))
 		return;
@@ -410,6 +410,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 	loadadjfreq = (unsigned int)cputime_speedadj * 100;
 	cpu_load = loadadjfreq / pcpu->target_freq;
 	boosted = tunables->boost_val || now < tunables->boostpulse_endtime;
+
+	per_cpu(cpu_shield_data, cpu).cpu_utilization = cpu_load;
 
 	if (cpu_load >= tunables->go_hispeed_load || boosted) {
 		if (pcpu->target_freq < tunables->hispeed_freq) {
