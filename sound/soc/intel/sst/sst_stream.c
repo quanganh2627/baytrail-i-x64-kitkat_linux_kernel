@@ -37,6 +37,7 @@
 #include "../sst_platform.h"
 #include "../platform_ipc_v2.h"
 #include "sst.h"
+#include "sst_trace.h"
 
 /**
  * sst_alloc_stream - Send msg for a new stream ID
@@ -193,6 +194,7 @@ int sst_alloc_stream_mrfld(char *params, struct sst_block *block)
 	memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
 	memcpy(msg->mailbox_data + sizeof(dsp_hdr), &alloc_param,
 			sizeof(alloc_param));
+	trace_sst_stream("ALLOC ->", str_id, pipe_id);
 	str_info = &sst_drv_ctx->streams[str_id];
 	pr_debug("header:%x\n", msg->mrfld_header.p.header_high.full);
 	pr_debug("response rqd: %x", msg->mrfld_header.p.header_high.part.res_rqd);
@@ -239,6 +241,7 @@ int sst_start_stream(int str_id)
 				str_info->pipe_id, sizeof(u16));
 		memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
 		memset(msg->mailbox_data + sizeof(dsp_hdr), 0, sizeof(u16));
+		trace_sst_stream("START ->", str_id, str_info->pipe_id);
 	} else {
 		pr_debug("fill START_STREAM for CTP\n");
 		sst_fill_header(&msg->header, IPC_IA_START_STREAM, 1, str_id);
@@ -277,6 +280,7 @@ int sst_send_byte_stream_mrfld(void *sbytes)
 	msg->mrfld_header.p.header_low_payload = length;
 	pr_debug("length is %d\n", length);
 	memcpy(msg->mailbox_data, &bytes->bytes, bytes->len);
+	trace_sst_stream("BYTES ->", bytes->type, bytes->pipe_id);
 	if (bytes->block) {
 		block = sst_create_block(sst_drv_ctx, bytes->ipc_msg, pvt_id);
 		if (block == NULL) {
@@ -302,6 +306,7 @@ int sst_send_byte_stream_mrfld(void *sbytes)
 			unsigned char *r = block->data;
 			pr_debug("read back %d bytes", bytes->len);
 			memcpy(bytes->bytes, r, bytes->len);
+			trace_sst_stream("BYTES <-", bytes->type, bytes->pipe_id);
 		}
 	}
 	if (bytes->block)
@@ -378,6 +383,7 @@ int sst_pause_stream(int str_id)
 			sst_fill_header_dsp(&dsp_hdr, IPC_IA_PAUSE_STREAM_MRFLD,
 						str_info->pipe_id, 0);
 			memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
+			trace_sst_stream("PAUSE ->", str_id, str_info->pipe_id);
 		} else {
 			retval = sst_create_block_and_ipc_msg(&msg, false,
 					sst_drv_ctx, &block,
@@ -447,6 +453,7 @@ int sst_resume_stream(int str_id)
 						IPC_IA_RESUME_STREAM_MRFLD,
 						str_info->pipe_id, 0);
 			memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
+			trace_sst_stream("RESUME->", str_id, str_info->pipe_id);
 		} else {
 			retval = sst_create_block_and_ipc_msg(&msg, false,
 					sst_drv_ctx, &block,
@@ -520,6 +527,7 @@ int sst_drop_stream(int str_id)
 			sst_fill_header_dsp(&dsp_hdr, IPC_IA_DROP_STREAM_MRFLD,
 					str_info->pipe_id, 0);
 			memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
+			trace_sst_stream("STOP  ->", str_id, str_info->pipe_id);
 			sst_drv_ctx->ops->sync_post_message(msg);
 		}
 	} else {
@@ -590,6 +598,7 @@ int sst_drain_stream(int str_id, bool partial_drain)
 		memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
 		memcpy(msg->mailbox_data + sizeof(dsp_hdr),
 				&partial_drain, sizeof(u8));
+		trace_sst_stream("DRAIN ->", str_id, str_info->pipe_id);
 	} else {
 		retval = sst_create_block_and_ipc_msg(&msg, false,
 				sst_drv_ctx, &block,
@@ -660,6 +669,7 @@ int sst_free_stream(int str_id)
 			sst_fill_header_dsp(&dsp_hdr, IPC_IA_FREE_STREAM_MRFLD,
 						str_info->pipe_id,  0);
 			memcpy(msg->mailbox_data, &dsp_hdr, sizeof(dsp_hdr));
+			trace_sst_stream("FREE  ->", str_id, str_info->pipe_id);
 		} else {
 			retval = sst_create_block_and_ipc_msg(&msg, false,
 						sst_drv_ctx, &block,
@@ -743,8 +753,8 @@ int sst_format_vtsv_message(struct intel_sst_drv *ctx,
 	struct snd_sst_vtsv_info vinfo;
 	struct ipc_post *msg;
 
-	BUG_ON((unsigned long)ctx->vcache.file1_in_mem & 0xffffffff00000000);
-	BUG_ON((unsigned long)ctx->vcache.file2_in_mem & 0xffffffff00000000);
+	BUG_ON((unsigned long)(ctx->vcache.file1_in_mem) & 0xffffffff00000000ULL);
+	BUG_ON((unsigned long)(ctx->vcache.file2_in_mem) & 0xffffffff00000000ULL);
 
 	vinfo.vfiles[0].addr = (u32)((unsigned long)ctx->vcache.file1_in_mem
 				& 0xffffffff);
@@ -784,14 +794,14 @@ int sst_send_vtsv_data_to_fw(struct intel_sst_drv *ctx)
 	struct sst_block *block = NULL;
 
 	/* Download both the data files */
-	retval = sst_request_vtsv_file("vtsv_net_119a.bin", ctx,
+	retval = sst_request_vtsv_file("vtsv_net.bin", ctx,
 			&ctx->vcache.file1_in_mem, &ctx->vcache.size1);
 	if (retval) {
 		pr_err("vtsv data file1 request failed %d\n", retval);
 		return retval;
 	}
 
-	retval = sst_request_vtsv_file("vtsv_grammar_119a.bin", ctx,
+	retval = sst_request_vtsv_file("vtsv_grammar.bin", ctx,
 			&ctx->vcache.file2_in_mem, &ctx->vcache.size2);
 	if (retval) {
 		pr_err("vtsv data file2 request failed %d\n", retval);

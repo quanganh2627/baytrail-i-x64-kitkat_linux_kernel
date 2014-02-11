@@ -4001,7 +4001,7 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 
 	WARN_ON(!crtc->enabled);
 
-	if (intel_crtc->active)
+	if (intel_crtc->active || dev->is_booting)
 		return;
 
 	intel_crtc->active = true;
@@ -4107,7 +4107,7 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 	int plane = intel_crtc->plane;
 	u32 data = 0;
 
-	if (!intel_crtc->active)
+	if (!intel_crtc->active || dev->is_booting)
 		return;
 
 	if ((pipe == 0) && (dev_priv->is_mipi || dev_priv->is_hdmi)) {
@@ -5476,6 +5476,9 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 	struct intel_encoder *encoder;
 	const intel_limit_t *limit;
 	int ret;
+
+	if (dev->is_booting)
+		return 0;
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		switch (encoder->type) {
@@ -8250,11 +8253,17 @@ void intel_unpin_work_fn(struct work_struct *__work)
 	struct intel_unpin_work *work =
 		container_of(__work, struct intel_unpin_work, work);
 	struct drm_device *dev = work->crtc->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	mutex_lock(&dev->struct_mutex);
 	intel_unpin_fb_obj(work->old_fb_obj);
 	drm_gem_object_unreference(&work->pending_flip_obj->base);
 	drm_gem_object_unreference(&work->old_fb_obj->base);
+
+	if (dev_priv->fwlogo_size) {
+		clear_reserved_fwlogo_mem(dev_priv);
+		dev_priv->fwlogo_size = 0;
+	}
 
 	intel_update_fbc(dev);
 	mutex_unlock(&dev->struct_mutex);
@@ -9712,6 +9721,13 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 			dev_priv->display.crtc_disable(&intel_crtc->base);
 	}
 
+	/* DO it only once */
+	if (IS_VALLEYVIEW(dev))
+		if (dev_priv->pfi_credit) {
+			program_pfi_credits(dev_priv, true);
+			dev_priv->pfi_credit = false;
+		}
+
 	/* crtc->mode is already used by the ->mode_set callbacks, hence we need
 	 * to set it here already despite that we pass it down the callchain.
 	 */
@@ -10335,6 +10351,8 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 		}
 	}
 
+	program_pfi_credits(dev_priv, false);
+
 	dev_priv->s0ixstat = false;
 	drm_modeset_unlock_all(dev);
 	i915_rpm_put_disp(dev);
@@ -10348,6 +10366,7 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 
 	i915_rpm_get_disp(dev);
 
+
 	/* Re-detect hot pluggable displays */
 	i915_simulate_hpd(dev, true);
 
@@ -10356,6 +10375,7 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	/* KMS EnterVT equivalent */
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		drm_modeset_lock_all(dev);
+		program_pfi_credits(dev_priv, true);
 		intel_modeset_setup_hw_state(dev, true);
 		drm_modeset_unlock_all(dev);
 		/*
@@ -10429,6 +10449,8 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	intel_crtc->primary_alpha = false;
 	intel_crtc->sprite0_alpha = true;
 	intel_crtc->sprite1_alpha = true;
+
+	intel_crtc->base.panning_en = false;
 }
 
 int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
@@ -10771,7 +10793,6 @@ intel_user_framebuffer_create(struct drm_device *dev,
 			      struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct drm_i915_gem_object *obj;
-
 	obj = to_intel_bo(drm_gem_object_lookup(dev, filp,
 						mode_cmd->handles[0]));
 	if (&obj->base == NULL)

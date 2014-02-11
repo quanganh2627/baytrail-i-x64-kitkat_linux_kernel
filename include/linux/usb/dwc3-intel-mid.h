@@ -41,6 +41,11 @@ struct intel_dwc_otg_pdata {
 	u8 ti_phy_vs1;
 	int sdp_charging;
 	enum usb_phy_intf usb2_phy_type;
+
+	/* ZHSDRV and IHSTX of VS1 register for TI1211 PHY.
+	 * They impact the eye diagram qulity. And every
+	 * platform have different value.*/
+	int ulpi_eye_calibrate;
 };
 
 /* timeout for disconnect from a suspended host */
@@ -207,5 +212,10 @@ struct intel_dwc_otg_pdata {
 /* SCCB registers */
 #define SCCB_USB_CFG	0xff03a018
 #define SCCB_USB_CFG_SELECT_ULPI	(1 << 14)
+
+/* SMIP address which check if violate BC */
+#define MOFD_SMIP_VIOLATE_BC_ADDR	0xFFFC631B
+#define MERR_SMIP_VIOLATE_BC_ADDR	0xFFFCE717
+#define SMIP_VIOLATE_BC_MASK	0x40
 
 #endif /* __DWC3_INTEL_H */

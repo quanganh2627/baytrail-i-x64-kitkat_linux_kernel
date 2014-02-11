@@ -400,7 +400,7 @@ static int sst_gain_ctl_info(struct snd_kcontrol *kcontrol,
 }
 
 static void sst_send_gain_cmd(struct sst_data *sst, struct sst_gain_value *gv,
-			      u16 task_id, u16 loc_id, int mute)
+			      u16 task_id, u16 loc_id, u16 module_id, int mute)
 {
 	struct sst_cmd_set_gain_dual cmd;
 	pr_debug("%s", __func__);
@@ -417,7 +417,7 @@ static void sst_send_gain_cmd(struct sst_data *sst, struct sst_gain_value *gv,
 		cmd.cell_gains[0].cell_gain_right = gv->r_gain;
 	}
 	SST_FILL_DESTINATION(2, cmd.cell_gains[0].dest,
-			     loc_id, SST_MODULE_ID_GAIN_CELL);
+			     loc_id, module_id);
 	cmd.cell_gains[0].gain_time_constant = gv->ramp_duration;
 
 	cmd.header.length = sizeof(struct sst_cmd_set_gain_dual)
@@ -483,7 +483,7 @@ static int sst_gain_put(struct snd_kcontrol *kcontrol,
 	};
 
 	if (mc->w && mc->w->power)
-		sst_send_gain_cmd(sst, gv, mc->task_id, mc->pipe_id, 0);
+		sst_send_gain_cmd(sst, gv, mc->task_id, mc->pipe_id, mc->module_id, 0);
 	return 0;
 }
 
@@ -552,7 +552,7 @@ static void sst_set_pipe_gain(struct sst_ids *ids, struct sst_data *sst, int mut
 		mc = (void *)kctl->private_value;
 		gv = mc->gain_val;
 
-		sst_send_gain_cmd(sst, gv, mc->task_id, mc->pipe_id, mute);
+		sst_send_gain_cmd(sst, gv, mc->task_id, mc->pipe_id, mc->module_id, mute);
 	}
 }
 
@@ -1455,7 +1455,7 @@ static const struct snd_kcontrol_new sst_probe_controls[] = {
 		SST_MODULE_ID_VOLUME, path_id, instance, task_id,			\
 		sst_gain_tlv_common, gain_var)
 
-#define SST_NUM_GAINS 34
+#define SST_NUM_GAINS 35
 static struct sst_gain_value sst_gains[SST_NUM_GAINS];
 
 static const struct snd_kcontrol_new sst_gain_controls[] = {
@@ -1498,6 +1498,7 @@ static const struct snd_kcontrol_new sst_gain_controls[] = {
 	SST_GAIN("media_loop2_out", SST_PATH_INDEX_MEDIA_LOOP2_OUT, SST_TASK_SBA, 0, &sst_gains[31]),
 	SST_GAIN("sprot_loop_out", SST_PATH_INDEX_SPROT_LOOP_OUT, SST_TASK_SBA, 0, &sst_gains[32]),
 	SST_VOLUME("media0_in", SST_PATH_INDEX_MEDIA0_IN, SST_TASK_MMX, 0, &sst_gains[33]),
+	SST_GAIN("sidetone_in", SST_PATH_INDEX_SIDETONE_IN, SST_TASK_SBA, 0, &sst_gains[34]),
 };
 
 static const struct snd_kcontrol_new sst_algo_controls[] = {

@@ -112,7 +112,6 @@ enum intel_mid_cpu_type {
 	INTEL_MID_CPU_CHIP_TANGIER,
 	INTEL_MID_CPU_CHIP_VALLEYVIEW2,
 	INTEL_MID_CPU_CHIP_ANNIEDALE,
-	INTEL_MID_CPU_CHIP_CARBONCANYON,
 };
 
 extern enum intel_mid_cpu_type __intel_mid_cpu_chip;
@@ -145,8 +144,6 @@ struct intel_mid_ops {
 	DECLARE_INTEL_MID_OPS_INIT(cloverview, INTEL_MID_CPU_CHIP_CLOVERVIEW) \
 	DECLARE_INTEL_MID_OPS_INIT(tangier, INTEL_MID_CPU_CHIP_TANGIER) \
 	DECLARE_INTEL_MID_OPS_INIT(anniedale, INTEL_MID_CPU_CHIP_ANNIEDALE) \
-	DECLARE_INTEL_MID_OPS_INIT(carboncanyon, \
-		INTEL_MID_CPU_CHIP_CARBONCANYON) \
 };
 
 static inline enum intel_mid_cpu_type intel_mid_identify_cpu(void)
@@ -172,7 +169,7 @@ extern enum intel_mid_timer_options intel_mid_timer_options;
  */
 #define FSB_FREQ_83SKU	83200
 #define FSB_FREQ_100SKU	99840
-#define FSB_FREQ_133SKU	133000
+#define FSB_FREQ_133SKU	133120
 
 #define FSB_FREQ_167SKU	167000
 #define FSB_FREQ_200SKU	200000

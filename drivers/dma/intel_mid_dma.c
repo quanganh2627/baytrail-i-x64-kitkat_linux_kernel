@@ -30,7 +30,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <asm/intel-mid.h>
 
 #include "dmaengine.h"
 
@@ -1500,7 +1499,7 @@ static void dma_tasklet(unsigned long data)
 {
 	struct middma_device *mid = NULL;
 	struct intel_mid_dma_chan *midc = NULL;
-	u32 status, raw_tfr, raw_block;
+	u32 status, raw_tfr, raw_block, raw_err;
 	int i;
 	mid = (struct middma_device *)data;
 	if (mid == NULL) {
@@ -1578,7 +1577,8 @@ static void dma_tasklet(unsigned long data)
 		spin_unlock_bh(&midc->lock);
 	}
 
-	status = ioread32(mid->dma_base + RAW_ERR);
+	raw_err = ioread32(mid->dma_base + RAW_ERR);
+	status = raw_err & mid->intr_mask;
 	pr_debug("MDMA:raw error status:%#x\n", status);
 	while (status) {
 		/*err interrupt*/
@@ -1921,21 +1921,14 @@ static int intel_mid_dma_probe(struct pci_dev *pdev,
 	struct middma_device *device;
 	u32 base_addr, bar_size;
 	struct intel_mid_dma_probe_info *info;
-	int err;
+	int err = -EINVAL;
 
 	pr_debug("MDMA: probe for %x\n", pdev->device);
 	info = (void *)id->driver_data;
 	pr_debug("MDMA: CH %d, base %d, block len %d, Periphral mask %x\n",
 				info->max_chan, info->ch_base,
 				info->block_size, info->pimr_mask);
-	/* REVERT ME: forcing failure of Audio DMA on CRC HVP  */
-	/* Temporary workaround waiting for root causing issue */
-	if ((info->pci_id == INTEL_MRFLD_DMAC0_ID)
-		&& (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON)
-		&& (intel_mid_identify_sim() == INTEL_MID_CPU_SIMULATION_HVP)) {
-		pr_err("Temporary WA : forcing failure of DMAC0 for CRC HVP\n");
-		goto err_enable_device;
-	}
+
 	err = pci_enable_device(pdev);
 	if (err)
 		goto err_enable_device;

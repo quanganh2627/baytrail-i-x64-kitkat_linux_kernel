@@ -42,6 +42,7 @@
 #include "../sst_platform.h"
 #include "../platform_ipc_v2.h"
 #include "sst.h"
+#include "sst_trace.h"
 
 #ifndef CONFIG_X86_64
 #define MEMCPY_TOIO memcpy_toio
@@ -509,8 +510,10 @@ static int sst_alloc_dma_chan(struct sst_dma *dma)
 		hid = sst_drv_ctx->hid;
 		if (!strncmp(hid, "LPE0F281", 8))
 			dma->dev = intel_mid_get_acpi_dma("DMA0F28");
-		if (!strncmp(hid, "80860F28", 8))
+		else if (!strncmp(hid, "80860F28", 8))
 			dma->dev = intel_mid_get_acpi_dma("ADMA0F28");
+		else if (!strncmp(hid, "808622A8", 8))
+			dma->dev = intel_mid_get_acpi_dma("ADMA22A8");
 		else if (!strncmp(hid, "LPE0F28", 7))
 			dma->dev = intel_mid_get_acpi_dma("DMA0F28");
 	}
@@ -1158,6 +1161,74 @@ void sst_memcpy_free_resources(void)
 	sst_memcpy_free_lib_resources();
 }
 
+void sst_firmware_load_cb(const struct firmware *fw, void *context)
+{
+	struct intel_sst_drv *ctx = context;
+	int ret = 0;
+
+	pr_debug("In %s\n", __func__);
+
+	if (fw == NULL) {
+		pr_err("request fw failed\n");
+		goto out;
+	}
+
+	if (sst_drv_ctx->sst_state != SST_UN_INIT ||
+			ctx->fw_in_mem != NULL)
+		goto exit;
+
+	pr_debug("Request Fw completed\n");
+	trace_sst_fw_download("End of FW request", ctx->sst_state);
+
+	if (ctx->info.use_elf == true)
+		ret = sst_validate_elf(fw, false);
+
+	if (ret != 0) {
+		pr_err("FW image invalid...\n");
+		goto out;
+	}
+
+	ctx->fw_in_mem = kzalloc(fw->size, GFP_KERNEL);
+	if (!ctx->fw_in_mem) {
+		pr_err("%s unable to allocate memory\n", __func__);
+		goto out;
+	}
+
+	pr_debug("copied fw to %p", ctx->fw_in_mem);
+	pr_debug("phys: %lx", (unsigned long)virt_to_phys(ctx->fw_in_mem));
+	memcpy(ctx->fw_in_mem, fw->data, fw->size);
+
+	trace_sst_fw_download("Start FW parsing", ctx->sst_state);
+	if (ctx->use_dma) {
+		if (ctx->info.use_elf == true)
+			ret = sst_parse_elf_fw_dma(ctx, ctx->fw_in_mem,
+							&ctx->fw_sg_list);
+		else
+			ret = sst_parse_fw_dma(ctx->fw_in_mem, fw->size,
+							&ctx->fw_sg_list);
+	} else {
+		if (ctx->info.use_elf == true)
+			ret = sst_parse_elf_fw_memcpy(ctx, ctx->fw_in_mem,
+							&ctx->memcpy_list);
+		else
+			ret = sst_parse_fw_memcpy(ctx->fw_in_mem, fw->size,
+							&ctx->memcpy_list);
+	}
+	trace_sst_fw_download("End FW parsing", ctx->sst_state);
+	if (ret) {
+		kfree(ctx->fw_in_mem);
+		ctx->fw_in_mem = NULL;
+		goto out;
+	}
+	sst_set_fw_state_locked(sst_drv_ctx, SST_FW_LIB_LOAD);
+	goto exit;
+out:
+	sst_set_fw_state_locked(sst_drv_ctx, SST_UN_INIT);
+exit:
+	if (fw != NULL)
+		release_firmware(fw);
+}
+
 /*
  * sst_request_fw - requests audio fw from kernel and saves a copy
  *
@@ -1183,6 +1254,7 @@ static int sst_request_fw(struct intel_sst_drv *sst)
 		pr_err("request fw failed %d\n", retval);
 		return retval;
 	}
+	trace_sst_fw_download("End of FW request", sst->sst_state);
 	if (sst->info.use_elf == true)
 		retval = sst_validate_elf(fw, false);
 	if (retval != 0) {
@@ -1198,7 +1270,7 @@ static int sst_request_fw(struct intel_sst_drv *sst)
 	pr_debug("copied fw to %p", sst->fw_in_mem);
 	pr_debug("phys: %lx", (unsigned long)virt_to_phys(sst->fw_in_mem));
 	memcpy(sst->fw_in_mem, fw->data, fw->size);
-
+	trace_sst_fw_download("Start FW parsing", sst->sst_state);
 	if (sst->use_dma) {
 		if (sst->info.use_elf == true)
 			retval = sst_parse_elf_fw_dma(sst, sst->fw_in_mem,
@@ -1214,6 +1286,7 @@ static int sst_request_fw(struct intel_sst_drv *sst)
 			retval = sst_parse_fw_memcpy(sst->fw_in_mem, fw->size,
 							&sst->memcpy_list);
 	}
+	trace_sst_fw_download("End FW parsing", sst->sst_state);
 	if (retval) {
 		kfree(sst->fw_in_mem);
 		sst->fw_in_mem = NULL;
@@ -1456,19 +1529,31 @@ int sst_load_fw(void)
 
 	pr_debug("sst_load_fw\n");
 
-	if (sst_drv_ctx->sst_state != SST_START_INIT ||
+	if ((sst_drv_ctx->sst_state !=  SST_START_INIT &&
+			sst_drv_ctx->sst_state !=  SST_FW_LIB_LOAD) ||
 			sst_drv_ctx->sst_state == SST_SHUTDOWN)
 		return -EAGAIN;
 
+	/* If static module download(download at boot time) is supported,
+	 * set the flag to indicate lib download is to be done
+	 */
+	if (sst_drv_ctx->pdata->lib_info)
+		if (sst_drv_ctx->pdata->lib_info->mod_ddr_dnld)
+			sst_drv_ctx->lib_dwnld_reqd = true;
+
 	if (!sst_drv_ctx->fw_in_mem) {
-		ret_val = sst_request_fw(sst_drv_ctx);
-		if (ret_val)
-			return ret_val;
-		/* If static module download(download at boot time) is supported,
-		   set the flag to indicate lib download is to be done */
-		if (sst_drv_ctx->pdata->lib_info)
-			if (sst_drv_ctx->pdata->lib_info->mod_ddr_dnld)
-				sst_drv_ctx->lib_dwnld_reqd = true;
+		if (sst_drv_ctx->sst_state != SST_START_INIT) {
+			/* even wake*/
+			pr_err("sst : wait for FW to be downloaded\n");
+			return -EBUSY;
+		} else {
+			trace_sst_fw_download("Req FW sent in check device",
+						sst_drv_ctx->sst_state);
+			pr_debug("sst: FW not in memory retry to download\n");
+			ret_val = sst_request_fw(sst_drv_ctx);
+			if (ret_val)
+				return ret_val;
+		}
 	}
 
 	BUG_ON(!sst_drv_ctx->fw_in_mem);
@@ -1483,6 +1568,7 @@ int sst_load_fw(void)
 	if (ret_val)
 		goto restore;
 
+	trace_sst_fw_download("Start FW copy", sst_drv_ctx->sst_state);
 	if (sst_drv_ctx->use_dma) {
 		ret_val = sst_do_dma(&sst_drv_ctx->fw_sg_list);
 		if (ret_val) {
@@ -1493,16 +1579,21 @@ int sst_load_fw(void)
 		sst_do_memcpy(&sst_drv_ctx->memcpy_list);
 	}
 
+	trace_sst_fw_download("Post download for Lib start",
+			sst_drv_ctx->sst_state);
 	/* Write the DRAM/DCCM config before enabling FW */
 	if (sst_drv_ctx->ops->post_download)
 		sst_drv_ctx->ops->post_download(sst_drv_ctx);
-
+	trace_sst_fw_download("Post download for Lib end",
+			sst_drv_ctx->sst_state);
 	sst_drv_ctx->sst_state = SST_FW_LOADED;
 
 	/* bring sst out of reset */
 	ret_val = sst_drv_ctx->ops->start();
 	if (ret_val)
 		goto restore;
+	trace_sst_fw_download("DSP reset done",
+			sst_drv_ctx->sst_state);
 
 	ret_val = sst_wait_timeout(sst_drv_ctx, block);
 	if (ret_val) {
@@ -1855,13 +1946,14 @@ int sst_load_all_modules_elf(struct intel_sst_drv *ctx, struct sst_module_info *
 
 	for (i = 0; i < num_modules; i++) {
 		mod = &mod_table[i];
-
+		trace_sst_lib_download("Start of Request Lib", mod->name);
 		retval = sst_request_lib_elf(mod, &fw_lib,
 						ctx->pci_id, ctx->dev);
 		if (retval < 0)
 			continue;
 		lib_size = fw_lib->size;
 
+		trace_sst_lib_download("End of Request Lib", mod->name);
 		retval = sst_validate_elf(fw_lib, true);
 		if (retval < 0) {
 			pr_err("library is not valid elf %d\n", retval);
@@ -1888,8 +1980,10 @@ int sst_load_all_modules_elf(struct intel_sst_drv *ctx, struct sst_module_info *
 		}
 		pr_debug("relocation done\n");
 		release_firmware(fw_lib);
+		trace_sst_lib_download("Start of download Lib", mod->name);
 		/* write to ddr imr region,use memcpy method */
 		retval = sst_download_lib_elf(ctx, out_elf, lib_size);
+		trace_sst_lib_download("End of download Lib", mod->name);
 		mod->status = SST_LIB_DOWNLOADED;
 		kfree(out_elf);
 	}

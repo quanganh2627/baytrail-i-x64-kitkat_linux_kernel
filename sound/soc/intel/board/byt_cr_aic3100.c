@@ -44,8 +44,8 @@
 #define BYT_PLAT_CLK_3_HZ	25000000
 
 #define BYT_INTR_DEBOUNCE               0
-#define BYT_HS_INSERT_DET_DELAY         500
-#define BYT_HS_REMOVE_DET_DELAY         500
+#define BYT_HS_INSERT_DET_DELAY         100
+#define BYT_HS_REMOVE_DET_DELAY         100
 #define BYT_BUTTON_PRESS_DELAY          50
 #define BYT_BUTTON_RELEASE_DELAY        50
 #define BYT_HS_DET_POLL_INTRVL          100
@@ -225,28 +225,12 @@ static void byt_check_hs_insert_status(struct work_struct *work)
 {
 	struct snd_soc_jack_gpio *gpio = &hs_gpio;
 	struct snd_soc_jack *jack = gpio->jack;
-	struct snd_soc_codec *codec = jack->codec;
 	struct byt_mc_private *ctx =
 		 container_of(work, struct byt_mc_private, hs_insert_work.work);
 	int jack_type = 0;
 
 	mutex_lock(&ctx->jack_mlock);
 	pr_debug("Enter:%s", __func__);
-
-	/* TODO: Switch to MCLK instead of internal clock once
-		 Jack connect interrupt is raised
-		 This is because with internal clock headset
-		 is getting detected as headphone. Need to check
-		 with TI guys whether this is limitation. Side
-		 effect of this is that 25MHz MCLK will remain
-		 ON if headset is inserted and removed without
-		 playback or capture done after insertion
-	*/
-	vlv2_plat_configure_clock(VLV2_PLAT_CLK_AUDIO,
-			PLAT_CLK_FORCE_ON);
-	pr_debug("Platform clk turned ON\n");
-	snd_soc_codec_set_sysclk(codec, AIC31XX_MCLK,
-			0, AIC31XX_FREQ_25000000, SND_SOC_CLOCK_IN);
 
 	jack_type = byt_check_jack_type();
 
@@ -530,34 +514,54 @@ static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"Ext Spk", NULL, "Platform Clock"},
 };
 
-static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
-			     struct snd_pcm_hw_params *params)
+/* Sets dai format and pll */
+static int byt_set_dai_fmt_pll(struct snd_soc_dai *codec_dai,
+					int source, unsigned int freq_out)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	unsigned int fmt;
 	int ret;
-
-	pr_debug("Enter:%s", __func__);
+	unsigned int fmt;
+	/* Set codec DAI configuration */
 	/* I2S Slave Mode`*/
 	fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 		SND_SOC_DAIFMT_CBS_CFS;
-
-	/* Set codec DAI configuration */
 	ret = snd_soc_dai_set_fmt(codec_dai, fmt);
 	if (ret < 0) {
 		pr_err("can't set codec DAI configuration %d\n", ret);
 		return ret;
 	}
-	ret = snd_soc_dai_set_pll(codec_dai, 0, AIC31XX_PLL_CLKIN_MCLK ,
-			BYT_PLAT_CLK_3_HZ, /* params_rate(params) */
-			params_rate(params));
+
+	ret = snd_soc_dai_set_pll(codec_dai, 0, source,
+			BYT_PLAT_CLK_3_HZ, freq_out);
 	if (ret < 0) {
-		pr_err("Can't set codec pll clock\n");
+		pr_err("can't set codec pll: %d\n", ret);
 		return ret;
 	}
 	return 0;
 }
+
+
+static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+
+	pr_debug("Enter:%s", __func__);
+	/* Setecodec DAI confinuration */
+	return byt_set_dai_fmt_pll(codec_dai, AIC31XX_PLL_CLKIN_MCLK,
+			params_rate(params));
+}
+
+static int byt_compr_set_params(struct snd_compr_stream *cstream)
+{
+	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+
+	pr_debug("Enter:%s", __func__);
+	/* Setecodec DAI confinuration */
+	return byt_set_dai_fmt_pll(codec_dai, AIC31XX_PLL_CLKIN_MCLK, 48000);
+}
+
 
 static int byt_set_bias_level(struct snd_soc_card *card,
 				struct snd_soc_dapm_context *dapm,
@@ -641,8 +645,12 @@ static struct snd_soc_ops byt_aif1_ops = {
 	.hw_params = byt_aif1_hw_params,
 };
 
+static struct snd_soc_compr_ops byt_compr_ops = {
+	.set_params = byt_compr_set_params,
+};
+
 static struct snd_soc_dai_link byt_dailink[] = {
-	[BYT_AUD_AIF1] = {
+	[BYT_CR_AUD_AIF1] = {
 		.name = "Baytrail Audio",
 		.stream_name = "Audio",
 		.cpu_dai_name = "Headset-cpu-dai",
@@ -654,6 +662,18 @@ static struct snd_soc_dai_link byt_dailink[] = {
 		.ops = &byt_aif1_ops,
 		.playback_count = 2,
 	},
+	[BYT_CR_AUD_COMPR_DEV] = {
+		.name = "Baytrail Compressed Audio",
+		.stream_name = "Compress",
+		.cpu_dai_name = "Compress-cpu-dai",
+		.codec_dai_name = "tlv320aic31xx-codec",
+		.codec_name = "tlv320aic31xx-codec.2-0018",
+		.platform_name = "sst-platform",
+		.init = NULL,
+		.ignore_suspend = 1,
+		.compr_ops = &byt_compr_ops,
+	},
+
 };
 
 #ifdef CONFIG_PM_SLEEP
@@ -779,7 +799,7 @@ static void snd_byt_mc_shutdown(struct platform_device *pdev)
 	struct byt_mc_private *drv = snd_soc_card_get_drvdata(soc_card);
 
 	pr_debug("In %s\n", __func__);
-	snd_soc_jack_free_gpios(&drv->jack, 1, &hs_gpio);
+	snd_byt_unregister_jack(drv);
 }
 
 static const struct dev_pm_ops snd_byt_mc_pm_ops = {

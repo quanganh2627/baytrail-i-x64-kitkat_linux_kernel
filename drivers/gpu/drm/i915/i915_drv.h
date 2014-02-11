@@ -1342,6 +1342,7 @@ typedef struct drm_i915_private {
 	bool late_resume;
 	bool is_suspending;
 	bool is_resuming;
+	bool pfi_credit;
 	u32 gt_irq_mask;
 	u32 pm_irq_mask;
 
@@ -1558,6 +1559,11 @@ typedef struct drm_i915_private {
 	bool is_hdmi;
 	u16 is_mipi;
 	u16 mipi_panel_id;
+
+	unsigned int fwlogo_size;
+	unsigned int fwlogo_offset;
+	struct drm_mm_node *fwlogo_gtt_node;
+	struct drm_mm_node *fwlogo_stolen_node;
 
 #ifdef CONFIG_DRM_VXD_BYT
 	struct drm_psb_private *vxd_priv;
@@ -2056,6 +2062,7 @@ extern void i915_master_destroy(struct drm_device *dev, struct drm_master *maste
 
 				/* i915_dma.c */
 void i915_update_dri1_breadcrumb(struct drm_device *dev);
+extern void program_pfi_credits(struct drm_i915_private *dev_priv, bool flag);
 extern void i915_kernel_lost_context(struct drm_device * dev);
 extern int i915_driver_load(struct drm_device *, unsigned long flags);
 extern int i915_driver_unload(struct drm_device *);
@@ -2646,6 +2653,7 @@ int i915_set_plane_alpha(struct drm_device *dev, void *data,
 
 int i915_get_reset_stats_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file);
+void clear_reserved_fwlogo_mem(struct drm_i915_private *dev_priv);
 
 /* overlay */
 extern struct intel_overlay_error_state *intel_overlay_capture_error_state(struct drm_device *dev);

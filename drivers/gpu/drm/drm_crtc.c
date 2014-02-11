@@ -2036,6 +2036,8 @@ int drm_mode_set_config_internal(struct drm_mode_set *set)
 	struct drm_crtc *tmp;
 	int ret;
 
+	if (crtc->dev->is_booting)
+		return 0;
 	/*
 	 * NOTE: ->set_config can also disable other crtcs (if we steal all
 	 * connectors from it), hence we need to refcount the fbs across all
@@ -2090,6 +2092,9 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	uint32_t __user *set_connectors_ptr;
 	int ret;
 	int i;
+
+	DRM_DEBUG_DRIVER("Releasing the is_booting flag\n");
+	dev->is_booting = false;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
@@ -3633,36 +3638,10 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	if (crtc->invert_dimensions)
 		swap(hdisplay, vdisplay);
 
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		if (connector->encoder->crtc == crtc) {
-			int i;
-			for (i = 0; i < connector->properties.count; i++) {
-				struct drm_mode_object *obj;
-				struct drm_property *property;
-				obj = drm_mode_object_find(dev,
-						connector->properties.ids[i],
-						DRM_MODE_OBJECT_PROPERTY);
-				if (!obj) {
-					ret = -EINVAL;
-					goto out;
-				}
-				property = obj_to_property(obj);
-				if (!strcmp(property->name, "pfit")) {
-					drm_object_property_get_value(
-							&connector->base,
-							property,
-							&panel_fitter_en);
-					break;
-				}
-			}
-			break;
-		}
-	}
-
 	if ((hdisplay > fb->width ||
 	    vdisplay > fb->height ||
 	    crtc->x > fb->width - hdisplay ||
-	    crtc->y > fb->height - vdisplay) && !panel_fitter_en) {
+	    crtc->y > fb->height - vdisplay) && !crtc->panning_en) {
 		DRM_DEBUG_KMS("Invalid fb size %ux%u for CRTC viewport %ux%u+%d+%d%s.\n",
 			      fb->width, fb->height, hdisplay, vdisplay, crtc->x, crtc->y,
 			      crtc->invert_dimensions ? " (inverted)" : "");

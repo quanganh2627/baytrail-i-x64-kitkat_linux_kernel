@@ -83,8 +83,7 @@ static void dump_trailer(const struct device *dev, char *buf, int len, int sz)
 static inline u8 ssp_cfg_get_mode(u8 ssp_cfg)
 {
 	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON)
+	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE)
 		return (ssp_cfg) & 0x03;
 	else
 		return (ssp_cfg) & 0x07;
@@ -93,8 +92,7 @@ static inline u8 ssp_cfg_get_mode(u8 ssp_cfg)
 static inline u8 ssp_cfg_get_spi_bus_nb(u8 ssp_cfg)
 {
 	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON)
+	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE)
 		return ((ssp_cfg) >> 2) & 0x07;
 	else
 		return ((ssp_cfg) >> 3) & 0x07;
@@ -103,8 +101,7 @@ static inline u8 ssp_cfg_get_spi_bus_nb(u8 ssp_cfg)
 static inline u8 ssp_cfg_is_spi_slave(u8 ssp_cfg)
 {
 	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE ||
-	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON)
+	    intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE)
 		return (ssp_cfg) & 0x20;
 	else
 		return (ssp_cfg) & 0x40;
@@ -998,8 +995,7 @@ static int handle_message(struct ssp_drv_context *sspc)
 
 	/* [REVERT ME] Bug in status register clear for Tangier simulation */
 	if ((intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_TANGIER) ||
-	    (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE) ||
-	    (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON)) {
+	    (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_ANNIEDALE)) {
 		if ((intel_mid_identify_sim() != INTEL_MID_CPU_SIMULATION_VP &&
 		    (intel_mid_identify_sim() != INTEL_MID_CPU_SIMULATION_HVP)))
 			write_SSSR(sspc->clear_sr, reg);
@@ -1308,21 +1304,6 @@ static int intel_mid_ssp_spi_probe(struct pci_dev *pdev,
 	if (ssp_cfg_get_mode(ssp_cfg) != SSP_CFG_SPI_MODE_ID) {
 		dev_info(dev, "Unsupported SSP mode (%02xh)\n", ssp_cfg);
 		goto err_abort_probe;
-	}
-
-	/*
-	* KKSANAG
-	* Remove registering SSP6(pci:0000:00:07.2)
-	* or it will cause tons of unprovoked interrupts
-	* This issue will be fixed in RTL. Then no need of this
-	* fix
-	*/
-	if (intel_mid_identify_cpu() == INTEL_MID_CPU_CHIP_CARBONCANYON) {
-		dev_info(dev, "The devfn (%0xh)\n", pdev->devfn);
-		if (0x2 == (pdev->devfn & 0x03)) {
-			dev_info(dev, "The SSP6 needs to be disabled, causing spurious interrupts\n");
-			goto err_abort_probe;
-		}
 	}
 
 	dev_info(dev, "found PCI SSP controller (ID: %04xh:%04xh cfg: %02xh)\n",

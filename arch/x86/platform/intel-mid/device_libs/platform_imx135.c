@@ -103,6 +103,11 @@ static int imx135_power_ctrl(struct v4l2_subdev *sd, int flag)
 	if (is_moorefield()) {
 #ifdef CONFIG_INTEL_SCU_IPC_UTIL
 		ret = intel_scu_ipc_msic_vprog1(flag);
+		if (ret) {
+			pr_err("imx135 power failed\n");
+			return ret;
+		}
+		ret = intel_scu_ipc_msic_vprog3(flag);
 #else
 		ret = -ENODEV;
 #endif
@@ -240,7 +245,12 @@ static int imx135_csi_configure(struct v4l2_subdev *sd, int flag)
 
 static char *imx135_msr_file_name(void)
 {
-	if (spid.hardware_id == MRFL_PHONE_SB_PR2) {
+	/*
+	 * drvb contains the SPID in the file name as:
+	 * sensor_name-vendorIdValue-platformFamilyIdValue-productLineIdValue.drvb
+	 */
+	if (spid.vendor_id == 0 && spid.platform_family_id == 0x4 &&
+	    spid.product_line_id == 0) {
 		return "00imx135-0-0x4-0.drvb";
 	} else {
 		pr_warn("drvb file name does not exists");

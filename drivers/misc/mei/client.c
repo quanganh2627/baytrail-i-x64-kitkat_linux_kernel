@@ -371,6 +371,7 @@ void mei_host_client_init(struct work_struct *work)
 	}
 
 	dev->dev_state = MEI_DEV_ENABLED;
+	dev->reset_count = 0;
 
 	mutex_unlock(&dev->device_lock);
 
@@ -1003,7 +1004,6 @@ void mei_cl_all_disconnect(struct mei_device *dev)
 	list_for_each_entry_safe(cl, next, &dev->file_list, link) {
 		cl->state = MEI_FILE_DISCONNECTED;
 		cl->mei_flow_ctrl_creds = 0;
-		cl->read_cb = NULL;
 		cl->timer_count = 0;
 	}
 }
@@ -1038,6 +1038,11 @@ void mei_cl_all_write_clear(struct mei_device *dev)
 	struct mei_cl_cb *cb, *next;
 
 	list_for_each_entry_safe(cb, next, &dev->write_list.list, list) {
+		list_del(&cb->list);
+		mei_io_cb_free(cb);
+	}
+
+	list_for_each_entry_safe(cb, next, &dev->write_waiting_list.list, list) {
 		list_del(&cb->list);
 		mei_io_cb_free(cb);
 	}

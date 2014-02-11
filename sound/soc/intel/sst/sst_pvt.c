@@ -33,6 +33,7 @@
 #include <linux/fs.h>
 #include <linux/firmware.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 #include <sound/asound.h>
 #include <sound/pcm.h>
 #include "../sst_platform.h"
@@ -154,6 +155,8 @@ void dump_sst_shim(struct intel_sst_drv *sst)
 
 void reset_sst_shim(struct intel_sst_drv *sst)
 {
+	union config_status_reg_mrfld csr;
+
 	pr_err("Resetting few Shim registers\n");
 	write_shim_data(sst, sst->ipc_reg.ipcx, 0x0);
 	write_shim_data(sst, sst->ipc_reg.ipcd, 0x0);
@@ -164,6 +167,13 @@ void reset_sst_shim(struct intel_sst_drv *sst)
 	write_shim_data(sst, SST_ISRSC, 0x0);
 	write_shim_data(sst, SST_ISRLPESC, 0x0);
 	write_shim_data(sst, SST_PISR, 0x0);
+
+	/* Reset the CSR value to the default value. i.e 0x1e40001*/
+	csr.full = sst_shim_read64(sst_drv_ctx->shim, SST_CSR);
+	csr.part.xt_snoop = 0;
+	csr.full &= ~(0xf);
+	csr.full |= 0x01;
+	sst_shim_write64(sst_drv_ctx->shim, SST_CSR, csr.full);
 }
 
 static void dump_sst_crash_area(void)
@@ -291,6 +301,10 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	char iram_event[30], dram_event[30], ddr_imr_event[65];
 	char *envp[4];
 	int env_offset = 0;
+	union config_status_reg_mrfld csr;
+	void __iomem *dma_reg0 = sst_drv_ctx->debugfs.dma_reg[0];
+	void __iomem *dma_reg1 = sst_drv_ctx->debugfs.dma_reg[1];
+	int offset = 0x3A0; /* ChEnReg of DMA */
 
 	/*
 	 * setting firmware state as uninit so that the firmware will get
@@ -303,11 +317,25 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	mutex_lock(&sst->sst_lock);
 	sst->sst_state = SST_UN_INIT;
 	sst_stream_recovery(sst);
-
 	mutex_unlock(&sst->sst_lock);
 
 	dump_stack();
 	dump_sst_shim(sst);
+	pr_err("Before stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
+				sst_reg_read64(dma_reg0, offset),
+				sst_reg_read64(dma_reg1, offset));
+
+	/* Stall LPE */
+	csr.full = sst_shim_read64(sst_drv_ctx->shim, SST_CSR);
+	csr.part.runstall  = 1;
+	sst_shim_write64(sst_drv_ctx->shim, SST_CSR, csr.full);
+
+	/* A 5ms delay, before resetting the LPE */
+	usleep_range(5000, 5100);
+
+	pr_err("After stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
+				sst_reg_read64(dma_reg0, offset),
+				sst_reg_read64(dma_reg1, offset));
 	reset_sst_shim(sst);
 
 	/* dump mailbox and sram */
@@ -345,7 +373,6 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	spin_lock(&sst_drv_ctx->pvt_id_lock);
 	sst_drv_ctx->pvt_id = 0;
 	spin_unlock(&sst_drv_ctx->pvt_id_lock);
-
 	sst_dump_lists(sst_drv_ctx);
 }
 
@@ -393,9 +420,10 @@ int sst_wait_timeout(struct intel_sst_drv *sst_drv_ctx, struct sst_block *block)
 		pr_err("sst: Wait timed-out condition:%#x, msg_id:%#x fw_state %#x\n",
 				block->condition, block->msg_id, sst_drv_ctx->sst_state);
 
-		if (sst_drv_ctx->sst_state == SST_FW_LOADED) {
+		if (sst_drv_ctx->sst_state == SST_FW_LOADED ||
+			sst_drv_ctx->sst_state ==  SST_START_INIT) {
 			pr_err("Can't recover as timedout while downloading the FW\n");
-			pr_err("reseting fw state to unint...\n");
+			pr_err("reseting fw state to unint from %d ...\n", sst_drv_ctx->sst_state);
 			sst_drv_ctx->sst_state = SST_UN_INIT;
 		} else {
 			if (sst_drv_ctx->ops->do_recovery)
