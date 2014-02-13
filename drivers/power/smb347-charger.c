@@ -264,6 +264,11 @@ static const char *smb34x_extcon_cable[] = {
 bool __otg_connect;
 EXPORT_SYMBOL(__otg_connect);
 
+static const short smb349_inlim[] = { /* mA */
+	500, 900, 1000, 1100, 1200, 1300, 1500, 1600,
+	1700, 1800, 2000, 2200, 2400, 2500, 3000, 3500
+};
+
 struct smb347_otg_event {
 	struct list_head	node;
 	bool			param;
@@ -1775,15 +1780,9 @@ static int smb347_set_inlmt(struct smb347_charger *smb, int inlmt)
 	if (ret < 0)
 		goto err_inlmt;
 
-	if (inlmt >= ILIM_1800)
-		smb_inlmt = SMB_INLMT_1800;
-	else if (inlmt >= ILIM_1500)
-		smb_inlmt = SMB_INLMT_1500;
-	else if (inlmt >= ILIM_1000)
-		smb_inlmt = SMB_INLMT_1000;
-	else
-		smb_inlmt = SMB_INLMT_500;
-
+	for (smb_inlmt = 0; smb_inlmt < ARRAY_SIZE(smb349_inlim); smb_inlmt++)
+		if (inlmt <= smb349_inlim[smb_inlmt])
+			break;
 
 	ret = smb347_read(smb, CFG_CHARGE_CURRENT);
 	if (ret < 0)
@@ -2289,6 +2288,8 @@ static int smb347_debugfs_show(struct seq_file *s, void *data)
 	seq_printf(s, "==================\n");
 	for (reg = CFG_CHARGE_CURRENT; reg <= CFG_ADDRESS; reg++) {
 		ret = smb347_read(smb, reg);
+		if (ret < 0)
+			return ret;
 		seq_printf(s, "0x%02x:\t0x%02x\n", reg, ret);
 	}
 	seq_printf(s, "\n");
@@ -2296,10 +2297,16 @@ static int smb347_debugfs_show(struct seq_file *s, void *data)
 	seq_printf(s, "Command registers:\n");
 	seq_printf(s, "==================\n");
 	ret = smb347_read(smb, CMD_A);
+	if (ret < 0)
+		return ret;
 	seq_printf(s, "0x%02x:\t0x%02x\n", CMD_A, ret);
 	ret = smb347_read(smb, CMD_B);
+	if (ret < 0)
+		return ret;
 	seq_printf(s, "0x%02x:\t0x%02x\n", CMD_B, ret);
 	ret = smb347_read(smb, CMD_C);
+	if (ret < 0)
+		return ret;
 	seq_printf(s, "0x%02x:\t0x%02x\n", CMD_C, ret);
 	seq_printf(s, "\n");
 
@@ -2307,6 +2314,8 @@ static int smb347_debugfs_show(struct seq_file *s, void *data)
 	seq_printf(s, "===========================\n");
 	for (reg = IRQSTAT_A; reg <= IRQSTAT_F; reg++) {
 		ret = smb347_read(smb, reg);
+		if (ret < 0)
+			return ret;
 		seq_printf(s, "0x%02x:\t0x%02x\n", reg, ret);
 	}
 	seq_printf(s, "\n");
@@ -2315,6 +2324,8 @@ static int smb347_debugfs_show(struct seq_file *s, void *data)
 	seq_printf(s, "=================\n");
 	for (reg = STAT_A; reg <= STAT_E; reg++) {
 		ret = smb347_read(smb, reg);
+		if (ret < 0)
+			return ret;
 		seq_printf(s, "0x%02x:\t0x%02x\n", reg, ret);
 	}
 
