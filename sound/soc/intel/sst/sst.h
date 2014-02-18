@@ -104,6 +104,7 @@ enum sst_stream_states {
 	STREAM_PAUSED	= 2,	/* Paused stream */
 	STREAM_DECODE	= 3,	/* stream is in decoding only state */
 	STREAM_INIT	= 4,	/* stream init, waiting for data */
+	STREAM_RESET	= 5,	/* force reset on recovery */
 };
 
 enum sst_ram_type {
@@ -682,6 +683,8 @@ void sst_do_recovery(struct intel_sst_drv *sst);
 
 void sst_dump_to_buffer(const void *from, size_t from_len, char *buf);
 
+extern int intel_scu_ipc_simple_command(int, int);
+
 static inline int sst_pm_runtime_put(struct intel_sst_drv *sst_drv)
 {
 	int ret;
@@ -749,12 +752,15 @@ static inline void sst_fill_header_dsp(struct ipc_dsp_hdr *dsp, int msg,
  */
 static inline unsigned int sst_assign_pvt_id(struct intel_sst_drv *sst_drv_ctx)
 {
+	unsigned int local;
+
 	spin_lock(&sst_drv_ctx->pvt_id_lock);
 	sst_drv_ctx->pvt_id++;
 	if (sst_drv_ctx->pvt_id > MAX_BLOCKS)
 		sst_drv_ctx->pvt_id = 1;
+	local = sst_drv_ctx->pvt_id;
 	spin_unlock(&sst_drv_ctx->pvt_id_lock);
-	return sst_drv_ctx->pvt_id;
+	return local;
 }
 
 

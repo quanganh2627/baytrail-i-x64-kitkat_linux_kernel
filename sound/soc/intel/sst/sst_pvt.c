@@ -36,6 +36,7 @@
 #include <linux/delay.h>
 #include <sound/asound.h>
 #include <sound/pcm.h>
+#include <sound/compress_offload.h>
 #include "../sst_platform.h"
 #include "../platform_ipc_v2.h"
 #include "sst.h"
@@ -234,6 +235,9 @@ static void sst_stream_recovery(struct intel_sst_drv *sst)
 			str_info = &sst_drv_ctx->streams[i];
 			if (str_info->pcm_substream)
 				snd_pcm_stop(str_info->pcm_substream, SNDRV_PCM_STATE_SETUP);
+			else if (str_info->compr_cb_param)
+				snd_compr_stop(str_info->compr_cb_param);
+			sst->streams[i].status = STREAM_RESET;
 		}
 	}
 }
@@ -294,17 +298,64 @@ static void dump_buffer_fromio(void __iomem *from,
 	pr_err("****** End *********\n\n\n");
 }
 
+static void sst_stall_lpe_n_wait(struct intel_sst_drv *sst)
+{
+	union config_status_reg_mrfld csr;
+	void __iomem *dma_reg0 = sst->debugfs.dma_reg[0];
+	void __iomem *dma_reg1 = sst->debugfs.dma_reg[1];
+	int offset = 0x3A0; /* ChEnReg of DMA */
+
+
+	pr_err("Before stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
+				sst_reg_read64(dma_reg0, offset),
+				sst_reg_read64(dma_reg1, offset));
+
+	/* Stall LPE */
+	csr.full = sst_shim_read64(sst->shim, SST_CSR);
+	csr.part.runstall  = 1;
+	sst_shim_write64(sst->shim, SST_CSR, csr.full);
+
+	/* A 5ms delay, before resetting the LPE */
+	usleep_range(5000, 5100);
+
+	pr_err("After stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
+				sst_reg_read64(dma_reg0, offset),
+				sst_reg_read64(dma_reg1, offset));
+}
+
+#if IS_ENABLED(CONFIG_INTEL_SCU_IPC)
+static void sst_send_scu_reset_ipc(struct intel_sst_drv *sst)
+{
+	int ret = 0;
+
+	/* Reset and power gate the LPE */
+	ret = intel_scu_ipc_simple_command(IPC_SCU_LPE_RESET, 0);
+	if (ret) {
+		pr_err("Power gating LPE failed %d\n", ret);
+		reset_sst_shim(sst);
+	} else {
+		pr_err("LPE reset via SCU is success!!\n");
+		pr_err("dump after LPE power cycle\n");
+		dump_sst_shim(sst);
+
+		/* Mask the DMA & SSP interrupts */
+		sst_shim_write64(sst->shim, SST_IMRX, 0xFFFF0038);
+	}
+}
+#else
+static void sst_send_scu_reset_ipc(struct intel_sst_drv *sst)
+{
+	pr_debug("%s: do nothing, just return\n", __func__);
+}
+#endif
+
 #define SRAM_OFFSET_MRFLD	0xc00
 #define NUM_DWORDS		256
 void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 {
-	char iram_event[30], dram_event[30], ddr_imr_event[65];
-	char *envp[4];
+	char iram_event[30], dram_event[30], ddr_imr_event[65], event_type[30];
+	char *envp[5];
 	int env_offset = 0;
-	union config_status_reg_mrfld csr;
-	void __iomem *dma_reg0 = sst_drv_ctx->debugfs.dma_reg[0];
-	void __iomem *dma_reg1 = sst_drv_ctx->debugfs.dma_reg[1];
-	int offset = 0x3A0; /* ChEnReg of DMA */
 
 	/*
 	 * setting firmware state as uninit so that the firmware will get
@@ -321,22 +372,8 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 
 	dump_stack();
 	dump_sst_shim(sst);
-	pr_err("Before stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
-				sst_reg_read64(dma_reg0, offset),
-				sst_reg_read64(dma_reg1, offset));
 
-	/* Stall LPE */
-	csr.full = sst_shim_read64(sst_drv_ctx->shim, SST_CSR);
-	csr.part.runstall  = 1;
-	sst_shim_write64(sst_drv_ctx->shim, SST_CSR, csr.full);
-
-	/* A 5ms delay, before resetting the LPE */
-	usleep_range(5000, 5100);
-
-	pr_err("After stall: DMA_0 Ch_EN %#llx DMA_1 Ch_EN %#llx\n",
-				sst_reg_read64(dma_reg0, offset),
-				sst_reg_read64(dma_reg1, offset));
-	reset_sst_shim(sst);
+	sst_stall_lpe_n_wait(sst);
 
 	/* dump mailbox and sram */
 	pr_err("Dumping Mailbox...\n");
@@ -353,6 +390,8 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 
 	}
 
+	snprintf(event_type, sizeof(event_type), "EVENT_TYPE=SST_RECOVERY");
+	envp[env_offset++] = event_type;
 	snprintf(iram_event, sizeof(iram_event), "IRAM_DUMP_SIZE=%d",
 					sst->dump_buf.iram_buf.size);
 	envp[env_offset++] = iram_event;
@@ -369,11 +408,20 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	kobject_uevent_env(&sst->dev->kobj, KOBJ_CHANGE, envp);
 	pr_err("Recovery Uevent Sent!!\n");
 
+	/* Send IPC to SCU to power gate and reset the LPE */
+	sst_send_scu_reset_ipc(sst);
+
 	pr_err("reset the pvt id from val %d\n", sst_drv_ctx->pvt_id);
 	spin_lock(&sst_drv_ctx->pvt_id_lock);
 	sst_drv_ctx->pvt_id = 0;
 	spin_unlock(&sst_drv_ctx->pvt_id_lock);
 	sst_dump_lists(sst_drv_ctx);
+
+	if (sst_drv_ctx->fw_in_mem) {
+		pr_err("Clearing the cached FW copy...\n");
+		kfree(sst_drv_ctx->fw_in_mem);
+		sst_drv_ctx->fw_in_mem = NULL;
+	}
 }
 
 void sst_do_recovery(struct intel_sst_drv *sst)
@@ -425,6 +473,17 @@ int sst_wait_timeout(struct intel_sst_drv *sst_drv_ctx, struct sst_block *block)
 			pr_err("Can't recover as timedout while downloading the FW\n");
 			pr_err("reseting fw state to unint from %d ...\n", sst_drv_ctx->sst_state);
 			sst_drv_ctx->sst_state = SST_UN_INIT;
+
+			dump_sst_shim(sst_drv_ctx);
+
+			/* Reset & Power Off the LPE only for MRFLD */
+			if (sst_drv_ctx->pci_id == SST_MRFLD_PCI_ID) {
+				sst_stall_lpe_n_wait(sst_drv_ctx);
+
+				/* Send IPC to SCU to power gate and reset the LPE */
+				sst_send_scu_reset_ipc(sst_drv_ctx);
+			}
+
 		} else {
 			if (sst_drv_ctx->ops->do_recovery)
 				sst_drv_ctx->ops->do_recovery(sst_drv_ctx);

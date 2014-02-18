@@ -1337,12 +1337,13 @@ typedef struct drm_i915_private {
 	/** Cached value of IMR to avoid reads in updating the bitfield */
 	u32 irq_mask;
 	u32 hotplugstat;
+	struct regulator *v3p3s_reg;
 	bool s0ixstat;
 	bool audio_suspended;
 	bool late_resume;
 	bool is_suspending;
 	bool is_resuming;
-	bool pfi_credit;
+	bool is_first_modeset;
 	u32 gt_irq_mask;
 	u32 pm_irq_mask;
 
@@ -1460,7 +1461,7 @@ typedef struct drm_i915_private {
 		atomic_t down_threshold;
 	} turbodebug;
 
-
+	struct mipi_info mipi;
 	/* gen6+ rps state */
 	struct intel_gen6_power_mgmt rps;
 
@@ -1557,6 +1558,7 @@ typedef struct drm_i915_private {
 	bool gamma_enabled;
 	bool csc_enabled;
 	bool is_hdmi;
+	bool is_mipi_from_vbt;
 	u16 is_mipi;
 	u16 mipi_panel_id;
 	u16 mipi_fw;

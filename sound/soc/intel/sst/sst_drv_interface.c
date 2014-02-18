@@ -508,9 +508,12 @@ static int sst_cdev_close(unsigned int str_id)
 	stream->compr_cb_param = NULL;
 	stream->compr_cb = NULL;
 
-	/* If stream free returns error, put already done in open so skip */
-	/* Do put only in valid free stream case */
-	if (!retval)
+	/* The free_stream will return a error if there is no stream to free,
+	(i.e. the alloc failure case). And in this case the open does a put in
+	the error scenario, so skip in this case.
+		In the close we need to handle put in the success scenario and
+	the timeout error(EBUSY) scenario. */
+	if (!retval || (retval == -EBUSY))
 		sst_pm_runtime_put(sst_drv_ctx);
 
 	return retval;
@@ -597,6 +600,10 @@ static int sst_cdev_set_metadata(unsigned int str_id,
 static int sst_cdev_control(unsigned int cmd, unsigned int str_id)
 {
 	pr_debug("recieved cmd %d on stream %d\n", cmd, str_id);
+
+	if (sst_drv_ctx->sst_state == SST_UN_INIT)
+		return 0;
+
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		return sst_pause_stream(str_id);
@@ -728,9 +735,12 @@ static int sst_close_pcm_stream(unsigned int str_id)
 	stream->period_elapsed = NULL;
 	sst_drv_ctx->stream_cnt--;
 
-	/* If stream free returns error, put already done in open so skip */
-	/* Do put only in valid free stream case */
-	if (!retval)
+	/* The free_stream will return a error if there is no stream to free,
+	(i.e. the alloc failure case). And in this case the open does a put in
+	the error scenario, so skip in this case.
+		In the close we need to handle put in the success scenario and
+	the timeout error(EBUSY) scenario. */
+	if (!retval || (retval == -EBUSY))
 		sst_pm_runtime_put(sst_drv_ctx);
 
 	return 0;

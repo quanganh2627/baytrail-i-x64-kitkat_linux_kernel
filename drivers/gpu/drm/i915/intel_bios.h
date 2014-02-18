@@ -203,6 +203,9 @@ struct bdb_general_features {
 #define DEVICE_PORT_DVOB	0x01
 #define DEVICE_PORT_DVOC	0x02
 
+#define EDP_SUPPORT           0x1806
+#define MIPI_SUPPORT          0x1400
+
 struct child_device_config {
 	u16 handle;
 	u16 device_type;
@@ -787,6 +790,17 @@ enum MIPI_GPIO_PIN_INDEX {
 	MIPI_GPIO_STDBY_RST_N,
 	MIPI_GPIO_MAX
 
+};
+
+struct mipi_info {
+	u8 seq_version;
+	u16 panel_id;
+	u16 panel_bpp;
+	struct _mipi_config *config;
+	struct _mipi_pps_data *pps;
+	u32 size;
+	u8 *data;
+	u8 *sequence[MIPI_SEQ_MAX];
 };
 
 /* We will have variable number of these - max 6 */

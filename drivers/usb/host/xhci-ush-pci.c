@@ -576,7 +576,12 @@ static void hsic_aux_work(struct work_struct *work)
 		mutex_unlock(&hsic.hsic_mutex);
 		return;
 	}
-	ush_hsic_port_disable();
+
+	if (hsic.port_disconnect == 0)
+		hsic_port_logical_disconnect(hsic.rh_dev,
+				HSIC_USH_PORT);
+	else
+		ush_hsic_port_disable();
 	usleep_range(hsic.reenumeration_delay,
 			hsic.reenumeration_delay + 1000);
 	ush_hsic_port_enable();
@@ -777,27 +782,21 @@ static ssize_t hsic_port_enable_store(struct device *dev,
 		pm_runtime_put(&hsic.rh_dev->dev);
 	}
 
+	if (hsic.port_disconnect == 0)
+		hsic_port_logical_disconnect(hsic.rh_dev,
+				HSIC_USH_PORT);
+	else
+		ush_hsic_port_disable();
+
 	if (org_req) {
 		dev_dbg(dev, "enable hsic\n");
-
-		/* add this due to hcd release
-			 doesn't set hcd to NULL */
-		ush_hsic_port_disable();
-		usleep_range(5000, 6000);
+		msleep(20);
 		ush_hsic_port_enable();
 	} else {
 		dev_dbg(dev, "disable hsic\n");
-		/* add this due to hcd release
-			 doesn't set hcd to NULL */
-		if (hsic.port_disconnect == 0)
-			hsic_port_logical_disconnect(hsic.rh_dev,
-					HSIC_USH_PORT);
-		else {
-			ush_hsic_port_disable();
-			if (hsic.rh_dev) {
-				hsic.autosuspend_enable = 0;
-				usb_enable_autosuspend(hsic.rh_dev);
-			}
+		if (hsic.rh_dev) {
+			hsic.autosuspend_enable = 0;
+			usb_enable_autosuspend(hsic.rh_dev);
 		}
 	}
 	mutex_unlock(&hsic.hsic_mutex);
@@ -1304,6 +1303,29 @@ static void xhci_ush_pci_remove(struct pci_dev *dev)
 	kfree(xhci);
 }
 
+/**
+ * xhci_ush_pci_shutdown - shutdown host controller
+ * @dev: USB Host Controller being shutdown
+ */
+static void xhci_ush_pci_shutdown(struct pci_dev *dev)
+{
+	struct usb_hcd		*hcd;
+
+	hcd = pci_get_drvdata(dev);
+	if (!hcd)
+		return;
+
+	if (test_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags) &&
+			hcd->driver->shutdown) {
+		hcd->driver->shutdown(hcd);
+		if (hsic.rh_dev)
+			hsic_port_logical_disconnect(hsic.rh_dev,
+					HSIC_USH_PORT);
+		ush_hsic_port_disable();
+		pci_disable_device(dev);
+	}
+}
+
 #ifdef CONFIG_PM_SLEEP
 static int xhci_ush_hcd_pci_suspend_noirq(struct device *dev)
 {
@@ -1575,7 +1597,7 @@ static struct pci_driver xhci_ush_driver = {
 		.pm = &xhci_ush_pm_ops
 	},
 #endif
-	.shutdown =     usb_hcd_pci_shutdown,
+	.shutdown =     xhci_ush_pci_shutdown,
 };
 
 int xhci_register_ush_pci(void)
