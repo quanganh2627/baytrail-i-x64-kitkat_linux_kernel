@@ -10475,12 +10475,19 @@ static void intel_setup_outputs(struct drm_device *dev)
 		 * Enable both for now as we know that VLV Baylake supports
 		 * both.
 		 *
-		 * eDP Vs MIPI detection is based on VBT
+		 * FIXME:
+		 * Support eDP Vs MIPI detection based on VBT and AUX
+		 * transaction later. As of now if mipi panel id > 0 is
+		 * given as kernel param we treat MIPI is there else we
+		 * always initialize on eDP.
+		 *
+		 * Can be fixed later when VBT or equivalent is available
 		 */
-		if (dev_priv->is_mipi_from_vbt)
-			intel_dsi_init(dev);
+		if (i915_mipi_panel_id <= 0)
+			intel_dp_init(dev, VLV_DISPLAY_BASE + DP_C,
+					PORT_C);
 		else
-			intel_dp_init(dev, DP_C, PORT_C);
+			intel_dsi_init(dev);
 
 		intel_hdmi_init(dev, VLV_DISPLAY_BASE + GEN4_HDMIB,
 				PORT_B);
