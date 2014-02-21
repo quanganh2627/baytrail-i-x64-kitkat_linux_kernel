@@ -467,6 +467,7 @@ static int monza_remove(struct i2c_client *client)
 static const struct i2c_device_id monza_ids[] = {
 	{ "MNZX2000:00", MONZAX_2K_ADDR_NUM },
 	{ "MNZX8000:00", MONZAX_8K_ADDR_NUM },
+	{ "IMPJ0003:00", MONZAX_8K_ADDR_NUM },
 	{ /* END OF LIST */ }
 };
 MODULE_DEVICE_TABLE(i2c, monza_ids);
@@ -474,6 +475,7 @@ MODULE_DEVICE_TABLE(i2c, monza_ids);
 static const struct acpi_device_id acpi_monza_id[] = {
 	{ "MNZX2000:00", MONZAX_2K_ADDR_NUM },
 	{ "MNZX8000:00", MONZAX_8K_ADDR_NUM },
+	{ "IMPJ0003:00", MONZAX_8K_ADDR_NUM },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, acpi_monza_id);
