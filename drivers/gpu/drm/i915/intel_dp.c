@@ -897,9 +897,6 @@ static void intel_dp_mode_set(struct intel_encoder *encoder)
 	struct intel_crtc *crtc = to_intel_crtc(encoder->base.crtc);
 	struct drm_display_mode *adjusted_mode = &crtc->config.adjusted_mode;
 
-	if (dev->is_booting)
-		return;
-
 	/*
 	 * There are four kinds of DP registers:
 	 *
@@ -933,20 +930,29 @@ static void intel_dp_mode_set(struct intel_encoder *encoder)
 		intel_write_eld(&encoder->base, adjusted_mode);
 	}
 
-	if (intel_dp->pfit && (adjusted_mode->hdisplay < PFIT_SIZE_LIMIT)) {
-		u32 val = 0;
-		if (intel_dp->pfit == AUTOSCALE)
-			val = PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
-		if (intel_dp->pfit == PILLARBOX)
-			val = PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_PILLAR;
-		else if (intel_dp->pfit == LETTERBOX)
-			val = PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
-		DRM_DEBUG_DRIVER("pfit val = %x", val);
-		I915_WRITE(PFIT_CONTROL, val);
-		crtc->base.panning_en = true;
+	if (intel_dp->pfit) {
+		/* Enable panel fitter only if the scaling ratio is > 1 and the
+			input src size should be < 2kx2k */
+		if (((adjusted_mode->hdisplay < PFIT_SIZE_LIMIT) &&
+		(adjusted_mode->vdisplay < PFIT_SIZE_LIMIT)) &&
+		((adjusted_mode->hdisplay != crtc->base.fb->width) ||
+		(adjusted_mode->vdisplay != crtc->base.fb->height))) {
+			u32 val = 0;
+			if (intel_dp->pfit == AUTOSCALE)
+				val = PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
+			if (intel_dp->pfit == PILLARBOX)
+				val = PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_PILLAR;
+			else if (intel_dp->pfit == LETTERBOX)
+				val = PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
+			DRM_DEBUG_DRIVER("pfit val = %x", val);
+			I915_WRITE(PFIT_CONTROL, val);
+			crtc->config.gmch_pfit.control = val;
+			crtc->base.panning_en = true;
+		} else
+			DRM_DEBUG_DRIVER("Wrong panel fitter input src config");
 	 } else
 		crtc->base.panning_en = false;
 
@@ -1999,9 +2005,6 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	enum port port = dp_to_dig_port(intel_dp)->port;
 	struct drm_device *dev = encoder->base.dev;
 
-	if (dev->is_booting)
-		return;
-
 	/* Make sure the panel is off before trying to change the mode. But also
 	 * ensure that we have vdd while we switch off the panel. */
 	ironlake_edp_panel_vdd_on(intel_dp);
@@ -2019,9 +2022,6 @@ static void intel_post_disable_dp(struct intel_encoder *encoder)
 	struct intel_dp *intel_dp = enc_to_intel_dp(&encoder->base);
 	enum port port = dp_to_dig_port(intel_dp)->port;
 	struct drm_device *dev = encoder->base.dev;
-
-	if (dev->is_booting)
-		return;
 
 	if (port == PORT_A || IS_VALLEYVIEW(dev)) {
 		intel_dp_link_down(intel_dp);
@@ -2073,9 +2073,6 @@ static void vlv_pre_enable_dp(struct intel_encoder *encoder)
 	int port = vlv_dport_to_channel(dport);
 	int pipe = intel_crtc->pipe;
 	u32 val;
-
-	if (dev->is_booting)
-		return;
 
 	mutex_lock(&dev_priv->dpio_lock);
 

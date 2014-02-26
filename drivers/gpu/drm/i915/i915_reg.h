@@ -144,6 +144,8 @@
 #define GAB_CTL				0x24000
 #define   GAB_CTL_CONT_AFTER_PAGEFAULT	(1<<8)
 
+#define PHYSICAL_ADDR_MASK		0xFFFFF000
+
 /* VGA stuff */
 
 #define VGA_ST01_MDA 0x3ba
@@ -3743,10 +3745,10 @@ EDP_PSR_SW_TIMER
 #define SPRITED_CB_REG		(dev_priv->info->display_mmio_offset + 0x724d0)
 
 /* Sprite Hue and Saturation Registers */
-#define SPRITEA_HS_REG         0x721d4
-#define SPRITEB_HS_REG         0x721d4
-#define SPRITEC_HS_REG         0x723d4
-#define SPRITED_HS_REG         0x724d4
+#define SPRITEA_HS_REG         (dev_priv->info->display_mmio_offset + 0x721d4)
+#define SPRITEB_HS_REG         (dev_priv->info->display_mmio_offset + 0x722d4)
+#define SPRITEC_HS_REG         (dev_priv->info->display_mmio_offset + 0x723d4)
+#define SPRITED_HS_REG         (dev_priv->info->display_mmio_offset + 0x724d4)
 
 /* Sprite A control */
 #define _DVSACNTR		0x72180

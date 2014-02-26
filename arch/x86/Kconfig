@@ -301,6 +301,20 @@ config SMP
 
 	  If you don't know what to do here, say N.
 
+config CPU_SHIELDING
+	bool "dynamic core shielding/unshielding"
+	depends on SMP
+	---help---
+	  This enables dynamic shielding and unshielding of CPUs on system more
+	  than one CPU based on the load in the system.
+
+	  If you don't know what to do here, say N.
+
+config NR_CORES_PER_MODULE
+	int "number of cpu cores per module"
+	default "2"
+	depends on CPU_SHIELDING
+
 config X86_X2APIC
 	bool "Support x2apic"
 	depends on X86_LOCAL_APIC && X86_64 && IRQ_REMAP

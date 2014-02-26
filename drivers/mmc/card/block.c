@@ -830,7 +830,7 @@ static int mmc_blk_cmd_recovery(struct mmc_card *card, struct request *req,
 {
 	bool prev_cmd_status_valid = true;
 	u32 status, stop_status = 0;
-	int err, retry;
+	int err;
 
 	if (mmc_card_removed(card))
 		return ERR_NOMEDIUM;
@@ -840,18 +840,13 @@ static int mmc_blk_cmd_recovery(struct mmc_card *card, struct request *req,
 	 * and why there was no response.  If the first attempt fails,
 	 * we can't be sure the returned status is for the r/w command.
 	 */
-	for (retry = 2; retry >= 0; retry--) {
-		err = get_card_status(card, &status, 0);
-		if (!err)
-			break;
-
-		prev_cmd_status_valid = false;
-		pr_err("%s: error %d sending status command, %sing\n",
-		       req->rq_disk->disk_name, err, retry ? "retry" : "abort");
-	}
+	err = get_card_status(card, &status, 0);
 
 	/* We couldn't get a response from the card.  Give up. */
 	if (err) {
+		prev_cmd_status_valid = false;
+		pr_err("%s: error %d sending status command\n",
+			req->rq_disk->disk_name, err);
 		/* Check if the card is removed */
 		if (mmc_detect_card_removed(card->host))
 			return ERR_NOMEDIUM;
@@ -1894,7 +1889,7 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
 	struct mmc_blk_request *brq = &mq->mqrq_cur->brq;
-	int ret = 1, disable_multi = 0, retry = 0, type;
+	int ret = 1, disable_multi = 0, type;
 	enum mmc_blk_status status;
 	struct mmc_queue_req *mq_rq;
 	struct request *req = rqc;
@@ -1978,8 +1973,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 				break;
 			goto cmd_abort;
 		case MMC_BLK_RETRY:
-			if (retry++ < 5)
-				break;
 			/* Fall through */
 		case MMC_BLK_ABORT:
 			if (!mmc_blk_reset(md, card->host, type))

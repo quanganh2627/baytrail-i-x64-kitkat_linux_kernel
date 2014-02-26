@@ -3259,6 +3259,8 @@ find_idlest_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
 
 	/* Traverse only the allowed CPUs */
 	for_each_cpu_and(i, sched_group_cpus(group), tsk_cpus_allowed(p)) {
+		if (is_this_cpu_shielded(i))
+			continue;
 		load = weighted_cpuload(i);
 
 		if (load < min_load || (load == min_load && i == this_cpu)) {
@@ -3279,13 +3281,14 @@ static int select_idle_sibling(struct task_struct *p, int target)
 	struct sched_group *sg;
 	int i = task_cpu(p);
 
-	if (idle_cpu(target))
+	if (idle_cpu(target) && !is_this_cpu_shielded(target))
 		return target;
 
 	/*
 	 * If the prevous cpu is cache affine and idle, don't be stupid.
 	 */
-	if (i != target && cpus_share_cache(i, target) && idle_cpu(i))
+	if (i != target && cpus_share_cache(i, target) && idle_cpu(i) &&
+			!is_this_cpu_shielded(i))
 		return i;
 
 	/*
@@ -3306,7 +3309,9 @@ static int select_idle_sibling(struct task_struct *p, int target)
 
 			target = cpumask_first_and(sched_group_cpus(sg),
 					tsk_cpus_allowed(p));
-			goto done;
+
+			if (!is_this_cpu_shielded(target))
+				goto done;
 next:
 			sg = sg->next;
 		} while (sg != sd->groups);
@@ -4569,6 +4574,11 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 			return true;
 	}
 
+#ifdef CONFIG_CPU_SHIELDING
+	if (shield_info.nr_module_shielded && (!is_this_cpu_shielded(env->dst_cpu)))
+		return true;
+#endif
+
 	return false;
 }
 
@@ -4617,7 +4627,7 @@ static inline void update_sd_lb_stats(struct lb_env *env,
 		if (prefer_sibling && !local_group && sds->this_has_capacity)
 			sgs.group_capacity = min(sgs.group_capacity, 1UL);
 
-		if (local_group) {
+	if (local_group) {
 			sds->this_load = sgs.avg_load;
 			sds->this = sg;
 			sds->this_nr_running = sgs.sum_nr_running;
@@ -4638,6 +4648,24 @@ static inline void update_sd_lb_stats(struct lb_env *env,
 
 		sg = sg->next;
 	} while (sg != env->sd->groups);
+}
+
+static int check_shield_packing(struct lb_env *env, struct sd_lb_stats *sds)
+{
+
+	if (!sds->busiest)
+		return 0;
+
+#ifdef CONFIG_CPU_SHIELDING
+	if (!(shield_info.nr_module_shielded && (!is_this_cpu_shielded(env->dst_cpu))))
+		return 0;
+#endif
+
+	env->imbalance = DIV_ROUND_CLOSEST(
+		sds->max_load * sds->busiest->sgp->power, SCHED_POWER_SCALE);
+
+	return 1;
+
 }
 
 /**
@@ -4844,6 +4872,7 @@ static struct sched_group *
 find_busiest_group(struct lb_env *env, int *balance)
 {
 	struct sd_lb_stats sds;
+	int cpu;
 
 	memset(&sds, 0, sizeof(sds));
 
@@ -4859,6 +4888,10 @@ find_busiest_group(struct lb_env *env, int *balance)
 	 */
 	if (!(*balance))
 		goto ret;
+
+	if ((env->idle == CPU_IDLE || env->idle == CPU_NEWLY_IDLE) &&
+			check_shield_packing(env, &sds))
+		return sds.busiest;
 
 	if ((env->idle == CPU_IDLE || env->idle == CPU_NEWLY_IDLE) &&
 	    check_asym_packing(env, &sds))
@@ -4998,6 +5031,11 @@ static int need_active_balance(struct lb_env *env)
 		 */
 		if ((sd->flags & SD_ASYM_PACKING) && env->src_cpu > env->dst_cpu)
 			return 1;
+
+#ifdef CONFIG_CPU_SHIELDING
+		if (shield_info.nr_module_shielded && !is_this_cpu_shielded(env->dst_cpu))
+			return 1;
+#endif
 	}
 
 	return unlikely(sd->nr_balance_failed > sd->cache_nice_tries+2);
@@ -5035,6 +5073,9 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 	 */
 	if (idle == CPU_NEWLY_IDLE)
 		env.dst_grpmask = NULL;
+
+	if (is_this_cpu_shielded(this_cpu))
+		goto out_balanced;
 
 	cpumask_copy(cpus, cpu_active_mask);
 
@@ -5245,6 +5286,9 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 	unsigned long next_balance = jiffies + HZ;
 
 	this_rq->idle_stamp = this_rq->clock;
+
+	if (is_this_cpu_shielded(this_cpu))
+		return;
 
 	if (this_rq->avg_idle < sysctl_sched_migration_cost)
 		return;
@@ -5519,6 +5563,8 @@ static void rebalance_domains(int cpu, enum cpu_idle_type idle)
 
 	rcu_read_lock();
 	for_each_domain(cpu, sd) {
+		if (is_this_cpu_shielded(cpu))
+			continue;
 		if (!(sd->flags & SD_LOAD_BALANCE))
 			continue;
 
@@ -5664,6 +5710,13 @@ static inline int nohz_kick_needed(struct rq *rq, int cpu)
 
 		if (sd->flags & SD_SHARE_PKG_RESOURCES && nr_busy > 1)
 			goto need_kick_unlock;
+
+#ifdef CONFIG_CPU_SHIELDING
+		if (shield_info.nr_module_shielded && nr_busy != sg->group_weight
+		&& !is_this_cpu_shielded((cpumask_first_and(nohz.idle_cpus_mask,
+						sched_domain_span(sd)))))
+			goto need_kick_unlock;
+#endif
 
 		if (sd->flags & SD_ASYM_PACKING && nr_busy != sg->group_weight
 		    && (cpumask_first_and(nohz.idle_cpus_mask,

@@ -116,10 +116,7 @@ static bool intel_dsi_compute_config(struct intel_encoder *encoder,
 
 static void intel_dsi_pre_pll_enable(struct intel_encoder *encoder)
 {
-	struct drm_device *dev = encoder->base.dev;
 	DRM_DEBUG_KMS("\n");
-	if (dev->is_booting)
-		return;
 
 	/* nothing to do here as we do necessary stuff in pre_enable
 	 * to comply to the hw team recommended DSI sequence */
@@ -210,11 +207,8 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 
 static void intel_dsi_pre_enable(struct intel_encoder *encoder)
 {
-	struct drm_device *dev = encoder->base.dev;
 	DRM_DEBUG_KMS("\n");
 
-	if (dev->is_booting)
-		return;
 	/* put device in ready state */
 	intel_dsi_device_ready(encoder);
 }
@@ -232,8 +226,6 @@ static void intel_dsi_enable(struct intel_encoder *encoder)
 	DRM_DEBUG_KMS("\n");
 
 	is_dsi = intel_pipe_has_type(encoder->base.crtc, INTEL_OUTPUT_DSI);
-	if (dev->is_booting)
-		return;
 
 	intel_enable_dsi_pll(intel_dsi);
 
@@ -278,9 +270,6 @@ static void intel_dsi_disable(struct intel_encoder *encoder)
 	u32 tmp;
 
 	DRM_DEBUG_KMS("\n");
-
-	if (dev->is_booting)
-		return;
 
 	intel_panel_disable_backlight(dev);
 	if (intel_dsi->backlight_off_delay >= 20)
@@ -384,11 +373,7 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 
 static void intel_dsi_post_disable(struct intel_encoder *encoder)
 {
-	struct drm_device *dev = encoder->base.dev;
-
 	DRM_DEBUG_KMS("\n");
-	if (dev->is_booting)
-		return;
 
 	intel_dsi_clear_device_ready(encoder);
 }
@@ -557,9 +542,6 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 	struct drm_display_mode *adjusted_mode = &intel_crtc->config.adjusted_mode;
 	u32 val;
 
-	if (dev->is_booting)
-		return;
-
 	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
 
 	dsi_config(encoder);
@@ -655,7 +637,8 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 	I915_WRITE(MIPI_INTR_STAT(pipe), 0xFFFFFFFF);
 
-	if (adjusted_mode->hdisplay < PFIT_SIZE_LIMIT) {
+	if ((adjusted_mode->hdisplay < PFIT_SIZE_LIMIT) &&
+	(adjusted_mode->vdisplay < PFIT_SIZE_LIMIT)) {
 		/* BYT-CR needs panel fitter only with Panasonic panel */
 		if (BYT_CR_CONFIG && (i915_mipi_panel_id ==
 			MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)) {
@@ -663,9 +646,11 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 					PFIT_SCALING_AUTO;
 			I915_WRITE(PFIT_CONTROL, val);
 			intel_crtc->base.panning_en = true;
-		} else {
-			/* Normal scenario, enable panel fitter only if configured */
-			if (intel_dsi->pfit) {
+		} else if (intel_dsi->pfit) {
+			/* Normal scenario, enable panel fitter only if the
+			scaling ratio is > 1 and the input src size < 2kx2k */
+			if ((adjusted_mode->hdisplay != intel_crtc->base.fb->width) ||
+			(adjusted_mode->vdisplay != intel_crtc->base.fb->height)) {
 				if (intel_dsi->pfit == AUTOSCALE)
 					val = PFIT_ENABLE | (intel_crtc->pipe <<
 						PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
@@ -677,11 +662,16 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 						PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
 				I915_WRITE(PFIT_CONTROL, val);
 				intel_crtc->base.panning_en = true;
-			}
-		}
-		DRM_DEBUG_DRIVER("pfit val = %x", val);
+				DRM_DEBUG_DRIVER("pfit val = %x", val);
+			} else
+				DRM_DEBUG_DRIVER("Wrong pfit input src config");
+		} else
+			intel_crtc->base.panning_en = false;
+
 	} else
-		intel_crtc->base.panning_en = false;
+		DRM_DEBUG_DRIVER("Wrong pfit input src config");
+
+	intel_crtc->config.gmch_pfit.control = val;
 }
 
 static enum drm_connector_status

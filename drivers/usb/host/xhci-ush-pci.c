@@ -38,7 +38,7 @@
 
 static struct pci_dev	*pci_dev;
 
-static int create_device_files();
+static int create_device_files(struct pci_dev *pdev);
 static void remove_device_files();
 
 static int hsic_enable;
@@ -166,7 +166,7 @@ static int hsic_wakeup_irq_init(void)
 	gpio_direction_input(hsic.wakeup_gpio);
 	retval = request_irq(gpio_to_irq(hsic.wakeup_gpio),
 			hsic_wakeup_gpio_irq,
-			IRQF_SHARED | IRQF_TRIGGER_RISING,
+			IRQF_SHARED | IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
 			"hsic_remote_wakeup_request", &pci_dev->dev);
 	if (retval) {
 		dev_err(&pci_dev->dev,
@@ -984,9 +984,10 @@ static ssize_t hsic_remoteWakeup_store(struct device *dev,
 static DEVICE_ATTR(remoteWakeup, S_IRUGO | S_IWUSR,
 		hsic_remoteWakeup_show, hsic_remoteWakeup_store);
 
-static int create_device_files()
+static int create_device_files(struct pci_dev *pdev)
 {
 	int retval;
+	struct ush_hsic_pdata *hsic_pdata;
 
 	retval = device_create_file(&pci_dev->dev,
 			&dev_attr_registers);
@@ -996,7 +997,10 @@ static int create_device_files()
 		goto dump_registers;
 	}
 
-	hsic.reenumeration_delay = USH_REENUM_DELAY;
+	hsic_pdata = pdev->dev.platform_data;
+	hsic.reenumeration_delay = hsic_pdata->reenum_delay;
+	dev_info(&pdev->dev, "Re-enumeration delay time %d\n",
+				hsic.reenumeration_delay);
 	retval = device_create_file(&pci_dev->dev,
 			&dev_attr_reenumeration_delay);
 	if (retval < 0) {
@@ -1215,7 +1219,7 @@ static int xhci_ush_pci_probe(struct pci_dev *dev,
 	*((struct xhci_hcd **) xhci->shared_hcd->hcd_priv) = xhci;
 
 	if (hsic.hsic_enable_created == 0) {
-		retval = create_device_files();
+		retval = create_device_files(dev);
 		if (retval < 0) {
 			dev_dbg(&dev->dev, "error create device files\n");
 			goto dealloc_usb2_hcd;

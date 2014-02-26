@@ -273,6 +273,9 @@
 #define SDHCI_DEFAULT_BOUNDARY_SIZE  (512 * 1024)
 #define SDHCI_DEFAULT_BOUNDARY_ARG   (ilog2(SDHCI_DEFAULT_BOUNDARY_SIZE) - 12)
 
+/* Max timeout timer value for each sdhci request */
+#define SDHCI_REQ_TIMEOUT_TIMER_CNT_MAX 10
+
 struct sdhci_ops {
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
 	u32		(*read_l)(struct sdhci_host *host, int reg);
@@ -309,6 +312,7 @@ struct sdhci_ops {
 	int	(*gpio_buf_check)(struct sdhci_host *host, unsigned int clk);
 	int	(*gpio_buf_dump)(struct sdhci_host *host);
 	int	(*set_io_voltage)(struct sdhci_host *, bool);
+	int	(*get_timeout_timer_count)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS

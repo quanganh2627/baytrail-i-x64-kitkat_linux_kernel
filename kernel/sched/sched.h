@@ -12,6 +12,37 @@
 
 extern __read_mostly int scheduler_running;
 
+#ifdef CONFIG_CPU_SHIELDING
+#define NR_MODULES		(NR_CPUS / CONFIG_NR_CORES_PER_MODULE)
+#define MAX_SHIELD_LEVEL	(NR_MODULES - 1)
+#define SHIELD_LWM_THRESH 20
+#define SHIELD_HWM_THRESH 80
+
+struct module_info {
+	unsigned int	shield_stat;
+	unsigned int	unshield_stat;
+	ktime_t		ktime_entry;
+	ktime_t		module_residency;
+};
+
+struct cpu_shield_info {
+	cpumask_var_t	shield_mask;
+	unsigned int	nr_module_shielded;
+	ktime_t		ktime_offset;
+	struct module_info	*info;
+};
+extern int get_module_utilization(int);
+#else
+static inline int get_module_utilization(int module)
+{
+	return 0;
+}
+#endif
+
+
+extern bool is_this_cpu_shielded(int cpu);
+
+extern struct cpu_shield_info shield_info;
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],

@@ -37,6 +37,9 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
+#define BYT_CR_MAX_HDISPLAY	1280
+#define BYT_CR_MAX_VDISPLAY	800
+
 static struct drm_device *intel_hdmi_to_dev(struct intel_hdmi *intel_hdmi)
 {
 	return hdmi_to_dig_port(intel_hdmi)->base.base.dev;
@@ -741,19 +744,27 @@ static void intel_hdmi_mode_set(struct intel_encoder *encoder)
 		hdmi_val |= SDVO_PIPE_SEL(crtc->pipe);
 
 	if (intel_hdmi->pfit) {
-		u32 val = 0;
-		if (intel_hdmi->pfit == AUTOSCALE)
-			val =  PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
-		if (intel_hdmi->pfit == PILLARBOX)
-			val =  PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_PILLAR;
-		else if (intel_hdmi->pfit == LETTERBOX)
-			val =  PFIT_ENABLE | (crtc->pipe <<
-				PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
-		DRM_DEBUG_DRIVER("pfit val = %x", val);
-		I915_WRITE(PFIT_CONTROL, val);
-		crtc->base.panning_en = true;
+		/*Enable panel fitter only if the scaling ratio is > 1 and the
+			input src size should be < 2kx2k */
+		if (((adjusted_mode->hdisplay < PFIT_SIZE_LIMIT) &&
+		(adjusted_mode->vdisplay < PFIT_SIZE_LIMIT)) &&
+		((adjusted_mode->hdisplay != crtc->base.fb->width) ||
+		(adjusted_mode->vdisplay != crtc->base.fb->height))) {
+			u32 val = 0;
+			if (intel_hdmi->pfit == AUTOSCALE)
+				val =  PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
+			if (intel_hdmi->pfit == PILLARBOX)
+				val =  PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_PILLAR;
+			else if (intel_hdmi->pfit == LETTERBOX)
+				val =  PFIT_ENABLE | (crtc->pipe <<
+					PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
+			DRM_DEBUG_DRIVER("pfit val = %x", val);
+			I915_WRITE(PFIT_CONTROL, val);
+			crtc->base.panning_en = true;
+		} else
+			DRM_DEBUG_DRIVER("Wrong panel fitter input src config");
 	} else
 		crtc->base.panning_en = false;
 
@@ -930,6 +941,17 @@ static int intel_hdmi_mode_valid(struct drm_connector *connector,
 	if (mode->clock < 20000)
 		return MODE_CLOCK_LOW;
 
+	/* WAR (FIXME):
+	  * BYT_CR has limitation in memory chanel bandwidth.
+	  * Temporarily blocking HDMI modes above 720 P
+	  */
+	if (BYT_CR_CONFIG) {
+		if (mode->vdisplay > BYT_CR_MAX_VDISPLAY)
+			return MODE_BAD_VVALUE;
+		if (mode->hdisplay > BYT_CR_MAX_HDISPLAY)
+			return MODE_BAD_HVALUE;
+	}
+
 	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return MODE_NO_DBLESCAN;
 
@@ -1089,7 +1111,8 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 			return status;
 		}
 	} else {
-		/* HDMI is disconneted, so remove saved old EDID */
+		/* HDMI is disconnected, so remove saved old EDID */
+		dev_priv->unplug = true;
 		kfree(intel_hdmi->edid);
 		intel_hdmi->edid = NULL;
 		connector->display_info.raw_edid = NULL;
