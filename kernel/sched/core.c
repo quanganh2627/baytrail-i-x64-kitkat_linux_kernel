@@ -169,7 +169,8 @@ static void do_shield_check(void)
 {
 	unsigned int curr_load, prev_load = UINT_MAX;
 	unsigned  int mod_shield = 0;
-	int cpu, module, mod_count = 0;
+	int module, mod_count = 0;
+	int cpu = smp_processor_id();
 
 	if (!sysctl_shield_enable)
 		return;
@@ -199,7 +200,8 @@ static void do_shield_check(void)
 
 static void do_unshield_check(void)
 {
-	int module, cpu;
+	int module;
+	int cpu = smp_processor_id();
 	unsigned int curr_load;
 	bool unshield = false;
 
