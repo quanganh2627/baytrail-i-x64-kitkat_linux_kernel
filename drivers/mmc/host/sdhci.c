@@ -2382,11 +2382,9 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 			tuning_loop_counter--;
 		if (timeout)
 			timeout--;
-		if (host->quirks2 & SDHCI_QUIRK2_TUNING_SLEEP) {
-			spin_unlock(&host->lock);
-			usleep_range(900, 1100);
-			spin_lock(&host->lock);
-		}
+		spin_unlock(&host->lock);
+		usleep_range(900, 1100);
+		spin_lock(&host->lock);
 	} while (ctrl & SDHCI_CTRL_EXEC_TUNING);
 
 	/*
