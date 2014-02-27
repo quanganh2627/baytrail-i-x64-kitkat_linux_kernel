@@ -1339,13 +1339,13 @@ static int dwc_otg_probe(struct pci_dev *pdev,
 
 	otg->irqnum = pdev->irq;
 
+	wake_lock_init(&wakelock, WAKE_LOCK_SUSPEND, "dwc_otg_wakelock");
+
 	if (dwc3_otg_pdata->platform_init) {
 		retval = dwc3_otg_pdata->platform_init(otg);
 		if (retval)
 			goto err;
 	}
-
-	wake_lock_init(&wakelock, WAKE_LOCK_SUSPEND, "dwc_otg_wakelock");
 
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
 	pm_runtime_use_autosuspend(&pdev->dev);
