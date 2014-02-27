@@ -83,24 +83,43 @@ typedef struct {
 #ifdef ESIF_ATTR_OS_WINDOWS
 
 typedef struct {
-	esif_ccb_timer_cb  function_ptr;
+	esif_ccb_timer_cb function_ptr;
 	esif_ccb_low_priority_thread_lock_t context_lock;
-	esif_flags_t       exit_flag;
+	esif_flags_t exit_flag;
 	void *context_ptr;
 } esif_ccb_timer_context_t;
 
+
+#ifdef ESIF_ATTR_USE_COALESCABLE_TIMERS
+
+typedef struct esif_ccb_timer {
+	KTIMER  timer;
+	KDPC dpc;
+	esif_ccb_timer_context_t timer_context;
+} esif_ccb_timer_t;
+
+typedef struct esif_ccb_work_item_context {
+	void *ptr;
+} esif_ccb_work_item_context_t;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(esif_ccb_work_item_context_t,
+				   esif_ccb_get_work_item_context)
+#else
 typedef WDFTIMER esif_ccb_timer_t;
+
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(esif_ccb_timer_context_t,
 				   esif_ccb_get_timer_context)
+#endif
+
 
 #endif /* ESIF_ATTR_OS_WINDOWS */
 
 #ifdef ESIF_ATTR_OS_LINUX
 /* Timer Callback Wrapper  Find And Fire Function */
-static ESIF_INLINE void esif_ccb_timer_cb_wrapper (struct work_struct *work)
+static ESIF_INLINE void esif_ccb_timer_cb_wrapper(struct work_struct *work)
 {
 	esif_ccb_timer_t *timer_ptr = container_of(
-			(struct delayed_work*)work,
+			(struct delayed_work *)work,
 			esif_ccb_timer_t,
 			work);
 
@@ -117,11 +136,84 @@ static ESIF_INLINE void esif_ccb_timer_cb_wrapper (struct work_struct *work)
 #endif /* ESIF_ATTR_OS_LINUX */
 
 #ifdef ESIF_ATTR_OS_WINDOWS
-/* Timer Callback Wrapper  Find And Fire Function */
+/* Timer Callback Wrapper Find And Fire Function */
+
+#ifdef ESIF_ATTR_USE_COALESCABLE_TIMERS
+
+static KDEFERRED_ROUTINE esif_ccb_timer_dpc;
+static EVT_WDF_WORKITEM esif_ccb_timer_cb_wrapper;
+
+static void esif_ccb_timer_cb_wrapper(
+    WDFWORKITEM work_item
+    )
+{
+	esif_ccb_work_item_context_t *work_item_context_ptr = NULL;
+	esif_ccb_timer_t *timer_ptr = NULL;
+	esif_ccb_timer_context_t *timer_context_ptr = NULL;
+
+	TIMER_DEBUG("%s: timer fired!!!!!\n", ESIF_FUNC);
+
+	work_item_context_ptr = esif_ccb_get_work_item_context(work_item);
+	if(NULL == work_item_context_ptr) {
+		goto exit;
+	}
+
+	timer_ptr = (esif_ccb_timer_t *)work_item_context_ptr->ptr;
+	if(NULL == timer_ptr) {
+		goto exit;
+	}
+
+	timer_context_ptr = &timer_ptr->timer_context;
+	if ((NULL != timer_context_ptr) && (!timer_context_ptr->exit_flag)) {
+		esif_ccb_low_priority_thread_read_lock(
+			&timer_context_ptr->context_lock);
+		timer_context_ptr->function_ptr(timer_context_ptr->context_ptr);
+		esif_ccb_low_priority_thread_read_unlock(
+			&timer_context_ptr->context_lock);
+	}
+exit:
+	WdfObjectDelete(work_item);
+}
+
+static void esif_ccb_timer_dpc (
+	struct _KDPC *Dpc,
+	PVOID DeferredContext,
+	PVOID SystemArgument1,
+	PVOID SystemArgument2
+    )
+{
+	NTSTATUS status = STATUS_SUCCESS;
+	esif_ccb_work_item_context_t *work_item_context_ptr = NULL;
+	WDF_WORKITEM_CONFIG workItemConfig    = {0};
+	WDF_OBJECT_ATTRIBUTES workItemAttribs = {0};
+	WDFWORKITEM workItem = NULL;
+
+	UNREFERENCED_PARAMETER(Dpc);
+	UNREFERENCED_PARAMETER(SystemArgument1);
+	UNREFERENCED_PARAMETER(SystemArgument2);
+
+	WDF_WORKITEM_CONFIG_INIT(&workItemConfig, esif_ccb_timer_cb_wrapper);
+	workItemConfig.AutomaticSerialization = TRUE;
+
+	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&workItemAttribs, 
+					        esif_ccb_work_item_context_t);
+	workItemAttribs.ParentObject = g_wdf_ipc_queue_handle;
+
+	status = WdfWorkItemCreate(&workItemConfig, &workItemAttribs, &workItem);
+	if (NT_SUCCESS(status)) {
+		work_item_context_ptr = esif_ccb_get_work_item_context(workItem);
+		work_item_context_ptr->ptr = DeferredContext;
+		WdfWorkItemEnqueue(workItem);
+	}
+}
+
+
+
+#else /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
 
 EVT_WDF_TIMER esif_ccb_timer_cb_wrapper;
 
-ESIF_INLINE void esif_ccb_timer_cb_wrapper (WDFTIMER timer)
+ESIF_INLINE void esif_ccb_timer_cb_wrapper(WDFTIMER timer)
 {
 	esif_ccb_timer_context_t *timer_context_ptr =
 		esif_ccb_get_timer_context(timer);
@@ -135,13 +227,13 @@ ESIF_INLINE void esif_ccb_timer_cb_wrapper (WDFTIMER timer)
 			&timer_context_ptr->context_lock);
 	}
 }
+#endif /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
+#endif /* ESIF_ATTR_OS_WINDOWS */
 
-
-#endif
 
 /* Timer Initialize */
 static ESIF_INLINE
-enum esif_rc esif_ccb_timer_init (esif_ccb_timer_t *timer_ptr)
+enum esif_rc esif_ccb_timer_init(esif_ccb_timer_t *timer_ptr)
 {
 	enum esif_rc rc = ESIF_E_UNSPECIFIED;
 #ifdef ESIF_ATTR_OS_LINUX
@@ -153,7 +245,21 @@ enum esif_rc esif_ccb_timer_init (esif_ccb_timer_t *timer_ptr)
 #endif
 
 #ifdef ESIF_ATTR_OS_WINDOWS
+#ifdef ESIF_ATTR_USE_COALESCABLE_TIMERS
+
+	esif_ccb_memset(timer_ptr, 0, sizeof(*timer_ptr));
+
+	KeInitializeDpc(&timer_ptr->dpc, esif_ccb_timer_dpc, timer_ptr);
+	KeInitializeTimer(&timer_ptr->timer);
+
+	esif_ccb_low_priority_thread_lock_init(&timer_ptr->timer_context.context_lock);
+	timer_ptr->timer_context.exit_flag = FALSE;
+
+	TIMER_DEBUG("%s: timer %p\n", ESIF_FUNC, timer_ptr);
+
+#else /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
 	NTSTATUS status;
+
 	WDF_TIMER_CONFIG timer_config = {0};
 	WDF_OBJECT_ATTRIBUTES timer_attributes      = {0};
 	esif_ccb_timer_context_t *timer_context_ptr = NULL;
@@ -171,9 +277,8 @@ enum esif_rc esif_ccb_timer_init (esif_ccb_timer_t *timer_ptr)
 					       esif_ccb_timer_context_t);
 	status = WdfTimerCreate(&timer_config, &timer_attributes, timer_ptr);
 	TIMER_DEBUG("%s: timer %p status %08x\n", ESIF_FUNC, timer_ptr, status);
-	if (STATUS_SUCCESS == status) {
+	if (STATUS_SUCCESS == status)
 		rc = ESIF_OK;
-	}
 
 	timer_context_ptr = esif_ccb_get_timer_context(*timer_ptr);
 	if (timer_context_ptr == NULL) {
@@ -183,14 +288,16 @@ enum esif_rc esif_ccb_timer_init (esif_ccb_timer_t *timer_ptr)
 
 	esif_ccb_low_priority_thread_lock_init(&timer_context_ptr->context_lock);
 	timer_context_ptr->exit_flag = FALSE;
+
 exit:
-#endif
+#endif /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
+#endif /* ESIF_ATTR_OS_WINDOWS */
 	return rc;
 }
 
 
 /* Timer Set */
-static ESIF_INLINE enum esif_rc esif_ccb_timer_set_msec (
+static ESIF_INLINE enum esif_rc esif_ccb_timer_set_msec(
 	esif_ccb_timer_t *timer_ptr,
 	esif_ccb_time_t timeout,
 	esif_ccb_timer_cb function_ptr,
@@ -220,12 +327,38 @@ static ESIF_INLINE enum esif_rc esif_ccb_timer_set_msec (
 	do_div(x, y);
 
 	result = schedule_delayed_work(&timer_ptr->work, x);
-	if (ESIF_TRUE == result) {
+	if (ESIF_TRUE == result)
 		rc = ESIF_OK;
-	}
 #endif
 
 #ifdef ESIF_ATTR_OS_WINDOWS
+#ifdef ESIF_ATTR_USE_COALESCABLE_TIMERS
+	esif_ccb_timer_context_t *timer_context_ptr = NULL;
+	LARGE_INTEGER due_time = {0LL};
+
+	TIMER_DEBUG("%s: timer %p timeout %u\n", ESIF_FUNC, timer_ptr, timeout);
+
+	if(NULL == timer_ptr) {
+		goto exit;
+	}
+
+	timer_context_ptr = &timer_ptr->timer_context;
+	timer_context_ptr->function_ptr = function_ptr;
+	timer_context_ptr->context_ptr  = context_ptr;
+	timer_context_ptr->exit_flag    = FALSE;
+
+	due_time.QuadPart = (LONGLONG)timeout * -10000;
+	KeSetCoalescableTimer(&timer_ptr->timer,
+			      due_time,
+			      0,
+			      (ULONG)timeout / 2,
+			      &timer_ptr->dpc);
+
+	rc = ESIF_OK;
+exit:
+
+#else /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
+
 	esif_ccb_timer_context_t *timer_context_ptr = NULL;
 	BOOLEAN status;
 
@@ -242,18 +375,18 @@ static ESIF_INLINE enum esif_rc esif_ccb_timer_set_msec (
 	/* Finally Start Timer */
 	status = WdfTimerStart(*timer_ptr, (LONG)timeout * -10000);
 	TIMER_DEBUG("%s: timer %p status %08x\n", ESIF_FUNC, timer_ptr, status);
-	if (TRUE == status) {
+	if (TRUE == status)
 		rc = ESIF_OK;
-	}
 
-#endif
+#endif /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
+#endif /* ESIF_ATTR_OS_WINDOWS */
 	return rc;
 }
 
 
 /* Timer Stop And Destory */
 static ESIF_INLINE
-enum esif_rc esif_ccb_timer_kill (esif_ccb_timer_t *timer)
+enum esif_rc esif_ccb_timer_kill(esif_ccb_timer_t *timer)
 {
 	enum esif_rc rc = ESIF_E_UNSPECIFIED;
 #ifdef ESIF_ATTR_OS_LINUX
@@ -263,12 +396,35 @@ enum esif_rc esif_ccb_timer_kill (esif_ccb_timer_t *timer)
 	timer->exit_flag = TRUE;
 	esif_ccb_low_priority_thread_read_unlock(&timer->context_lock);
 
-	if (ESIF_TRUE == cancel_delayed_work(&timer->work)) {
+	if (ESIF_TRUE == cancel_delayed_work(&timer->work))
 		rc = ESIF_OK;
-	}
 #endif
 
 #ifdef ESIF_ATTR_OS_WINDOWS
+#ifdef ESIF_ATTR_USE_COALESCABLE_TIMERS
+	esif_ccb_timer_context_t *timer_context_ptr = NULL;
+
+	TIMER_DEBUG("%s: timer %p\n", ESIF_FUNC, timer);
+
+	if(NULL == timer) {
+		goto exit;
+	}
+
+	timer_context_ptr = &timer->timer_context;
+
+	if (timer_context_ptr != NULL) {
+		esif_ccb_low_priority_thread_read_lock(
+			&timer_context_ptr->context_lock);
+		timer_context_ptr->exit_flag = TRUE;
+		esif_ccb_low_priority_thread_read_unlock(
+			&timer_context_ptr->context_lock);
+	}
+
+	KeCancelTimer(&timer->timer);
+exit:
+	rc = ESIF_OK;
+
+#else /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
 	esif_ccb_timer_context_t *timer_context_ptr = NULL;
 
 	TIMER_DEBUG("%s: timer %p\n", ESIF_FUNC, timer);
@@ -285,7 +441,9 @@ enum esif_rc esif_ccb_timer_kill (esif_ccb_timer_t *timer)
 	/* WDF Framework Will Cleanup  */
 	WdfTimerStop(*timer, FALSE);
 	rc = ESIF_OK;
-#endif
+
+#endif /* NOT ESIF_ATTR_USE_COALESCABLE_TIMERS */
+#endif /* ESIF_ATTR_OS_WINDOWS */
 	return rc;
 }
 
@@ -337,10 +495,10 @@ typedef struct esif_ccb_timer {
  *  something goes wrong.  We simply wrap the parameters with a
  *  validity check and hope for the best.
  */
-static ESIF_INLINE void esif_ccb_timer_wrapper (const union sigval sv)
+static ESIF_INLINE void esif_ccb_timer_wrapper(const union sigval sv)
 {
 	esif_ccb_timer_ctx_t *timer_ctx_ptr =
-		(esif_ccb_timer_ctx_t*)sv.sival_ptr;
+		(esif_ccb_timer_ctx_t *)sv.sival_ptr;
 
 	ESIF_ASSERT(timer_ctx_ptr != NULL);
 	ESIF_ASSERT(timer_ctx_ptr->cb_func != NULL);
@@ -382,13 +540,13 @@ typedef struct esif_ccb_timer {
  *  validity check and hope for the best.
  */
 
-static ESIF_INLINE void esif_ccb_timer_wrapper (
+static ESIF_INLINE void esif_ccb_timer_wrapper(
 	const void *context_ptr,
 	const BOOLEAN notUsed
 	)
 {
 	esif_ccb_timer_ctx_t *timer_ctx_ptr =
-		(esif_ccb_timer_ctx_t*)context_ptr;
+		(esif_ccb_timer_ctx_t *)context_ptr;
 
 	ESIF_ASSERT(timer_ctx_ptr != NULL);
 	ESIF_ASSERT(timer_ctx_ptr->cb_func != NULL);
@@ -407,7 +565,7 @@ static ESIF_INLINE void esif_ccb_timer_wrapper (
 #endif /* ESIF_ATTR_OS_WINDOWS */
 
 /* Windows Initialize Timer */
-static ESIF_INLINE eEsifError esif_ccb_timer_init (
+static ESIF_INLINE eEsifError esif_ccb_timer_init(
 	esif_ccb_timer_t *timer_ptr,		/* Our Timer */
 	const esif_ccb_timer_cb function_ptr,	/* Callback when timer fires */
 	void *context_ptr
@@ -420,11 +578,10 @@ static ESIF_INLINE eEsifError esif_ccb_timer_init (
 	/* Allocate and setup new data */
 	if (NULL != timer_ptr) {
 		timer_ptr->timer_ctx_ptr =
-			(esif_ccb_timer_ctx_t*)esif_ccb_malloc(sizeof(
+			(esif_ccb_timer_ctx_t *)esif_ccb_malloc(sizeof(
 								       esif_ccb_timer_ctx_t));
-		if (NULL == timer_ptr->timer_ctx_ptr) {
+		if (NULL == timer_ptr->timer_ctx_ptr)
 			return rc;
-		}
 
 		/* Store state for timer set */
 		timer_ptr->timer_ctx_ptr->cb_func        = function_ptr;
@@ -448,7 +605,7 @@ static ESIF_INLINE eEsifError esif_ccb_timer_init (
 
 		if (0 ==
 		    timer_create(CLOCK_REALTIME, &se,
-				 (timer_t*)&timer_ptr->timer)) {
+				 (timer_t *)&timer_ptr->timer)) {
 			rc = ESIF_OK;
 		}
 	}
@@ -458,7 +615,7 @@ static ESIF_INLINE eEsifError esif_ccb_timer_init (
 
 
 /* Windows Set Timer */
-static ESIF_INLINE eEsifError esif_ccb_timer_set_msec (
+static ESIF_INLINE eEsifError esif_ccb_timer_set_msec(
 	esif_ccb_timer_t *timer_ptr,		/* Our Timer */
 	const esif_ccb_time_t timeout
 	)	/* Timeout in msec */
@@ -492,9 +649,9 @@ static ESIF_INLINE eEsifError esif_ccb_timer_set_msec (
 		its.it_interval.tv_sec  = 0;
 		its.it_interval.tv_nsec = 0;
 
-		if (0 == timer_settime(timer_ptr->timer, 0, &its, NULL)) {
+		if (0 == timer_settime(timer_ptr->timer, 0, &its, NULL))
 			rc = ESIF_OK;
-		}
+
 #endif
 	}
 	return rc;
@@ -502,7 +659,7 @@ static ESIF_INLINE eEsifError esif_ccb_timer_set_msec (
 
 
 /* Windows Kill Timer */
-static ESIF_INLINE eEsifError esif_ccb_timer_kill (
+static ESIF_INLINE eEsifError esif_ccb_timer_kill(
 	const esif_ccb_timer_t *timer_ptr)	/* Our Timer */
 {
 	eEsifError rc = ESIF_E_UNSPECIFIED;
@@ -517,14 +674,12 @@ static ESIF_INLINE eEsifError esif_ccb_timer_kill (
 #endif
 
 #ifdef ESIF_ATTR_OS_LINUX
-		if (0 == timer_delete(timer_ptr->timer)) {
+		if (0 == timer_delete(timer_ptr->timer))
 			rc = ESIF_OK;
-		}
 
 #endif
-		if (timer_ptr->timer_ctx_ptr != NULL) {
+		if (timer_ptr->timer_ctx_ptr != NULL)
 			esif_ccb_free(timer_ptr->timer_ctx_ptr);
-		}
 	}
 	return rc;
 }

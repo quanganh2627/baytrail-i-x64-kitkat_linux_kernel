@@ -61,7 +61,7 @@ enum esif_command_priority {
 };
 
 /* Command Priority String */
-static ESIF_INLINE esif_string esif_command_priority_str (
+static ESIF_INLINE esif_string esif_command_priority_str(
 	enum esif_command_priority priority)
 {
 	#define CREATE_COMMAND_PRIORITY(cp, str) case cp: str = (esif_string) #cp; break;
@@ -87,7 +87,7 @@ enum esif_command_type {
 	ESIF_COMMAND_TYPE_GET_MEMORY_STATS,
 };
 
-static ESIF_INLINE esif_string esif_command_type_str (
+static ESIF_INLINE esif_string esif_command_type_str(
 	enum esif_command_type type)
 {
 	#define CREATE_COMMAND_TYPE(ct, str) case ct: str = (esif_string) #ct; break;
@@ -122,6 +122,7 @@ struct esif_command_debug_modules {
 struct esif_command_get_debug_module_level {
 	u32  modules;
 	u32  levels[32];
+	u32  tracelevel;
 };
 
 struct esif_command_set_debug_module_level {

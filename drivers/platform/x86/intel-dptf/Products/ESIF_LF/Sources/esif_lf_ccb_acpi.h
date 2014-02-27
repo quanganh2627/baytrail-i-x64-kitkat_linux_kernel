@@ -61,7 +61,6 @@
 
 #ifdef ESIF_ATTR_OS_LINUX
 #define esif_ccb_acpi_get_name acpi_get_name
-#define esif_ccb_acpi_set_len(len)
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
 #define ACPI_TYPE_INTEGER          ACPI_METHOD_ARGUMENT_INTEGER	/* 0 */
@@ -76,10 +75,9 @@
 #define AE_ERROR                   0x0001
 #define AE_NOT_FOUND               0x0005
 
+#define do_div(x, y)   x = x / y
 #define esif_ccb_acpi_get_name(handle, pathname, ref) \
 		(ESIF_E_UNSUPPORTED_ACTION_TYPE)
-
-#define esif_ccb_acpi_set_len(len)  (len = sizeof(acpi_obj->integer.value))
 
 #define ACPI_FULL_PATHNAME
 
@@ -160,7 +158,7 @@ struct acpi_object_list {
 #endif
 
 /* ACPI Type String */
-static ESIF_INLINE char *esif_acpi_type_str (u32 type)
+static ESIF_INLINE char *esif_acpi_type_str(u32 type)
 {
 #define CREATE_ACPI_TYPE(t, str)  case t: str = #t; break;
 
@@ -172,7 +170,7 @@ static ESIF_INLINE char *esif_acpi_type_str (u32 type)
 		CREATE_ACPI_TYPE(ACPI_TYPE_PACKAGE, str);
 		CREATE_ACPI_TYPE(ACPI_TYPE_POWER, str);
 		CREATE_ACPI_TYPE(ACPI_TYPE_PROCESSOR, str);
-#ifndef ESIF_ATTR_OS_WINDOWS
+#ifdef ESIF_ATTR_OS_LINUX
 		CREATE_ACPI_TYPE(ACPI_TYPE_ANY, str);
 		CREATE_ACPI_TYPE(ACPI_TYPE_FIELD_UNIT, str);
 		CREATE_ACPI_TYPE(ACPI_TYPE_DEVICE, str);
@@ -199,24 +197,19 @@ static ESIF_INLINE acpi_status esif_ccb_acpi_evaluate_object(
 {
 	acpi_status rc = 0;
 
-#if defined(ESIF_ATTR_OS_LINUX) || defined(ESIF_ATTR_OS_WINDOWS)
 	int orig_length = 0;
-	if (NULL != return_buffer_ptr) {
+	if (NULL != return_buffer_ptr)
 		orig_length = return_buffer_ptr->length;
-	}
-#endif
 
 	rc = acpi_evaluate_object(handle,
 				  acpi_method,
 				  in_params_ptr,
 				  return_buffer_ptr);
 
-#if defined(ESIF_ATTR_OS_LINUX) || defined(ESIF_ATTR_OS_WINDOWS)
 	if (NULL != return_buffer_ptr && NULL != return_buffer_ptr->pointer &&
 	    ACPI_ALLOCATE_BUFFER == orig_length) {
-		g_memstat.allocs++; /* Increment in Linux Only Not *Windows! */
+		memstat_inc(&g_memstat.allocs); /* Increment in Linux Only Not *Windows! */
 	}
-#endif
 #ifdef ESIF_ATTR_OS_LINUX
 	return rc;
 
@@ -224,9 +217,9 @@ static ESIF_INLINE acpi_status esif_ccb_acpi_evaluate_object(
 
 /* Align Windows NTSTATUS to Linux AE error code */
 #ifdef ESIF_ATTR_OS_WINDOWS
-	if (NT_SUCCESS(rc)) {
+	if (NT_SUCCESS(rc))
 		return AE_OK;
-	}
+
 	switch (rc) {
 	case STATUS_OBJECT_NAME_NOT_FOUND:
 		return AE_NOT_FOUND;
@@ -272,20 +265,19 @@ static ESIF_INLINE u32 esif_ccb_acpi_arg_count(struct acpi_buffer *buf_ptr)
 {
 	u32 count = 0;
 #ifdef ESIF_ATTR_OS_LINUX
-	if (NULL == buf_ptr) {
+	if (NULL == buf_ptr)
 		return 0;
-	}
+
 	count = 1;
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
 	ACPI_EVAL_OUTPUT_BUFFER *aeob_ptr = NULL;
-	if (NULL == buf_ptr) {
+	if (NULL == buf_ptr)
 		return 0;
-	}
-	aeob_ptr = (ACPI_EVAL_OUTPUT_BUFFER*)buf_ptr->pointer;
-	if (aeob_ptr->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE) {
+
+	aeob_ptr = (ACPI_EVAL_OUTPUT_BUFFER *)buf_ptr->pointer;
+	if (aeob_ptr->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE)
 		count = aeob_ptr->Count;
-	}
 #endif
 	return count;
 }
@@ -296,22 +288,21 @@ static ESIF_INLINE union acpi_object
 *esif_ccb_acpi_arg_first(struct acpi_buffer *buf_ptr)
 {
 #ifdef ESIF_ATTR_OS_LINUX
-	if (NULL == buf_ptr) {
+	if (NULL == buf_ptr)
 		return NULL;
-	}
-	return (union acpi_object*)buf_ptr->pointer;
+
+	return (union acpi_object *)buf_ptr->pointer;
 
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
 	ACPI_EVAL_OUTPUT_BUFFER *aeob_ptr = NULL;
-	if (NULL == buf_ptr) {
+	if (NULL == buf_ptr)
 		return NULL;
-	}
 
-	aeob_ptr = (ACPI_EVAL_OUTPUT_BUFFER*)buf_ptr->pointer;
-	if (aeob_ptr->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE) {
-		return (union acpi_object*)&aeob_ptr->Argument[0];
-	}
+	aeob_ptr = (ACPI_EVAL_OUTPUT_BUFFER *)buf_ptr->pointer;
+	if (aeob_ptr->Signature == ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE)
+		return (union acpi_object *)&aeob_ptr->Argument[0];
+
 	return NULL;
 
 #endif
@@ -328,13 +319,12 @@ static ESIF_INLINE union acpi_object *esif_acpi_arg_next(
 
 #ifdef ESIF_ATTR_OS_WINDOWS
 	PACPI_METHOD_ARGUMENT ama_ptr = NULL;
-	if (NULL == obj_ptr) {
+	if (NULL == obj_ptr)
 		return NULL;
-	}
 
-	ama_ptr = (ACPI_METHOD_ARGUMENT*)obj_ptr;
+	ama_ptr = (ACPI_METHOD_ARGUMENT *)obj_ptr;
 	ama_ptr = ACPI_METHOD_NEXT_ARGUMENT(ama_ptr);
-	return (union acpi_object*)ama_ptr;
+	return (union acpi_object *)ama_ptr;
 
 #endif
 }
@@ -346,24 +336,24 @@ static ESIF_INLINE enum esif_rc esif_handle_osc_buf(
 	)
 {
 	struct esif_data_complex_osc *osc_ptr =
-		(struct esif_data_complex_osc*)req_data_ptr->buf_ptr;
+		(struct esif_data_complex_osc *)req_data_ptr->buf_ptr;
 	acpi_status rc = 0;
 
-#ifdef  ESIF_ATTR_OS_LINUX
+#ifdef ESIF_ATTR_OS_LINUX
 	union acpi_object *out_obj = output->pointer;
 
-	osc_ptr->status = *((u32*)out_obj->buffer.pointer);
-	rc = *((u32*)out_obj->buffer.pointer) & ~(1 << 0);
+	osc_ptr->status = *((u32 *)out_obj->buffer.pointer);
+	rc = *((u32 *)out_obj->buffer.pointer) & ~(1 << 0);
 #endif
-#ifdef  ESIF_ATTR_OS_WINDOWS
+#ifdef ESIF_ATTR_OS_WINDOWS
 	PACPI_EVAL_OUTPUT_BUFFER aeob_ptr = NULL;
 	PACPI_METHOD_ARGUMENT method_arg  = NULL;
 	PULONG temp = NULL;
 
-	if (NULL == output) {
+	if (NULL == output)
 		return ESIF_E_ACPI_EVAL_FAILURE;
-	}
-	aeob_ptr        = (ACPI_EVAL_OUTPUT_BUFFER*)output->pointer;
+
+	aeob_ptr        = (ACPI_EVAL_OUTPUT_BUFFER *)output->pointer;
 	method_arg      = aeob_ptr->Argument;
 	temp            = (PULONG)method_arg->Data;
 	osc_ptr->status = *temp;
@@ -434,14 +424,14 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 	case 'CSO_':
 	{
 		struct esif_data_complex_osc *osc =
-			(struct esif_data_complex_osc*)req_data_ptr->buf_ptr;
+			(struct esif_data_complex_osc *)req_data_ptr->buf_ptr;
 /* First Argument - copy GUID from request buffer */
 		acpi_obj->buffer.type    = ACPI_TYPE_BUFFER;
 		acpi_obj->buffer.length  = 16;	/* Sizeof GUID */
 #ifdef ESIF_ATTR_OS_LINUX
-		acpi_obj->buffer.pointer = (u8*)osc->guid;
+		acpi_obj->buffer.pointer = (u8 *)osc->guid;
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(union acpi_object));
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
@@ -449,10 +439,11 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 		/* On Windows, Use &acpi_obj->buffer.pointer Do NOT use
 		 *esif_acpi_memcpy!!! */
 		acpi_obj->buffer.pointer =
-			((u8*)acpi_obj + sizeof(acpi_obj->buffer.pointer));
+			((u8 *)acpi_obj + (sizeof(acpi_obj->buffer) - 
+			                   sizeof(acpi_obj->buffer.pointer)));
 		esif_ccb_memcpy(&acpi_obj->buffer.pointer, &osc->guid, 16);
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(acpi_obj->buffer) -
 					     sizeof(acpi_obj->buffer.pointer)
 					     + 16);
@@ -463,13 +454,14 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 		acpi_obj->integer.value = osc->revision;
 #ifdef ESIF_ATTR_OS_LINUX
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(union acpi_object));
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
-		esif_ccb_acpi_set_len(acpi_obj->integer.length);
+
+		acpi_obj->integer.length = sizeof(acpi_obj->integer.value);
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(acpi_obj->integer));
 #endif
 
@@ -478,13 +470,13 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 		acpi_obj->integer.value = osc->count;
 #ifdef ESIF_ATTR_OS_LINUX
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(union acpi_object));
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
-		esif_ccb_acpi_set_len(acpi_obj->integer.length);
+		acpi_obj->integer.length = sizeof(acpi_obj->integer.value);
 		acpi_obj =
-			(union acpi_object*)((u8*)acpi_obj +
+			(union acpi_object *)((u8 *)acpi_obj +
 					     sizeof(acpi_obj->integer));
 #endif
 
@@ -493,14 +485,15 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 		acpi_obj->buffer.length = (u16)(osc->count * sizeof(u32));
 
 #ifdef ESIF_ATTR_OS_LINUX
-		acpi_obj->buffer.pointer = (u8*)&osc->status;
+		acpi_obj->buffer.pointer = (u8 *)&osc->status;
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
 
 		/* On Windows, Use &acpi_obj->buffer.pointer!!! Do NOT use
 		 *esif_acpi_memcpy!!! */
 		acpi_obj->buffer.pointer =
-			((u8*)acpi_obj + sizeof(acpi_obj->buffer.pointer));
+			((u8 *)acpi_obj + (sizeof(acpi_obj->buffer) - 
+			                   sizeof(acpi_obj->buffer.pointer)));
 		esif_ccb_memcpy(&acpi_obj->buffer.pointer,
 				&osc->status,
 				acpi_obj->buffer.length);
@@ -510,7 +503,7 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 
 	default:
 	{
-		u8 *buf_ptr = (u8*)req_data_ptr->buf_ptr;
+		u8 *buf_ptr = (u8 *)req_data_ptr->buf_ptr;
 		u32 i;
 
 		/*
@@ -520,10 +513,13 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 		 */
 		for (i = 0; i < arg_list->count; i++) {
 			acpi_obj->integer.type = ACPI_TYPE_INTEGER;
-			esif_ccb_acpi_set_len(acpi_obj->integer.length);
+#ifdef ESIF_ATTR_OS_WINDOWS
+			acpi_obj->integer.length = sizeof(acpi_obj->integer.value);
+#endif
+
 			switch (req_data_ptr->type) {
 			case ESIF_DATA_UINT8:
-				acpi_obj->integer.value = *((u8*)buf_ptr);
+				acpi_obj->integer.value = *((u8 *)buf_ptr);
 				buf_ptr += sizeof(u8);
 				break;
 
@@ -531,15 +527,16 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 				buf_ptr += sizeof(u16);
 				break;
 
-			case ESIF_DATA_TEMPERATURE:
 			case ESIF_DATA_UINT32:
-				acpi_obj->integer.value = *((u32*)buf_ptr);
+			case ESIF_DATA_TEMPERATURE:
+				acpi_obj->integer.value = *((u32 *)buf_ptr);
 				buf_ptr += sizeof(u32);
 				break;
 
 			case ESIF_DATA_UINT64:
+			case ESIF_DATA_FREQUENCY:
 				/* For 32-bit Windows, it's type ULONG 4-byte */
-				acpi_obj->integer.value = *((u32*)buf_ptr);
+				acpi_obj->integer.value = *((u32 *)buf_ptr);
 				buf_ptr += sizeof(u64);
 				break;
 
@@ -549,8 +546,8 @@ static ESIF_INLINE void esif_create_acpi_buffer(
 
 			/* Note: don't do arg_p++, it doesn't work out as
 			 *expected on Windows */
-			acpi_obj = (union acpi_object*)
-				((u8*)acpi_obj + sizeof(acpi_obj->integer));
+			acpi_obj = (union acpi_object *)
+				((u8 *)acpi_obj + sizeof(acpi_obj->integer));
 		}
 	}
 	break;
@@ -612,16 +609,14 @@ static ESIF_INLINE void esif_acpi_set_cols(
 	)
 {
 #ifdef ESIF_ATTR_OS_WINDOWS
-	if (data_ptr->cols == 1) {
+	if (data_ptr->cols == 1)
 		data_ptr->cols = (u16)count;
-	}
 #endif
 #ifdef ESIF_ATTR_OS_LINUX
-	if (data_ptr->rows == 1) {
+	if (data_ptr->rows == 1)
 		data_ptr->rows = (u16)count;
-	} else {
+	else
 		data_ptr->cols = (u16)count;
-	}
 #endif
 }
 
@@ -640,14 +635,19 @@ static ESIF_INLINE u32 esif_ccb_acpi_pkg_count(union acpi_object *obj_ptr)
 	 * count how many are there
 	 */
 	union acpi_object *pkg_ptr =
-		(union acpi_object*)&obj_ptr->package.elements;
+		(union acpi_object *)&obj_ptr->package.elements;
 	int pkg_len, obj_len = obj_ptr->package.count;
 	u32 count = 0;
 
 	while (obj_len > 0) {
 		/* Calc the size of each package and move to the next one */
-		pkg_len  = (2 * sizeof(USHORT)) + pkg_ptr->package.count;
-		pkg_ptr  = (union acpi_object*)((u8*)pkg_ptr + pkg_len);
+		/* make sure if the count is less than 4 to account for the */
+		/* union. A good example would be a short string like ma\0 */
+		pkg_len  = (2 * sizeof(USHORT)) + 
+			(pkg_ptr->package.count < sizeof(ULONG) ? sizeof(ULONG): 
+			pkg_ptr->package.count);
+
+		pkg_ptr  = (union acpi_object *)((u8 *)pkg_ptr + pkg_len);
 		obj_len -= pkg_len;
 		count++;
 		NO_ESIF_DEBUG(
@@ -680,7 +680,7 @@ static ESIF_INLINE union acpi_object
 	)
 {
 #ifdef ESIF_ATTR_OS_LINUX
-	return (union acpi_object*)&package->package.elements[item];
+	return (union acpi_object *)&package->package.elements[item];
 
 #endif
 #ifdef ESIF_ATTR_OS_WINDOWS
@@ -688,22 +688,21 @@ static ESIF_INLINE union acpi_object
 
 	UNREFERENCED_PARAMETER(package);
 
-	/* 
+	/*
 	 * Windows: first element is actually Data[0], while the rest are
 	 * (2 * sizeof(USHORT) + DataLength)
 	 */
-	if (0 == item) {
+	if (0 == item)
 		offset = 2 * sizeof(esif_acpi_p_type);
-	} else {
+	else
 		offset = (2 * sizeof(esif_acpi_p_type)) + method->string.length;
-	}
 
 	NO_ESIF_DEBUG("%s - orignal obj addr %p offset %ld, new addr %p\n",
 		      ESIF_FUNC,
 		      method,
 		      offset,
-		      (u8*)obj_ptr + offset);
-	return (union acpi_object*)((u8*)method + offset);
+		      (u8 *)obj_ptr + offset);
+	return (union acpi_object *)((u8 *)method + offset);
 
 #endif
 }
@@ -719,22 +718,20 @@ static ESIF_INLINE int esif_ccb_has_acpi_failure(
 	)
 {
 #ifdef ESIF_ATTR_OS_WINDOWS
-	if (!NT_SUCCESS(status)) {
+	if (!NT_SUCCESS(status))
 		return ESIF_TRUE;
-	}
+
 	/* buf_ptr could be NULL for SET operation */
-	if (buf_ptr && (buf_ptr->pointer == NULL || buf_ptr->length <= 0)) {
+	if (buf_ptr && (buf_ptr->pointer == NULL || buf_ptr->length <= 0))
 		return ESIF_TRUE;
-	}
+
 #endif
 #ifdef ESIF_ATTR_OS_LINUX
-	if (ACPI_FAILURE(status)) {
+	if (ACPI_FAILURE(status))
 		return ESIF_TRUE;
-	}
 #endif
 	return ESIF_FALSE;
 }
-
 
 #endif /* ESIF_ATTR_KERNEL */
 #endif /* _ESIF_CCB_ACPI_H_ */

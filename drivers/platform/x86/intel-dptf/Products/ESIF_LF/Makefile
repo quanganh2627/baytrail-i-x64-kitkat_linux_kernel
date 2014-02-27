@@ -50,19 +50,17 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##
 ################################################################################
-
 KERNEL_DIR    ?= /usr/src/linux
-ESIF_CM_SRC   := ../../../ESIF_CM/Sources
-ESIF_LF_SRC   := ../../Sources
+ESIF_CM_SRC   := ../ESIF_CM/Sources
+ESIF_LF_SRC   := Sources
 ESIF_LF_LINSRC:= $(ESIF_LF_SRC)/lin
 
 obj-m := dptf_acpi.o dptf_cpu.o dptf_pch.o dptf_plat.o esif_lf.o
 ccflags-y := -I$(src)/$(ESIF_CM_SRC) -I$(src)/$(ESIF_LF_SRC)
-ccflags-y += -g 
-ccflags-y += -Wno-multichar -Wall -Wno-error 
+ccflags-y += -g0 
+ccflags-y += -Wno-multichar -Wall 
 ccflags-y += -DESIF_ATTR_KERNEL 
 ccflags-y += -DESIF_ATTR_OS_LINUX 
-ccflags-y += -DESIF_ATTR_DEBUG
 ccflags-y += -DESIF_ATTR_IOSF
 #ccflags-y += -DESIF_ATTR_PLATFORM 
 #ccflags-y += -DESIF_ATTR_NO_OUTPUT

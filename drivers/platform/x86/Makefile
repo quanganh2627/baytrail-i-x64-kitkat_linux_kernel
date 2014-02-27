@@ -61,9 +61,10 @@ obj-$(CONFIG_APPLE_GMUX)	+= apple-gmux.o
 obj-$(CONFIG_CHROMEOS_LAPTOP)	+= chromeos_laptop.o
 
 obj-$(CONFIG_PVPANIC)           += pvpanic.o
-obj-$(CONFIG_INTEL_BAYTRAIL_MBI)	+= intel_baytrail.o
+obj-$(CONFIG_INTEL_BAYTRAIL_MBI)	+= iosf_mbi.o
 obj-$(CONFIG_INTEL_BYT_EC)	+= intel_byt_ec.o
 obj-$(CONFIG_INTEL_BYT_M_BTN)	+= intel_byt_buttons.o
 obj-$(CONFIG_INTEL_CRYSTALCOVE_PAGE0)	+= intel_crystalcove_page0.o
 obj-$(CONFIG_INTEL_BYTCR_BOOST_CNTL)	+= intel_bytcr_bcntl.o
 obj-$(CONFIG_ACPI) += intel_em_config.o
+obj-$(CONFIG_INTEL_DPTF)	+= intel-dptf/Products/ESIF_LF/

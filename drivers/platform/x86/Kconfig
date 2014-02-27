@@ -881,7 +881,7 @@ config INTEL_BAYTRAIL_MBI
 	  Interface. This is a requirement for systems that need to configure
 	  the PUNIT for power management features such as RAPL. Register
 	  addresses and r/w opcodes are defined in
-	  drivers/platform/x86/intel_baytrail.c.
+	  drivers/platform/x86/iosf_mbi.c.
 
 config INTEL_DPTF
 	tristate "Dynamic Platform & Thermal Framework Driver (DPTF)"

@@ -1,5 +1,5 @@
 /*
- * Baytrail IOSF-SB MailBox Interface Driver
+ * IOSF-SB MailBox Interface Driver
  * Copyright (c) 2013, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -14,7 +14,8 @@
  *
  * The IOSF-SB is a fabric bus available on Atom based SOC's that uses a
  * mailbox interface (MBI) to communicate with mutiple devices. This
- * driver implements BayTrail-specific access to this interface.
+ * driver implements access to this interface for those platforms that can
+ * enumerate the device using PCI.
  */
 
 #include <linux/module.h>
@@ -22,13 +23,13 @@
 #include <linux/spinlock.h>
 #include <linux/pci.h>
 
-#include "intel_baytrail.h"
+#include <asm/iosf_mbi.h>
 
 static DEFINE_SPINLOCK(iosf_mbi_lock);
 
 static inline u32 iosf_mbi_form_mcr(u8 op, u8 port, u8 offset)
 {
-	return (op << 24) | (port << 16) | (offset << 8) | BT_MBI_ENABLE;
+	return (op << 24) | (port << 16) | (offset << 8) | MBI_ENABLE;
 }
 
 static struct pci_dev *mbi_pdev;	/* one mbi device */
@@ -41,17 +42,17 @@ static int iosf_mbi_pci_read_mdr(u32 mcrx, u32 mcr, u32 *mdr)
 		return -ENODEV;
 
 	if (mcrx) {
-		result = pci_write_config_dword(mbi_pdev, BT_MBI_MCRX_OFFSET,
+		result = pci_write_config_dword(mbi_pdev, MBI_MCRX_OFFSET,
 						mcrx);
 		if (result < 0)
 			goto fail_read;
 	}
 
-	result = pci_write_config_dword(mbi_pdev, BT_MBI_MCR_OFFSET, mcr);
+	result = pci_write_config_dword(mbi_pdev, MBI_MCR_OFFSET, mcr);
 	if (result < 0)
 		goto fail_read;
 
-	result = pci_read_config_dword(mbi_pdev, BT_MBI_MDR_OFFSET, mdr);
+	result = pci_read_config_dword(mbi_pdev, MBI_MDR_OFFSET, mdr);
 	if (result < 0)
 		goto fail_read;
 
@@ -69,18 +70,18 @@ static int iosf_mbi_pci_write_mdr(u32 mcrx, u32 mcr, u32 mdr)
 	if (!mbi_pdev)
 		return -ENODEV;
 
-	result = pci_write_config_dword(mbi_pdev, BT_MBI_MDR_OFFSET, mdr);
+	result = pci_write_config_dword(mbi_pdev, MBI_MDR_OFFSET, mdr);
 	if (result < 0)
 		goto fail_write;
 
 	if (mcrx) {
-		result = pci_write_config_dword(mbi_pdev, BT_MBI_MCRX_OFFSET,
+		result = pci_write_config_dword(mbi_pdev, MBI_MCRX_OFFSET,
 						mcrx);
 		if (result < 0)
 			goto fail_write;
 	}
 
-	result = pci_write_config_dword(mbi_pdev, BT_MBI_MCR_OFFSET, mcr);
+	result = pci_write_config_dword(mbi_pdev, MBI_MCR_OFFSET, mcr);
 	if (result < 0)
 		goto fail_write;
 
@@ -91,7 +92,7 @@ fail_write:
 	return result;
 }
 
-int bt_mbi_read(u8 port, u8 opcode, u32 offset, u32 *mdr)
+int iosf_mbi_read(u8 port, u8 opcode, u32 offset, u32 *mdr)
 {
 	u32 mcr, mcrx;
 	unsigned long flags;
@@ -103,8 +104,8 @@ int bt_mbi_read(u8 port, u8 opcode, u32 offset, u32 *mdr)
 		return -EPERM;
 	}
 
-	mcr = iosf_mbi_form_mcr(opcode, port, offset & BT_MBI_MASK_LO);
-	mcrx = offset & BT_MBI_MASK_HI;
+	mcr = iosf_mbi_form_mcr(opcode, port, offset & MBI_MASK_LO);
+	mcrx = offset & MBI_MASK_HI;
 
 	spin_lock_irqsave(&iosf_mbi_lock, flags);
 	ret = iosf_mbi_pci_read_mdr(mcrx, mcr, mdr);
@@ -112,9 +113,9 @@ int bt_mbi_read(u8 port, u8 opcode, u32 offset, u32 *mdr)
 
 	return ret;
 }
-EXPORT_SYMBOL(bt_mbi_read);
+EXPORT_SYMBOL(iosf_mbi_read);
 
-int bt_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr)
+int iosf_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr)
 {
 	u32 mcr, mcrx;
 	unsigned long flags;
@@ -126,8 +127,8 @@ int bt_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr)
 		return -EPERM;
 	}
 
-	mcr = iosf_mbi_form_mcr(opcode, port, offset & BT_MBI_MASK_LO);
-	mcrx = offset & BT_MBI_MASK_HI;
+	mcr = iosf_mbi_form_mcr(opcode, port, offset & MBI_MASK_LO);
+	mcrx = offset & MBI_MASK_HI;
 
 	spin_lock_irqsave(&iosf_mbi_lock, flags);
 	ret = iosf_mbi_pci_write_mdr(mcrx, mcr, mdr);
@@ -135,9 +136,9 @@ int bt_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr)
 
 	return ret;
 }
-EXPORT_SYMBOL(bt_mbi_write);
+EXPORT_SYMBOL(iosf_mbi_write);
 
-int bt_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask)
+int iosf_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask)
 {
 	u32 mcr, mcrx;
 	u32 value;
@@ -150,13 +151,13 @@ int bt_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask)
 		return -EPERM;
 	}
 
-	mcr = iosf_mbi_form_mcr(opcode, port, offset & BT_MBI_MASK_LO);
-	mcrx = offset & BT_MBI_MASK_HI;
+	mcr = iosf_mbi_form_mcr(opcode, port, offset & MBI_MASK_LO);
+	mcrx = offset & MBI_MASK_HI;
 
 	spin_lock_irqsave(&iosf_mbi_lock, flags);
 
 	/* Read current mdr value */
-	ret = iosf_mbi_pci_read_mdr(mcrx, mcr & BT_MBI_RD_MASK, &value);
+	ret = iosf_mbi_pci_read_mdr(mcrx, mcr & MBI_RD_MASK, &value);
 	if (ret < 0) {
 		spin_unlock_irqrestore(&iosf_mbi_lock, flags);
 		return ret;
@@ -168,13 +169,13 @@ int bt_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask)
 	value |= mdr;
 
 	/* Write back */
-	ret = iosf_mbi_pci_write_mdr(mcrx, mcr | BT_MBI_WR_MASK, value);
+	ret = iosf_mbi_pci_write_mdr(mcrx, mcr | MBI_WR_MASK, value);
 
 	spin_unlock_irqrestore(&iosf_mbi_lock, flags);
 
 	return ret;
 }
-EXPORT_SYMBOL(bt_mbi_modify);
+EXPORT_SYMBOL(iosf_mbi_modify);
 
 static int iosf_mbi_probe(struct pci_dev *pdev,
 			  const struct pci_device_id *unused)
@@ -203,12 +204,12 @@ static struct pci_driver iosf_mbi_pci_driver = {
 	.id_table	= iosf_mbi_pci_ids,
 };
 
-static int __init bt_mbi_init(void)
+static int __init iosf_mbi_init(void)
 {
 	return pci_register_driver(&iosf_mbi_pci_driver);
 }
 
-static void __exit bt_mbi_exit(void)
+static void __exit iosf_mbi_exit(void)
 {
 	pci_unregister_driver(&iosf_mbi_pci_driver);
 	if (mbi_pdev) {
@@ -217,9 +218,9 @@ static void __exit bt_mbi_exit(void)
 	}
 }
 
-module_init(bt_mbi_init);
-module_exit(bt_mbi_exit);
+module_init(iosf_mbi_init);
+module_exit(iosf_mbi_exit);
 
 MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
-MODULE_DESCRIPTION("BayTrail Mailbox Interface accessor");
+MODULE_DESCRIPTION("IOSF Mailbox Interface accessor");
 MODULE_LICENSE("GPL v2");

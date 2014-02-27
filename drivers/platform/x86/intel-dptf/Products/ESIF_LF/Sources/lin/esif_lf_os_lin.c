@@ -89,6 +89,8 @@ static struct esif_participant_iface pi = {
 	.device_name = "?",	/* Filled In Dynamically By Driver */
 	.device_path = "NA",	/* Filled In Dynamically By Driver */
 	.device      = NULL,	/* Driver Assigned                 */
+ 	.mem_base    = NULL,    /* Driver Assigned                 */
+        .mem_size    = 0,       /* Driver Assigned                 */
 	.acpi_handle = NULL,	/* Driver Assigned                 */
 
 	/* EVENT */
@@ -1335,7 +1337,7 @@ static ssize_t dptf_device_aux1_store(
 	if (!sscanf(buf_ptr, "%d\n", &aux1))
 		return -EINVAL;
 
-	ESIF_TRACE_DEBUG("linux_%s: Primitive DPTF_SET_AUX0, value %d\n",
+	ESIF_TRACE_DEBUG("linux_%s: Primitive DPTF_SET_AUX1, value %d\n",
 			 ESIF_FUNC,
 			 aux1);
 
@@ -1482,9 +1484,9 @@ static ssize_t dptf_debug_module_level_store(
 /*
 ** Setup Attributes For Linux SYSFS
 */
-#define RO 0444
-#define RW 0644
-#define WO 0244
+#define RW S_IRWXUGO  
+#define RO S_IRUGO
+#define WO S_IWUGO
 
 static DEVICE_ATTR(rapl_power, RO, dptf_device_rapl_power_show, NULL);
 static DEVICE_ATTR(rapl_power_default,
@@ -1500,16 +1502,16 @@ static DEVICE_ATTR(rapl_turbo_priority,
 		   RO,
 		   dptf_device_rapl_turbo_priority_show,
 		   NULL);
-static DEVICE_ATTR(rapl_pl1, RW, dptf_device_rapl_pl1_show, NULL);
-static DEVICE_ATTR(rapl_pl2, RW, dptf_device_rapl_pl2_show, NULL);
+static DEVICE_ATTR(rapl_pl1, RO, dptf_device_rapl_pl1_show, NULL);
+static DEVICE_ATTR(rapl_pl2, RO, dptf_device_rapl_pl2_show, NULL);
 static DEVICE_ATTR(rapl_pl1_enable, RO, dptf_device_rapl_pl1_enable_show, NULL);
 static DEVICE_ATTR(rapl_pl2_enable, RO, dptf_device_rapl_pl2_enable_show, NULL);
 static DEVICE_ATTR(rapl_time_window_1,
-		   RW,
+		   RO,
 		   dptf_device_rapl_time_window_1_show,
 		   NULL);
 static DEVICE_ATTR(rapl_time_window_2,
-		   RW,
+		   RO,
 		   dptf_device_rapl_time_window_2_show,
 		   NULL);
 static DEVICE_ATTR(rapl_power_min_1, RO, dptf_device_rapl_power_min_1_show,
@@ -1558,6 +1560,7 @@ static DEVICE_ATTR(_debug_module_level,
 /* Instrument Class Thermal */
 enum esif_rc esif_lf_instrument_capability(struct esif_lp_domain *lpd_ptr)
 {
+	int rc = 0;
 	/* Only Instrument Once */
 	if (NULL != lpd_ptr->tzd_ptr || NULL != lpd_ptr->cdev_ptr)
 		return ESIF_E_UNSPECIFIED;
@@ -1585,12 +1588,20 @@ enum esif_rc esif_lf_instrument_capability(struct esif_lp_domain *lpd_ptr)
 			ESIF_TRACE_ERROR("%s: tzd_error\n", ESIF_FUNC);
 
 		/* Enhance Thermal File Sysem For NOW */
-		sysfs_create_link(&lpd_ptr->tzd_ptr->device.kobj,
+		rc = sysfs_create_link(&lpd_ptr->tzd_ptr->device.kobj,
 				  &lpd_ptr->device.kobj,
 				  "device");
-		sysfs_create_link(&lpd_ptr->device.kobj,
+
+		if (rc)
+			return ESIF_E_UNSPECIFIED;
+
+
+		rc = sysfs_create_link(&lpd_ptr->device.kobj,
 				  &lpd_ptr->tzd_ptr->device.kobj,
 				  "tzd");
+
+		if (rc)
+			return ESIF_E_UNSPECIFIED;
 
 		if (lpd_ptr->capabilities & ESIF_CAPABILITY_TEMP_STATUS) {
 			device_create_file(&lpd_ptr->tzd_ptr->device,
@@ -1617,12 +1628,19 @@ enum esif_rc esif_lf_instrument_capability(struct esif_lp_domain *lpd_ptr)
 
 
 		/* Enhance Cooling Device For NOW */
-		sysfs_create_link(&lpd_ptr->cdev_ptr->device.kobj,
+		rc = sysfs_create_link(&lpd_ptr->cdev_ptr->device.kobj,
 				  &lpd_ptr->device.kobj,
 				  "device");
-		sysfs_create_link(&lpd_ptr->device.kobj,
+
+		if (rc)
+			return ESIF_E_UNSPECIFIED;
+
+		rc = sysfs_create_link(&lpd_ptr->device.kobj,
 				  &lpd_ptr->cdev_ptr->device.kobj,
 				  "cdev");
+
+		if (rc)
+			return ESIF_E_UNSPECIFIED;
 	}
 
 	/* Provide RAPL ? */
@@ -2020,7 +2038,11 @@ static int acpi_add(struct acpi_device *dev_ptr)
 
 
 /* Remove */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3, 8, 0)
+static int acpi_remove(struct acpi_device *dev_ptr, int type)
+#else
 static int acpi_remove(struct acpi_device *dev_ptr)
+#endif
 {
 	enum esif_rc rc = ESIF_OK;
 	ESIF_TRACE_DEBUG("%s: acpi_dev %p\n", ESIF_FUNC, dev_ptr);

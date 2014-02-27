@@ -105,9 +105,7 @@ struct esif_participant_iface {
 
 	esif_device_t  device;		/* Os Agnostic Driver Context */
 	void __iomem   *mem_base;	/* MMIO/MCHBAR Address        */
-#ifdef ESIF_ATTR_OS_WINDOWS
 	u32          mem_size;		/* MMIO/MCHBAR Size           */
-#endif
 	acpi_handle  acpi_handle;	/* ACPI Handle                */
 };
 
@@ -125,7 +123,7 @@ typedef struct _t_EsifParticipantIface {
 	char          driver_name[ESIF_NAME_LEN];	/* Driver Name */
 	char          device_name[ESIF_NAME_LEN];	/* Device Name */
 	char          device_path[ESIF_PATH_LEN];	/* Device Path /sys/bus/platform...*/
-							 
+
 	char          object_id[ESIF_SCOPE_LEN];	/* Scope/REGEX e.g.\_UF.CNJR.WIDI  */
 
 	/* EVENT Send Event From Conjure To Framework */

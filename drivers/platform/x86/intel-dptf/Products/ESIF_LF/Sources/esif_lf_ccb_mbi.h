@@ -1,4 +1,4 @@
-/*******************************************************************************
+﻿/*******************************************************************************
 ** This file is provided under a dual BSD/GPLv2 license.  When using or
 ** redistributing this file, you may do so under either license.
 **
@@ -136,8 +136,7 @@
 #ifdef ESIF_ATTR_KERNEL
 
 #ifdef ESIF_ATTR_IOSF
-extern u32 bt_mbi_read(u8, u8, u32, u32*);
-extern u32 bt_mbi_write(u8, u8, u32, u32);
+#include <asm/iosf_mbi.h>
 #endif
 
 /* MBI Read 32 */
@@ -153,15 +152,16 @@ static ESIF_INLINE enum esif_rc esif_ccb_mbi_read(
 	u32 MCR = 0x10000000 | (port << 16) | (punit << 8) | 0xF0;
 	return esif_lf_win_mbi_read(MCR, val_ptr);
 
-#else
+#endif /* ESIF_ATTR_OS_WINDOWS */
+#ifdef ESIF_ATTR_OS_LINUX
 #ifdef ESIF_ATTR_IOSF
-	return bt_mbi_read(port, 0x10, punit, val_ptr);
+	return iosf_mbi_read(port, 0x10, punit, val_ptr);
 #else
 	*val_ptr = 0;
 	return ESIF_E_NOT_IMPLEMENTED;
 
 #endif
-#endif /* ESIF_ATTR_OS_WINDOWS */
+#endif /* ESIF_ATTR_OS_LINUX */
 }
 
 
@@ -177,14 +177,15 @@ static ESIF_INLINE enum esif_rc esif_ccb_mbi_write(
 #ifdef ESIF_ATTR_OS_WINDOWS
 	u32 MCR = 0x11000000 | (port << 16) | (punit << 8) | 0xF0;
 	return esif_lf_win_mbi_write(MCR, val);
-#else
+#endif /* ESIF_ATTR_OS_WINDOWS */
+#ifdef ESIF_ATTR_OS_LINUX
 #ifdef ESIF_ATTR_IOSF
-	return bt_mbi_write(port, 0x11, punit, val);
+	return iosf_mbi_write(port, 0x11, punit, val);
 #else
 	return ESIF_E_NOT_IMPLEMENTED;
 
 #endif
-#endif /* ESIF_ATTR_OS_WINDOWS */
+#endif /* ESIF_ATTR_OS_LINUX */
 }
 
 
