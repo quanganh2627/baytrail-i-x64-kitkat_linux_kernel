@@ -119,6 +119,12 @@ void mei_io_cb_free(struct mei_cl_cb *cb)
 	if (cb == NULL)
 		return;
 
+	/* Ensure that cb->cl and cb->cl->dev are not NULL */
+	if ((cb->cl) && (cb->cl->dev)) {
+		cb->cl->dev->req_alloc_count = 0;
+		cb->cl->dev->resp_alloc_count = 0;
+	}
+
 	kfree(cb->request_buffer.data);
 	kfree(cb->response_buffer.data);
 	kfree(cb);
@@ -163,6 +169,20 @@ int mei_io_cb_alloc_req_buf(struct mei_cl_cb *cb, size_t length)
 	if (!cb)
 		return -EINVAL;
 
+	if (!cb->cl)
+		return -EINVAL;
+
+	if (!cb->cl->dev)
+		return -EINVAL;
+
+	if (cb->cl->dev->req_alloc_count > MEI_MAX_ALLOCS) {
+		dev_err(&cb->cl->dev->pdev->dev,
+			"Too many req buffers allocated\n");
+		return -EBUSY;
+	}
+
+	cb->cl->dev->req_alloc_count += 1;
+
 	if (length == 0)
 		return 0;
 
@@ -186,6 +206,20 @@ int mei_io_cb_alloc_resp_buf(struct mei_cl_cb *cb, size_t length)
 {
 	if (!cb)
 		return -EINVAL;
+
+	if (!cb->cl)
+		return -EINVAL;
+
+	if (!cb->cl->dev)
+		return -EINVAL;
+
+	if (cb->cl->dev->resp_alloc_count > MEI_MAX_ALLOCS) {
+		dev_err(&cb->cl->dev->pdev->dev,
+			"Too many resp buffers allocated\n");
+		return -EBUSY;
+	}
+
+	cb->cl->dev->resp_alloc_count += 1;
 
 	if (length == 0)
 		return 0;
