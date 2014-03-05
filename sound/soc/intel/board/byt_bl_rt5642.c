@@ -566,7 +566,6 @@ static const struct snd_soc_dapm_widget byt_dapm_widgets[] = {
 static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"IN2P", NULL, "Headset Mic"},
 	{"IN2N", NULL, "Headset Mic"},
-	{"DMIC1", NULL, "Int Mic"},
 	{"Headphone", NULL, "HPOL"},
 	{"Headphone", NULL, "HPOR"},
 	{"Ext Spk", NULL, "SPOLP"},
@@ -578,6 +577,12 @@ static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"Headset Mic", NULL, "Platform Clock"},
 	{"Int Mic", NULL, "Platform Clock"},
 	{"Ext Spk", NULL, "Platform Clock"},
+
+	{"micbias1", NULL, "Int Mic"},
+	{"IN3P", NULL, "micbias1"},
+	{"IN3N", NULL, "micbias1"},
+	{"micbias1", NULL, "LDO2"},
+
 };
 
 static const struct snd_kcontrol_new byt_mc_controls[] = {
