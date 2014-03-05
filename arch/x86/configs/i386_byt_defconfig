@@ -1728,6 +1728,7 @@ CONFIG_INPUT_UINPUT=y
 # CONFIG_INPUT_ADXL34X is not set
 # CONFIG_INPUT_IMS_PCU is not set
 # CONFIG_INPUT_CMA3000 is not set
+CONFIG_XPWR_VIB=y
 
 #
 # Hardware I/O ports
