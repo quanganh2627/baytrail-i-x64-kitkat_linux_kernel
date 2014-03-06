@@ -1315,7 +1315,13 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 	if (!intel_crtc_active(crtc))
 		return false;
 
-	clock = crtc->mode.clock;	/* VESA DOT Clock */
+	clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;	/* VESA DOT Clock */
+	/* WAR (FIXME):
+	* Needs to be fixed in resume path adjusted_mode clock cannot be 0
+	*/
+	if (clock == 0)
+		clock = crtc->mode.clock;
+
 	if (enable.plane_enabled) {
 		pixel_size = crtc->fb->bits_per_pixel / 8;	/* BPP */
 		entries = (clock / 1000) * pixel_size;
