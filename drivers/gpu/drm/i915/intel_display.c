@@ -8636,6 +8636,19 @@ static int intel_gen7_queue_mmio_flip(struct drm_device *dev,
 		goto err_unpin;
 	}
 
+	/*
+	 * Check opportunistically, if rendering has already completed or not
+	 * on the buffer to be flipped. Else we need to wait and we queue
+	 * a work item for that, so as to wait from worker thread's context.
+	 */
+	if (!obj->ring ||
+	    i915_seqno_passed(obj->ring->get_seqno(obj->ring, false),
+			      obj->last_write_seqno)) {
+		intel_mark_page_flip_active(intel_crtc);
+		i9xx_update_plane(crtc, crtc->fb, 0, 0);
+		return 0;
+	}
+
 	work->flipdata.crtc  = crtc;
 	work->flipdata.seqno = obj->last_write_seqno;
 	work->flipdata.ring_id = RCS;
@@ -10373,6 +10386,9 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 	if (!dev_priv->audio_suspended)
 		DRM_ERROR("Audio active, CRTC will not be suspended\n");
 
+	/* Save Hue/Saturation/Brightness/Contrast status */
+	intel_save_clr_mgr_status(dev);
+
 	dev_priv->dpst.state = dev_priv->dpst.enabled;
 	if (dev_priv->dpst.state)
 		i915_dpst_disable_hist_interrupt(dev);
@@ -10672,7 +10688,7 @@ static void intel_setup_outputs(struct drm_device *dev)
 			intel_dp_init(dev, VLV_DISPLAY_BASE + DP_C,
 					PORT_C);
 		else
-			intel_dsi_init(dev);
+			intel_dp_init(dev, VLV_DISPLAY_BASE + DP_C, PORT_C);
 
 		intel_hdmi_init(dev, VLV_DISPLAY_BASE + GEN4_HDMIB,
 				PORT_B);

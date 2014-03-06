@@ -22,6 +22,40 @@
 #include "mei_dev.h"
 #include "hbm.h"
 
+static const char *mei_cl_conn_status_str(enum mei_cl_connect_status status)
+{
+#define MEI_CL_CS(status) case MEI_CL_CONN_##status: return #status
+	switch (status) {
+	MEI_CL_CS(SUCCESS);
+	MEI_CL_CS(NOT_FOUND);
+	MEI_CL_CS(ALREADY_STARTED);
+	MEI_CL_CS(OUT_OF_RESOURCES);
+	MEI_CL_CS(MESSAGE_SMALL);
+	default: return "unknown";
+	}
+#undef MEI_CL_CCS
+}
+
+/**
+ * mei_cl_conn_status_to_errno - convert client connect response
+ * status to error code
+ *
+ * @status: client connect response status
+ *
+ * returns corresponding error code
+ */
+static int mei_cl_conn_status_to_errno(enum mei_cl_connect_status status)
+{
+	switch (status) {
+	case MEI_CL_CONN_SUCCESS:          return 0;
+	case MEI_CL_CONN_NOT_FOUND:        return -ENOTTY;
+	case MEI_CL_CONN_ALREADY_STARTED:  return -EBUSY;
+	case MEI_CL_CONN_OUT_OF_RESOURCES: return -EBUSY;
+	case MEI_CL_CONN_MESSAGE_SMALL:    return -EINVAL;
+	default:                           return -EINVAL;
+	}
+}
+
 /**
  * mei_hbm_me_cl_allocate - allocates storage for me clients
  *
@@ -97,33 +131,6 @@ bool mei_hbm_cl_addr_equal(struct mei_cl *cl, void *buf)
 		cl->me_client_id == cmd->me_addr;
 }
 
-
-/**
- * is_treat_specially_client - checks if the message belongs
- * to the file private data.
- *
- * @cl: private data of the file object
- * @rs: connect response bus message
- *
- */
-static bool is_treat_specially_client(struct mei_cl *cl,
-		struct hbm_client_connect_response *rs)
-{
-	if (mei_hbm_cl_addr_equal(cl, rs)) {
-		if (!rs->status) {
-			cl->state = MEI_FILE_CONNECTED;
-			cl->status = 0;
-
-		} else {
-			cl->state = MEI_FILE_DISCONNECTED;
-			cl->status = -ENODEV;
-		}
-		cl->timer_count = 0;
-
-		return true;
-	}
-	return false;
-}
 
 /**
  * mei_hbm_idle - set hbm to idle state
@@ -416,29 +423,23 @@ static void mei_hbm_cl_disconnect_res(struct mei_device *dev,
 		struct hbm_client_connect_response *rs)
 {
 	struct mei_cl *cl;
-	struct mei_cl_cb *pos = NULL, *next = NULL;
+	struct mei_cl_cb *cb, *next;
 
-	dev_dbg(&dev->pdev->dev,
-			"disconnect_response:\n"
-			"ME Client = %d\n"
-			"Host Client = %d\n"
-			"Status = %d\n",
-			rs->me_addr,
-			rs->host_addr,
-			rs->status);
+	dev_dbg(&dev->pdev->dev, "hbm: disconnect response cl:host=%02d me=%02d status=%d\n",
+			rs->me_addr, rs->host_addr, rs->status);
 
-	list_for_each_entry_safe(pos, next, &dev->ctrl_rd_list.list, list) {
-		cl = pos->cl;
+	list_for_each_entry_safe(cb, next, &dev->ctrl_rd_list.list, list) {
+		cl = cb->cl;
 
-		if (!cl) {
-			list_del(&pos->list);
+		/* this should not happen */
+		if (WARN_ON(!cl)) {
+			list_del(&cb->list);
 			return;
 		}
 
-		dev_dbg(&dev->pdev->dev, "list_for_each_entry_safe in ctrl_rd_list.\n");
 		if (mei_hbm_cl_addr_equal(cl, rs)) {
-			list_del(&pos->list);
-			if (!rs->status)
+			list_del(&cb->list);
+			if (rs->status == MEI_CL_DISCONN_SUCCESS)
 				cl->state = MEI_FILE_DISCONNECTED;
 
 			cl->status = 0;
@@ -478,46 +479,41 @@ static void mei_hbm_cl_connect_res(struct mei_device *dev,
 {
 
 	struct mei_cl *cl;
-	struct mei_cl_cb *pos = NULL, *next = NULL;
+	struct mei_cl_cb *cb, *next;
 
-	dev_dbg(&dev->pdev->dev,
-			"connect_response:\n"
-			"ME Client = %d\n"
-			"Host Client = %d\n"
-			"Status = %d\n",
-			rs->me_addr,
-			rs->host_addr,
-			rs->status);
+	dev_dbg(&dev->pdev->dev, "hbm: connect response cl:host=%02d me=%02d status=%s\n",
+			rs->me_addr, rs->host_addr,
+			mei_cl_conn_status_str(rs->status));
 
-	/* if WD or iamthif client treat specially */
+	cl = NULL;
 
-	if (is_treat_specially_client(&dev->wd_cl, rs)) {
-		dev_dbg(&dev->pdev->dev, "successfully connected to WD client.\n");
-		mei_watchdog_register(dev);
+	list_for_each_entry_safe(cb, next, &dev->ctrl_rd_list.list, list) {
 
-		return;
-	}
-
-	if (is_treat_specially_client(&dev->iamthif_cl, rs)) {
-		dev->iamthif_state = MEI_IAMTHIF_IDLE;
-		return;
-	}
-	list_for_each_entry_safe(pos, next, &dev->ctrl_rd_list.list, list) {
-
-		cl = pos->cl;
-		if (!cl) {
-			list_del(&pos->list);
-			return;
+		cl = cb->cl;
+		/* this should not happen */
+		if (WARN_ON(!cl)) {
+			list_del_init(&cb->list);
+			continue;
 		}
-		if (pos->fop_type == MEI_FOP_IOCTL) {
-			if (is_treat_specially_client(cl, rs)) {
-				list_del(&pos->list);
-				cl->status = 0;
-				cl->timer_count = 0;
-				break;
-			}
+
+		if (cb->fop_type !=  MEI_FOP_IOCTL)
+			continue;
+
+		if (mei_hbm_cl_addr_equal(cl, rs)) {
+			list_del(&cb->list);
+			break;
 		}
 	}
+
+	if (!cl)
+		return;
+
+	cl->timer_count = 0;
+	if (rs->status == MEI_CL_CONN_SUCCESS)
+		cl->state = MEI_FILE_CONNECTED;
+	else
+		cl->state = MEI_FILE_DISCONNECTED;
+	cl->status = mei_cl_conn_status_to_errno(rs->status);
 }
 
 
@@ -541,10 +537,6 @@ static void mei_hbm_fw_disconnect_req(struct mei_device *dev,
 					disconnect_req->me_addr);
 			cl->state = MEI_FILE_DISCONNECTED;
 			cl->timer_count = 0;
-			if (cl == &dev->wd_cl)
-				dev->wd_pending = false;
-			else if (cl == &dev->iamthif_cl)
-				dev->iamthif_timer = 0;
 
 			/* prepare disconnect response */
 			mei_hbm_hdr(&dev->wr_ext_msg.hdr, len);

@@ -115,8 +115,6 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_DISABLE_HIGH_SPEED			(1<<21)
 /* Fake VDD for device */
 #define SDHCI_QUIRK2_FAKE_VDD				(1<<22)
-/* TUNING SLEEP */
-#define SDHCI_QUIRK2_TUNING_SLEEP			(1<<23)
 #define SDHCI_QUIRK2_CARD_CD_DELAY			(1<<24)
 #define SDHCI_QUIRK2_WAIT_FOR_IDLE			(1<<25)
 /* BAD sd cd in HOST IC. This will cause system hang when removing SD */
