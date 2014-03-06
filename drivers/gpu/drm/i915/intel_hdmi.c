@@ -37,9 +37,6 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
-#define BYT_CR_MAX_HDISPLAY	1280
-#define BYT_CR_MAX_VDISPLAY	800
-
 static struct drm_device *intel_hdmi_to_dev(struct intel_hdmi *intel_hdmi)
 {
 	return hdmi_to_dig_port(intel_hdmi)->base.base.dev;
@@ -940,17 +937,6 @@ static int intel_hdmi_mode_valid(struct drm_connector *connector,
 		return MODE_CLOCK_HIGH;
 	if (mode->clock < 20000)
 		return MODE_CLOCK_LOW;
-
-	/* WAR (FIXME):
-	  * BYT_CR has limitation in memory chanel bandwidth.
-	  * Temporarily blocking HDMI modes above 720 P
-	  */
-	if (BYT_CR_CONFIG) {
-		if (mode->vdisplay > BYT_CR_MAX_VDISPLAY)
-			return MODE_BAD_VVALUE;
-		if (mode->hdisplay > BYT_CR_MAX_HDISPLAY)
-			return MODE_BAD_HVALUE;
-	}
 
 	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return MODE_NO_DBLESCAN;
