@@ -38,8 +38,11 @@ static int dwc3_start_host(struct usb_hcd *hcd);
 static int dwc3_stop_host(struct usb_hcd *hcd);
 static struct platform_driver dwc3_xhci_driver;
 static int __dwc3_stop_host(struct usb_hcd *hcd);
+static int dwc3_suspend_host(struct usb_hcd *hcd);
+static int dwc3_resume_host(struct usb_hcd *hcd);
 
 static struct dwc3_xhci_hcd {
+	struct wake_lock wakelock;
 	struct xhci_hcd *xhci;
 	struct work_struct reset_hcd;
 	int otg_irqnum;
@@ -166,8 +169,12 @@ static void dwc3_host_reset(struct work_struct *data)
 		return;
 	hcd = dwc3_xhci.xhci->main_hcd;
 
+	/* Need hold wakelock to prevent the S3 interrupt
+	 * the reset work.*/
+	wake_lock(&dwc3_xhci.wakelock);
 	__dwc3_stop_host(hcd);
 	dwc3_start_host(hcd);
+	wake_unlock(&dwc3_xhci.wakelock);
 }
 
 static void dwc_xhci_enable_phy_auto_resume(struct usb_hcd *hcd, bool enable)
@@ -601,16 +608,20 @@ static int xhci_dwc_drv_probe(struct platform_device *pdev)
 	if (otg) {
 		otg->start_host = dwc3_start_host;
 		otg->stop_host = dwc3_stop_host;
+		otg->suspend_host = dwc3_suspend_host;
+		otg->resume_host = dwc3_resume_host;
 	}
-
 
 	usb_put_phy(usb_phy);
 
 	/* Enable wakeup irq */
 	hcd->has_wakeup_irq = 1;
 	INIT_WORK(&dwc3_xhci.reset_hcd, dwc3_host_reset);
+	wake_lock_init(&dwc3_xhci.wakelock, WAKE_LOCK_SUSPEND,
+			"dwc3_host_wakelock");
 
 	platform_set_drvdata(pdev, hcd);
+	pm_runtime_no_callbacks(hcd->self.controller);
 	pm_runtime_enable(hcd->self.controller);
 
 	return retval;
@@ -632,26 +643,12 @@ static int xhci_dwc_drv_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(hcd->self.controller);
 	pm_runtime_set_suspended(hcd->self.controller);
+	wake_lock_destroy(&dwc3_xhci.wakelock);
 	return 0;
 }
 
 
 #ifdef CONFIG_PM
-
-#ifdef CONFIG_PM_RUNTIME
-/*
- * Do nothing in runtime pm callback.
- * On HVP platform, if make controller go to hibernation mode.
- * controller will not send IRQ until restore status which
- * implement in pm runtime resume callback. So there is no
- * any one can trigger pm_runtime_get to resume USB3 device.
- * This issue need to continue investigate. So just implement SW logic at here.
- */
-static int dwc_hcd_runtime_idle(struct device *dev)
-{
-	return 0;
-}
-
 /* dwc_hcd_suspend_common and dwc_hcd_resume_common are refer to
  * suspend_common and resume_common in usb core.
  * Because the usb core function just support PCI device.
@@ -771,81 +768,38 @@ static int dwc_hcd_resume_common(struct device *dev)
 	return retval;
 }
 
-static int dwc_hcd_runtime_suspend(struct device *dev)
+static int dwc3_suspend_host(struct usb_hcd *hcd)
 {
 	int retval;
-	struct platform_device      *pdev = to_platform_device(dev);
-	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
 
-	retval = dwc_hcd_suspend_common(dev);
+	if (!hcd)
+		return -EINVAL;
+
+	retval = dwc_hcd_suspend_common(hcd->self.controller);
 
 	if (retval)
 		dwc_xhci_enable_phy_auto_resume(
 			hcd, false);
 
-	dev_dbg(dev, "hcd_pci_runtime_suspend: %d\n", retval);
+	dev_dbg(hcd->self.controller, "%s: %d\n", __func__, retval);
 	return retval;
 }
 
-static int dwc_hcd_runtime_resume(struct device *dev)
+static int dwc3_resume_host(struct usb_hcd *hcd)
 {
 	int retval;
-	struct platform_device      *pdev = to_platform_device(dev);
-	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
+
+	if (!hcd)
+		return -EINVAL;
 
 	dwc_xhci_enable_phy_auto_resume(
 			hcd, false);
 
-	retval = dwc_hcd_resume_common(dev);
-	dev_dbg(dev, "hcd_pci_runtime_resume: %d\n", retval);
+	retval = dwc_hcd_resume_common(hcd->self.controller);
+	dev_dbg(hcd->self.controller, "%s: %d\n", __func__, retval);
 
 	return retval;
 }
-#else
-#define dwc_hcd_runtime_idle NULL
-#define dwc_hcd_runtime_suspend NULL
-#define dwc_hcd_runtime_resume NULL
-#endif
-
-
-static int dwc_hcd_suspend(struct device *dev)
-{
-	int retval;
-	struct platform_device      *pdev = to_platform_device(dev);
-	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
-
-	retval = dwc_hcd_suspend_common(dev);
-
-	if (retval)
-		dwc_xhci_enable_phy_auto_resume(
-			hcd, false);
-
-	dev_dbg(dev, "hcd_pci_runtime_suspend: %d\n", retval);
-	return retval;
-}
-
-static int dwc_hcd_resume(struct device *dev)
-{
-	int retval;
-	struct platform_device      *pdev = to_platform_device(dev);
-	struct usb_hcd      *hcd = platform_get_drvdata(pdev);
-
-	dwc_xhci_enable_phy_auto_resume(
-			hcd, false);
-
-	retval = dwc_hcd_resume_common(dev);
-	dev_dbg(dev, "hcd_pci_runtime_resume: %d\n", retval);
-
-	return retval;
-}
-
-static const struct dev_pm_ops dwc_usb_hcd_pm_ops = {
-	.runtime_suspend = dwc_hcd_runtime_suspend,
-	.runtime_resume	= dwc_hcd_runtime_resume,
-	.runtime_idle	= dwc_hcd_runtime_idle,
-	.suspend	=	dwc_hcd_suspend,
-	.resume		=	dwc_hcd_resume,
-};
 #endif
 
 static struct platform_driver dwc3_xhci_driver = {
@@ -853,8 +807,5 @@ static struct platform_driver dwc3_xhci_driver = {
 	.remove = xhci_dwc_drv_remove,
 	.driver = {
 		.name = "dwc3-host",
-#ifdef CONFIG_PM
-		.pm = &dwc_usb_hcd_pm_ops,
-#endif
 	},
 };

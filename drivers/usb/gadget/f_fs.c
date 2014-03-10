@@ -796,7 +796,14 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = kzalloc(len, GFP_KERNEL);
+			size_t allocated_len, packet_size;
+			packet_size = ep->ep->desc->wMaxPacketSize;
+			if (read && packet_size && !IS_ALIGNED(len, packet_size))
+				allocated_len = roundup(len, packet_size);
+			else
+				allocated_len = len;
+			data = kzalloc(allocated_len, GFP_KERNEL);
+
 			if (unlikely(!data))
 				return -ENOMEM;
 
@@ -842,7 +849,6 @@ first_try:
 		req->length   = len;
 
 		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
-
 		spin_unlock_irq(&epfile->ffs->eps_lock);
 
 		if (unlikely(ret < 0)) {
@@ -852,9 +858,16 @@ first_try:
 			usb_ep_dequeue(ep->ep, req);
 		} else {
 			ret = ep->status;
-			if (read && ret > 0 &&
-			    unlikely(copy_to_user(buf, data, ret)))
-				ret = -EFAULT;
+			if (read && ret > 0) {
+				if (ret > len) {
+					pr_err("too many bytes to be returned"
+						" ret=%d,req len=%d\n",
+						ret, len);
+					ret = len;
+				}
+				if (unlikely(copy_to_user(buf, data, ret)))
+					ret = -EFAULT;
+			}
 		}
 	}
 
