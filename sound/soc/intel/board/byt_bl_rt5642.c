@@ -905,6 +905,12 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	/* Set overcurrent detection threshold base and scale factor
 	   for jack type identification and button events. */
 
+	rt5640_config_ovcd_thld(codec, RT5640_MIC1_OVTH_1500UA,
+				RT5640_MIC_OVCD_SF_1P0);
+	snd_soc_update_bits(codec, RT5640_JD_CTRL,
+				RT5640_JD_MASK, RT5640_JD_JD1_IN4P);
+
+#if 0
 	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1))
 		/* The mic bias resistor in BYT FFRD8 PR1 is reduced from
 		2.1K to 1.5K. Therefore the correct over current threshold
@@ -931,6 +937,7 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 			snd_soc_update_bits(codec, RT5640_JD_CTRL,
 					RT5640_JD_MASK, RT5640_JD_JD1_IN4P);
 	}
+#endif
 
 	ret = snd_soc_jack_new(codec, "Intel MID Audio Jack",
 			       SND_JACK_HEADSET | SND_JACK_HEADPHONE | SND_JACK_BTN_0,
@@ -1127,7 +1134,7 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	int ret_val = 0;
 	struct byt_mc_private *drv;
 	int codec_gpio;
-	int jd_gpio;
+/*	int jd_gpio; remove this line for -Werror=unused-variable */
 
 	pr_debug("Entry %s\n", __func__);
 
@@ -1159,6 +1166,13 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	drv->num_jack_gpios = 1;
 	drv->use_soc_jd_gpio = false;
 
+	/* Configure GPIO_SCORE56 for BT SCO workaround on FFRD8 PR1 */
+	drv->tristate_buffer_gpio = acpi_get_gpio("\\_SB.GPO0", 56);
+	ret_val = devm_gpio_request_one(&pdev->dev,
+				drv->tristate_buffer_gpio,
+				GPIOF_OUT_INIT_LOW,
+				"byt_ffrd8_tristate_buffer_gpio");
+#if 0
 	/* FFRD PR1 has 2 SoC gpios for Jack detect/Button press. One GPIO is for
 	   codec interrupt(codec-> SoC) and the second GPIO is for jack detection
 	   alone (direct jack-> SoC).Since there is a dedicated jack det GPIO on PR1,
@@ -1191,7 +1205,7 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 			return ret_val;
 		}
 	}
-
+#endif
 	/* register the soc card */
 	snd_soc_card_byt.dev = &pdev->dev;
 	snd_soc_card_set_drvdata(&snd_soc_card_byt, drv);
