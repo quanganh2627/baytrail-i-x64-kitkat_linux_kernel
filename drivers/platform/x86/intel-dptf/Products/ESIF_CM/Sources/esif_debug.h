@@ -258,21 +258,10 @@ static char g_alwaysfalse;
 			ESIF_TRACE_FMT_ERROR(format, ##__VA_ARGS__); \
 	} while (ESIF_ALWAYSFALSE)
 
-/* Compile out all Trace messages except ERROR for Release Candidates 
- * Include messages in regular RELEASE and DEBUG builds
+
+/* Change these ESIF_TRACE macros to call ESIF_TRACENULL to compile out all
+ * non-Error trace messages from the kernel drivers and reduce the binary size
  */
-#ifdef ESIF_ATTR_RELEASE_CAND
-
-#define ESIF_TRACE_WARN(format, ...)		ESIF_TRACENULL
-#define ESIF_TRACE_INFO(format, ...)		ESIF_TRACENULL
-#define ESIF_TRACE_DEBUG(format, ...)		ESIF_TRACENULL
-#define ESIF_TRACE_ENTRY()			ESIF_TRACENULL
-#define ESIF_TRACE_EXIT()			ESIF_TRACENULL
-#define ESIF_TRACE_EXIT_W_STATUS(status)	ESIF_TRACENULL
-#define ESIF_TRACE_DYN(module, module_level, format, ...)       ESIF_TRACENULL
-
-#else
-
 #define ESIF_TRACE_WARN(format, ...) \
 	do { \
 		if (ESIF_TRACE_CATEGORY_ON(ESIF_DEBUG_MODULE, ESIF_TRACE_CATEGORY_WARN)) \
@@ -315,7 +304,6 @@ static char g_alwaysfalse;
 			ESIF_TRACE_FMT_DEBUG(format, ##__VA_ARGS__); \
 	} while (ESIF_ALWAYSFALSE)
 
-#endif
 
 /* Initialize the enabled module debug categories */
 void esif_debug_init_module_categories(void);
@@ -483,14 +471,13 @@ extern int EsifTraceMessage(esif_tracemask_t module, int level, const char *func
 /* Never route a trace message and compile it out of the binary */
 #define ESIF_DOTRACE_NEVER(mod, lev, msg, ...)	((void)0)
 
-/* Compile out DEBUG-level messages for Release Candidate Builds */
-#ifdef ESIF_ATTR_RELEASE_CAND
-# define ESIF_DOTRACE_IFCOMPILED(mod, lev, msg, ...) ESIF_DOTRACE_NEVER(mod, lev, msg)
-# define ESIF_TRACELEVEL_DEFAULT	ESIF_TRACELEVEL_ERROR
-#else
-# define ESIF_DOTRACE_IFCOMPILED(mod, lev, msg, ...) ESIF_DOTRACE_IFACTIVE(mod, lev, msg, ##__VA_ARGS__)
-# define ESIF_TRACELEVEL_DEFAULT	ESIF_TRACELEVEL_ERROR
-#endif
+/* Change ESIF_DOTRACE_INACTIVE to ESIF_DOTRACE_NEVER in the following macro
+ * to compile out all ESIF_TRACE_DEBUG messages from the Upper Framework binaries.
+ */
+#define ESIF_DOTRACE_IFCOMPILED(mod, lev, msg, ...) ESIF_DOTRACE_IFACTIVE(mod, lev, msg, ##__VA_ARGS__)
+
+/* Default User-Mode Trace Level at startup */
+#define ESIF_TRACELEVEL_DEFAULT	ESIF_TRACELEVEL_ERROR
 
 /*****************************************************************************
  * App Interface for Trace messages. Only use these macros in source modules.

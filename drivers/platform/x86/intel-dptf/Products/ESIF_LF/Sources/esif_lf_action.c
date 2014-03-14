@@ -95,6 +95,7 @@ enum esif_rc esif_execute_action(
 	esif_temp_t orig_temp = 0;
 	u8 was_temp  = ESIF_FALSE;
 	u8 was_power = ESIF_FALSE;
+	u8 was_percent = ESIF_FALSE;
 
 
 	ESIF_TRACE_DYN_ACTION(
@@ -184,6 +185,19 @@ enum esif_rc esif_execute_action(
 				      ESIF_FUNC);
 		req_data_ptr->type = ESIF_DATA_UINT32;
 		was_power = ESIF_TRUE;
+	}
+
+	if ((ESIF_PRIMITIVE_OP_GET == primitive_ptr->opcode) &&
+	    (ESIF_DATA_PERCENT == rsp_data_ptr->type)) {
+		was_percent = ESIF_TRUE;
+		rsp_data_ptr->type = ESIF_DATA_UINT32;
+	}
+
+	if ((ESIF_PRIMITIVE_OP_SET == primitive_ptr->opcode) &&
+	    (ESIF_DATA_PERCENT == req_data_ptr->type)) {
+		was_percent = ESIF_TRUE;
+		*(u32 *)req_data_ptr->buf_ptr /= ESIF_PERCENT_CONV_FACTOR;
+		req_data_ptr->type = ESIF_DATA_UINT32;
 	}
 
 	/* Handle Actions */
@@ -715,6 +729,20 @@ enum esif_rc esif_execute_action(
 		ESIF_TRACE_DYN_ACTION("%s: TRANSFORM REQ UINT32 >> POWER\n",
 				      ESIF_FUNC);
 		req_data_ptr->type = ESIF_DATA_POWER;
+	}
+
+	if ((ESIF_PRIMITIVE_OP_GET == primitive_ptr->opcode) &&
+	    (ESIF_TRUE == was_percent)) {
+		rsp_data_ptr->type = ESIF_DATA_PERCENT;
+		if(ESIF_OK == rc) {
+			*(u32 *)rsp_data_ptr->buf_ptr *= 
+				ESIF_PERCENT_CONV_FACTOR;
+		}
+	}
+
+	if ((ESIF_PRIMITIVE_OP_SET == primitive_ptr->opcode) &&
+	    (ESIF_TRUE == was_percent)) {
+		req_data_ptr->type = ESIF_DATA_PERCENT;
 	}
 
 	/*

@@ -142,10 +142,25 @@ void esif_debug_get_module_category (
 #ifdef ESIF_ATTR_OS_WINDOWS
 #endif
 #ifdef ESIF_ATTR_OS_LINUX
-# include <syslog.h>
-# define IDENT		"DPTF"
-# define OPTION		LOG_PID
-# define FACILITY	LOG_DAEMON
+# ifdef ESIF_ATTR_OS_ANDROID
+#  include <android/log.h>
+#  define IDENT    "DPTF"
+#  define ESIF_PRIORITY_FATAL   ANDROID_LOG_FATAL
+#  define ESIF_PRIORITY_ERROR   ANDROID_LOG_ERROR
+#  define ESIF_PRIORITY_WARNING ANDROID_LOG_WARN
+#  define ESIF_PRIORITY_INFO    ANDROID_LOG_INFO
+#  define ESIF_PRIORITY_DEBUG   ANDROID_LOG_DEBUG
+# else
+#  include <syslog.h>
+#  define IDENT    "DPTF"
+#  define OPTION   LOG_PID
+#  define FACILITY LOG_DAEMON
+#  define ESIF_PRIORITY_FATAL   LOG_EMERG
+#  define ESIF_PRIORITY_ERROR   LOG_ERR
+#  define ESIF_PRIORITY_WARNING LOG_WARNING
+#  define ESIF_PRIORITY_INFO    LOG_INFO
+#  define ESIF_PRIORITY_DEBUG   LOG_DEBUG
+# endif
 #endif
 
 #define TRACEON(module)		((esif_tracemask_t)1 << (module))
@@ -228,12 +243,12 @@ const char *EsifTraceModule_ToString(enum esif_tracemodule val)
 }
 
 int EsifTraceMessage(
-	esif_tracemask_t module, 
-	int level, 
-	const char *func, 
-	const char *file, 
-	int line, 
-	const char *msg, 
+	esif_tracemask_t module,
+	int level,
+	const char *func,
+	const char *file,
+	int line,
+	const char *msg,
 	...)
 {
 	int rc=0;
@@ -243,7 +258,7 @@ int EsifTraceMessage(
 	const char *sep=NULL;
 	size_t fmtlen=esif_ccb_strlen(msg, 0x7FFFFFFF);
 	va_list args;
-		
+
 	UNREFERENCED_PARAMETER(module);
 	level = esif_ccb_min(level, ESIF_TRACELEVEL_MAX);
 	if ((sep = strrchr(file, *ESIF_PATH_SEP)) != NULL)
@@ -307,7 +322,7 @@ int EsifTraceMessage(
 			if (rc && buffer[rc-1]!='\n')
 				esif_ccb_strcat(buffer, "\n", msglen);
 
-			OutputDebugStringA(buffer); 
+			OutputDebugStringA(buffer);
 			esif_ccb_free(buffer);
 		}
 	}
@@ -390,25 +405,29 @@ int EsifTraceMessage(
 
 			switch (g_traceinfo[level].level) {
 			case ESIF_TRACELEVEL_FATAL:
-				priority = LOG_EMERG;
+				priority = ESIF_PRIORITY_FATAL;
 				break;
 			case ESIF_TRACELEVEL_ERROR:
-				priority = LOG_ERR;
+				priority = ESIF_PRIORITY_ERROR;
 				break;
 			case ESIF_TRACELEVEL_WARN:
-				priority = LOG_WARNING;
+				priority = ESIF_PRIORITY_WARNING;
 				break;
 			case ESIF_TRACELEVEL_INFO:
-				priority = LOG_INFO;
+				priority = ESIF_PRIORITY_INFO;
 				break;
 			case ESIF_TRACELEVEL_DEBUG:
 			default:
-				priority = LOG_DEBUG;
+				priority = ESIF_PRIORITY_DEBUG;
 				break;
 			}
+		#ifdef ESIF_ATTR_OS_ANDROID
+			__android_log_write(priority, IDENT, buffer);
+		#else
 			openlog(IDENT, OPTION, FACILITY);
 			syslog(priority, "%s", buffer);
 			closelog();
+		#endif
 			esif_ccb_free(buffer);
 		}
 	}

@@ -211,9 +211,9 @@ struct esif_up_dsp {
 	/* PCI */
 	esif_string  vendor_id;		/* Vendor ID 8086 For Intel */
 	esif_string  device_id;		/* Device ID                */
-	UInt8        *pci_bus;		/* PCI Bus                  */
-	UInt8        *pci_bus_device;	/* PCI Device               */
-	UInt8        *pci_function;	/* PCI Function             */
+	esif_string  pci_bus;		/* PCI Bus                  */
+	esif_string  pci_bus_device;/* PCI Device               */
+	esif_string  pci_function;	/* PCI Function             */
 
 	/* Attributes */
 	/* UInt32  *capability_ptr; / * Enhanced Capability * / */
@@ -311,16 +311,24 @@ struct esif_uf_dm_query_acpi {
 };
 
 /* Fields may be blank to indicate don't cares */
+struct esif_uf_dm_query_pci {
+	EsifString  pci_did;	/* Weight 8 */
+	EsifString  pci_vid;	/* Weight 4 */
+};
+
+/* Fields may be blank to indicate don't cares */
 struct esif_uf_dm_query_plat {
 	esif_string  plat_type;	/* Weight 2 */
 	esif_string  plat_name;	/* Weight 1 */
 };
 
 /* Query */
-esif_string esif_uf_dm_query (enum esif_uf_dm_query_type query_type,
-			      void *qry_ptr);
+struct esif_ipc_event_data_create_participant;
+
+esif_string esif_uf_dm_query(enum esif_uf_dm_query_type query_type, void *qry_ptr);
 struct esif_up_dsp *esif_uf_dm_select_dsp_by_code (esif_string code);
 esif_string esif_uf_dm_select_dsp (eEsifParticipantOrigin origin, void *piPtr);
+EsifString esif_uf_dm_select_dsp_for_participant(struct esif_ipc_event_data_create_participant *data_ptr);
 
 /* Init / Exit */
 enum esif_rc EsifDspInit (void);

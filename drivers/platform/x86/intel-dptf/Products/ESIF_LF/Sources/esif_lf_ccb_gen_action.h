@@ -61,6 +61,7 @@
 #ifdef ESIF_ATTR_OS_WINDOWS
 #include "win\esif_lf_win_disp_intfc.h"
 #include "win\esif_lf_win_gfx_intfc.h"
+#include "win\esif_lf_os_win.h"
 
 /* For ACTION ESIF_ACTION_DDIGFXDISP */
 #define esif_get_action_ddigfxdisp(pPrim, pAct, pLp, pReq, pRsp)  \
@@ -76,6 +77,9 @@
 #define esif_set_action_ddigfxperf(pPrim, pAct, pLp, pReq) \
 	GfxIntfcExecuteSetAction(pPrim, pAct, pLp, pReq)
 
+#define esif_get_action_code_putl(pUtil) \
+	esif_get_action_code_putl_win(pUtil)
+
 #endif	/* ESIF_ATTR_OS_WINDOWS */
 #ifdef ESIF_ATTR_OS_LINUX
 #define esif_get_action_ddigfxdisp(pPrim, pAct, pLp, pReq, pRsp) \
@@ -86,6 +90,9 @@
 	ESIF_E_ACTION_NOT_IMPLEMENTED
 #define esif_set_action_ddigfxperf(pPrim, pAct, pLp, pReq) \
 	ESIF_E_ACTION_NOT_IMPLEMENTED	
+#define esif_get_action_code_putl(pUtil) \
+	ESIF_E_ACTION_NOT_IMPLEMENTED	
+
 #endif	/* ESIF_ATTR_OS_LINUX */
 
 #endif /* ESIF_ATTR_KERNEL */

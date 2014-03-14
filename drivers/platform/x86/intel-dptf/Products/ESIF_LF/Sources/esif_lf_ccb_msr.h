@@ -72,8 +72,7 @@ static ESIF_INLINE int esif_ccb_read_cpu_msr_safe(
 	KAFFINITY kaUserThreadAffinity = 0xff;
 
 	/* Save active processors and set affinity */
-	kaUserThreadAffinity = KeQueryActiveProcessors();
-	KeSetSystemAffinityThreadEx(((ULONG_PTR)1 << cpu));
+	kaUserThreadAffinity = KeSetSystemAffinityThreadEx(((ULONG_PTR)1 << cpu));
 
 	/*
 	 * EXCEPTION HANDLER
@@ -114,8 +113,7 @@ static ESIF_INLINE int esif_ccb_write_cpu_msr_safe(
 	int64Content |= l;
 
 	/* Save active processors and set affinity */
-	kaUserThreadAffinity = KeQueryActiveProcessors();
-	KeSetSystemAffinityThreadEx(((ULONG_PTR)1 << cpu));
+	kaUserThreadAffinity = KeSetSystemAffinityThreadEx(((ULONG_PTR)1 << cpu));
 
 	/*
 	 * EXCEPTION HANDLER

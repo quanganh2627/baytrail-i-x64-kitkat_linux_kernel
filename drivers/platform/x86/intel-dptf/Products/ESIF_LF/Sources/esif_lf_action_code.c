@@ -54,6 +54,7 @@
 #include "esif_action.h"	/* EISF Action                      */
 #include "esif_participant.h"	/* EISF Participant                 */
 #include "esif_lf_poll.h"	/* EISF Poll                        */
+#include "esif_lf_ccb_gen_action.h"
 
 #ifdef ESIF_ATTR_OS_WINDOWS
 
@@ -69,6 +70,7 @@
 /* Debug Logging Defintions */
 #define INIT_DEBUG       0
 #define GET_DEBUG        1
+#define ESIF_DEBUG_MODULE ESIF_DEBUG_MOD_ACTION_CODE
 
 #define ESIF_MSR_PLATFORM_INFO 0xCE
 #define ESIF_MSR_BIT_FIVR_RFI_TUNING_AVAIL (1LL << 25)
@@ -140,6 +142,16 @@ static struct esif_data_variant_integer esif_lpat_table[] = {
         {ESIF_DATA_UINT64, 3731}, {ESIF_DATA_UINT64, 104},
 };
 
+#define GFX_PSTATE_FREQ_INCREMENT	50 /* Increment in 50Mhz units */
+#define GFX_PSTATE_FREQ_RPX_CONV_FACTOR 50 /* Provided in 50MHz units */
+
+struct gfx_freq_range {
+	u32 rp0_freq;
+	u32 rp1_freq;
+	u32 rpn_freq;
+	u32 freq_increment;
+};
+
 extern enum esif_rc read_mod_write_msr_bit_range(
 	const u32 msr,
 	const u8 bit_from,
@@ -152,6 +164,23 @@ static enum esif_rc esif_set_action_code_fndg(
 	const struct esif_primitive_tuple *tuple_ptr,
 	const struct esif_lp_action *action_ptr,
 	const struct esif_data *req_data_ptr
+);
+
+static enum esif_rc esif_get_action_code_rpcp(
+	struct esif_lp *lp_ptr,
+	const struct esif_primitive_tuple *tuple_ptr,
+	const struct esif_lp_action *action_ptr,
+	struct esif_data *rsp_data_ptr
+);
+
+static u32 calc_num_freqs_in_gfx_range(
+	struct gfx_freq_range* freq_range_ptr
+);
+
+static enum esif_rc create_gfx_pstate_tbl_from_range_data (
+	struct gfx_freq_range *freq_range_ptr,
+	u32 **freq_tbl_ptr,
+	u32 *num_entries_ptr
 );
 
 
@@ -717,6 +746,15 @@ enum esif_rc esif_get_action_code(
 		goto exit;
 	}
 
+	case 'LTUP':	/* PUTL */
+		rc = esif_get_action_code_putl(&val);
+		break;
+
+	case 'PCPR':	/* RPCP */
+		rc = esif_get_action_code_rpcp(lp_ptr, tuple_ptr, action_ptr, rsp_data_ptr);
+		goto exit;
+		break;
+
 	default:
 		rc = ESIF_E_NOT_IMPLEMENTED;
 		break;
@@ -877,7 +915,7 @@ static enum esif_rc esif_set_action_code_fndg(
 					GET_RFPROFILE_CLIP_PERCENT_RIGHT,
 					tuple_ptr->domain,
 					255,
-					ESIF_DATA_PERCENT,
+					ESIF_DATA_UINT32,
 					&right_spread_percent,
 					sizeof(right_spread_percent));
 	if(rc != ESIF_OK)
@@ -887,7 +925,7 @@ static enum esif_rc esif_set_action_code_fndg(
 					GET_RFPROFILE_CLIP_PERCENT_LEFT,
 					tuple_ptr->domain,
 					255,
-					ESIF_DATA_PERCENT,
+					ESIF_DATA_UINT32,
 					&left_spread_percent,
 					sizeof(left_spread_percent));
 	if(rc != ESIF_OK)
@@ -935,6 +973,256 @@ static enum esif_rc esif_set_action_code_fndg(
 exit:
 	return rc;
 }
+
+
+static enum esif_rc esif_get_action_code_rpcp(
+	struct esif_lp *lp_ptr,
+	const struct esif_primitive_tuple *tuple_ptr,
+	const struct esif_lp_action *action_ptr,
+	struct esif_data *rsp_data_ptr
+	)
+{
+	enum esif_rc rc = ESIF_OK;
+	struct gfx_freq_range freq_range_data = {0};
+	u32 num_freqs = 0;
+	u32 *freq_tbl_ptr = NULL;
+	union esif_data_variant *cur_resp_ptr = NULL;
+	u32 data_size;
+	u8 i;
+
+	if ((NULL == lp_ptr) || (NULL == tuple_ptr) ||
+	    (NULL == action_ptr) || (NULL == rsp_data_ptr)) {
+		rc = ESIF_E_PARAMETER_IS_NULL;
+		goto exit;
+	}
+
+	/*
+	 * Get the upper and lower frequency limits
+	 */
+	rc = esif_get_simple_primitive(lp_ptr,
+				       GET_PROC_RP_STATE_CAPABILITY,
+				       tuple_ptr->domain,
+				       0,
+				       ESIF_DATA_UINT32,
+				       &freq_range_data.rp0_freq,
+				       sizeof(freq_range_data.rp0_freq));
+	if(ESIF_OK != rc) {
+		goto exit;
+	}
+	freq_range_data.rp0_freq *= GFX_PSTATE_FREQ_RPX_CONV_FACTOR;
+
+	rc = esif_get_simple_primitive(lp_ptr,
+				       GET_PROC_RP_STATE_CAPABILITY,
+				       tuple_ptr->domain,
+				       1,
+				       ESIF_DATA_UINT32,
+				       &freq_range_data.rp1_freq,
+				       sizeof(freq_range_data.rp1_freq));
+	if(ESIF_OK != rc) {
+		goto exit;
+	}
+	freq_range_data.rp1_freq *= GFX_PSTATE_FREQ_RPX_CONV_FACTOR;
+
+	rc = esif_get_simple_primitive(lp_ptr,
+				       GET_PROC_RP_STATE_CAPABILITY,
+				       tuple_ptr->domain,
+				       2,
+				       ESIF_DATA_UINT32,
+				       &freq_range_data.rpn_freq,
+				       sizeof(freq_range_data.rpn_freq));
+	if(ESIF_OK != rc) {
+		goto exit;
+	}
+	freq_range_data.rpn_freq *= GFX_PSTATE_FREQ_RPX_CONV_FACTOR;
+
+	freq_range_data.freq_increment = GFX_PSTATE_FREQ_INCREMENT;
+	if (freq_range_data.freq_increment > freq_range_data.rp0_freq) {
+		freq_range_data.freq_increment = freq_range_data.rp0_freq;
+	}
+
+	ESIF_TRACE_DEBUG("RP0 = %d, RP1 = %d, RPn = %d, Increment = %d\n",
+		freq_range_data.rp0_freq,
+		freq_range_data.rp1_freq,
+		freq_range_data.rpn_freq,
+		freq_range_data.freq_increment);
+
+
+	rc = create_gfx_pstate_tbl_from_range_data (&freq_range_data,
+						    &freq_tbl_ptr,
+						    &num_freqs);
+	if (rc != ESIF_OK) {
+		goto exit;
+	}
+
+	data_size = num_freqs * sizeof(union esif_data_variant);
+	rsp_data_ptr->data_len = data_size;
+
+	if (rsp_data_ptr->buf_len < data_size) {
+		rc = ESIF_E_NEED_LARGER_BUFFER;
+		ESIF_TRACE_ERROR("Response buffer is too small, "
+				 "%d available, %d required\n",
+				 rsp_data_ptr->buf_len, data_size);
+		goto exit;
+	}
+
+	//
+	// Report the data as an array of variants
+	//
+	cur_resp_ptr = (union esif_data_variant*)rsp_data_ptr->buf_ptr;
+
+	for (i = 0; i < num_freqs; i++) {
+		cur_resp_ptr->type = ESIF_DATA_UINT64;
+		cur_resp_ptr++->integer.value = (UINT64)freq_tbl_ptr[i];
+	}
+
+exit:
+	if (freq_tbl_ptr != NULL) {
+		esif_ccb_free(freq_tbl_ptr);
+	}
+	return rc;
+}
+
+
+static u32 calc_num_freqs_in_gfx_range(struct gfx_freq_range* freq_range_ptr)
+{
+	u32 num_freqs = 0;
+	u32 freq_increment;
+
+	if(NULL == freq_range_ptr) {
+		goto exit;
+	}
+
+	if ((freq_range_ptr->rpn_freq > freq_range_ptr->rp1_freq) || 
+	    (freq_range_ptr->rp1_freq > freq_range_ptr->rp0_freq)) {
+		ESIF_TRACE_ERROR("Lower frequency above higher frequency.\n");
+		goto exit;
+	}
+
+	if (freq_range_ptr->rp0_freq == 0) {
+		ESIF_TRACE_ERROR("Frequency data is all 0.\n");
+		goto exit;
+	}
+
+	/*
+	 * Make sure the increment is a reasonable value or else the
+	 * calculations below could be wrong. If so, change to a value that
+	 * results in no intermediate frequencies
+	 */
+	freq_increment =  freq_range_ptr->freq_increment;
+	if ((freq_increment == 0) || 
+	    (freq_increment > freq_range_ptr->rp0_freq)) {
+		freq_increment = freq_range_ptr->rp0_freq;
+	}
+
+	/*
+	 * Calculate the number of frequencies we will report so that we can
+	 * verify the buffer size before using it
+	 */
+	num_freqs = 1;	/* RP0 frequency */
+	if (freq_range_ptr->rp0_freq > freq_range_ptr->rp1_freq) {
+		/*
+		 * Add the +1 to RP1 so the calculated mid frequencies doesn't
+		 * include RP1 itself if the two are seperated by an exact
+		 * multiple of the increment
+		 */
+		num_freqs += (freq_range_ptr->rp0_freq -
+			     (freq_range_ptr->rp1_freq + 1)) /
+			     freq_increment;
+		num_freqs += 1;	/* RP1 frequency */
+	}
+	if (freq_range_ptr->rp1_freq > freq_range_ptr->rpn_freq) {
+		/*
+		 * Add the +1 to RPn so the calculated mid frequencies doesn't
+		 * include RPn itself if the two are seperated by an exact
+		 * multiple of the increment
+		 */
+		num_freqs += (freq_range_ptr->rp1_freq -
+			     (freq_range_ptr->rpn_freq + 1)) /
+			     freq_increment;
+		num_freqs += 1;	/* RPn frequency */
+	}
+
+exit:
+	ESIF_TRACE_DEBUG(" Num frequencies = %d\n", num_freqs);
+	return num_freqs;
+}
+
+
+/*
+ * WARNING:  It is the responsibility of the caller to free the returned table
+ * pointer if not NULL.
+*/
+static enum esif_rc create_gfx_pstate_tbl_from_range_data (
+	struct gfx_freq_range *freq_range_ptr,
+	u32 **freq_tbl_ptr,
+	u32 *num_entries_ptr
+	)
+{
+	static enum esif_rc rc = ESIF_OK;
+	u32 num_freqs;
+	u32 *cur_entry_ptr = NULL;
+	u32 freq_incr;
+	u32 cur_freq;
+
+	if ((NULL == freq_range_ptr) ||
+	    (NULL == freq_tbl_ptr) ||
+	    (NULL == num_entries_ptr)) {
+		rc = ESIF_E_PARAMETER_IS_NULL;
+		goto exit;
+	}
+
+	num_freqs = calc_num_freqs_in_gfx_range(freq_range_ptr);
+	if (num_freqs == 0) {
+		rc = ESIF_E_PRIMITIVE_ACTION_FAILURE;
+		goto exit;
+	}
+
+	*freq_tbl_ptr = (u32*)esif_ccb_malloc(num_freqs * sizeof(**freq_tbl_ptr));
+	if (*freq_tbl_ptr == NULL) {
+		rc = ESIF_E_NO_MEMORY;
+		ESIF_TRACE_ERROR("Resource allocation failure\n");
+		goto exit;
+	}
+
+	freq_incr = freq_range_ptr->freq_increment;
+	if ((freq_incr == 0) || (freq_incr > freq_range_ptr->rp0_freq)) {
+		freq_incr = freq_range_ptr->rp0_freq;
+	}
+
+	//
+	// Report the data as an array of variants
+	//
+	cur_entry_ptr = *freq_tbl_ptr;
+	cur_freq = freq_range_ptr->rp0_freq;
+	while ((cur_freq > freq_range_ptr->rp1_freq) &&
+	       (cur_freq <= freq_range_ptr->rp0_freq)) {
+
+		*cur_entry_ptr++ = cur_freq;
+		ESIF_TRACE_DEBUG("Frequency = %d\n", cur_freq);
+		cur_freq -= freq_incr;
+	} 
+
+	cur_freq = freq_range_ptr->rp1_freq;
+	while ((cur_freq > freq_range_ptr->rpn_freq) &&
+	       (cur_freq <= freq_range_ptr->rp1_freq)) {
+
+		*cur_entry_ptr++ = cur_freq;
+		ESIF_TRACE_DEBUG("Frequency = %d\n", cur_freq);
+		cur_freq -= freq_incr;
+	}
+
+	if (cur_freq <= freq_range_ptr->rpn_freq) {
+		*cur_entry_ptr++ = freq_range_ptr->rpn_freq;
+		ESIF_TRACE_DEBUG("Frequency = %d\n", freq_range_ptr->rpn_freq);
+	}
+
+	*num_entries_ptr = num_freqs;
+
+exit:
+	return rc;
+}
+
+
 
 /*****************************************************************************/
 /*****************************************************************************/
