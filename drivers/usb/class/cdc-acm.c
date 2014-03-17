@@ -49,12 +49,19 @@
 #include <linux/list.h>
 #include <linux/pci.h>
 #include <linux/debugfs.h>
+#include <linux/gpio.h>
 
 #include "cdc-acm.h"
 
 
 #define DRIVER_AUTHOR "Armin Fuerst, Pavel Machek, Johannes Erdfelt, Vojtech Pavlik, David Kubicek, Johan Hovold"
 #define DRIVER_DESC "USB Abstract Control Model driver for USB modems and ISDN adapters"
+#define RESET_BB 159
+#define POWER_ON 125
+#define POWER_OFF 100
+#define RESET_OUT 158
+#define CORE_DUMP 160
+
 
 static struct usb_driver acm_driver;
 static struct tty_driver *acm_tty_driver;
@@ -747,6 +754,7 @@ static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 	tty_port_close(&acm->port, tty, filp);
 }
 
+
 static int acm_tty_write(struct tty_struct *tty,
 					const unsigned char *buf, int count)
 {
@@ -1327,8 +1335,7 @@ made_compressed_probe:
 	}
 
 	ctrlsize = usb_endpoint_maxp(epctrl);
-	readsize = usb_endpoint_maxp(epread) *
-				(quirks == SINGLE_RX_URB ? 1 : 2);
+	readsize = usb_endpoint_maxp(epread) * 3;
 	acm->combined_interfaces = combined_interfaces;
 	acm->writesize = usb_endpoint_maxp(epwrite) * 20;
 	acm->control = control_interface;
@@ -1509,6 +1516,8 @@ skip_countries:
 	if (is_comneon_modem(usb_dev))
 		usb_enable_autosuspend(usb_dev);
 
+    device_set_wakeup_enable(&usb_dev->dev, 1);
+
 	if (is_hsic_host(usb_dev)) {
 		if (!acm_debug_root)
 			acm_debug_root = debugfs_create_dir("acm",
@@ -1640,7 +1649,9 @@ static int acm_suspend(struct usb_interface *intf, pm_message_t message)
 
 	spin_lock_irq(&acm->read_lock);
 	spin_lock(&acm->write_lock);
-	cnt = acm->susp_count++;
+	cnt = acm->susp_count;
+    if (acm->susp_count < 2)
+        acm->susp_count++;
 	spin_unlock(&acm->write_lock);
 	spin_unlock_irq(&acm->read_lock);
 
@@ -1662,6 +1673,10 @@ static int acm_resume(struct usb_interface *intf)
 	int cnt;
 
 	spin_lock_irq(&acm->read_lock);
+    if (acm->susp_count == 0) {
+        spin_unlock_irq(&acm->read_lock);
+        return 0;
+    }
 	acm->susp_count -= 1;
 	cnt = acm->susp_count;
 	spin_unlock_irq(&acm->read_lock);
@@ -1947,6 +1962,20 @@ static const struct tty_operations acm_ops = {
 	.tiocmset =		acm_tty_tiocmset,
 };
 
+static irqreturn_t mdm_ctrl_reset_it(int irq, void *data)
+{
+    pr_info("Modem_Ctrl: callback function mdm_ctrl_reset_it )");
+    out:
+        return IRQ_HANDLED;
+}
+
+static irqreturn_t mdm_ctrl_coredump_it(int irq, void *data)
+{
+    pr_info("Modem_Ctrl: callback function mdm_ctrl_coredump_it)");
+    out:
+        return IRQ_HANDLED;
+}
+
 /*
  * Init / exit.
  */
@@ -1968,6 +1997,100 @@ static int __init acm_init(void)
 	acm_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD |
 								HUPCL | CLOCAL;
 	tty_set_operations(acm_tty_driver, &acm_ops);
+
+/*
+    pr_info("Modem_Ctrl: Start Power On Modem");
+
+
+    pr_info("Modem_Ctrl: IRQ request for GPIO (POWER_OFF: %d)", POWER_OFF);
+    retval = gpio_request(POWER_OFF, "power_off");
+    if (retval < 0)
+    {
+        pr_info("Modem_Ctrl: IRQ request failed for GPIO (POWER_OFF)");
+        retval = -ENODEV;
+        //return retval;
+    }
+
+    retval = gpio_get_value(POWER_OFF);
+    pr_info("Modem_Ctrl: POWER_OFF default value:  %d)", retval);
+
+    gpio_direction_output(POWER_OFF, 1);
+    usleep_range(200, 500);
+    pr_info("Modem_Ctrl: (POWER_OFF) Assert");
+    gpio_set_value(POWER_OFF, 1);
+
+    retval = gpio_get_value(POWER_OFF);
+    pr_info("Modem_Ctrl: set POWER_OFF to 1, actual result:  %d)", retval);
+
+    pr_info("Modem_Ctrl: IRQ request for GPIO (RESET_BB: %d)", RESET_BB);
+    retval = gpio_request(RESET_BB, "reset_bb");
+    if (retval < 0)
+    {
+        pr_info("Modem_Ctrl: IRQ request failed for GPIO (RESET_BB)");
+        retval = -ENODEV;
+        //return retval;
+    }
+    gpio_direction_output(RESET_BB, 1);
+    usleep_range(200, 500);
+    pr_info("Modem_Ctrl: (RESET_BB) Assert");
+    gpio_set_value(RESET_BB, 1);
+
+    retval = gpio_get_value(RESET_BB);
+    pr_info("Modem_Ctrl: set reset BB to 1, actual result is %d)", retval);
+
+    pr_info("Modem_Ctrl: IRQ request for GPIO (POWER_ON: %d)", POWER_ON);
+    retval = gpio_request(POWER_ON, "power_on");
+    if (retval < 0)
+    {
+        pr_info("Modem_Ctrl: IRQ request failed for GPIO (POWER_ON)");
+        retval = -ENODEV;
+        //return retval;
+    }
+
+    gpio_direction_output(POWER_ON, 1);
+    usleep_range(200, 500);
+    pr_info("Modem_Ctrl: (POWER_ON) Assert");
+    gpio_set_value(POWER_ON, 1);
+
+    retval = gpio_get_value(POWER_ON);
+    pr_info("Modem_Ctrl: set POWER_ON to 1, actual result:  %d)", retval);
+
+    usleep_range(200, 500);
+    pr_info("Modem_Ctrl: (POWER_ON) DeAssert");
+    gpio_set_value(POWER_ON, 0);
+
+    retval = gpio_get_value(POWER_ON);
+    pr_info("Modem_Ctrl: set POWER_ON to 0, actual result:  %d)", retval);
+
+    pr_info("Modem_Ctrl: IRQ request for GPIO (RST_OUT: %d)", RESET_OUT);
+    retval = gpio_request(RESET_OUT, "reset_out");
+    retval =
+        request_irq(RESET_OUT,
+                mdm_ctrl_reset_it,
+                IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+                IRQF_NO_SUSPEND, "Modem_Ctrl", NULL);
+    if (retval) {
+        pr_info("Modem_Ctrl: IRQ request failed for GPIO (RST_OUT)");
+        retval = -ENODEV;
+        //return retval;
+    }
+
+// if core dump gpio 160 is requested, touch will NOT work, enable it after root cause is found.
+    pr_info("Moem_Ctrl: IRQ request for GPIO (CORE_DUMP: %d)", CORE_DUMP);
+    retval = gpio_request(CORE_DUMP, "core_dump");
+    retval =
+        request_irq(CORE_DUMP,
+                mdm_ctrl_coredump_it,
+                IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, "Modem_Ctrl",
+                NULL);
+    if (retval) {
+        pr_info("Moem_Ctrl: IRQ request failed for GPIO (CORE_DUMP)");
+        retval = -ENODEV;
+        //return retval;
+    }
+
+    pr_info("Modem_Ctrl: Finish Power On Modem");
+*/
 
 	retval = tty_register_driver(acm_tty_driver);
 	if (retval) {

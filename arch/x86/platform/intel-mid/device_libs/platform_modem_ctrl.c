@@ -65,7 +65,8 @@ static struct cfg_match cfg_assoc_tbl[] = {
 	{"XMM7260_CONF_5", "XMM_7260_REV2", CPU_TANGIER},
 	{"XMM7260_CONF_8", "XMM_7260_REV2", CPU_TANGIER},
 	/* Baytrail FFRD8 */
-	{"XMM7160_CONF_3", "XMM_7160", CPU_VVIEW2},
+	/* H350 power on use shortly*/
+	{"XMM6260_CONF_h", "XMM_7160", CPU_VVIEW2},
 	/* CTP 7160 */
 	{"XMM7160_CONF_4", "XMM_7160_REV3", CPU_CLVIEW},
 	{"XMM7160_CONF_5", "XMM_7160_REV3_5", CPU_CLVIEW},
