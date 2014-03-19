@@ -86,7 +86,7 @@ static void usb2phy_eye_optimization(struct dwc_otg2 *otg)
 	struct intel_dwc_otg_pdata *data;
 
 	if (!otg || !otg->otg_data)
-		return -EINVAL;
+		return;
 
 	data = (struct intel_dwc_otg_pdata *)otg->otg_data;
 
@@ -373,7 +373,8 @@ static int enable_usb_phy(struct dwc_otg2 *otg, bool on_off)
 		if (ret)
 			otg_err(otg, "Fail to enable VBUSPHY\n");
 
-		msleep(20);
+		/* Debounce 10ms for turn on VUSBPHY */
+		usleep_range(10000, 11000);
 	} else {
 		ret = intel_scu_ipc_update_register(PMIC_VLDOCNT,
 				0x00, PMIC_VLDOCNT_VUSBPHYEN);
@@ -394,8 +395,6 @@ int basin_cove_get_id(struct dwc_otg2 *otg)
 			USBIDCTRL_ACA_DETEN_D1 | PMIC_USBPHYCTRL_D0);
 	if (ret)
 		otg_err(otg, "Fail to enable ACA&ID detection logic\n");
-
-	mdelay(50);
 
 	ret = intel_scu_ipc_ioread8(PMIC_USBIDSTS, &idsts);
 	if (ret) {
@@ -647,6 +646,9 @@ static int dwc3_intel_set_power(struct usb_phy *_otg,
 
 	/* Covert macro to integer number*/
 	switch (ma) {
+	case OTG_USB2_0MA:
+		ma = 0;
+		break;
 	case OTG_USB2_100MA:
 		ma = 100;
 		break;
@@ -724,39 +726,6 @@ static int dwc3_intel_notify_charger_type(struct dwc_otg2 *otg,
 	return ret;
 }
 
-static void dwc3_phy_soft_reset(struct dwc_otg2 *otg)
-{
-	u32 val;
-
-	val = otg_read(otg, GCTL);
-	val |= GCTL_CORESOFTRESET;
-	otg_write(otg, GCTL, val);
-
-	val = otg_read(otg, GUSB3PIPECTL0);
-	val |= GUSB3PIPECTL_PHYSOFTRST;
-	otg_write(otg, GUSB3PIPECTL0, val);
-
-	val = otg_read(otg, GUSB2PHYCFG0);
-	val |= GUSB2PHYCFG_PHYSOFTRST;
-	otg_write(otg, GUSB2PHYCFG0, val);
-
-	msleep(50);
-
-	val = otg_read(otg, GUSB3PIPECTL0);
-	val &= ~GUSB3PIPECTL_PHYSOFTRST;
-	otg_write(otg, GUSB3PIPECTL0, val);
-
-	val = otg_read(otg, GUSB2PHYCFG0);
-	val &= ~GUSB2PHYCFG_PHYSOFTRST;
-	otg_write(otg, GUSB2PHYCFG0, val);
-
-	msleep(100);
-
-	val = otg_read(otg, GCTL);
-	val &= ~GCTL_CORESOFTRESET;
-	otg_write(otg, GCTL, val);
-}
-
 static enum power_supply_charger_cable_type
 			dwc3_intel_get_charger_type(struct dwc_otg2 *otg)
 {
@@ -780,7 +749,6 @@ static enum power_supply_charger_cable_type
 	 * Power on PHY
 	 */
 	enable_usb_phy(otg, true);
-	dwc3_phy_soft_reset(otg);
 
 	if (is_basin_cove(otg)) {
 		/* Enable ACA:
@@ -847,7 +815,10 @@ static enum power_supply_charger_cable_type
 	 * Check ID pin state.
 	 */
 	val = dwc3_intel_get_id(otg);
-	if (val != RID_FLOAT) {
+	if (val == RID_GND) {
+		type = POWER_SUPPLY_CHARGER_TYPE_B_DEVICE;
+		goto cleanup;
+	} else if (val != RID_FLOAT) {
 		type = dwc3_intel_aca_check(otg);
 		goto cleanup;
 	}

@@ -383,7 +383,7 @@ struct dwc_otg2 {
 		__rc;						\
 	})
 
-#define VBUS_TIMEOUT	100
+#define VBUS_TIMEOUT	20
 #define PCI_DEVICE_ID_DWC 0x119E
 #define PCI_DEVICE_ID_DWC_VLV 0x0F37
 
@@ -424,6 +424,7 @@ struct dwc3_otg_hw_ops {
 	int (*resume)(struct dwc_otg2 *otg);
 };
 
+#define OTG_USB2_0MA				0xfff0
 #define OTG_USB2_100MA				0xfff1
 #define OTG_USB3_150MA				0xfff2
 #define OTG_USB2_500MA				0xfff3

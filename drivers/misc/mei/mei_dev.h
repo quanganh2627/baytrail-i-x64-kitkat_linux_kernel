@@ -43,6 +43,11 @@
 
 #define MEI_RD_MSG_BUF_SIZE           (128 * sizeof(u32))
 
+/**
+ * 100 should be enough concurrent allocations to have; too many
+ * will overrun system memory and crash system
+ */
+#define MEI_MAX_ALLOCS 100
 
 /*
  * AMTHI Client UUID
@@ -375,6 +380,8 @@ struct mei_device {
 	struct mei_cl_cb write_waiting_list;	/* write waiting queue */
 	struct mei_cl_cb ctrl_wr_list;		/* managed write IOCTL list */
 	struct mei_cl_cb ctrl_rd_list;		/* managed read IOCTL list */
+	int req_alloc_count;
+	int resp_alloc_count;
 
 	/*
 	 * list of files
