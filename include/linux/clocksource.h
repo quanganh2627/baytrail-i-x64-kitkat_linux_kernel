@@ -17,9 +17,9 @@
 #include <linux/init.h>
 #include <asm/div64.h>
 #include <asm/io.h>
+#include <linux/kernel.h>
 
 /* clocksource cycle base type */
-typedef u64 cycle_t;
 struct clocksource;
 
 #ifdef CONFIG_ARCH_CLOCKSOURCE_DATA
