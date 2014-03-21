@@ -96,6 +96,7 @@ struct mt_device {
 	struct mt_class mtclass;	/* our mt device class */
 	struct mt_fields *fields;	/* temporary placeholder for storing the
 					   multitouch fields */
+	struct hid_device_id id;
 	int cc_index;	/* contact count field index in the report */
 	int cc_value_index;	/* contact count value index in the field */
 	unsigned last_slot_field;	/* the last field of a slot */
@@ -150,6 +151,7 @@ static void mt_post_parse(struct mt_device *td);
 #define MT_MAX_MAXCONTACT	250
 
 #define MT_USB_DEVICE(v, p)	HID_DEVICE(BUS_USB, HID_GROUP_MULTITOUCH, v, p)
+#define MT_DEVICE(v, p)		HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, v, p)
 #define MT_BT_DEVICE(v, p)	HID_DEVICE(BUS_BLUETOOTH, HID_GROUP_MULTITOUCH, v, p)
 
 /*
@@ -344,15 +346,18 @@ static void mt_feature_mapping(struct hid_device *hdev,
 		break;
 	case 0xff0000c5:
 		if (field->report_count == 256 && field->report_size == 8) {
-			/* Win 8 devices need special quirks */
 			__s32 *quirks = &td->mtclass.quirks;
-			*quirks |= MT_QUIRK_ALWAYS_VALID;
-			*quirks |= MT_QUIRK_IGNORE_DUPLICATES;
-			*quirks |= MT_QUIRK_HOVERING;
-			*quirks |= MT_QUIRK_CONTACT_CNT_ACCURATE;
-			*quirks &= ~MT_QUIRK_NOT_SEEN_MEANS_UP;
-			*quirks &= ~MT_QUIRK_VALID_IS_INRANGE;
-			*quirks &= ~MT_QUIRK_VALID_IS_CONFIDENCE;
+			if (!(td->id.vendor == USB_VENDOR_ID_ATMEL) &&
+			!(td->id.product == USB_DEVICE_ID_ATMEL_MXT3432_MULTITOUCH)) {
+				/* Win 8 devices need special quirks */
+				*quirks |= MT_QUIRK_ALWAYS_VALID;
+				*quirks |= MT_QUIRK_IGNORE_DUPLICATES;
+				*quirks |= MT_QUIRK_HOVERING;
+				*quirks |= MT_QUIRK_CONTACT_CNT_ACCURATE;
+				*quirks &= ~MT_QUIRK_NOT_SEEN_MEANS_UP;
+				*quirks &= ~MT_QUIRK_VALID_IS_INRANGE;
+				*quirks &= ~MT_QUIRK_VALID_IS_CONFIDENCE;
+			}
 		}
 		break;
 	}
@@ -1112,6 +1117,8 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	td->mt_report_id = -1;
 	td->pen_report_id = -1;
 	td->gd_report_id = -1;
+	td->id.vendor = id->vendor;
+	td->id.product = id->product;
 	hid_set_drvdata(hdev, td);
 
 	td->fields = kzalloc(sizeof(struct mt_fields), GFP_KERNEL);
@@ -1211,6 +1218,9 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_SERIAL,
 		MT_USB_DEVICE(USB_VENDOR_ID_ATMEL,
 			USB_DEVICE_ID_ATMEL_MXT_DIGITIZER) },
+	{ .driver_data = MT_CLS_NSMU,
+		MT_DEVICE(USB_VENDOR_ID_ATMEL,
+			USB_DEVICE_ID_ATMEL_MXT3432_MULTITOUCH) },
 
 	/* Baanto multitouch devices */
 	{ .driver_data = MT_CLS_NSMU,
