@@ -71,6 +71,8 @@
 
 #define BYT_EC_BUTTON_STATUS		0xC9
 
+#define BYT_EC_S3_WAKEUP_STATUS         0xB7
+
 /* EC commands */
 enum byt_ec_commands {
 	BYT_EC_ACPI_ENABLE = 0xAA,

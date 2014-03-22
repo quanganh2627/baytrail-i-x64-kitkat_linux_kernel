@@ -38,6 +38,8 @@
 
 #define DRIVER_NAME "byt_buttons"
 
+#define PWRBTN_HID_WAKE  0x01
+
 #define POWER_BTN_STAT_MASK	(1 << 0)
 #define VOLUP_BTN_STAT_MASK	(1 << 1)
 #define VOLDOWN_BTN_STAT_MASK	(1 << 2)
@@ -73,7 +75,10 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 {
 	u8 stat;
 	u8 valid;
+	u8 wakeup_status;
 	int ret = NOTIFY_OK;
+	int KEY_PRESSED = 1;
+	int KEY_RELEASED = 0;
 	struct byt_buttons_priv *priv;
 
 	priv = container_of(nb, struct byt_buttons_priv, nb);
@@ -116,6 +121,20 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 		input_sync(priv->input);
 		priv->last_stat = stat;
 
+		ret = byt_ec_read_byte(BYT_EC_S3_WAKEUP_STATUS, &wakeup_status);
+		if (ret) {
+			dev_err(&priv->input->dev,
+				"Query button status failed\n");
+			mutex_unlock(&priv->btn_mutex);
+			return NOTIFY_DONE;
+		}
+		if (wakeup_status & PWRBTN_HID_WAKE) {
+			ret = byt_ec_write_byte(BYT_EC_S3_WAKEUP_STATUS, 0x0);
+			if (ret) {
+				dev_err(&priv->input->dev,
+					"Clear wakeup status failed\n");
+			}
+		}
 		mutex_unlock(&priv->btn_mutex);
 		break;
 	case BYT_EC_SCI_LID:
@@ -124,6 +143,25 @@ static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 		ret = send_lid_state(priv->input);
 		if (ret)
 			ret = NOTIFY_DONE;
+		ret = byt_ec_read_byte(BYT_EC_S3_WAKEUP_STATUS, &wakeup_status);
+		if (ret) {
+			dev_err(&priv->input->dev,
+				"Query button status failed\n");
+			mutex_unlock(&priv->btn_mutex);
+			return NOTIFY_DONE;
+		}
+		if (wakeup_status & PWRBTN_HID_WAKE) {
+			input_event(priv->input, EV_KEY, KEY_POWER,
+				KEY_PRESSED);
+			input_event(priv->input, EV_KEY, KEY_POWER,
+				KEY_RELEASED);
+			input_sync(priv->input);
+			ret = byt_ec_write_byte(BYT_EC_S3_WAKEUP_STATUS, 0x0);
+			if (ret) {
+				dev_err(&priv->input->dev,
+					"Clear wakeup status failed\n");
+			}
+		}
 		mutex_unlock(&priv->btn_mutex);
 		break;
 	default:
