@@ -193,8 +193,11 @@ static int smsc375x_detect_dev(struct smsc375x_chip *chip)
 	else
 		stat = ret;
 
-	if (!(stat & STAT_CHRG_DET_DONE))
+	if (!(stat & STAT_CHRG_DET_DONE)) {
 		dev_info(&chip->client->dev, "DET failed");
+		return -EFAULT;
+	}
+
 
 	ret = smsc375x_read_reg(client, SMSC375X_REG_CFG);
 	if (ret < 0)
