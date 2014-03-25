@@ -30,7 +30,7 @@ static int vlv2_pci_enable_irq(struct pci_dev *pdev)
 	irq_attr.ioapic = mp_find_ioapic(pdev->irq);
 	if (irq_attr.ioapic < 0) {
 		dev_warn(&pdev->dev, "VLV2: no IOAPIC found for IRQ %d\n", pdev->irq);
-		return -ENODEV;
+		return 0;
 	}
 	irq_attr.ioapic_pin = pdev->irq;
 	irq_attr.trigger = 1; /* level */
