@@ -102,8 +102,10 @@ int i2c_sensor_hw_suspend(struct i2c_client *client)
 int i2c_sensor_hw_resume(struct i2c_client *client)
 {
 	if (gpio_psh_ctl > 0) {
+		gpio_set_value(gpio_psh_ctl, 0);
+		msleep(50);
 		gpio_set_value(gpio_psh_ctl, 1);
-		usleep_range(800, 800);
+		msleep(10);
 	}
 	dev_dbg(&client->dev, "I2C HID resume: %s\n", __func__);
 	return 0;
@@ -112,9 +114,9 @@ int i2c_sensor_hw_resume(struct i2c_client *client)
 int i2c_sensor_hw_reset(struct i2c_client *client)
 {
 	gpio_set_value(gpio_psh_rst, 0);
-	usleep_range(10000, 10000);
+	msleep(50);
 	gpio_set_value(gpio_psh_rst, 1);
-	msleep(500);
+	msleep(10);
 	dev_dbg(&client->dev, "I2C HID hardware reset : %s\n", __func__);
 	return 0;
 }
