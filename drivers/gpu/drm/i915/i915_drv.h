@@ -1179,7 +1179,12 @@ enum drrs_support_type {
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
-
+	struct {
+		u16 pwm_freq_hz;
+		bool active_low_pwm;
+		u8 brightness_level;
+		bool is_inverter_type_pwm;
+	} backlight;
 	/* Feature bits */
 	unsigned int int_tv_support:1;
 	unsigned int lvds_dither:1;
