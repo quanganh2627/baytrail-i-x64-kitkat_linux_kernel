@@ -498,6 +498,14 @@ extern int EsifTraceMessage(esif_tracemask_t module, int level, const char *func
 /* ESIF_TRACE_IFENABLED messages are always compiled into binary and routed if module/level enabled, regardles of current trace level */
 #define ESIF_TRACE_IFENABLED(module, level, msg, ...) ESIF_DOTRACE_IFENABLED(ESIF_TRACEMASK(module), level, msg, ##__VA_ARGS__)
 
+/* Use these for tracing Entry/Exit of functions */
+#define ESIF_TRACE_ENTRY()		ESIF_TRACE_DEBUG("Entering Function")
+#define ESIF_TRACE_EXIT()		ESIF_TRACE_DEBUG("Exiting Function")
+
+/* Use these for tracing Entry/Exit of functions that you need logged at INFO level (rare) */
+#define ESIF_TRACE_ENTRY_INFO()	ESIF_TRACE_INFO("Entering Function")
+#define ESIF_TRACE_EXIT_INFO()	ESIF_TRACE_INFO("Exiting Function")
+
 #endif /* ESIF_ATTR_USER */
 
 #endif	/* _ESIF_DEBUG_H_ */

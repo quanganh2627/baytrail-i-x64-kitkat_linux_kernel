@@ -102,7 +102,7 @@ typedef char *esif_string;		/* Opaque ESIF String ASCIIZ Today */
 				/* In Structure Order        */
 
 /* Build option to enable coalescable timers in Windows */
-/* #define ESIF_ATTR_USE_COALESCABLE_TIMERS */
+#define ESIF_ATTR_USE_COALESCABLE_TIMERS
 
 /* We Use The Linux Dictionary So Add For Windows */
 typedef unsigned char u8;	/* A BYTE  */
@@ -224,13 +224,14 @@ typedef esif_string EsifString;
 #define ESIF_NOT_AVAILABLE "NA"
 
 /* Data Lengths */
-#define ESIF_NAME_LEN    64	/* Maximum Name Length        */
-#define ESIF_DESC_LEN    64	/* Maximum Description Length */
-#define ESIF_SCOPE_LEN   64	/* Maximum ACPI Scope Length  */
-#define ESIF_OBJ_LEN     64	/* Maximum Object Name Length */
-#define ESIF_GUID_LEN    16	/* Length of a GUID In Bytes  */
-#define ESIF_PATH_LEN    128	/* Maximum Path Length        */
-#define ESIF_LIBPATH_LEN 128	/* Maximum Lib Path Length    */
+#define ESIF_NAME_LEN		64	/* Maximum Name Length        */
+#define ESIF_DESC_LEN		64	/* Maximum Description Length */
+#define ESIF_SCOPE_LEN		64	/* Maximum ACPI Scope Length  */
+#define ESIF_OBJ_LEN		64	/* Maximum Object Name Length */
+#define ESIF_GUID_LEN		16	/* Length of a GUID In Bytes  */
+#define ESIF_PATH_LEN		128	/* Maximum Path Length        */
+#define ESIF_LIBPATH_LEN	128	/* Maximum Lib Path Length    */
+#define ESIF_ACPI_UID_LEN	64	/* Maximum ACPI UID Length  */
 
 #define ESIF_TRUE 1		/* C True */
 #define ESIF_FALSE 0		/* C False */

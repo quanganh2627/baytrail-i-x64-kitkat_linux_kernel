@@ -804,7 +804,9 @@ enum esif_rc esif_lf_event(
 		esif_ccb_memcpy(&evt_data.acpi_scope,
 				lp_ptr->pi_ptr->acpi_scope,
 				ESIF_SCOPE_LEN);
-		evt_data.acpi_uid  = lp_ptr->pi_ptr->acpi_uid;
+		esif_ccb_memcpy(&evt_data.acpi_uid,
+				lp_ptr->pi_ptr->acpi_uid,
+				sizeof(evt_data.acpi_uid));
 		evt_data.acpi_type = lp_ptr->pi_ptr->acpi_type;
 
 		esif_ccb_memcpy(((u8 *)(ipc_ptr + 1) +
@@ -1030,7 +1032,7 @@ enum esif_rc esif_lf_register_participant(struct esif_participant_iface *pi_ptr)
 		"Device Path:    %s\n"
 		"ACPI Device:    %s\n"
 		"ACPI Scope:     %s\n"
-		"ACPI UID:       %x\n"
+		"ACPI UID:       %s\n"
 		"ACPI Type:      %x\n"
 		"PCI Vendor:     %x\n"
 		"PCI Device:     %x\n"

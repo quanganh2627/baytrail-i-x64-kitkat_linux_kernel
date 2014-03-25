@@ -164,8 +164,8 @@ struct esif_command_get_participant_detail {
 
 	/* ACPI */
 	char  acpi_device[ESIF_SCOPE_LEN];	/* Device e.g. INT3400 */
-	char  acpi_scope[ESIF_SCOPE_LEN]; /* Scope/REGEX e.g. \_SB.PCI0.TPCH */
-	u32   acpi_uid; /* Unique ID If Any */
+	char  acpi_scope[ESIF_SCOPE_LEN];/* Scope/REGEX e.g. \_SB.PCI0.TPCH */
+	char  acpi_uid[ESIF_ACPI_UID_LEN];	/* Unique ID If Any */
 	u32   acpi_type; /* Participant Type If Any */
 
 	/* PCI */

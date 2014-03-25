@@ -87,10 +87,10 @@ struct esif_participant_iface {
 				    struct esif_data *data);
 
 	/* ACPI */
-	char  acpi_device[ESIF_SCOPE_LEN];	/* Device INT340X */
+	char  acpi_device[ESIF_SCOPE_LEN];/* Device INT340X */
 	char  acpi_scope[ESIF_SCOPE_LEN]; /* Scope/REGEX e.g. \_SB.PCI0.TPCH  */
-	u32   acpi_uid;				/* Unique ID If Any */
-	u32   acpi_type;			/* Participant Type If Any */
+	char  acpi_uid[ESIF_ACPI_UID_LEN];   /* Unique ID If Any        */
+	u32   acpi_type;                  /* Participant Type If Any */
 
 	/* PCI */
 	u32  pci_vendor;	/* PCI Vendor e.g. 0x8086 For Intel */

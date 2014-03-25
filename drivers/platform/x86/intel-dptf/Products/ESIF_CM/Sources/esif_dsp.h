@@ -166,8 +166,8 @@ void esif_dsp_exit (void);
 #define THIS struct esif_up_dsp *THIS
 
 #define MAX_DSP_MANAGER_ENTRY 128
-#define ESIF_DSP_NAMESPACE              "dsp"	/* DSP DataVault Namespace
-						 * (namespace.dv) */
+#define ESIF_DSP_NAMESPACE              "dsp"	/* DSP DataVault Namespace */
+#define ESIF_DSP_OVERRIDE_NAMESPACE	"override" /* DSP Overrides DV name */
 #define ESIF_EDP_DV_PRIORITY    0		/* 0=EDP on disk overrides EDP
 						 * in DataVault, 1=EDP in
 						 * DataVault overrides EDP on
