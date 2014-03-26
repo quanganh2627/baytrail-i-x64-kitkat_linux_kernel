@@ -498,7 +498,7 @@ health_read_fail:
 
 static int get_charging_status(struct pmic_chrg_info *info)
 {
-	int stat;
+	int stat = POWER_SUPPLY_STATUS_UNKNOWN;
 	int pwr_stat, chrg_stat, bat_irq_stat;
 
 	pwr_stat = pmic_chrg_reg_readb(info, DC_PS_STAT_REG);
