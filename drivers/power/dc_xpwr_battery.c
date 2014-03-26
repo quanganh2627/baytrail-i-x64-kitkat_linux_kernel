@@ -334,7 +334,7 @@ static int pmic_fg_get_current(struct pmic_fg_info *info, int *cur)
 	pwr_stat = pmic_fg_reg_readb(info, DC_PS_STAT_REG);
 	if (pwr_stat < 0) {
 		dev_err(&info->pdev->dev, "PWR STAT read failed:%d\n", ret);
-		return ret;
+		return pwr_stat;
 	}
 
 	if (pwr_stat & PS_STAT_BAT_CHRG_DIR) {
@@ -579,7 +579,6 @@ static void pmic_fg_status_monitor(struct work_struct *work)
 {
 	struct pmic_fg_info *info = container_of(work,
 		struct pmic_fg_info, status_monitor.work);
-	static int cap, health;
 
 	power_supply_changed(&info->bat);
 	schedule_delayed_work(&info->status_monitor, STATUS_MON_DELAY_JIFFIES);
