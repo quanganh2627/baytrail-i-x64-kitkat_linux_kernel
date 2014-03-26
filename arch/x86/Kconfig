@@ -154,7 +154,10 @@ config SBUS
 	bool
 
 config MRD7
-	tristate "Baytrail MRD7"
+	bool "Baytrail CR MRD7"
+
+config MRD8
+	bool "Baytrail CR MRD8"
 
 config NEED_DMA_MAP_STATE
 	def_bool y
