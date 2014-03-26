@@ -10544,6 +10544,11 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	if (dev_priv->dpst.state)
 		i915_dpst_enable_hist_interrupt(dev);
 
+	DRM_DEBUG_PM("Value in iClk5val = %x\n",
+		vlv_ccu_read(dev_priv, CCU_ICLK5_REG));
+	DRM_DEBUG_PM("Value in iClkgtval = %x\n",
+		vlv_ccu_read(dev_priv, CCU_ICLK_GATE_CTRL_REG));
+
 	return 0;
 }
 
@@ -11795,7 +11800,7 @@ void intel_connector_attach_encoder(struct intel_connector *connector,
 int intel_modeset_vga_set_state(struct drm_device *dev, bool state)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	u16 gmch_ctrl;
+	u16 gmch_ctrl = 0;
 
 	pci_read_config_word(dev_priv->bridge_dev, INTEL_GMCH_CTRL, &gmch_ctrl);
 	if (state)

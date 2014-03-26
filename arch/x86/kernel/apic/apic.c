@@ -2236,7 +2236,11 @@ static int lapic_suspend(void)
 	 */
 	if ((intel_mid_identify_cpu() != 0) ||
 			(boot_cpu_data.x86_model == 0x37)) {
-		apic_write(APIC_TMICT, ~0);
+		if (this_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER))
+			wrmsrl(MSR_IA32_TSC_DEADLINE, 0);
+		else
+			apic_write(APIC_TMICT, ~0);
+
 		return 0;
 	}
 #endif
@@ -2277,6 +2281,7 @@ static void lapic_resume(void)
 	unsigned int l, h;
 	unsigned long flags;
 	int maxlvt;
+	u64 tsc;
 
 #ifndef CONFIG_ENABLE_S3
 	/*
@@ -2285,7 +2290,11 @@ static void lapic_resume(void)
 	 */
 	if ((intel_mid_identify_cpu() != 0) ||
 			(boot_cpu_data.x86_model == 0x37)) {
-		apic_write(APIC_TMICT, 10);
+		if (this_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
+			rdtscll(tsc);
+			wrmsrl(MSR_IA32_TSC_DEADLINE, tsc + 10);
+		} else
+			apic_write(APIC_TMICT, 10);
 		return;
 	}
 #endif

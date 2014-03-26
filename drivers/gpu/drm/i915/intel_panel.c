@@ -451,7 +451,7 @@ static u32 intel_panel_get_backlight(struct drm_device *dev)
 			val >>= 1;
 
 		if (is_backlight_combination_mode(dev)) {
-			u8 lbpc;
+			u8 lbpc = 0;
 
 			pci_read_config_byte(dev->pdev, PCI_LBPC, &lbpc);
 			val *= lbpc;
@@ -680,11 +680,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 			intel_mid_pmic_writeb(0x51, 0x01);
 
 			/* Control Backlight Slope programming for LP8556 IC*/
-<<<<<<< HEAD
-			if (lpdata) {
-=======
 			if (lpdata && (spid.hardware_id == BYT_TABLET_BLK_8PR1)) {
->>>>>>> 74764b60d1e495cfef738314b9cb8bf689eed269
 				mdelay(2);
 				if (lp855x_ext_write_byte(LP8556_CFG3, LP8556_MODE_SL_50MS_FL_HV_PWM_12BIT))
 					DRM_ERROR("Backlight slope programming failed\n");
