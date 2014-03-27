@@ -338,14 +338,6 @@ static int ov2722_power_ctrl(struct v4l2_subdev *sd, int flag)
 #endif
 	int ret = 0;
 
-#ifdef CONFIG_CRYSTAL_COVE
-	if (!v1p8_reg || !v2p8_reg) {
-		dev_err(&client->dev,
-				"not avaiable regulator\n");
-		return -EINVAL;
-	}
-#endif
-
 	if (flag) {
 		if (!camera_vprog1_on) {
 #ifdef CONFIG_CRYSTAL_COVE
