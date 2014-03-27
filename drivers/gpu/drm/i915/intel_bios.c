@@ -636,6 +636,12 @@ u8 *goto_next_sequence(u8 *data)
 		case MIPI_SEQ_ELEM_GPIO:
 			data += 2;
 			break;
+		case MIPI_SEQ_ELEM_I2C:
+			/* skip by this element payload size */
+			data += 6;
+			len = *data;
+			data += len + 1;
+			break;
 		default:
 			DRM_ERROR("Unknown element\n");
 			break;
@@ -784,10 +790,22 @@ parse_mipi(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 									data;
 			DRM_DEBUG_DRIVER("Found MIPI_SEQ_DEASSERT_RESET\n");
 			break;
+		case MIPI_SEQ_BACKLIGHT_ON:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_BACKLIGHT_ON] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_BACKLIGHT ON\n");
+			break;
+		case MIPI_SEQ_BACKLIGHT_OFF:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_BACKLIGHT_OFF] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_BACKLIGHT OFF\n");
+			break;
+		case MIPI_SEQ_TEAR_ON:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_TEAR_ON] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_Tear ON\n");
+			break;
 		case MIPI_SEQ_UNDEFINED:
 		default:
-			DRM_ERROR("undefined sequnce\n");
-			continue;
+			DRM_ERROR("undefined sequence : %d\n", *data);
+			goto out;
 		}
 
 		/* partial parsing to skip elements */
@@ -798,6 +816,9 @@ parse_mipi(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 	}
 
 	DRM_DEBUG_DRIVER("MIPI related vbt parsing complete\n");
+out:
+	memset(dev_priv->vbt.dsi.sequence, 0, sizeof(dev_priv->vbt.dsi.sequence));
+	kfree(dev_priv->vbt.dsi.data);
 }
 
 static void
