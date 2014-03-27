@@ -37,6 +37,7 @@
 #include <linux/power_supply.h>
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
+#include "internal.h"
 
 #define PREFIX "ACPI: "
 
@@ -47,6 +48,9 @@
 #define ACPI_AC_STATUS_OFFLINE		0x00
 #define ACPI_AC_STATUS_ONLINE		0x01
 #define ACPI_AC_STATUS_UNKNOWN		0xFF
+#define BYT_EC_SCI_ACINSERTION          0x30    /* AC insertion SCI */
+#define BYT_EC_SCI_ACREMOVAL            0x31    /* AC removal SCI */
+
 
 #define _COMPONENT		ACPI_AC_COMPONENT
 ACPI_MODULE_NAME("ac");
@@ -96,6 +100,8 @@ struct acpi_ac {
 	struct acpi_device * device;
 	unsigned long long state;
 };
+
+static struct acpi_ac *ac1;
 
 #define to_acpi_ac(x) container_of(x, struct acpi_ac, charger)
 
@@ -295,14 +301,42 @@ static struct dmi_system_id ac_dmi_table[] = {
 	},
 	{},
 };
+typedef int (*acpi_ec_query_func) (void *data);
+extern int acpi_ec_add_query_handler(struct acpi_ec *ec, u8 query_bit,
+		acpi_handle handle, acpi_ec_query_func func,
+		void *data);
+
+static int ac_event_handler(void *data)
+{
+	int event;
+	event = (int *)data;
+
+	switch (event) {
+	case BYT_EC_SCI_ACINSERTION:
+	case BYT_EC_SCI_ACREMOVAL:
+		acpi_ac_get_state(ac1);
+		acpi_bus_generate_proc_event(ac1->device, event, (u32) ac1->state);
+		acpi_bus_generate_netlink_event(ac1->device->pnp.device_class,
+					dev_name(&ac1->device->dev), event,
+					(u32) ac1->state);
+		acpi_notifier_call_chain(ac1->device, event, (u32) ac1->state);
+		power_supply_changed(&ac1->charger);
+		break;
+	default:
+		printk(KERN_WARNING PREFIX "Not a AC charger event\n");
+		break;
+	}
+	return 0;
+}
 
 static int acpi_ac_add(struct acpi_device *device)
 {
 	int result = 0;
 	struct acpi_ac *ac = NULL;
+	struct acpi_ec *ec;
 
-
-	if (!device)
+	ec = first_ec;
+	if (!device || !ec)
 		return -EINVAL;
 
 	ac = kzalloc(sizeof(struct acpi_ac), GFP_KERNEL);
@@ -335,6 +369,10 @@ static int acpi_ac_add(struct acpi_device *device)
 	printk(KERN_INFO PREFIX "%s [%s] (%s)\n",
 	       acpi_device_name(device), acpi_device_bid(device),
 	       ac->state ? "on-line" : "off-line");
+
+	acpi_ec_add_query_handler(ec, BYT_EC_SCI_ACINSERTION, NULL, ac_event_handler, BYT_EC_SCI_ACINSERTION);
+	acpi_ec_add_query_handler(ec, BYT_EC_SCI_ACREMOVAL, NULL, ac_event_handler, BYT_EC_SCI_ACREMOVAL);
+	ac1 = ac;
 
       end:
 	if (result) {
