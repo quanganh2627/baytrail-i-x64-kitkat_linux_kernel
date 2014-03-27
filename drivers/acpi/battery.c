@@ -534,7 +534,8 @@ static int acpi_battery_set_alarm(struct acpi_battery *battery)
 	    !test_bit(ACPI_BATTERY_ALARM_PRESENT, &battery->flags))
 		return -ENODEV;
 
-	arg0.integer.value = battery->alarm;
+	/* Clear the trip point */
+	arg0.integer.value = 0;
 
 	mutex_lock(&battery->lock);
 	status = acpi_evaluate_object(battery->device->handle, "_BTP",
@@ -1082,7 +1083,7 @@ static int acpi_battery_add(struct acpi_device *device)
 	mutex_init(&battery->sysfs_lock);
 	if (ACPI_SUCCESS(acpi_get_handle(battery->device->handle,
 			"_BIX", &handle)))
-		set_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags);
+		clear_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags);
 	result = acpi_battery_update(battery);
 	if (result)
 		goto fail;
