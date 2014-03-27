@@ -35,9 +35,75 @@
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include "linux/mfd/intel_mid_pmic.h"
+#include <linux/pwm.h>
+#undef DRM_DEBUG_KMS
+#define DRM_DEBUG_KMS(fmt, args...)				\
+	do {								\
+		my_drm_ut_debug_printk(DRM_UT_KMS, DRM_NAME, 		\
+					 __func__, fmt, ##args);	\
+	} while (0)
+extern void my_drm_ut_debug_printk(unsigned int request_level,
+			 const char *prefix,
+			 const char *function_name,
+			 const char *format, ...);
+#ifdef CONFIG_MRD7
+extern void ps8622_send_init_cmd(void);
+extern int ps8622_init(void) ;
+#endif
 
 #define DP_LINK_CHECK_TIMEOUT	(10 * 1000)
 #define EDP_PSR_MODE 0 /* 0 = HW TIMER, 1 = SW TIMER */
+
+
+
+
+#ifdef CONFIG_MRD7
+static void
+intel_dp_init_edp_port(struct drm_device *dev)
+{
+   struct drm_i915_private *dev_priv = dev->dev_private;
+   u32 vdden_pad;
+   //panel1_vdden_pconf
+   vdden_pad = vlv_gpio_nc_read(dev_priv,0x4100);
+   vdden_pad &= ~(0x7);
+   vdden_pad |= 0x2; //3'b010
+   vlv_gpio_nc_write(dev_priv,0x4100,vdden_pad);
+   vdden_pad = vlv_gpio_nc_read(dev_priv,0x4100);
+   DRM_DEBUG_KMS("panel1_vdden_pconf :0x%08x\n",vdden_pad);
+   usleep_range(10000, 12000);
+
+}
+
+
+static int
+intel_dp_ctrl_lvds_panel(struct drm_device *dev, u32 ctrl)
+{
+  struct drm_i915_private *dev_priv = dev->dev_private;
+	int val;
+	int ret;
+	DRM_DEBUG_KMS("ctrl:%d\n",ctrl);
+	//DLDO3
+  val = intel_mid_pmic_readb(0x12);
+  if(ctrl > 0)
+    val |= 1<<5;
+  else
+    val &= ~(1<<5);
+  ret = intel_mid_pmic_writeb(0x12, val);
+  
+  if(ctrl) {
+     //Bridge MDSI_A_TE GPIONC_12  => RST# active low
+    	vlv_gpio_nc_write(dev_priv,0x40c0,0x2000cc00);
+    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000005);
+    	usleep_range(2000,5000);
+    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000004);
+    	usleep_range(2000,5000);
+    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000005);
+  }
+  return ret;
+}
+#endif
+
 /**
  * is_edp - is the given port attached to an eDP panel (either CPU or PCH)
  * @intel_dp: DP struct
@@ -1289,7 +1355,7 @@ void ironlake_edp_backlight_off(struct intel_dp *intel_dp)
 	if (!is_edp(intel_dp))
 		return;
 
-	/*intel_panel_disable_backlight(dev);*/
+	intel_panel_disable_backlight(dev);
 
 	DRM_DEBUG_KMS("\n");
 	pp = ironlake_get_pp_control(intel_dp);
@@ -2011,7 +2077,7 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	struct intel_dp *intel_dp = enc_to_intel_dp(&encoder->base);
 	enum port port = dp_to_dig_port(intel_dp)->port;
 	struct drm_device *dev = encoder->base.dev;
-
+	DRM_DEBUG_KMS("\n");
 	/* Make sure the panel is off before trying to change the mode. But also
 	 * ensure that we have vdd while we switch off the panel. */
 	ironlake_edp_panel_vdd_on(intel_dp);
@@ -2022,6 +2088,9 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	/* cpu edp my only be disable _after_ the cpu pipe/plane is disabled. */
 	if (!(port == PORT_A || IS_VALLEYVIEW(dev)))
 		intel_dp_link_down(intel_dp);
+#ifdef CONFIG_MRD7
+	intel_dp_ctrl_lvds_panel(dev, 0);
+#endif
 }
 
 static void intel_post_disable_dp(struct intel_encoder *encoder)
@@ -2043,11 +2112,14 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	uint32_t dp_reg = I915_READ(intel_dp->output_reg);
-
+	DRM_DEBUG_KMS("\n");
 	if (WARN_ON(dp_reg & DP_PORT_EN))
 		return;
-
 	ironlake_edp_panel_vdd_on(intel_dp);
+#ifdef CONFIG_MRD7
+	intel_dp_ctrl_lvds_panel(dev, 1);
+	ps8622_send_init_cmd();
+#endif
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
 	intel_dp_start_link_train(intel_dp);
 	ironlake_edp_panel_on(intel_dp);
@@ -3925,9 +3997,13 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 
 	intel_dp->drrs_state.type = DRRS_NOT_SUPPORTED;
 
+  DRM_DEBUG_KMS("\n");
 	if (!is_edp(intel_dp))
 		return true;
-
+#ifdef CONFIG_MRD7
+	intel_dp_ctrl_lvds_panel(dev, 1);
+	intel_dp_init_edp_port(dev);
+#endif
 	intel_dp_init_panel_power_sequencer(dev, intel_dp, &power_seq);
 
 	/* Cache DPCD and EDID for edp. */
@@ -4005,7 +4081,10 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	enum port port = intel_dig_port->port;
 	const char *name = NULL;
 	int type, error;
-
+#ifdef CONFIG_MRD7
+	intel_dp_ctrl_lvds_panel(dev, 1);
+	intel_dp_init_edp_port(dev);
+#endif
 	/* Preserve the current hw state. */
 	intel_dp->DP = I915_READ(intel_dp->output_reg);
 	intel_dp->attached_connector = intel_connector;
@@ -4145,6 +4224,11 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 	struct drm_encoder *encoder;
 	struct intel_connector *intel_connector;
 
+
+	//struct drm_i915_private *dev_priv = dev->dev_private;
+	DRM_DEBUG_KMS("\n");
+
+
 	intel_dig_port = kzalloc(sizeof(struct intel_digital_port), GFP_KERNEL);
 	if (!intel_dig_port)
 		return;
@@ -4184,6 +4268,10 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 	intel_encoder->crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
 	intel_encoder->cloneable = false;
 	intel_encoder->hot_plug = intel_dp_hot_plug;
+
+#ifdef CONFIG_MRD7
+	ps8622_init();
+#endif  
 
 	intel_connector->panel.fitting_mode = 0;
 	if (!intel_dp_init_connector(intel_dig_port, intel_connector)) {

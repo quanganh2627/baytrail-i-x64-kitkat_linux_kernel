@@ -48,6 +48,32 @@
 #include <asm/spid.h>
 #include <linux/shmem_fs.h>
 
+#undef DRM_DEBUG_KMS
+#define DRM_DEBUG_KMS(fmt, args...)				\
+	do {								\
+		my_drm_ut_debug_printk(DRM_UT_KMS, DRM_NAME,		\
+				__func__, fmt, ##args);	\
+	} while (0)
+extern void my_drm_ut_debug_printk(unsigned int request_level,
+		const char *prefix,
+		const char *function_name,
+		const char *format, ...);
+void my_drm_ut_debug_printk(unsigned int request_level,
+		const char *prefix,
+		const char *function_name,
+		const char *format, ...)
+{
+	va_list args;
+
+	{
+		if (function_name)
+			printk(KERN_DEBUG "[%s:%s], ", prefix, function_name);
+		va_start(args, format);
+		vprintk(format, args);
+		va_end(args);
+	}
+}
+
 #define MAX_BRIGHTNESS	255
 
 /*extern*/ int __wait_seqno(struct intel_ring_buffer *ring, u32 seqno,
@@ -10814,9 +10840,11 @@ static void intel_setup_outputs(struct drm_device *dev)
 		 *
 		 * eDP Vs MIPI detection is based on VBT
 		 */
+#ifndef CONFIG_MRD7
 		if (dev_priv->is_mipi_from_vbt)
 			intel_dsi_init(dev);
 		else
+#endif
 			intel_dp_init(dev, VLV_DISPLAY_BASE + DP_C, PORT_C);
 
 		intel_hdmi_init(dev, VLV_DISPLAY_BASE + GEN4_HDMIB,
