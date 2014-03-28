@@ -816,6 +816,7 @@ parse_mipi(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 	}
 
 	DRM_DEBUG_DRIVER("MIPI related vbt parsing complete\n");
+	return;
 out:
 	memset(dev_priv->vbt.dsi.sequence, 0, sizeof(dev_priv->vbt.dsi.sequence));
 	kfree(dev_priv->vbt.dsi.data);
