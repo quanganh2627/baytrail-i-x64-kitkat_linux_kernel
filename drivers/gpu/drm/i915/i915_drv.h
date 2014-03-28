@@ -1559,6 +1559,7 @@ typedef struct drm_i915_private {
 	struct drm_property *broadcast_rgb_property;
 	struct drm_property *force_audio_property;
 	struct drm_property *force_pfit_property;
+	struct drm_property *scaling_src_size_property;
 
 	bool hw_contexts_disabled;
 	uint32_t hw_context_size;
