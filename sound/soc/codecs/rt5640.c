@@ -53,12 +53,20 @@ struct rt5640_init_reg {
 
 static struct rt5640_init_reg init_list[] = {
 #ifdef USE_ASRC
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{RT5640_GEN_CTRL1, 0x3e71},	/*fa[12:13] = 1'b; fa[10~11]=1; fa[9]=1;(single end for hs det) fa[8]=0;(in2 dif input)fa[0]=1 */
+#else
+	{RT5640_GEN_CTRL1, 0x3f71},     /*fa[12:13] = 1'b; fa[8~11]=1; fa[0]=1*/
+#endif
 /*	{RT5640_ASRC_1		, 0x9a00},*/
 /*	{RT5640_ASRC_2		, 0xf800},*/
 	{RT5640_JD_CTRL, 0x0003},
 #else
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{RT5640_GEN_CTRL1, 0x3e01},	/*fa[12:13] = 1'b; fa[10~11]=1; fa[0]=1 */
+#else
+	{RT5640_GEN_CTRL1, 0x3f01},     /*fa[12:13] = 1'b; fa[8~11]=1; fa[0]=1 */
+#endif
 #endif
 	{RT5640_ADDA_CLK1, 0x0014},	/*73[2] = 1'b */
 	{RT5640_MICBIAS, 0x3030},	/*93[5:4] = 11'b */
@@ -99,12 +107,22 @@ static struct rt5640_init_reg init_list[] = {
 /*	{RT5640_SPO_R_MIXER	, 0x1800},//DAC -> SPORMIX*/
 /*	{RT5640_I2S1_SDP	, 0xD000},//change IIS1 and IIS2*/
 	/*record */
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{RT5640_IN1_IN2, 0x0540},	/*IN3 boost 40db and differential mode - main mic, maybe big, tb tuned */
 	{RT5640_IN3_IN4, 0x0540},	/*IN2 boost 40db and differential mode - headset */
+#else
+	{RT5640_IN1_IN2, 0x5080},       /*IN1 boost 40db and differential mode */
+	{RT5640_IN3_IN4, 0x0000},       /*IN2 boost 40db and signal ended mode */
+#endif
 /*	{RT5640_REC_L2_MIXER	, 0x007d},//Mic1 -> RECMIXL*/
 /*	{RT5640_REC_R2_MIXER	, 0x007d},//Mic1 -> RECMIXR*/
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{RT5640_REC_L2_MIXER, 0x007b},	/*Mic3 -> RECMIXL default set main mic, user space control to switch to hs */
 	{RT5640_REC_R2_MIXER, 0x007b},	/*Mic3 -> RECMIXR main mic*/
+#else
+	{RT5640_REC_L2_MIXER, 0x006f},  /*Mic2 -> RECMIXL */
+	{RT5640_REC_R2_MIXER, 0x006f},  /*Mic2 -> RECMIXR */
+#endif
 	{RT5640_STO_ADC_MIXER, 0x1000},	/*DMIC1 & AMIC */
 	{RT5640_MONO_ADC_MIXER, 0x1010},
 	{RT5640_ADC_DIG_VOL, 0xe2e2},
@@ -123,7 +141,11 @@ static struct rt5640_init_reg init_list[] = {
 /*	{RT5640_IRQ_CTRL2, 0x8000},*/	/*set MICBIAS short current to IRQ */
 	/*( if sticky set regBE : 8800 ) */
 	/* for Jack Detection */
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{RT5640_JD_CTRL, 0x4003}, /* jd1 as jack det src */
+#else
+	{RT5640_JD_CTRL, 0x6003},
+#endif
 	{RT5640_IRQ_CTRL1, 0x8000}, /* enable jd */
 #endif
 };
@@ -747,10 +769,10 @@ static const SOC_ENUM_SINGLE_DECL(rt5640_in1_mode_enum, RT5640_IN1_IN2,
 
 static const SOC_ENUM_SINGLE_DECL(rt5640_in2_mode_enum, RT5640_IN3_IN4,
 				  RT5640_IN_SFT2, rt5640_input_mode);
-
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 static const SOC_ENUM_SINGLE_DECL(rt5640_in3_mode_enum, RT5640_IN1_IN2,
 				  RT5640_IN_SFT2, rt5640_input_mode);
-
+#endif
 /* Interface data select */
 static const char * const rt5640_data_select[] = {
 	"Normal", "Swap", "left copy to right", "right copy to left"
@@ -895,9 +917,11 @@ static const struct snd_kcontrol_new rt5640_snd_controls[] = {
 	SOC_ENUM("IN2 Mode Control", rt5640_in2_mode_enum),
 	SOC_SINGLE_TLV("IN2 Boost", RT5640_IN3_IN4,
 		       RT5640_BST_SFT2, 8, 0, bst_tlv),
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	SOC_ENUM("IN3 Mode Control", rt5640_in3_mode_enum),
 	SOC_SINGLE_TLV("IN3 Boost", RT5640_IN1_IN2,
 		       RT5640_BST_SFT2, 8, 0, bst_tlv),
+#endif
 	SOC_SINGLE_TLV("Speaker Boost", RT5640_SPO_CLSD_RATIO,
 		       0, 7, 0, speaker_boost_tlv),
 	/* INL/INR Volume Control */
@@ -3157,9 +3181,17 @@ static int rt5640_set_bias_level(struct snd_soc_codec *codec,
 					    RT5640_PWR_FV1 | RT5640_PWR_FV2,
 					    RT5640_PWR_FV1 | RT5640_PWR_FV2);
 #ifdef USE_ASRC
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 			snd_soc_write(codec, RT5640_GEN_CTRL1, 0x3e71);
 #else
+			snd_soc_write(codec, RT5640_GEN_CTRL1, 0x3f71);
+#endif
+#else
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 			snd_soc_write(codec, RT5640_GEN_CTRL1, 0x3e01);
+#else
+			snd_soc_write(codec, RT5640_GEN_CTRL1, 0x3701);
+#endif
 #endif
 			codec->cache_only = false;
 			codec->cache_sync = 1;

@@ -566,6 +566,9 @@ static const struct snd_soc_dapm_widget byt_dapm_widgets[] = {
 static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"IN2P", NULL, "Headset Mic"},
 	{"IN2N", NULL, "Headset Mic"},
+#if !(defined(CONFIG_MRD7) || defined(CONFIG_MRD8))
+	{"DMIC1", NULL, "Int Mic"},
+#endif
 	{"Headphone", NULL, "HPOL"},
 	{"Headphone", NULL, "HPOR"},
 	{"Ext Spk", NULL, "SPOLP"},
@@ -577,12 +580,12 @@ static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"Headset Mic", NULL, "Platform Clock"},
 	{"Int Mic", NULL, "Platform Clock"},
 	{"Ext Spk", NULL, "Platform Clock"},
-
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	{"micbias1", NULL, "Int Mic"},
 	{"IN3P", NULL, "micbias1"},
 	{"IN3N", NULL, "micbias1"},
 	{"micbias1", NULL, "LDO2"},
-
+#endif
 };
 
 static const struct snd_kcontrol_new byt_mc_controls[] = {
@@ -909,13 +912,13 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	card->dapm.idle_bias_off = true;
 	/* Set overcurrent detection threshold base and scale factor
 	   for jack type identification and button events. */
-
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	rt5640_config_ovcd_thld(codec, RT5640_MIC1_OVTH_1500UA,
 				RT5640_MIC_OVCD_SF_1P0);
 	snd_soc_update_bits(codec, RT5640_JD_CTRL,
 				RT5640_JD_MASK, RT5640_JD_JD1_IN4P);
 
-#if 0
+#else
 	if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, 8PR1))
 		/* The mic bias resistor in BYT FFRD8 PR1 is reduced from
 		2.1K to 1.5K. Therefore the correct over current threshold
@@ -1139,7 +1142,10 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	int ret_val = 0;
 	struct byt_mc_private *drv;
 	int codec_gpio;
-/*	int jd_gpio; remove this line for -Werror=unused-variable */
+#if !(defined(CONFIG_MRD7) || defined(CONFIG_MRD8))
+	/*remove this line for -Werror=unused-variable*/
+	int jd_gpio;
+#endif
 
 	pr_debug("Entry %s\n", __func__);
 
@@ -1170,14 +1176,14 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	drv->tristate_buffer_gpio = -1;
 	drv->num_jack_gpios = 1;
 	drv->use_soc_jd_gpio = false;
-
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 	/* Configure GPIO_SCORE56 for BT SCO workaround on FFRD8 PR1 */
 	drv->tristate_buffer_gpio = acpi_get_gpio("\\_SB.GPO0", 56);
 	ret_val = devm_gpio_request_one(&pdev->dev,
 				drv->tristate_buffer_gpio,
 				GPIOF_OUT_INIT_LOW,
 				"byt_ffrd8_tristate_buffer_gpio");
-#if 0
+#else
 	/* FFRD PR1 has 2 SoC gpios for Jack detect/Button press. One GPIO is for
 	   codec interrupt(codec-> SoC) and the second GPIO is for jack detection
 	   alone (direct jack-> SoC).Since there is a dedicated jack det GPIO on PR1,
