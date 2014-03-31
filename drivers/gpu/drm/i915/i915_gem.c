@@ -1988,14 +1988,34 @@ i915_gem_object_shmem_preallocate(struct drm_i915_gem_object *obj)
 		if (IS_ERR(page)) {
 			DRM_DEBUG_DRIVER("Failure for obj(%p) size(%x) at page(%d)\n",
 					obj, (u32)obj->base.size, i);
-			break;
+			return;
 		}
+		/* Flush the cpu cache for the page now itself */
+		drm_clflush_pages(&page, 1);
+
 		/* Decrement the extra ref count on the returned page,
 		   otherwise when 'get_pages_gtt' will be called later on
 		   in the regular path, it will also increment the ref count,
 		   which will disturb the ref count management */
 		page_cache_release(page);
 	}
+
+	/*
+	 * Reset the CPU domain now itself, so as to avoid the cache
+	 * flush later (under 'struct_mutex' lock), as the all pages
+	 * have been cache flushed.
+	 * Hope this is safe enough to be done here.
+	 * But can't think of a scenario where this could cause a problem.
+	 * When an object has been passed to execbuffer Ioctl, would there be
+	 * any other concurrent operation likely to be done on that object,
+	 * considering this object was having no backing physical store
+	 * allocated for it (hence will not have a mapping in GTT also or
+	 * will be a part of bound/unbound list, hence not visible to Gem
+	 * shrinker also). The same doubt is there for the other case
+	 * also when an object is being accessed through the mmap_gtt
+	 * interface, which resulted in a Page fault.
+	 */
+	obj->base.write_domain = 0;
 
 	trace_i915_gem_obj_prealloc_end(obj);
 }
