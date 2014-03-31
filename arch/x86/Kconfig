@@ -159,6 +159,9 @@ config MRD7
 config MRD8
 	bool "Baytrail CR MRD8"
 
+config MRD7P05
+	bool "Baytrail CR MRD7 P0.5"
+
 config NEED_DMA_MAP_STATE
 	def_bool y
 	depends on X86_64 || INTEL_IOMMU || DMA_API_DEBUG
