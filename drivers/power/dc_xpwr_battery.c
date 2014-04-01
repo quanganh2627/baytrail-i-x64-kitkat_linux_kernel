@@ -148,9 +148,9 @@
 #define FG_LOW_CAP_THR1_MASK		0xf0	/* 5% tp 20% */
 #define FG_LOW_CAP_THR1_VAL		0xa0	/* 15 perc */
 #define FG_LOW_CAP_THR2_MASK		0x0f	/* 0% to 15% */
-#define FG_LOW_CAP_WARN_THR		15	/* 15 perc */
-#define FG_LOW_CAP_CRIT_THR		5	/* 5 perc */
-#define FG_LOW_CAP_SHDN_THR		1	/* 1 perc */
+#define FG_LOW_CAP_WARN_THR		14	/* 14 perc */
+#define FG_LOW_CAP_CRIT_THR		4	/* 4 perc */
+#define FG_LOW_CAP_SHDN_THR		0	/* 0 perc */
 
 #define DC_FG_TUNING_CNTL0		0xE8
 #define DC_FG_TUNING_CNTL1		0xE9
