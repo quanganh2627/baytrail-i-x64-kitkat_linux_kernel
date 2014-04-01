@@ -231,7 +231,10 @@ struct intel_encoder {
 
 struct intel_panel {
 	struct drm_display_mode *fixed_mode;
+	struct drm_display_mode *downclock_mode;
 	int fitting_mode;
+	bool edp_downclock_avail;
+	int edp_downclock;
 };
 
 struct intel_connector {
@@ -338,6 +341,9 @@ struct intel_crtc_config {
 
 	int pipe_bpp;
 	struct intel_link_m_n dp_m_n;
+
+	/* m2_n2 for eDP downclock */
+	struct intel_link_m_n dp_m2_n2;
 
 	/*
 	 * Frequence the dpll for the port should run at. Differs from the
@@ -528,6 +534,27 @@ struct intel_hdmi {
 #define DP_LINK_CONFIGURATION_SIZE	9
 #define EDP_PSR_RECEIVER_CAP_SIZE	2
 
+/*
+ * HIGH_RR is the highest eDP panel refresh rate read from EDID
+ * LOW_RR is the lowest eDP panel refresh rate found from EDID
+ * parsing for same resolution.
+ */
+enum edp_drrs_refresh_rate_type {
+	DRRS_HIGH_RR,
+	DRRS_LOW_RR,
+	DRRS_MAX_RR, /* RR count */
+};
+
+/*
+ * The drrs_info struct will represent the DRRS feature for eDP
+ * panel.
+ */
+struct drrs_info {
+	enum drrs_support_type type;
+	enum edp_drrs_refresh_rate_type refresh_rate_type;
+	struct mutex mutex;
+};
+
 struct intel_dp {
 	uint32_t output_reg;
 	uint32_t aux_ch_ctl_reg;
@@ -555,6 +582,7 @@ struct intel_dp {
 	bool want_panel_vdd;
 	bool psr_setup_done;
 	struct intel_connector *attached_connector;
+	struct drrs_info drrs_state;
 };
 
 struct intel_digital_port {
@@ -686,7 +714,8 @@ extern void intel_flush_display_plane(struct drm_i915_private *dev_priv,
 
 /* intel_panel.c */
 extern int intel_panel_init(struct intel_panel *panel,
-			    struct drm_display_mode *fixed_mode);
+			struct drm_display_mode *fixed_mode,
+			struct drm_display_mode *downclock_mode);
 extern void intel_panel_fini(struct intel_panel *panel);
 
 extern void intel_fixed_panel_mode(struct drm_display_mode *fixed_mode,
@@ -708,6 +737,10 @@ extern enum drm_connector_status intel_panel_detect(struct drm_device *dev);
 extern void intel_get_cd_cz_clk(struct drm_i915_private *dev_priv, int *cd_clk,
 				int *cz_clk);
 
+extern struct drm_display_mode *intel_find_panel_downclock(
+				struct drm_device *dev,
+				struct drm_display_mode *fixed_mode,
+				struct drm_connector *connector);
 
 struct intel_set_config {
 	struct drm_encoder **save_connector_encoders;
@@ -931,6 +964,11 @@ extern bool intel_set_pch_fifo_underrun_reporting(struct drm_device *dev,
 extern void intel_edp_psr_enable(struct intel_dp *intel_dp);
 extern void intel_edp_psr_disable(struct intel_dp *intel_dp);
 extern void intel_edp_psr_update(struct drm_device *dev);
+extern void intel_dp_set_drrs_state(struct drm_device *dev, int refresh_rate);
+extern void intel_init_drrs_idleness_detection(struct drm_device *dev,
+				struct intel_connector *connector);
+extern void intel_update_drrs(struct drm_device *dev);
+extern void intel_disable_drrs(struct drm_device *dev);
 extern void hsw_disable_lcpll(struct drm_i915_private *dev_priv,
 			      bool switch_to_fclk, bool allow_power_down);
 extern void hsw_restore_lcpll(struct drm_i915_private *dev_priv);

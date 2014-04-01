@@ -2480,7 +2480,7 @@ EDP_PSR_SW_TIMER
 /* DPST related registers */
 #define BLC_HIST_CTL	(dev_priv->info->display_mmio_offset + 0x61260)
 #define IE_HISTOGRAM_ENABLE             (1<<31)
-#define IE_MOD_TABLE_ENABLE             (1<<30)
+#define IE_MOD_TABLE_ENABLE             (1<<27)
 #define HSV_INTENSITY_MODE              (1<<24)
 #define ENHANCEMENT_MODE_MULT           (2<<13)
 #define BIN_REG_FUNCTION_SELECT_IE      (1<<11)
@@ -3222,6 +3222,8 @@ EDP_PSR_SW_TIMER
 #define   PIPECONF_INTERLACED_DBL_ILK		(4 << 21) /* ilk/snb only */
 #define   PIPECONF_PFIT_PF_INTERLACED_DBL_ILK	(5 << 21) /* ilk/snb only */
 #define   PIPECONF_INTERLACE_MODE_MASK		(7 << 21)
+#define   PIPECONF_EDP_RR_MODE_SWITCH		(1 << 20)
+#define   PIPECONF_EDP_RR_MODE_SWITCH_VLV	(1 << 14)
 #define   PIPECONF_CXSR_DOWNCLOCK	(1<<16)
 #define   PIPECONF_COLOR_RANGE_SELECT	(1 << 13)
 #define   PIPECONF_BPC_MASK	(0x7 << 5)

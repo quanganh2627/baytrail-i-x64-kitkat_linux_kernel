@@ -305,6 +305,7 @@ struct mmc_card {
 	unsigned int    nr_parts;
 
 	unsigned int		rpmb_max_req;
+	unsigned int		last_max_dtr;
 };
 
 /*

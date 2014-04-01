@@ -723,6 +723,21 @@ intel_dp_set_clock(struct intel_encoder *encoder,
 	}
 }
 
+static void
+intel_dp_set_m2_n2(struct intel_crtc *crtc, struct intel_link_m_n *m_n)
+{
+	struct drm_device *dev = crtc->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	enum transcoder transcoder = crtc->config.cpu_transcoder;
+
+	I915_WRITE(PIPE_DATA_M2(transcoder),
+		TU_SIZE(m_n->tu) | m_n->gmch_m);
+	I915_WRITE(PIPE_DATA_N2(transcoder), m_n->gmch_n);
+	I915_WRITE(PIPE_LINK_M2(transcoder), m_n->link_m);
+	I915_WRITE(PIPE_LINK_N2(transcoder), m_n->link_n);
+	return;
+}
+
 bool
 intel_dp_compute_config(struct intel_encoder *encoder,
 			struct intel_crtc_config *pipe_config)
@@ -837,6 +852,14 @@ found:
 	intel_link_compute_m_n(bpp, lane_count,
 			       adjusted_mode->clock, pipe_config->port_clock,
 			       &pipe_config->dp_m_n);
+
+	if (intel_connector->panel.edp_downclock_avail &&
+		intel_dp->drrs_state.type == SEAMLESS_DRRS_SUPPORT) {
+			intel_link_compute_m_n(bpp, lane_count,
+				intel_connector->panel.edp_downclock,
+				pipe_config->port_clock,
+				&pipe_config->dp_m2_n2);
+	}
 
 	intel_dp_set_clock(encoder, pipe_config, intel_dp->link_bw);
 
@@ -3481,16 +3504,35 @@ intel_dp_connector_destroy(struct drm_connector *connector)
 	kfree(connector);
 }
 
+static void intel_dp_drrs_fini(struct drm_i915_private *dev_priv,
+			struct intel_dp *intel_dp)
+{
+	if (intel_dp->drrs_state.type == SEAMLESS_DRRS_SUPPORT) {
+		if (cancel_delayed_work_sync(&dev_priv->drrs.drrs_work->work)) {
+			kfree(dev_priv->drrs.drrs_work);
+			dev_priv->drrs.drrs_work = NULL;
+			dev_priv->drrs.connector = NULL;
+		}
+	}
+}
+
 void intel_dp_encoder_destroy(struct drm_encoder *encoder)
 {
 	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
 	struct intel_dp *intel_dp = &intel_dig_port->dp;
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	i2c_del_adapter(&intel_dp->adapter);
 	drm_encoder_cleanup(encoder);
 	if (is_edp(intel_dp)) {
 		cancel_delayed_work_sync(&intel_dp->panel_vdd_work);
+		/* DRRS cleanup */
+		if (dev_priv->drrs.connector &&
+			intel_dp == enc_to_intel_dp(
+				&dev_priv->drrs.connector->encoder->base))
+			intel_dp_drrs_fini(dev_priv, intel_dp);
+
 		mutex_lock(&dev->mode_config.mutex);
 		ironlake_panel_vdd_off_sync(intel_dp);
 		mutex_unlock(&dev->mode_config.mutex);
@@ -3688,6 +3730,83 @@ intel_dp_init_panel_power_sequencer(struct drm_device *dev,
 		*out = final;
 }
 
+void
+intel_dp_set_drrs_state(struct drm_device *dev, int refresh_rate) {
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_encoder *encoder;
+	struct intel_dp *intel_dp = NULL;
+	struct intel_crtc_config *config = NULL;
+	struct intel_crtc *intel_crtc = NULL;
+	struct intel_connector *intel_connector = dev_priv->drrs.connector;
+	u32 reg, val;
+	int index = 0;
+
+	if (refresh_rate <= 0) {
+		DRM_INFO("Refresh rate should be positive non-zero.\n");
+		return;
+	}
+
+	if (intel_connector == NULL) {
+		DRM_DEBUG_KMS("DRRS Supported for EDP only\n");
+		return;
+	}
+
+	encoder = intel_attached_encoder(&intel_connector->base);
+	intel_dp = enc_to_intel_dp(&encoder->base);
+	intel_crtc = encoder->new_crtc;
+
+	if (!intel_crtc) {
+		DRM_DEBUG_KMS("DRRS: intel_crtc not initialized\n");
+		return;
+	}
+
+	config = &intel_crtc->config;
+
+	if (intel_dp->drrs_state.type < SEAMLESS_DRRS_SUPPORT) {
+		DRM_INFO("Seamless DRRS not supported.\n");
+		return;
+	}
+
+	if (intel_connector->panel.fixed_mode->vrefresh == refresh_rate)
+		index = DRRS_HIGH_RR;
+	else
+		index = DRRS_LOW_RR;
+
+	if (index == intel_dp->drrs_state.refresh_rate_type) {
+		DRM_INFO("DRRS requested for previously set RR...ignoring\n");
+		return;
+	}
+
+	if (!intel_crtc->active) {
+		DRM_INFO("eDP encoder has been disabled. CRTC not Active\n");
+		return;
+	}
+
+	if (INTEL_INFO(dev)->gen > 6 && INTEL_INFO(dev)->gen < 8) {
+		reg = PIPECONF(intel_crtc->config.cpu_transcoder);
+		val = I915_READ(reg);
+		if (index > DRRS_HIGH_RR) {
+			if (IS_VALLEYVIEW(dev))
+				val |= PIPECONF_EDP_RR_MODE_SWITCH_VLV;
+			else
+				val |= PIPECONF_EDP_RR_MODE_SWITCH;
+			intel_dp_set_m2_n2(intel_crtc, &config->dp_m2_n2);
+		} else {
+			if (IS_VALLEYVIEW(dev))
+				val &= ~PIPECONF_EDP_RR_MODE_SWITCH_VLV;
+			else
+				val &= ~PIPECONF_EDP_RR_MODE_SWITCH;
+		}
+		I915_WRITE(reg, val);
+	}
+
+	mutex_lock(&intel_dp->drrs_state.mutex);
+	intel_dp->drrs_state.refresh_rate_type = index;
+	mutex_unlock(&intel_dp->drrs_state.mutex);
+
+	DRM_INFO("eDP Refresh Rate set to : %dHz\n", refresh_rate);
+}
+
 static void
 intel_dp_init_panel_power_sequencer_registers(struct drm_device *dev,
 					      struct intel_dp *intel_dp,
@@ -3742,6 +3861,52 @@ intel_dp_init_panel_power_sequencer_registers(struct drm_device *dev,
 		      I915_READ(pp_div_reg));
 }
 
+static struct drm_display_mode *
+intel_dp_drrs_init(struct intel_digital_port *intel_dig_port,
+			struct intel_connector *intel_connector,
+			struct drm_display_mode *fixed_mode) {
+	struct drm_connector *connector = &intel_connector->base;
+	struct intel_dp *intel_dp = &intel_dig_port->dp;
+	struct drm_device *dev = intel_dig_port->base.base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_display_mode *downclock_mode = NULL;
+
+	/*
+	 * Check if PSR is supported by panel and enabled
+	 * if so, DRRS is reported as not supported.
+	 */
+	if (INTEL_INFO(dev)->gen < 8 &&	intel_edp_is_psr_enabled(dev)) {
+		DRM_INFO("eDP panel has PSR enabled. Cannot support DRRS\n");
+		return downclock_mode;
+	}
+
+	/* First check if DRRS is enabled from VBT struct */
+	if (dev_priv->vbt.drrs_type == DRRS_NOT_SUPPORTED) {
+		DRM_INFO("VBT doesn't support DRRS\n");
+		return downclock_mode;
+	}
+
+	downclock_mode = intel_find_panel_downclock(dev,
+					fixed_mode, connector);
+
+	if (downclock_mode != NULL &&
+		dev_priv->vbt.drrs_type == SEAMLESS_DRRS_SUPPORT) {
+		intel_connector->panel.edp_downclock_avail = true;
+		intel_connector->panel.edp_downclock =
+						downclock_mode->clock;
+
+		intel_init_drrs_idleness_detection(dev, intel_connector);
+		mutex_init(&intel_dp->drrs_state.mutex);
+
+		intel_dp->drrs_state.type = dev_priv->vbt.drrs_type;
+		intel_dp->drrs_state.refresh_rate_type = DRRS_HIGH_RR;
+		DRM_INFO("SEAMLESS DRRS supported for eDP panel.\n");
+	} else
+		DRM_INFO("DRRS not supported.\n");
+
+	return downclock_mode;
+}
+
 static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 				     struct intel_connector *intel_connector)
 {
@@ -3750,10 +3915,13 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_display_mode *fixed_mode = NULL;
+	struct drm_display_mode *downclock_mode = NULL;
 	struct edp_power_seq power_seq = { 0 };
 	bool has_dpcd;
 	struct drm_display_mode *scan;
 	struct edid *edid;
+
+	intel_dp->drrs_state.type = DRRS_NOT_SUPPORTED;
 
 	if (!is_edp(intel_dp))
 		return true;
@@ -3800,6 +3968,9 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	list_for_each_entry(scan, &connector->probed_modes, head) {
 		if ((scan->type & DRM_MODE_TYPE_PREFERRED)) {
 			fixed_mode = drm_mode_duplicate(dev, scan);
+			if (INTEL_INFO(dev)->gen > 6)
+				downclock_mode = intel_dp_drrs_init(intel_dig_port,
+						intel_connector, fixed_mode);
 			break;
 		}
 	}
@@ -3814,7 +3985,7 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 
 	ironlake_edp_panel_vdd_off(intel_dp, false);
 
-	intel_panel_init(&intel_connector->panel, fixed_mode);
+	intel_panel_init(&intel_connector->panel, fixed_mode, downclock_mode);
 	intel_panel_setup_backlight(connector);
 
 	return true;

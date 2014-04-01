@@ -1676,13 +1676,10 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		 */
 		if ((host->flags & SDHCI_NEEDS_RETUNING) &&
 		    !(present_state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
-		    (mmc_cmd_type(mrq->cmd) == MMC_CMD_ADTC) &&
-		    (mrq->cmd->opcode != MMC_SEND_STATUS)) {
+		    (present_state & SDHCI_DATA_0_LVL_MASK)) {
 			if (mmc->card) {
-				/* Do not tuning for write CMD52 */
-				if (host->quirks2 & SDHCI_QUIRK2_NOT_TUNE &&
-				    IS_IO_RW_DIRECT_WRITE(mrq->cmd->opcode,
-				    mrq->cmd->arg))
+				if (mmc_card_sdio(mmc->card) &&
+				    (mmc_cmd_type(mrq->cmd) != MMC_CMD_ADTC))
 					goto end_tuning;
 				if ((mmc->card->ext_csd.part_config & 0x07) ==
 					EXT_CSD_PART_CONFIG_ACC_RPMB)
@@ -3777,23 +3774,16 @@ int sdhci_suspend_host(struct sdhci_host *host)
 
 	sdhci_disable_card_detection(host);
 
+	ret = mmc_suspend_host(host->mmc);
+	if (ret) {
+		sdhci_enable_card_detection(host);
+		goto out;
+	}
+
 	/* Disable tuning since we are suspending */
 	if (host->flags & SDHCI_USING_RETUNING_TIMER) {
 		del_timer_sync(&host->tuning_timer);
 		host->flags &= ~SDHCI_NEEDS_RETUNING;
-	}
-
-	ret = mmc_suspend_host(host->mmc);
-	if (ret) {
-		if (host->flags & SDHCI_USING_RETUNING_TIMER) {
-			host->flags |= SDHCI_NEEDS_RETUNING;
-			mod_timer(&host->tuning_timer, jiffies +
-					host->tuning_count * HZ);
-		}
-
-		sdhci_enable_card_detection(host);
-
-		goto out;
 	}
 
 	if (!device_may_wakeup(mmc_dev(host->mmc))) {

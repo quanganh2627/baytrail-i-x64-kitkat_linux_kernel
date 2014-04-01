@@ -672,6 +672,16 @@ enum no_psr_reason {
 	PSR_HSW_NOT_DDIA,
 };
 
+struct i915_drrs {
+	struct intel_connector *connector;
+	bool is_clone;
+	struct intel_drrs_work {
+		struct delayed_work work;
+		struct drm_crtc *crtc;
+		int interval;
+	} *drrs_work;
+};
+
 enum intel_pch {
 	PCH_NONE = 0,	/* No PCH present */
 	PCH_IBX,	/* Ibexpeak PCH */
@@ -1160,6 +1170,12 @@ enum modeset_restore {
 	MODESET_SUSPENDED,
 };
 
+enum drrs_support_type {
+	DRRS_NOT_SUPPORTED = 0,
+	STATIC_DRRS_SUPPORT = 1,
+	SEAMLESS_DRRS_SUPPORT = 2
+};
+
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
@@ -1174,6 +1190,13 @@ struct intel_vbt_data {
 	unsigned int fdi_rx_polarity_inverted:1;
 	int lvds_ssc_freq;
 	unsigned int bios_lvds_val; /* initial [PCH_]LVDS reg val in VBIOS */
+
+	/*
+	 * DRRS support type (Seamless OR Static DRRS OR not supported)
+	 * drrs_support type Val 0x2 is Seamless DRRS and 0 is Static DRRS.
+	 * These values correspond to the VBT values for drrs mode.
+	 */
+	enum drrs_support_type drrs_type;
 
 	/* eDP */
 	int edp_rate;
@@ -1382,6 +1405,7 @@ typedef struct drm_i915_private {
 	int num_plane;
 
 	struct i915_fbc fbc;
+	struct i915_drrs drrs;
 	struct intel_opregion opregion;
 	struct intel_vbt_data vbt;
 
@@ -2073,6 +2097,7 @@ extern int i915_pc8_timeout __read_mostly;
 extern bool i915_prefault_disable __read_mostly;
 extern int i915_enable_kernel_batch_copy __read_mostly;
 extern int i915_enable_cmd_parser __read_mostly;
+extern int i915_drrs_interval __read_mostly;
 
 extern int i915_suspend(struct drm_device *dev, pm_message_t state);
 extern int i915_resume(struct drm_device *dev);
