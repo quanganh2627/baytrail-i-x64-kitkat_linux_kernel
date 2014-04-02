@@ -65,8 +65,9 @@ static struct cfg_match cfg_assoc_tbl[] = {
 	{"XMM7260_CONF_5", "XMM_7260_REV2", CPU_TANGIER},
 	{"XMM7260_CONF_8", "XMM_7260_REV2", CPU_TANGIER},
 	/* Baytrail FFRD8 */
-	/* H350 power on use shortly*/
-	{"XMM6260_CONF_h", "XMM_7160", CPU_VVIEW2},
+    {"XMM716_CONF_3", "XMM_7160", CPU_VVIEW2},
+	/* H350 power on use */
+	{"XMM6260_CONF_h", "XMM_6260", CPU_VVIEW2},
 	/* CTP 7160 */
 	{"XMM7160_CONF_4", "XMM_7160_REV3", CPU_CLVIEW},
 	{"XMM7160_CONF_5", "XMM_7160_REV3_5", CPU_CLVIEW},
@@ -611,6 +612,8 @@ void *retrieve_acpi_modem_data(struct platform_device *pdev)
 	/* Convert the configuration name to mcd configuration type*/
 	mcd_reg_info->conf_type = mcd_get_config_type();
 
+#if 0
+
 	/* PMIC */
 	switch (mcd_reg_info->cpu_ver) {
 	case CPU_VVIEW2:
@@ -650,6 +653,8 @@ void *retrieve_acpi_modem_data(struct platform_device *pdev)
 
 	pr_info("%s: cpu info setup\n", __func__);
 
+#endif
+
 	/* finalize cpu data */
 	if (mcd_reg_info->conf_type == XMM_CONF_M2) {
 		/* M.2 specific GPIO configuration */
@@ -681,6 +686,8 @@ void *retrieve_acpi_modem_data(struct platform_device *pdev)
 			cpu_data->gpio_rst_bbn, cpu_data->gpio_cdump);
 	}
 
+#if 0
+
 	status = get_acpi_param(handle, ACPI_TYPE_PACKAGE, "EPWR", &out_obj);
 	if (ACPI_FAILURE(status)) {
 		pr_err("%s: ERROR evaluating Early PWR info\n", __func__);
@@ -691,6 +698,7 @@ void *retrieve_acpi_modem_data(struct platform_device *pdev)
 	pmic_data->early_pwr_on = (int)item->integer.value;
 	item = &(out_obj->package.elements[1]);
 	pmic_data->early_pwr_off = (int)item->integer.value;
+#endif
 
 	return mcd_reg_info;
 
