@@ -5934,6 +5934,10 @@ static int __e1000_shutdown(struct pci_dev *pdev, bool runtime)
 		e1000e_down(adapter);
 		e1000_free_irq(adapter);
 	}
+
+	retval = pci_save_state(pdev);
+	if (retval)
+		return retval;
 	e1000e_reset_interrupt_capability(adapter);
 
 	status = er32(STATUS);
@@ -6013,7 +6017,10 @@ static int __e1000_shutdown(struct pci_dev *pdev, bool runtime)
 
 		pcie_capability_write_word(us_dev, PCI_EXP_DEVCTL, devctl);
 	}
-
+	pci_disable_device(pdev);
+	retval = pci_set_power_state(pdev, PCI_D3hot);
+	if (retval)
+		return retval;
 	return 0;
 }
 
@@ -6064,6 +6071,7 @@ static int __e1000_resume(struct pci_dev *pdev)
 	struct e1000_hw *hw = &adapter->hw;
 	u16 aspm_disable_flag = 0;
 	u32 err;
+	int retval = 0;
 
 	if (adapter->flags2 & FLAG2_DISABLE_ASPM_L0S)
 		aspm_disable_flag = PCIE_LINK_STATE_L0S;
@@ -6071,7 +6079,13 @@ static int __e1000_resume(struct pci_dev *pdev)
 		aspm_disable_flag |= PCIE_LINK_STATE_L1;
 	if (aspm_disable_flag)
 		e1000e_disable_aspm(pdev, aspm_disable_flag);
-
+	retval = pci_set_power_state(pdev, PCI_D0);
+	if (retval)
+		return retval;
+	pci_restore_state(pdev);
+	retval = pci_enable_device(pdev);
+	if (retval)
+		return retval;
 	pci_set_master(pdev);
 
 	e1000e_set_interrupt_capability(adapter);
