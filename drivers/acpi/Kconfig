@@ -394,6 +394,15 @@ config ACPI_BGRT
 	  data from the firmware boot splash. It will appear under
 	  /sys/firmware/acpi/bgrt/ .
 
+config ACPI_VIRTUAL_BUTTON
+	bool "Button Driver for non acpi devices"
+	depends on INPUT
+	default n
+	help
+	  This driver handles buttons which does not have acpi device id
+	  such as volume keys and home button. Buttons which have acpi device id
+	  is still handled in acpi button driver.
+
 source "drivers/acpi/apei/Kconfig"
 
 endif	# ACPI
