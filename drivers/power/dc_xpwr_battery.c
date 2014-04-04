@@ -535,12 +535,6 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		return -EINVAL;
 	}
 
-	/*
-	 * back to back or contineous read/writes to
-	 * PMIC is causing i2c semaphore hang issues.
-	 * adding a delay of 5ms to avoid the issue.
-	 */
-	usleep_range(5000, 10000);
 	mutex_unlock(&info->lock);
 	return 0;
 
