@@ -119,12 +119,8 @@ void mei_io_cb_free(struct mei_cl_cb *cb)
 	if (cb == NULL)
 		return;
 
-	/* Ensure that cb->cl and cb->cl->dev are not NULL */
-	if ((cb->cl) && (cb->cl->dev)) {
-		cb->cl->dev->req_alloc_count = 0;
-		cb->cl->dev->resp_alloc_count = 0;
-	}
-
+	if (cb->fop_type == MEI_FOP_WRITE)
+		cb->cl->dev->write_mem_limit += cb->request_buffer.size;
 	kfree(cb->request_buffer.data);
 	kfree(cb->response_buffer.data);
 	kfree(cb);
@@ -163,33 +159,26 @@ struct mei_cl_cb *mei_io_cb_init(struct mei_cl *cl, struct file *fp)
  * returns 0 on success
  *         -EINVAL if cb is NULL
  *         -ENOMEM if allocation failed
+ *         -EBUSY  if write memory limit reached
  */
 int mei_io_cb_alloc_req_buf(struct mei_cl_cb *cb, size_t length)
 {
 	if (!cb)
 		return -EINVAL;
 
-	if (!cb->cl)
-		return -EINVAL;
-
-	if (!cb->cl->dev)
-		return -EINVAL;
-
-	if (cb->cl->dev->req_alloc_count > MEI_MAX_ALLOCS) {
-		dev_err(&cb->cl->dev->pdev->dev,
-			"Too many req buffers allocated\n");
-		return -EBUSY;
-	}
-
-	cb->cl->dev->req_alloc_count += 1;
-
 	if (length == 0)
 		return 0;
+
+	if (length > cb->cl->dev->write_mem_limit)
+		return -EBUSY;
 
 	cb->request_buffer.data = kmalloc(length, GFP_KERNEL);
 	if (!cb->request_buffer.data)
 		return -ENOMEM;
 	cb->request_buffer.size = length;
+
+	/* register that we use length memory in this call */
+	cb->cl->dev->write_mem_limit -= length;
 	return 0;
 }
 /**
@@ -206,20 +195,6 @@ int mei_io_cb_alloc_resp_buf(struct mei_cl_cb *cb, size_t length)
 {
 	if (!cb)
 		return -EINVAL;
-
-	if (!cb->cl)
-		return -EINVAL;
-
-	if (!cb->cl->dev)
-		return -EINVAL;
-
-	if (cb->cl->dev->resp_alloc_count > MEI_MAX_ALLOCS) {
-		dev_err(&cb->cl->dev->pdev->dev,
-			"Too many resp buffers allocated\n");
-		return -EBUSY;
-	}
-
-	cb->cl->dev->resp_alloc_count += 1;
 
 	if (length == 0)
 		return 0;

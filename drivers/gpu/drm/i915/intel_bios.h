@@ -298,6 +298,17 @@ struct bdb_lfp_backlight_data {
 	u8 level[16];
 } __packed;
 
+struct bdb_panel_backlight {
+	/* Backlight control parameters */
+	u8 type:2;
+	u8 inverter_pol:1;
+	u8 gpio:3;
+	u8 gmbus:2;
+	u16 pwm_freq;
+	u8 minbrightness;
+	u8 i2c_slave_addr;
+	u8 brightnesscmd;
+} __packed;
 
 /* LFP pointer table contains entries to the struct below */
 struct bdb_lvds_lfp_data_ptr {
@@ -802,6 +813,9 @@ enum MIPI_SEQ {
 	MIPI_SEQ_DISPLAY_ON,
 	MIPI_SEQ_DISPLAY_OFF,
 	MIPI_SEQ_DEASSERT_RESET,
+	MIPI_SEQ_BACKLIGHT_ON,
+	MIPI_SEQ_BACKLIGHT_OFF,
+	MIPI_SEQ_TEAR_ON,
 	MIPI_SEQ_MAX
 
 };
@@ -811,6 +825,7 @@ enum MIPI_SEQ_ELEMENT {
 	MIPI_SEQ_ELEM_SEND_PKT,
 	MIPI_SEQ_ELEM_DELAY,
 	MIPI_SEQ_ELEM_GPIO,
+	MIPI_SEQ_ELEM_I2C,
 	MIPI_SEQ_ELEM_STATUS,
 	MIPI_SEQ_ELEM_MAX
 

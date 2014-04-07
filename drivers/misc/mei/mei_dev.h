@@ -22,6 +22,7 @@
 #include <linux/poll.h>
 #include <linux/mei.h>
 #include <linux/mei_cl_bus.h>
+#include <linux/sizes.h>
 
 #include "hw.h"
 #include "hbm.h"
@@ -43,11 +44,8 @@
 
 #define MEI_RD_MSG_BUF_SIZE           (128 * sizeof(u32))
 
-/**
- * 100 should be enough concurrent allocations to have; too many
- * will overrun system memory and crash system
- */
-#define MEI_MAX_ALLOCS 100
+/* write buffer limit multiplier (per hw client) in bytes */
+#define MEI_WRITE_BUF_LIMIT      SZ_128K
 
 /*
  * AMTHI Client UUID
@@ -368,6 +366,7 @@ enum mei_pg_state {
  * @hbuf_is_ready - query if the host host/write buffer is ready
  * @wr_msg - the buffer for hbm control messages
  * @wr_ext_msg - the buffer for hbm control responses (set in read cycle)
+ * @write_mem_limit - limit write buffers, counted in bytes
  */
 struct mei_device {
 	struct pci_dev *pdev;	/* pointer to pci device struct */
@@ -380,8 +379,6 @@ struct mei_device {
 	struct mei_cl_cb write_waiting_list;	/* write waiting queue */
 	struct mei_cl_cb ctrl_wr_list;		/* managed write IOCTL list */
 	struct mei_cl_cb ctrl_rd_list;		/* managed read IOCTL list */
-	int req_alloc_count;
-	int resp_alloc_count;
 
 	/*
 	 * list of files
@@ -425,6 +422,9 @@ struct mei_device {
 	/* write buffer */
 	u8 hbuf_depth;
 	bool hbuf_is_ready;
+
+	/* limit write buffers*/
+	size_t write_mem_limit;
 
 	/* used for control messages */
 	struct {

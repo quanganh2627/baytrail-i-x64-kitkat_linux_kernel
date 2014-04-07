@@ -197,6 +197,22 @@ get_lvds_fp_timing(const struct bdb_header *bdb,
 	return (const struct lvds_fp_timing *)((const u8 *)bdb + ofs);
 }
 
+static void parse_backlight_data(struct drm_i915_private *dev_priv,
+						struct bdb_header *bdb)
+{
+	struct bdb_panel_backlight *vbt_panel_bl = NULL;
+	void *bl_start = NULL;
+
+	bl_start = find_section(bdb, BDB_LVDS_BACKLIGHT);
+	if (!bl_start) {
+		DRM_DEBUG_KMS("No backlight BDB found");
+		return;
+	}
+	DRM_DEBUG_KMS("Found backlight BDB");
+	vbt_panel_bl = (struct bdb_panel_backlight *)(bl_start + 1) + panel_type;
+	dev_priv->vbt.pwm_frequency = vbt_panel_bl->pwm_freq;
+}
+
 /* Try to find integrated panel data */
 /* We use the data recovered from this section for MIPI as well
  * It is common for all LFPs. The structure names might confuse
@@ -658,6 +674,12 @@ u8 *goto_next_sequence(u8 *data)
 		case MIPI_SEQ_ELEM_GPIO:
 			data += 2;
 			break;
+		case MIPI_SEQ_ELEM_I2C:
+			/* skip by this element payload size */
+			data += 6;
+			len = *data;
+			data += len + 1;
+			break;
 		default:
 			DRM_ERROR("Unknown element\n");
 			break;
@@ -806,10 +828,22 @@ parse_mipi(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 									data;
 			DRM_DEBUG_DRIVER("Found MIPI_SEQ_DEASSERT_RESET\n");
 			break;
+		case MIPI_SEQ_BACKLIGHT_ON:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_BACKLIGHT_ON] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_BACKLIGHT ON\n");
+			break;
+		case MIPI_SEQ_BACKLIGHT_OFF:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_BACKLIGHT_OFF] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_BACKLIGHT OFF\n");
+			break;
+		case MIPI_SEQ_TEAR_ON:
+			dev_priv->vbt.dsi.sequence[MIPI_SEQ_TEAR_ON] = data;
+			DRM_DEBUG_DRIVER("Found MIPI_SEQ_Tear ON\n");
+			break;
 		case MIPI_SEQ_UNDEFINED:
 		default:
-			DRM_ERROR("undefined sequnce\n");
-			continue;
+			DRM_ERROR("undefined sequence : %d\n", *data);
+			goto out;
 		}
 
 		/* partial parsing to skip elements */
@@ -820,6 +854,10 @@ parse_mipi(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 	}
 
 	DRM_DEBUG_DRIVER("MIPI related vbt parsing complete\n");
+	return;
+out:
+	memset(dev_priv->vbt.dsi.sequence, 0, sizeof(dev_priv->vbt.dsi.sequence));
+	kfree(dev_priv->vbt.dsi.data);
 }
 
 static void
@@ -1001,6 +1039,7 @@ intel_parse_bios(struct drm_device *dev)
 	parse_driver_features(dev_priv, bdb);
 	parse_edp(dev_priv, bdb);
 	parse_mipi(dev_priv, bdb);
+	parse_backlight_data(dev_priv, bdb);
 
 	if (bios)
 		pci_unmap_rom(pdev, bios);

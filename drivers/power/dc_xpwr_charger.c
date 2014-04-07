@@ -498,7 +498,7 @@ health_read_fail:
 
 static int get_charging_status(struct pmic_chrg_info *info)
 {
-	int stat;
+	int stat = POWER_SUPPLY_STATUS_UNKNOWN;
 	int pwr_stat, chrg_stat, bat_irq_stat;
 
 	pwr_stat = pmic_chrg_reg_readb(info, DC_PS_STAT_REG);
@@ -547,6 +547,17 @@ static int pmic_chrg_usb_set_property(struct power_supply *psy,
 		info->online = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
+		/*
+		 * X-Power Inlimit is getting set to default(500mA)
+		 * whenever we hit the Charger UVP condition and the
+		 * setting remains same even after UVP recovery.
+		 * As a WA to make sure the SW programmed INLMT intact
+		 * we are reprogramming the inlimit before enabling the charging.
+		 */
+		ret = pmic_chrg_set_inlmt(info, info->inlmt);
+		if (ret < 0)
+			dev_warn(&info->pdev->dev, "set inlimit failed\n");
+
 		ret = pmic_chrg_enable_charging(info, val->intval);
 		if (ret < 0)
 			dev_warn(&info->pdev->dev, "enable charging failed\n");
@@ -652,10 +663,7 @@ static int pmic_chrg_usb_get_property(struct power_supply *psy,
 			val->intval = 0;
 			break;
 		}
-		ret = pmic_chrg_is_online(info);
-		if (ret < 0)
-			goto psy_get_prop_fail;
-		val->intval = ret;
+		val->intval = info->online;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = get_charger_health(info);
