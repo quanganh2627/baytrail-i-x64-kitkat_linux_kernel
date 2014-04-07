@@ -77,7 +77,7 @@ static void *get_platform_data(void)
 	pdata.def_max_temp = 55;
 	pdata.def_min_temp = 0;
 
-	pdata.otg_gpio = 3; /* GPIOC_03 */
+	pdata.otg_gpio = 117; /* GPIONC_15 */
 	/* configure output */
 	ret = gpio_request(pdata.otg_gpio, "otg_gpio");
 	if (ret) {
