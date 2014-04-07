@@ -1176,6 +1176,11 @@ enum drrs_support_type {
 	SEAMLESS_DRRS_SUPPORT = 2
 };
 
+struct intel_vbt_target_res {
+	int xres;
+	int yres;
+};
+
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
@@ -1224,7 +1229,9 @@ struct intel_vbt_data {
 	u16 pwm_frequency;
 
 	int child_dev_num;
+
 	struct child_device_config *child_dev;
+	struct intel_vbt_target_res target_res;
 };
 
 enum intel_ddb_partitioning {
@@ -1411,6 +1418,9 @@ typedef struct drm_i915_private {
 	struct i915_drrs drrs;
 	struct intel_opregion opregion;
 	struct intel_vbt_data vbt;
+	/* Mismatch in required mode and panel native mode
+	indicating fb scaling */
+	bool scaling_reqd;
 
 	/* overlay */
 	struct intel_overlay *overlay;
