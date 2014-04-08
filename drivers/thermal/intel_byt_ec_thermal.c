@@ -99,7 +99,7 @@ static struct thermal_data *tdata;
 
 static int set_fan_speed(unsigned long rpm)
 {
-	u8 val;
+	u8 val = 0;
 	int ret;
 
 	/* Select the PWM port */
@@ -127,7 +127,7 @@ static int set_fan_speed(unsigned long rpm)
 static int set_hyst_mC(long hyst_mC)
 {
 	int ret;
-	u8 val, hystC;
+	u8 val = 0, hystC;
 
 	hystC = hyst_mC / 1000;
 
@@ -155,7 +155,7 @@ exit:
 static int get_hyst_mC(long *hyst)
 {
 	int ret;
-	u8 val;
+	u8 val = 0;
 
 	mutex_lock(&thrm_update_lock);
 
@@ -174,7 +174,7 @@ exit:
 static int set_trip_temp(struct thermal_device_info *td_info,
 			int flag, int temp)
 {
-	u8 val;
+	u8 val = 0;
 	u8 new_val, old_val;
 	u8 new_reg, old_reg;
 	int ret;
@@ -232,7 +232,7 @@ static int set_trip_temp(struct thermal_device_info *td_info,
 static int update_temp(struct thermal_zone_device *tzd, long *temp)
 {
 	int ret;
-	u8 val;
+	u8 val = 0;
 	struct thermal_device_info *td_info = tzd->devdata;
 	int ec_reg = ec_sensors[td_info->sensor_index];
 
@@ -436,7 +436,7 @@ exit:
 
 static void handle_therm_trip(void)
 {
-	u8 sts;
+	u8 sts = 0;
 	int i, ret;
 
 	ret = byt_ec_read_byte(TEMP_THRESH_STS, &sts);

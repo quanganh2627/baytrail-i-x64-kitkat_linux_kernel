@@ -138,8 +138,8 @@ static int ec_get_battery_property(struct power_supply *psy,
 				struct ec_battery_info, bat);
 	int ret = 0, cur_sign = -1;
 	int comp_cap = 0;
-	u8 val8, cap;
-	u16 val16;
+	u8 val8 = 0, cap = 0;
+	u16 val16 = 0;
 
 	mutex_lock(&chip->lock);
 	switch (psp) {
@@ -334,7 +334,7 @@ static int ec_get_charger_property(struct power_supply *psy,
 				struct ec_battery_info, chrg);
 	int ret = 0;
 	int chrg_present = 0;
-	u8 data;
+	u8 data = 0;
 
 	mutex_lock(&chip->lock);
 	ret = byt_ec_read_byte(EC_REAL_AC_PWR_REG, &data);

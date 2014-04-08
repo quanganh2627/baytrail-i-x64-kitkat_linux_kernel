@@ -56,7 +56,7 @@ struct byt_buttons_priv {
 
 static int send_lid_state(struct input_dev *input)
 {
-	u8 stat;
+	u8 stat = 0;
 	int ret;
 	ret = byt_ec_read_byte(BYT_EC_LSTE, &stat);
 	if (ret) {
@@ -73,9 +73,9 @@ static int send_lid_state(struct input_dev *input)
 static int byt_ec_evt_btn_callback(struct notifier_block *nb,
 					unsigned long event, void *data)
 {
-	u8 stat;
+	u8 stat = 0;
 	u8 valid;
-	u8 wakeup_status;
+	u8 wakeup_status = 0;
 	int ret = NOTIFY_OK;
 	int KEY_PRESSED = 1;
 	int KEY_RELEASED = 0;
