@@ -48,6 +48,9 @@
 
 #define PREFIX "ACPI: "
 
+#define ACPI_VIRTUAL_BATTERY_UID	0x0
+#define ACPI_REAL_BATTERY_UID		0x1
+
 #define ACPI_BATTERY_VALUE_UNKNOWN 0xFFFFFFFF
 
 #define ACPI_BATTERY_CLASS		"battery"
@@ -1095,10 +1098,20 @@ static int battery_notify(struct notifier_block *nb,
 static int acpi_battery_add(struct acpi_device *device)
 {
 	int result = 0;
+	int battery_type;
 	struct acpi_battery *battery = NULL;
 	acpi_handle handle;
+
 	if (!device)
 		return -EINVAL;
+
+	/* Do not add support for Virtual battery */
+	acpi_evaluate_integer(device->handle, "_UID", NULL, &battery_type);
+	if (battery_type == ACPI_VIRTUAL_BATTERY_UID) {
+		printk(KERN_WARNING PREFIX "Virtual battery not supported\n");
+		return -EINVAL;
+	}
+
 	battery = kzalloc(sizeof(struct acpi_battery), GFP_KERNEL);
 	if (!battery)
 		return -ENOMEM;
