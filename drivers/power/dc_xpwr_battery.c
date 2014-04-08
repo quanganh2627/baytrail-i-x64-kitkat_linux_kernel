@@ -334,7 +334,7 @@ static int pmic_fg_get_current(struct pmic_fg_info *info, int *cur)
 
 	pwr_stat = pmic_fg_reg_readb(info, DC_PS_STAT_REG);
 	if (pwr_stat < 0) {
-		dev_err(&info->pdev->dev, "PWR STAT read failed:%d\n", ret);
+		dev_err(&info->pdev->dev, "PWR STAT read failed:%d\n", pwr_stat);
 		return pwr_stat;
 	}
 
