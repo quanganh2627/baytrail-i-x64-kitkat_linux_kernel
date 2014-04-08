@@ -405,6 +405,11 @@ static int pmic_fg_battery_health(struct pmic_fg_info *info)
 	int temp, vocv;
 	int ret, health = POWER_SUPPLY_HEALTH_UNKNOWN;
 
+	if (info->pdata->technology != POWER_SUPPLY_TECHNOLOGY_LION) {
+		dev_err(&info->pdev->dev, "Invalid battery detected");
+		return POWER_SUPPLY_HEALTH_UNKNOWN;
+	}
+
 	ret = pmic_fg_get_btemp(info, &temp);
 	if (ret < 0)
 		goto health_read_fail;
@@ -499,7 +504,7 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		val->intval = value * 10;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		val->intval = info->pdata->technology;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);

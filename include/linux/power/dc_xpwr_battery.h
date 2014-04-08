@@ -31,8 +31,9 @@
 #define BATTID_LEN		8
 
 struct dollarcove_fg_pdata {
-	char battid[BATTID_LEN + 1];
 
+	char battid[BATTID_LEN + 1];
+	int technology;
 	int design_cap;
 	int design_min_volt;
 	int design_max_volt;
