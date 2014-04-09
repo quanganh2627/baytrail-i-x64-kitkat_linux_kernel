@@ -176,6 +176,7 @@
 #define NR_RETRY_CNT	3
 
 #define DEV_NAME			"dollar_cove_battery"
+#define BATT_OVP_OFFSET			50		/* 50mV */
 
 enum {
 	QWBTU_IRQ = 0,
@@ -412,10 +413,10 @@ static int pmic_fg_battery_health(struct pmic_fg_info *info)
 	if (ret < 0)
 		goto health_read_fail;
 
-	if (vocv > info->pdata->design_max_volt)
+	if (vocv > (info->pdata->design_max_volt + BATT_OVP_OFFSET))
 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
-	else if (temp > info->pdata->max_temp ||
-			temp < info->pdata->min_temp)
+	else if (temp >= info->pdata->max_temp ||
+			temp <= info->pdata->min_temp)
 		health = POWER_SUPPLY_HEALTH_OVERHEAT;
 	else if (vocv < info->pdata->design_min_volt)
 		health = POWER_SUPPLY_HEALTH_DEAD;
