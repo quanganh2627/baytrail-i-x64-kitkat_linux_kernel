@@ -103,12 +103,12 @@ static struct regulator_consumer_supply v3p3s_consumer[] = {
 	 * REGULATOR_SUPPLY("usbregu", "usbreg0"),
 	 */
 };
-
+#if !(defined(CONFIG_MRD7) || defined(CONFIG_MRD8))
 static struct pmic_regulator_gpio_en v3p3s_gpio_data = {
 	.gpio = GPIO_3P3SX_EN,
 	.init_gpio_state = GPIOF_OUT_INIT_HIGH,
 };
-
+#endif
 static struct regulator_init_data v3p3s_data = {
 	.constraints = {
 		.name = "v3p3s",
@@ -126,7 +126,9 @@ static struct intel_pmic_info v3p3s_info = {
 	.init_data  = &v3p3s_data,
 	.table_len  = ARRAY_SIZE(V3P3S_VSEL_TABLE),
 	.table      = V3P3S_VSEL_TABLE,
+#if !(defined(CONFIG_MRD7) || defined(CONFIG_MRD8))
 	.en_pin	=  &v3p3s_gpio_data,
+#endif
 };
 
 static struct platform_device v3p3s_device = {

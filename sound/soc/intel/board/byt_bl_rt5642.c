@@ -40,6 +40,7 @@
 #include <sound/soc.h>
 #include <sound/jack.h>
 #include "../../codecs/rt5640.h"
+#include <linux/lnw_gpio.h>
 
 #ifdef CONFIG_SND_SOC_COMMS_SSP
 #include "byt_bl_rt5642.h"
@@ -664,6 +665,7 @@ static int byt_aif2_hw_free(struct snd_pcm_substream *substream)
 
 	if (ctx->tristate_buffer_gpio >= 0)
 		gpio_set_value(ctx->tristate_buffer_gpio, 0);
+
 	return 0;
 }
 
@@ -1177,12 +1179,19 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	drv->num_jack_gpios = 1;
 	drv->use_soc_jd_gpio = false;
 #if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
-	/* Configure GPIO_SCORE56 for BT SCO workaround on FFRD8 PR1 */
-	drv->tristate_buffer_gpio = acpi_get_gpio("\\_SB.GPO0", 56);
-	ret_val = devm_gpio_request_one(&pdev->dev,
-				drv->tristate_buffer_gpio,
-				GPIOF_OUT_INIT_LOW,
-				"byt_ffrd8_tristate_buffer_gpio");
+	/* Configure GPIOS_21 for BT SCO workaround on MRD */
+	drv->tristate_buffer_gpio = acpi_get_gpio("\\_SB.GPO2", 21);
+	if (drv->tristate_buffer_gpio >= 0) {
+		ret_val = devm_gpio_request_one(&pdev->dev,
+					drv->tristate_buffer_gpio,
+					GPIOF_OUT_INIT_LOW,
+					"byt_ffrd8_tristate_buffer_gpio");
+		if (ret_val != 0) {
+			pr_err(" gpio request failed\n");
+			drv->tristate_buffer_gpio = -1;
+		}
+	} else
+		pr_err("No tristate gpio\n");
 #else
 	/* FFRD PR1 has 2 SoC gpios for Jack detect/Button press. One GPIO is for
 	   codec interrupt(codec-> SoC) and the second GPIO is for jack detection
