@@ -797,7 +797,17 @@ first_try:
 		/* Allocate & copy */
 		if (!halt && !data) {
 			size_t allocated_len, packet_size;
+
+			spin_lock_irq(&epfile->ffs->eps_lock);
+			/* ffs may have been disabled here */
+			if (unlikely(!epfile->ep)) {
+				spin_unlock_irq(&epfile->ffs->eps_lock);
+				ret = -ENODEV;
+				goto error;
+			}
 			packet_size = ep->ep->desc->wMaxPacketSize;
+			spin_unlock_irq(&epfile->ffs->eps_lock);
+
 			if (read && packet_size && !IS_ALIGNED(len, packet_size))
 				allocated_len = roundup(len, packet_size);
 			else
