@@ -95,7 +95,7 @@ static void *get_platform_data(void)
 	pdata.design_cap = 4980;
 	pdata.design_min_volt = 3400;
 	pdata.design_max_volt = 4350;
-	pdata.max_temp = 55;
+	pdata.max_temp = 45;
 	pdata.min_temp = 0;
 
 	pdata.cap1 = 0x8D;
