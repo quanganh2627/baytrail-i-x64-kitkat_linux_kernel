@@ -59,6 +59,9 @@
 /* Battery power unit: 0 means mW, 1 means mA */
 #define ACPI_BATTERY_POWER_UNIT_MA	1
 
+/* 6% is minimun threshold  for platform shutdown*/
+#define EC_BAT_SAFE_MIN_CAPACITY        6
+
 #define _COMPONENT		ACPI_BATTERY_COMPONENT
 
 ACPI_MODULE_NAME("battery");
@@ -108,6 +111,10 @@ enum {
 	   post-1.29 BIOS), but as of Nov. 2012, no such update is
 	   available for the 2010 models.  */
 	ACPI_BATTERY_QUIRK_THINKPAD_MAH,
+	/* On BYT-M platform 6% battery is minimum threshold for
+	 * platform shutdown
+	 */
+	ACPI_BATTERY_VALLEYVIEW_QUIRK,
 };
 
 struct acpi_battery {
@@ -197,6 +204,7 @@ static int acpi_battery_get_property(struct power_supply *psy,
 				     union power_supply_propval *val)
 {
 	int ret = 0;
+	int comp_cap = 0;
 	struct acpi_battery *battery = to_acpi_battery(psy);
 
 	if (acpi_battery_present(battery)) {
@@ -265,10 +273,24 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			val->intval = battery->capacity_now * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (battery->capacity_now && battery->full_charge_capacity)
-			val->intval = battery->capacity_now * 100/
-					battery->full_charge_capacity;
-		else
+		if (battery->capacity_now && battery->full_charge_capacity) {
+			comp_cap = battery->capacity_now * 100/
+				battery->full_charge_capacity;
+			/* 6% of capacity is minimun treshold for BYT-M
+			* So, the 6% is mapped to 0% in android.
+			* 6% to 100% is compensated with 0% to 100% to OS.
+			* Compensated capacity= cap - ((100 - cap)*6)/100 + 0.5
+			*/
+			if (test_bit(ACPI_BATTERY_VALLEYVIEW_QUIRK,
+							&battery->flags)) {
+				comp_cap = comp_cap*100 - ((100 - comp_cap)
+					*EC_BAT_SAFE_MIN_CAPACITY) + 50;
+				comp_cap /= 100;
+			}
+			if (comp_cap < 0)
+				comp_cap = 0;
+			val->intval = comp_cap;
+		} else
 			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
@@ -663,6 +685,11 @@ static void find_battery(const struct dmi_header *dm, void *private)
  */
 static void acpi_battery_quirks(struct acpi_battery *battery)
 {
+	char *str;
+	str = dmi_get_system_info(DMI_PRODUCT_NAME);
+	if (str && !strnicmp(str, "VALLEYVIEW", 10))
+		set_bit(ACPI_BATTERY_VALLEYVIEW_QUIRK, &battery->flags);
+
 	if (test_bit(ACPI_BATTERY_QUIRK_PERCENTAGE_CAPACITY, &battery->flags))
 		return ;
 
