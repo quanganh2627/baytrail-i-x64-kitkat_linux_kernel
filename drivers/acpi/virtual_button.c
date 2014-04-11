@@ -33,9 +33,16 @@
 #define BYT_EC_SCI_VOLUMEUP_BTN         0x80    /* SCI from vol up button */
 #define BYT_EC_SCI_VOLUMEDOWN_BTN       0x81    /* SCI from vol down button */
 #define BYT_EC_SCI_HOME_BTN             0x85    /* SCI from home button */
+#define BYT_EC_SCI_POWER_BTN            0x86    /* SCI from power button */
+#define BYT_EC_SCI_RESUME		0x55	/* SCI from Resuming from S3 */
 #define VOL_UP_MASK			(1 << 0)
 #define VOL_DOWN_MASK			(1 << 1)
 #define VOL_HOME_MASK			(1 << 2)
+#define POWER_MASK			(1 << 3)
+
+#define	EC_S3_WAKEUP_STATUS		0xB7
+#define	PWRBTN_HID_WAKE			0x01
+#define	PWRBTN_HID_CLEAR		0x0
 
 struct virtual_button {
 	u8 key_press;
@@ -62,12 +69,36 @@ static struct virtual_keys_button virtual_buttons[] = {
 	{ KEY_VOLUMEUP,		EV_KEY, "Volume_up", 1 },
 	{ KEY_VOLUMEDOWN,	EV_KEY, "Volume_down", 1 },
 	{ KEY_HOME,		EV_KEY, "Home_btn", 1 },
+	{ KEY_POWER,		EV_KEY, "Power_btn", 1 },
 };
 
 static struct virtual_keys_platform_data virtual_key_pdata = {
 	.buttons = virtual_buttons,
-	.nbuttons = 3,
+	.nbuttons = 4,
 };
+
+static void power_button_work(int event)
+{
+	u8 val;
+	int ret;
+
+	ret = ec_read(EC_S3_WAKEUP_STATUS, &val);
+	if (ret)
+		pr_err("%s: ec read fail\n", __func__);
+	else if (val & PWRBTN_HID_WAKE) {
+		if (event == BYT_EC_SCI_RESUME) {
+			input_event(priv->input, EV_KEY,
+				KEY_POWER, 1);
+			input_sync(priv->input);
+			input_event(priv->input, EV_KEY,
+				KEY_POWER, 0);
+			input_sync(priv->input);
+		}
+		ret = ec_write(EC_S3_WAKEUP_STATUS, PWRBTN_HID_CLEAR);
+		if (ret)
+			pr_err("%s: ec write fail\n", __func__);
+	}
+}
 
 static int button_event_handler(void *data)
 {
@@ -89,6 +120,16 @@ static int button_event_handler(void *data)
 			KEY_HOME, !(priv->key_press & VOL_HOME_MASK));
 		priv->key_press ^= VOL_HOME_MASK;
 		break;
+	case BYT_EC_SCI_POWER_BTN:
+		input_event(priv->input, EV_KEY,
+			KEY_POWER, !(priv->key_press & POWER_MASK));
+		priv->key_press ^= POWER_MASK;
+		acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
+		power_button_work(BYT_EC_SCI_POWER_BTN);
+		break;
+	case BYT_EC_SCI_RESUME:
+		power_button_work(BYT_EC_SCI_RESUME);
+		return 0;
 	default:
 		pr_err("%s: non acpi button unhandled event\n", __func__);
 		return 0;
@@ -151,6 +192,12 @@ static int virtual_buttons_probe(struct platform_device *pdev)
 		button_event_handler, BYT_EC_SCI_VOLUMEDOWN_BTN);
 	acpi_ec_add_query_handler(first_ec, BYT_EC_SCI_HOME_BTN, NULL,
 		button_event_handler, BYT_EC_SCI_HOME_BTN);
+#ifdef CONFIG_ACPI_VIRTUAL_POWER_BUTTON
+	acpi_ec_add_query_handler(first_ec, BYT_EC_SCI_POWER_BTN, NULL,
+		button_event_handler, BYT_EC_SCI_POWER_BTN);
+	acpi_ec_add_query_handler(first_ec, BYT_EC_SCI_RESUME, NULL,
+		button_event_handler, BYT_EC_SCI_RESUME);
+#endif
 
 	dev_info(&pdev->dev, "Probed %s device\n", pdev->name);
 	return 0;

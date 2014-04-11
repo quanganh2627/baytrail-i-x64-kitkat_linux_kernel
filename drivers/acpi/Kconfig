@@ -403,6 +403,13 @@ config ACPI_VIRTUAL_BUTTON
 	  such as volume keys and home button. Buttons which have acpi device id
 	  is still handled in acpi button driver.
 
+config ACPI_VIRTUAL_POWER_BUTTON
+	bool "VIRTUAL Button for Power Key"
+	depends on INPUT && ACPI_VIRTUAL_BUTTON
+	default n
+	help
+	  Adds Power Button to virtual button driver.
+
 source "drivers/acpi/apei/Kconfig"
 
 endif	# ACPI
