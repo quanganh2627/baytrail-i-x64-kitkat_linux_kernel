@@ -24,6 +24,7 @@
 #include "platform_gc0339.h"
 #include "platform_gc2235.h"
 #include "platform_gc5004.h"
+#include "platform_ov5648.h"
 #include "platform_ov5693.h"
 #include "platform_lm3554.h"
 #include "platform_lm3642.h"
@@ -51,6 +52,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"gc2235", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"gc5004", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov5693", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
+	{"ov5648", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9d113", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9m114", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"mt9v113", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
@@ -103,7 +105,6 @@ static struct camera_device_table byt_ffrd8_cam_table[] = {
 			&intel_register_i2c_camera_device}
 	}
 };
-//{SFI_DEV_TYPE_I2C, 4, 0x36, 0x0, 0x0, "gc5004"},
 #ifdef CONFIG_MRD7
 static struct camera_device_table byt_crv2_cam_table[] = {
 	{
@@ -113,6 +114,10 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "gc5004"},
 		{"gc5004", SFI_DEV_TYPE_I2C, 0, &gc5004_platform_data,
+			&intel_register_i2c_camera_device}
+	}, {
+		{SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "ov5648"},
+		{"ov5648", SFI_DEV_TYPE_I2C, 0, &ov5648_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x21, 0x0, 0x0, "gc0339"},

@@ -115,6 +115,7 @@
 #include "device_libs/platform_lm3559.h"
 #include "device_libs/platform_ov8830.h"
 #include "device_libs/platform_ov5693.h"
+#include "device_libs/platform_ov5648.h"
 #include "device_libs/platform_wm5102.h"
 #include "device_libs/platform_ap1302.h"
 #include "device_libs/platform_csi_xactor.h"
@@ -299,6 +300,8 @@ struct devs_id __initconst device_ids[] = {
 	{"gc2235", SFI_DEV_TYPE_I2C, 0, &gc2235_platform_data,
 					&intel_register_i2c_camera_device},
 	{"gc5004", SFI_DEV_TYPE_I2C, 0, &gc5004_platform_data,
+                    &intel_register_i2c_camera_device},
+	{"ov5648", SFI_DEV_TYPE_I2C, 0, &ov5648_platform_data,
                     &intel_register_i2c_camera_device},
 	{"lm3559", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,
 					&intel_register_i2c_camera_device},

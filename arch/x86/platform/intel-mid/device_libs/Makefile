@@ -105,6 +105,7 @@ obj-$(subst m,y,$(CONFIG_VIDEO_OV2722))					+= platform_ov2722.o
 obj-$(subst m,y,$(CONFIG_VIDEO_GC0339))                 += platform_gc0339.o
 obj-$(subst m,y,$(CONFIG_VIDEO_GC2235))                 += platform_gc2235.o
 obj-$(subst m,y,$(CONFIG_VIDEO_GC5004))                 += platform_gc5004.o
+obj-$(subst m,y,$(CONFIG_VIDEO_OV5648))                 += platform_ov5648.o
 obj-$(subst m,y,$(CONFIG_VIDEO_OV5693))					+= platform_ov5693.o
 obj-$(subst m,y,$(CONFIG_VIDEO_LM3554))					+= platform_lm3554.o
 obj-$(subst m,y,$(CONFIG_VIDEO_LM3559))					+= platform_lm3559.o
