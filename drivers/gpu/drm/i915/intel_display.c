@@ -4118,14 +4118,9 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	}
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
-		if (encoder->type != INTEL_OUTPUT_DSI) {
 			if (encoder->pre_enable)
 				encoder->pre_enable(encoder);
-		} else {
-			/* For DSI recommended to enable PORT before plane and pipe */
-			encoder->enable(encoder);
 		}
-	}
 
 	i9xx_pfit_enable(intel_crtc);
 
@@ -4140,10 +4135,8 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	intel_update_fbc(dev);
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
-		if (encoder->type != INTEL_OUTPUT_DSI)
-			/* For DSI already enabled above */
 			encoder->enable(encoder);
-	}
+		}
 }
 
 static void i9xx_crtc_enable(struct drm_crtc *crtc)
@@ -7179,9 +7172,6 @@ static int intel_crtc_mode_set(struct drm_crtc *crtc,
 			encoder->base.base.id,
 			drm_get_encoder_name(&encoder->base),
 			mode->base.id, mode->name);
-
-		if (encoder->type == INTEL_OUTPUT_DSI)
-			encoder->pre_enable(encoder);
 
 		encoder->mode_set(encoder);
 	}
