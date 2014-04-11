@@ -55,13 +55,16 @@
 #define	BASE_ADDRESS_MASK	0xFFFFFFFE00
 
 /* Disable PMC SOIX_WAKE_EN events coming from:
- * - LPC clock run
- * - GPIO_SUS ored dedicated IRQs
- * - GPIO_SCORE ored dedicated IRQs
- * - GPIO_SUS shared IRQ
- * - GPIO_SCORE shared IRQ
+ * - Bit 4 LPC clock run
+ * - Bit 5 Shared IRQ from GPSC
+ * - Bit 6 GPE from GPSC
+ * - Bit 7 GPE from GPSS
+ * - Bit 8 Shared IRQ from GPNC
+ * - Bit 18 Ored dedicated IRQs from GPSS
+ * - Bit 19 Ored dedicated IRQs from GPSC
+ * - Bit 20 Shared IRQ from GPSS
  */
-#define	PMC_WAKE_EN_SETTING     0xe3ffcf
+#define	PMC_WAKE_EN_SETTING     0xe3fe0f
 
 #define PM_SUPPORT		0x21
 
