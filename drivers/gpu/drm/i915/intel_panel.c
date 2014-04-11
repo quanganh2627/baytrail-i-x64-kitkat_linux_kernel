@@ -53,6 +53,12 @@
 	} while (0)
 #endif
 
+#ifdef CONFIG_MRD7
+#define ENABLE_SIO_PWM
+#endif
+#ifdef CONFIG_MRD8
+#define ENABLE_SIO_PWM
+#endif
 extern void my_drm_ut_debug_printk(unsigned int request_level,
 			 const char *prefix,
 			 const char *function_name,
@@ -424,7 +430,7 @@ u32 intel_panel_get_max_backlight(struct drm_device *dev)
 	if (IS_VALLEYVIEW(dev)){
 		if(dev_priv->is_mipi)
 			max = 255;
-#ifdef CONFIG_MRD7
+#ifdef ENABLE_SIO_PWM
 		else
 			max = 255;
 #endif
@@ -573,7 +579,7 @@ void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level)
 		level /= lbpc;
 		pci_write_config_byte(dev->pdev, PCI_LBPC, lbpc);
 	}
-#ifdef CONFIG_MRD7
+#ifdef ENABLE_SIO_PWM
 	if (BYT_CR_CONFIG) {
 		lpio_bl_write_bits(0, LPIO_PWM_CTRL,(0xFF-level), 0xFF);
 		lpio_bl_update(0, LPIO_PWM_CTRL);
@@ -629,7 +635,7 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 freq;
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
@@ -637,7 +643,7 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 	freq = intel_panel_get_max_backlight(dev);
 	if (!freq) {
 		/* we are screwed, bail out */
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 		spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 #endif
 		return;
@@ -658,7 +664,7 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 		if (!dev_priv->is_mipi)
 			intel_panel_actually_set_backlight(dev, level);
 	}
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 #endif
 	if (dev_priv->is_mipi)
@@ -668,18 +674,18 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level, u32 max)
 void intel_panel_disable_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	unsigned long flags;
 #endif
   DRM_DEBUG_DRIVER("\n");
 	if (IS_VALLEYVIEW(dev)
-#ifndef CONFIG_MRD7	
+#ifndef ENABLE_SIO_PWM
 	 && dev_priv->is_mipi
 #endif
 	 ) {
 	  if (dev_priv->is_mipi)
    		intel_panel_actually_set_mipi_backlight(dev, 0);
-#ifdef CONFIG_MRD7
+#ifdef ENABLE_SIO_PWM
 		else
 	   intel_panel_actually_set_backlight(dev, 0);
 #endif		
@@ -702,11 +708,11 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 		DRM_ERROR("Backlight not supported yet\n");
 #endif
 	}
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
 #endif
 	dev_priv->backlight.enabled = false;
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
 		spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 		return;
@@ -728,7 +734,7 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 			I915_WRITE(BLC_PWM_PCH_CTL1, tmp);
 		}
 	}
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 #endif
 }
@@ -790,14 +796,14 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	enum transcoder cpu_transcoder =
 		intel_pipe_to_cpu_transcoder(dev_priv, pipe);
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	unsigned long flags;
 #endif
 	uint32_t pwm_base;
 
   DRM_DEBUG_DRIVER("\n");
 	if (IS_VALLEYVIEW(dev)
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	&& dev_priv->is_mipi
 #endif	
 	) {
@@ -825,7 +831,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 			vlv_gpio_nc_write(dev_priv, 0x40E8, 0x00000005);
 			udelay(500);
 
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 			if (lpdata)
 			{
 				if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)
@@ -836,7 +842,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 		} else {
 			intel_mid_pmic_writeb(0x4B, 0xFF);
 			intel_mid_pmic_writeb(0x51, 0x01);
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 			/* Control Backlight Slope programming for LP8556 IC*/
 			if (lpdata && (spid.hardware_id == BYT_TABLET_BLK_8PR1)) {
 				mdelay(2);
@@ -855,7 +861,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 		DRM_ERROR("Backlight not supported yet\n");
 #endif
 	}
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	spin_lock_irqsave(&dev_priv->backlight.lock, flags);
 #endif
 #if 0
@@ -914,7 +920,7 @@ set_level:
 	if (!dev_priv->is_mipi)
 		intel_panel_actually_set_backlight(dev,
 						dev_priv->backlight.level);
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	spin_unlock_irqrestore(&dev_priv->backlight.lock, flags);
 
 	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi)
@@ -926,7 +932,7 @@ set_level:
 static void intel_panel_init_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-#ifndef CONFIG_MRD7
+#ifndef ENABLE_SIO_PWM
 	dev_priv->backlight.level = intel_panel_get_backlight(dev);
 #else
     dev_priv->backlight.level = 100;
