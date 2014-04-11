@@ -69,6 +69,13 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 		.name = "jdi-lpm070w425b-dsi-vid-mode-display",
 		.dev_ops = &jdi_lpm070w425b_dsi_display_ops,
 	},
+        {
+                .panel_id = MIPI_DSI_AUO_B080EAN01_PANEL_ID,
+                .type = INTEL_DSI_VIDEO_MODE,
+                .name = "auo-b080ean01-dsi-vid-mode-display",
+                .dev_ops = &auo_b080ean011_dsi_display_ops,
+                .lane_count = 4, /* XXX: this really doesn't belong here */
+        },
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
