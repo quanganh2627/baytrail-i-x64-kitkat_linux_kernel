@@ -161,7 +161,6 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 	}
 
 	dbs_data->cdata->gov_check_cpu(cpu, max_load);
-	per_cpu(cpu_shield_data, cpu).cpu_utilization = max_load;
 }
 EXPORT_SYMBOL_GPL(dbs_check_cpu);
 
