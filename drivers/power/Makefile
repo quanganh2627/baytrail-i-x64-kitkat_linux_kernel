@@ -60,3 +60,4 @@ obj-$(CONFIG_POWER_RESET)	+= reset/
 obj-$(CONFIG_BYT_EC_BATTERY)	+= byt_ec_battery.o
 obj-$(CONFIG_DC_XPWR_BATTERY)	+= dc_xpwr_battery.o
 obj-$(CONFIG_DC_XPWR_CHARGER)	+= dc_xpwr_charger.o
+obj-$(CONFIG_INTEL_FUEL_GAUGE)	+= intel_fuel_gauge.o
