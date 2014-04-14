@@ -42,9 +42,6 @@
 #include <linux/security.h>
 #include <linux/notifier.h>
 #include <linux/profile.h>
-#include <linux/cpuidle.h>
-#include <linux/cpufreq.h>
-#include <linux/cpumask.h>
 #include <linux/freezer.h>
 #include <linux/vmalloc.h>
 #include <linux/blkdev.h>
@@ -91,147 +88,6 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
-
-#ifdef CONFIG_CPU_SHIELDING
-
-static DEFINE_SPINLOCK(shield_lock);
-static DEFINE_PER_CPU(unsigned int, shield_index);
-struct cpu_shield_info shield_info;
-unsigned int sysctl_shield_low_wm;
-unsigned int sysctl_shield_high_wm;
-unsigned int sysctl_shield_enable;
-unsigned int sysctl_shield_rate;
-
-bool is_this_cpu_shielded(int cpu)
-{
-	if (!sysctl_shield_enable)
-		return false;
-	return cpumask_test_cpu(cpu, shield_info.shield_mask);
-}
-
-int get_module_utilization(int module)
-{
-	int cpu_util_stat = 0, cpu;
-
-	for_each_module_cpus(cpu, module)
-		cpu_util_stat += per_cpu(cpu_shield_data, cpu).cpu_utilization;
-
-	return cpu_util_stat;
-}
-
-static void shield_this_module(int module)
-{
-	unsigned long flags;
-	int cpu;
-
-	spin_lock_irqsave(&shield_lock, flags);
-
-	if (shield_info.nr_module_shielded >= MAX_SHIELD_LEVEL)
-		goto unlock;
-
-	shield_info.info[module].ktime_entry = ktime_get();
-
-	for_each_module_cpus(cpu, module)
-		cpumask_set_cpu(cpu, shield_info.shield_mask);
-
-	shield_info.info[module].shield_stat += 1;
-	shield_info.nr_module_shielded++;
-
-unlock:
-	spin_unlock_irqrestore(&shield_lock, flags);
-}
-
-static void unshield_this_module(int module)
-{
-	unsigned long flags;
-	int cpu;
-	ktime_t temp;
-
-	spin_lock_irqsave(&shield_lock, flags);
-	if (!shield_info.nr_module_shielded)
-		goto unlock;
-
-	for_each_module_cpus(cpu, module)
-		cpumask_clear_cpu(cpu, shield_info.shield_mask);
-
-	shield_info.nr_module_shielded--;
-
-	temp = ktime_sub(ktime_get(), shield_info.info[module].ktime_entry);
-	shield_info.info[module].module_residency =
-		ktime_add(shield_info.info[module].module_residency, temp);
-
-	shield_info.info[module].unshield_stat += 1;
-unlock:
-	spin_unlock_irqrestore(&shield_lock, flags);
-}
-
-static void do_shield_check(void)
-{
-	unsigned int curr_load, prev_load = UINT_MAX;
-	unsigned  int mod_shield = 0;
-	int cpu, module, mod_count = 0;
-
-	if (!sysctl_shield_enable)
-		return;
-
-	if (shield_info.nr_module_shielded >= MAX_SHIELD_LEVEL)
-		return;
-
-	if (per_cpu(cpu_shield_data, cpu).is_not_valid)
-		return;
-
-	for (module = 0; module < NR_MODULES; module++) {
-		curr_load = get_module_utilization(module);
-		if (curr_load < prev_load)
-			mod_shield = module;
-
-		if (curr_load < sysctl_shield_low_wm * NR_ML_CPUS)
-			mod_count++;
-
-		prev_load = curr_load;
-	}
-
-	if (mod_count == NR_MODULES) {
-		for (module = 1; module < NR_MODULES; module++)
-			shield_this_module(module);
-	}
-}
-
-static void do_unshield_check(void)
-{
-	int module, cpu;
-	unsigned int curr_load;
-	bool unshield = false;
-
-	if (!shield_info.nr_module_shielded)
-		return;
-
-	if (per_cpu(cpu_shield_data, cpu).is_not_valid) {
-		unshield = true;
-		goto un_shield;
-	}
-
-	for (module = 0; module < NR_MODULES; module++) {
-		if (!cpumask_test_cpu(module * 2, shield_info.shield_mask)) {
-			curr_load = get_module_utilization(module);
-			if (curr_load > sysctl_shield_high_wm * NR_ML_CPUS)
-				unshield = true;
-
-			continue;
-		}
-
-	}
-
-un_shield:
-	if (unshield) {
-		for (module = 1; module < NR_MODULES; module++)
-			unshield_this_module(module);
-	}
-}
-
-#else /* !CONFIG_CPU_SHIELDING */
-bool is_this_cpu_shielded(int cpu) { return false; }
-#endif /* CONFIG_CPU_SHIELDING */
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -2884,19 +2740,6 @@ void scheduler_tick(void)
 	raw_spin_lock(&rq->lock);
 	update_rq_clock(rq);
 	update_cpu_load_active(rq);
-
-#ifdef CONFIG_CPU_SHIELDING
-
-	if (sysctl_shield_rate &&
-		 !(per_cpu(shield_index, cpu) % sysctl_shield_rate)) {
-		if (shield_info.nr_module_shielded)
-			do_unshield_check();
-		else
-			do_shield_check();
-	}
-	per_cpu(shield_index, cpu)++;
-#endif
-
 	curr->sched_class->task_tick(rq, curr, 0);
 	raw_spin_unlock(&rq->lock);
 
@@ -2904,8 +2747,6 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
-	if (is_this_cpu_shielded(cpu))
-		return;
 	trigger_load_balance(rq, cpu);
 #endif
 	rq_last_tick_reset(rq);
@@ -6952,26 +6793,6 @@ match2:
 
 static int num_cpus_frozen;	/* used to mark begin/end of suspend/resume */
 
-#ifdef CONFIG_CPU_SHIELDING
-int sched_core_shielding_init(void)
-{
-	int err = 0, size;
-
-	size = NR_MODULES * sizeof(struct module_info);
-	shield_info.info = kzalloc(size, GFP_KERNEL);
-	shield_info.nr_module_shielded = 0;
-	shield_info.ktime_offset = ktime_get();
-
-	/* set thresholds for shielding */
-	sysctl_shield_low_wm = SHIELD_LWM_THRESH;
-	sysctl_shield_high_wm = SHIELD_HWM_THRESH;
-	sysctl_shield_rate = 2;
-	sysctl_shield_enable = 1;
-
-	return err;
-}
-#endif
-
 /*
  * Update cpusets according to cpu_active mask.  If cpusets are
  * disabled, cpuset_update_active_cpus() becomes a simple wrapper
@@ -7066,10 +6887,6 @@ void __init sched_init_smp(void)
 	free_cpumask_var(non_isolated_cpus);
 
 	init_sched_rt_class();
-#ifdef CONFIG_CPU_SHIELDING
-	sched_core_shielding_init();
-#endif /* CONFIG_CPU_SHIELDING */
-
 }
 #else
 void __init sched_init_smp(void)
