@@ -1085,10 +1085,7 @@ static int battery_notify(struct notifier_block *nb,
 	switch (mode) {
 	case PM_POST_HIBERNATION:
 	case PM_POST_SUSPEND:
-		if (battery->bat.dev) {
-			sysfs_remove_battery(battery);
-			sysfs_add_battery(battery);
-		}
+		acpi_battery_refresh(battery);
 		break;
 	}
 
