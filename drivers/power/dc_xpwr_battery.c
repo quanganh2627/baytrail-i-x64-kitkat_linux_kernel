@@ -121,8 +121,8 @@
 #define DC_FG_OCV_CURVE_REG		0xC0
 
 #define DC_FG_DES_CAP1_REG		0xE0
-#define DC_FG_DES_CAP1_VALID		(1 << 7)
-#define DC_FG_DES_CAP1_VAL_MASK		0x7F
+#define FG_DES_CAP1_VALID		(1 << 7)
+#define FG_DES_CAP1_VAL_MASK		0x7F
 
 #define DC_FG_DES_CAP0_REG		0xE1
 #define FG_DES_CAP0_VAL_MASK		0xFF
@@ -432,13 +432,55 @@ health_read_fail:
 	return health;
 }
 
+static int pmic_fg_get_charge_now(struct pmic_fg_info *info, int *value)
+{
+	int ret;
+
+	ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
+	if (ret < 0)
+		goto pmic_fg_cnow_err;
+
+	*value = (ret & FG_CC_MTR1_VAL_MASK) << 8;
+	ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR0_REG);
+	if (ret < 0)
+		goto pmic_fg_cnow_err;
+	*value |= (ret & FG_CC_MTR0_VAL_MASK);
+	*value *= FG_DES_CAP_RES_LSB;
+
+	return 0;
+
+pmic_fg_cnow_err:
+	return ret;
+}
+
+static int pmic_fg_get_charge_full(struct pmic_fg_info *info, int *value)
+{
+	int ret;
+
+	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	if (ret < 0)
+		goto pmic_fg_cfull_err;
+	*value = (ret & FG_DES_CAP1_VAL_MASK) << 8;
+
+	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
+	if (ret < 0)
+		goto pmic_fg_cfull_err;
+	*value |= (ret & FG_DES_CAP0_VAL_MASK);
+	*value *= FG_DES_CAP_RES_LSB;
+
+	return 0;
+
+pmic_fg_cfull_err:
+	return ret;
+}
+
 static int pmic_fg_get_battery_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					union power_supply_propval *val)
 {
 	struct pmic_fg_info *info = container_of(psy,
 				struct pmic_fg_info, bat);
-	int ret = 0, value;
+	int ret = 0, value, cc_cap;
 
 	mutex_lock(&info->lock);
 	switch (psp) {
@@ -495,7 +537,22 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		if (!(ret & FG_REP_CAP_VALID))
 			dev_err(&info->pdev->dev,
 				"capacity measurement not valid\n");
-		val->intval = (ret & FG_REP_CAP_VAL_MASK);
+
+		/*
+		 * read the coulomb meter capacity to report SOC
+		 * when the FULL is detected, as RepSoC is not
+		 * hitting 100% in some cases.
+		 */
+		if (info->status == POWER_SUPPLY_STATUS_FULL) {
+			cc_cap = pmic_fg_reg_readb(info, DC_FG_CC_CAP_REG);
+			if (cc_cap < 0) {
+				ret = cc_cap;
+				goto pmic_fg_read_err;
+			}
+			val->intval = (cc_cap & FG_CC_CAP_VAL_MASK);
+		} else {
+			val->intval = (ret & FG_REP_CAP_VAL_MASK);
+		}
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		ret = pmic_fg_get_btemp(info, &value);
@@ -507,28 +564,16 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		val->intval = info->pdata->technology;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
-		ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
+		ret = pmic_fg_get_charge_now(info, &value);
 		if (ret < 0)
 			goto pmic_fg_read_err;
-
-		value = (ret & FG_CC_MTR1_VAL_MASK) << 8;
-		ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR0_REG);
-		if (ret < 0)
-			goto pmic_fg_read_err;
-		value |= (ret & FG_CC_MTR0_VAL_MASK);
-		val->intval = value * FG_DES_CAP_RES_LSB;
+		val->intval = value;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+		ret = pmic_fg_get_charge_full(info, &value);
 		if (ret < 0)
 			goto pmic_fg_read_err;
-
-		value = (ret & DC_FG_DES_CAP1_VAL_MASK) << 8;
-		ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
-		if (ret < 0)
-			goto pmic_fg_read_err;
-		value |= (ret & FG_DES_CAP0_VAL_MASK);
-		val->intval = value * FG_DES_CAP_RES_LSB;
+		val->intval = value;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		val->intval = info->pdata->design_cap * 1000;
@@ -750,7 +795,7 @@ static void pmic_fg_init_config_regs(struct pmic_fg_info *info)
 	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
 	if (ret < 0) {
 		dev_warn(&info->pdev->dev, "CAP1 reg read err!!\n");
-	} else if (ret & DC_FG_DES_CAP1_VALID) {
+	} else if (ret & FG_DES_CAP1_VALID) {
 		dev_info(&info->pdev->dev, "FG data is already initialized\n");
 		pmic_fg_dump_init_regs(info);
 		return;
