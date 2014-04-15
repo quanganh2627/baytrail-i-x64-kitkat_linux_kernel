@@ -791,9 +791,8 @@ static void dc_xpwr_otg_event_worker(struct work_struct *work)
 	if (ret < 0)
 		dev_warn(&info->pdev->dev, "vbus path disable failed\n");
 
-	/* SOC GPIOC_03 o/p is configured as active low */
 	if (info->pdata->otg_gpio >= 0)
-		gpio_direction_output(info->pdata->otg_gpio, !info->id_short);
+		gpio_direction_output(info->pdata->otg_gpio, info->id_short);
 }
 
 static int dc_xpwr_handle_otg_event(struct notifier_block *nb,

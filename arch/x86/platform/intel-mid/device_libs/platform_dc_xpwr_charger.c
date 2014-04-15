@@ -5,6 +5,7 @@
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/power/dc_xpwr_charger.h>
+#include <asm/intel_em_config.h>
 
 static struct dollarcove_chrg_pdata pdata;
 
@@ -39,66 +40,15 @@ static char *dc_chrg_supplied_to[] = {
 
 static void *platform_get_batt_charge_profile(void)
 {
-	struct ps_temp_chg_table temp_mon_range[BATT_TEMP_NR_RNG];
+	if (!em_config_get_charge_profile(&batt_chg_profile))
+		ps_batt_chrg_prof.chrg_prof_type = CHRG_PROF_NONE;
+	else
+		ps_batt_chrg_prof.chrg_prof_type = PSE_MOD_CHRG_PROF;
 
-	char batt_str[] = "INTN0001";
-
-	memcpy(batt_chg_profile.batt_id, batt_str, strlen(batt_str));
-
-	batt_chg_profile.battery_type = 0x2;
-	batt_chg_profile.capacity = 4980;
-	batt_chg_profile.voltage_max = 4350;
-	batt_chg_profile.chrg_term_ma = 300;
-	batt_chg_profile.low_batt_mV = 3400;
-	batt_chg_profile.disch_tmp_ul = 55;
-	batt_chg_profile.disch_tmp_ll = 0;
-	batt_chg_profile.temp_mon_ranges = 5;
-
-	temp_mon_range[0].temp_up_lim = 55;
-	temp_mon_range[0].full_chrg_vol = 4100;
-	temp_mon_range[0].full_chrg_cur = 1800;
-	temp_mon_range[0].maint_chrg_vol_ll = 4050;
-	temp_mon_range[0].maint_chrg_vol_ul = 4100;
-	temp_mon_range[0].maint_chrg_cur = 1800;
-
-	temp_mon_range[1].temp_up_lim = 45;
-	temp_mon_range[1].full_chrg_vol = 4350;
-	temp_mon_range[1].full_chrg_cur = 1800;
-	temp_mon_range[1].maint_chrg_vol_ll = 4300;
-	temp_mon_range[1].maint_chrg_vol_ul = 4350;
-	temp_mon_range[1].maint_chrg_cur = 1800;
-
-	temp_mon_range[2].temp_up_lim = 23;
-	temp_mon_range[2].full_chrg_vol = 4350;
-	temp_mon_range[2].full_chrg_cur = 1400;
-	temp_mon_range[2].maint_chrg_vol_ll = 4300;
-	temp_mon_range[2].maint_chrg_vol_ul = 4350;
-	temp_mon_range[2].maint_chrg_cur = 1400;
-
-	temp_mon_range[3].temp_up_lim = 10;
-	temp_mon_range[3].full_chrg_vol = 4350;
-	temp_mon_range[3].full_chrg_cur = 1000;
-	temp_mon_range[3].maint_chrg_vol_ll = 4300;
-	temp_mon_range[3].maint_chrg_vol_ul = 4350;
-	temp_mon_range[3].maint_chrg_cur = 1000;
-
-	temp_mon_range[4].temp_up_lim = 0;
-	temp_mon_range[4].full_chrg_vol = 0;
-	temp_mon_range[4].full_chrg_cur = 0;
-	temp_mon_range[4].maint_chrg_vol_ll = 0;
-	temp_mon_range[4].maint_chrg_vol_ul = 0;
-	temp_mon_range[4].maint_chrg_vol_ul = 0;
-	temp_mon_range[4].maint_chrg_cur = 0;
-
-	memcpy(batt_chg_profile.temp_mon_range,
-		temp_mon_range,
-		BATT_TEMP_NR_RNG * sizeof(struct ps_temp_chg_table));
-
-	batt_chg_profile.temp_low_lim = 0;
-
-	ps_batt_chrg_prof.chrg_prof_type = PSE_MOD_CHRG_PROF;
 	ps_batt_chrg_prof.batt_prof = &batt_chg_profile;
-	battery_prop_changed(POWER_SUPPLY_BATTERY_INSERTED, &ps_batt_chrg_prof);
+	battery_prop_changed(POWER_SUPPLY_BATTERY_INSERTED,
+			&ps_batt_chrg_prof);
+
 	return &ps_batt_chrg_prof;
 }
 
@@ -127,7 +77,7 @@ static void *get_platform_data(void)
 	pdata.def_max_temp = 55;
 	pdata.def_min_temp = 0;
 
-	pdata.otg_gpio = 3; /* GPIOC_03 */
+	pdata.otg_gpio = 117; /* GPIONC_15 */
 	/* configure output */
 	ret = gpio_request(pdata.otg_gpio, "otg_gpio");
 	if (ret) {
