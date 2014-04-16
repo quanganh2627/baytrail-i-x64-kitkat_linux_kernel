@@ -45,6 +45,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/mfd/intel_mid_pmic.h>
 #include <linux/power/dc_xpwr_battery.h>
+#include <linux/intel_fg_helper.h>
 
 #define DC_PS_STAT_REG			0x00
 #define PS_STAT_VBUS_TRIGGER		(1 << 0)
@@ -107,6 +108,7 @@
 #define FG_CNTL_CAP_ADJ_EN		(1 << 5)
 #define FG_CNTL_CC_EN			(1 << 6)
 #define FG_CNTL_GAUGE_EN		(1 << 7)
+#define FG_CNTL_DEF_EN_MASK		0xff
 
 #define DC_FG_REP_CAP_REG		0xB9
 #define FG_REP_CAP_VALID		(1 << 7)
@@ -193,11 +195,15 @@ struct pmic_fg_info {
 	int			irq[DC_FG_INTR_NUM];
 	struct power_supply	bat;
 	struct mutex		lock;
+	struct dc_xpwr_fg_cfg	*cfg;
+	bool			fg_init_done;
 
 	int			status;
 	/* Worker to monitor status and faults */
 	struct delayed_work status_monitor;
 };
+
+struct pmic_fg_info *info_ptr;
 
 static enum power_supply_property pmic_fg_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -441,6 +447,12 @@ static int pmic_fg_get_charge_now(struct pmic_fg_info *info, int *value)
 		goto pmic_fg_cnow_err;
 
 	*value = (ret & FG_CC_MTR1_VAL_MASK) << 8;
+
+	/*
+	 * higher byte and lower byte reads should be
+	 * back to back to get successful lower byte result.
+	 */
+	pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
 	ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR0_REG);
 	if (ret < 0)
 		goto pmic_fg_cnow_err;
@@ -462,6 +474,11 @@ static int pmic_fg_get_charge_full(struct pmic_fg_info *info, int *value)
 		goto pmic_fg_cfull_err;
 	*value = (ret & FG_DES_CAP1_VAL_MASK) << 8;
 
+	/*
+	 * higher byte and lower byte reads should be
+	 * back to back to get successful lower byte result.
+	 */
+	pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
 	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
 	if (ret < 0)
 		goto pmic_fg_cfull_err;
@@ -616,6 +633,58 @@ static int pmic_fg_set_battery_property(struct power_supply *psy,
 	return ret;
 }
 
+static int pmic_fg_update_config_params(struct pmic_fg_info *info)
+{
+	int ret, i;
+
+	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	if (ret < 0)
+		goto fg_svae_cfg_fail;
+	else
+		info->cfg->cap1 = ret;
+
+	/*
+	 * higher byte and lower byte reads should be
+	 * back to back to get successful lower byte result.
+	 */
+	pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
+	if (ret < 0)
+		goto fg_svae_cfg_fail;
+	else
+		info->cfg->cap0 = ret;
+
+	ret = pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
+	if (ret < 0)
+		goto fg_svae_cfg_fail;
+	else
+		info->cfg->rdc1 = ret;
+
+	/*
+	 * higher byte and lower byte reads should be
+	 * back to back to get successful lower byte result.
+	 */
+	pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
+	ret = pmic_fg_reg_readb(info, DC_FG_RDC0_REG);
+	if (ret < 0)
+		goto fg_svae_cfg_fail;
+	else
+		info->cfg->rdc0 = ret;
+
+	for (i = 0; i < BAT_CURVE_SIZE; i++) {
+		ret = pmic_fg_reg_readb(info, DC_FG_OCV_CURVE_REG + i);
+		if (ret < 0)
+			goto fg_svae_cfg_fail;
+		else
+			info->cfg->bat_curve[i] = ret;
+	}
+
+	return 0;
+
+fg_svae_cfg_fail:
+	return ret;
+}
+
 static void pmic_fg_status_monitor(struct work_struct *work)
 {
 	struct pmic_fg_info *info = container_of(work,
@@ -744,11 +813,11 @@ static int pmic_fg_program_design_cap(struct pmic_fg_info *info)
 {
 	int ret;
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP1_REG, info->pdata->cap1);
+	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP1_REG, info->cfg->cap1);
 	if (ret < 0)
 		goto fg_prog_descap_fail;
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP0_REG, info->pdata->cap0);
+	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP0_REG, info->cfg->cap0);
 
 fg_prog_descap_fail:
 	return ret;
@@ -760,7 +829,7 @@ static int pmic_fg_program_ocv_curve(struct pmic_fg_info *info)
 
 	for (i = 0; i < BAT_CURVE_SIZE; i++) {
 		ret = pmic_fg_reg_writeb(info,
-			DC_FG_OCV_CURVE_REG + i, info->pdata->bat_curve[i]);
+			DC_FG_OCV_CURVE_REG + i, info->cfg->bat_curve[i]);
 		if (ret < 0)
 			goto fg_prog_ocv_fail;
 	}
@@ -773,11 +842,11 @@ static int pmic_fg_program_rdc_vals(struct pmic_fg_info *info)
 {
 	int ret;
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_RDC1_REG, info->pdata->rdc1);
+	ret = pmic_fg_reg_writeb(info, DC_FG_RDC1_REG, info->cfg->rdc1);
 	if (ret < 0)
 		goto fg_prog_ocv_fail;
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_RDC0_REG, info->pdata->rdc0);
+	ret = pmic_fg_reg_writeb(info, DC_FG_RDC0_REG, info->cfg->rdc0);
 
 fg_prog_ocv_fail:
 	return ret;
@@ -792,11 +861,12 @@ static void pmic_fg_init_config_regs(struct pmic_fg_info *info)
 	 * check if the config data is already
 	 * programmed and if so just return.
 	 */
-	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	ret = pmic_fg_reg_readb(info, DC_FG_CNTL_REG);
 	if (ret < 0) {
-		dev_warn(&info->pdev->dev, "CAP1 reg read err!!\n");
-	} else if (ret & FG_DES_CAP1_VALID) {
+		dev_warn(&info->pdev->dev, "FG CNTL reg read err!!\n");
+	} else if ((ret & FG_CNTL_OCV_ADJ_EN) && (ret & FG_CNTL_CAP_ADJ_EN)) {
 		dev_info(&info->pdev->dev, "FG data is already initialized\n");
+		info->fg_init_done = true;
 		pmic_fg_dump_init_regs(info);
 		return;
 	} else {
@@ -823,10 +893,11 @@ static void pmic_fg_init_config_regs(struct pmic_fg_info *info)
 	if (ret < 0)
 		dev_err(&info->pdev->dev, "lowbatt thr set fail:%d\n", ret);
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_CNTL_REG, 0xef);
+	ret = pmic_fg_reg_writeb(info, DC_FG_CNTL_REG, FG_CNTL_DEF_EN_MASK);
 	if (ret < 0)
 		dev_err(&info->pdev->dev, "gauge cntl set fail:%d\n", ret);
 
+	info->fg_init_done = true;
 	pmic_fg_dump_init_regs(info);
 }
 
@@ -855,6 +926,42 @@ intr_failed:
 		free_irq(info->irq[i - 1], info);
 		info->irq[i - 1] = -1;
 	}
+}
+
+static int pmic_fg_save_fg_params(struct dc_xpwr_fg_cfg *cfg, int len)
+{
+	int ret;
+
+	if (!info_ptr || !info_ptr->cfg || !info_ptr->fg_init_done)
+		return -ENODEV;
+
+	mutex_lock(&info_ptr->lock);
+	ret = pmic_fg_update_config_params(info_ptr);
+	mutex_unlock(&info_ptr->lock);
+	if (ret < 0)
+		return ret;
+
+	memcpy(cfg, info_ptr->cfg, sizeof(struct dc_xpwr_fg_cfg));
+	return 0;
+}
+
+static int pmic_fg_set_config_params(struct dc_xpwr_fg_cfg *cfg, int len)
+{
+	int ret;
+
+	if (!info_ptr)
+		return -ENODEV;
+
+	info_ptr->cfg = kzalloc(sizeof(struct dc_xpwr_fg_cfg), GFP_KERNEL);
+	if (!info_ptr->cfg)
+		return -ENOMEM;
+
+	memcpy(info_ptr->cfg, cfg, sizeof(struct dc_xpwr_fg_cfg));
+	mutex_lock(&info_ptr->lock);
+	pmic_fg_init_config_regs(info_ptr);
+	mutex_unlock(&info_ptr->lock);
+
+	return 0;
 }
 
 static void pmic_fg_init_hw_regs(struct pmic_fg_info *info)
@@ -894,9 +1001,10 @@ static int pmic_fg_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, info);
 	mutex_init(&info->lock);
 	INIT_DELAYED_WORK(&info->status_monitor, pmic_fg_status_monitor);
-
-	pmic_fg_init_config_regs(info);
 	pmic_fg_init_psy(info);
+	intel_fg_set_store_fn(pmic_fg_save_fg_params);
+	intel_fg_set_restore_fn(pmic_fg_set_config_params);
+	info_ptr = info;
 
 	info->bat.name = DEV_NAME;
 	info->bat.type = POWER_SUPPLY_TYPE_BATTERY;
@@ -926,6 +1034,7 @@ static int pmic_fg_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&info->status_monitor);
 	for (i = 0; i < DC_FG_INTR_NUM && info->irq[i] != -1; i++)
 		free_irq(info->irq[i], info);
+	kfree(info->cfg);
 	power_supply_unregister(&info->bat);
 	return 0;
 }
