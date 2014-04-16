@@ -61,6 +61,7 @@ static const struct acpi_device_id acpi_platform_device_ids[] = {
 	{ "HAD022A8", 0 },
 	/* BYT catalog Audio devices */
 	{ "AMCR0F29", 0 },
+	{ "AMCR0F30", 0 },
 	{ }
 };
 

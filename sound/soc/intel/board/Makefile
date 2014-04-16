@@ -35,8 +35,9 @@ obj-$(CONFIG_SND_MOOR_MACHINE) += snd-merr-saltbay-wm8958.o
 snd-byt-bl-rt5642-objs := byt_bl_rt5642.o
 snd-byt-cr-aic3100-objs := byt_cr_aic3100.o
 snd-byt-bl-rt5645-objs := byt_bl_rt5645.o
+snd-byt-cr-rt5651-objs := byt_cr_rt5651.o
 snd-byt-catalog-objs := byt_common.o byt_comms_common.o
-obj-$(CONFIG_SND_BYT_MACHINE) += snd-byt-bl-rt5642.o snd-byt-cr-aic3100.o snd-byt-catalog.o snd-byt-bl-rt5645.o
+obj-$(CONFIG_SND_BYT_MACHINE) += snd-byt-bl-rt5642.o snd-byt-cr-aic3100.o snd-byt-catalog.o snd-byt-bl-rt5645.o snd-byt-cr-rt5651.o
 
 # Cherrytrail board
 snd-cht-bl-rt5672-objs := cht_bl_rt5672.o

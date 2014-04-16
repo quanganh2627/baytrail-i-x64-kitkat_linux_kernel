@@ -86,6 +86,7 @@ config SND_BYT_MACHINE
 	depends on X86
 	select SND_SOC_RT5640
 	select SND_SOC_RT5645
+	select SND_SOC_RT5651
 	select SND_SOC_TLV320AIC31XX
 	select SND_SST_PLATFORM
 	select SND_SST_MACHINE
