@@ -259,3 +259,4 @@ obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 
 #BYT catalog
 obj-y += rt5645/
+obj-y += rt5651/

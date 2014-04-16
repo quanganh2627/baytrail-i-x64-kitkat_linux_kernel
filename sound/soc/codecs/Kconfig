@@ -236,6 +236,9 @@ config SND_SOC_RT5672
 config SND_SOC_CS42L73
 	tristate
 
+config SND_SOC_RT5651
+	tristate
+
 # Cirrus Logic CS4270 Codec
 config SND_SOC_CS4270
 	tristate
