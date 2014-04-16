@@ -3341,6 +3341,7 @@ CONFIG_INTEL_SCU_FLIS=y
 # CONFIG_INTEL_BYT_EC is not set
 # CONFIG_INTEL_CRYSTALCOVE_PAGE0 is not set
 # CONFIG_INTEL_BYTCR_BOOST_CNTL is not set
+# CONFIG_INTEL_FG_HELPER is not set
 
 #
 # Hardware Spinlock drivers
