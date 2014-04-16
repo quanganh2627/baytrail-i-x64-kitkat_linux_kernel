@@ -331,7 +331,7 @@ static int acpi_button_resume(struct device *dev)
 
 	if (button->type == ACPI_BUTTON_TYPE_LID)
 		return acpi_lid_send_state(device);
-#ifdef CONFIG_ACPI_VIRTUAL_POWER_BUTTON
+#ifndef CONFIG_ACPI_VIRTUAL_POWER_BUTTON
 	else {
 		ret = ec_read(EC_S3_WAKEUP_STATUS, &val);
 		if (ret)
