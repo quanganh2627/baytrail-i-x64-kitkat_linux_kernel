@@ -117,14 +117,6 @@ static void *get_platform_data(void)
 	pdata.max_temp = 45;
 	pdata.min_temp = 0;
 
-	pdata.cap1 = 0x8D;
-	pdata.cap0 = 0xA3;
-	pdata.rdc1 = 0xc0;
-	pdata.rdc0 = 0x97;
-	/* copy curve data */
-	for (i = 0; i < BAT_CURVE_SIZE; i++)
-		pdata.bat_curve[i] = bat_curve[i];
-
 	return &pdata;
 }
 
