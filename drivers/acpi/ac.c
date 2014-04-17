@@ -75,6 +75,11 @@ static const struct acpi_device_id ac_device_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, ac_device_ids);
 
+#ifdef CONFIG_PM_SLEEP
+static int acpi_ac_resume(struct device *dev);
+#endif
+static SIMPLE_DEV_PM_OPS(acpi_ac_pm, NULL, acpi_ac_resume);
+
 static int ac_sleep_before_get_state_ms;
 
 static struct acpi_driver acpi_ac_driver = {
@@ -87,6 +92,7 @@ static struct acpi_driver acpi_ac_driver = {
 		.remove = acpi_ac_remove,
 		.notify = acpi_ac_notify,
 		},
+	.drv.pm = &acpi_ac_pm,
 };
 
 struct acpi_ac {
@@ -138,12 +144,17 @@ static int get_ac_property(struct power_supply *psy,
 			   enum power_supply_property psp,
 			   union power_supply_propval *val)
 {
-	if (!ac1)
+	struct acpi_ac *ac = to_acpi_ac(psy);
+
+	if (!ac)
+		return -ENODEV;
+
+	if (acpi_ac_get_state(ac))
 		return -ENODEV;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = ac1->state;
+		val->intval = ac->state;
 		break;
 	default:
 		return -EINVAL;
@@ -353,7 +364,6 @@ static int acpi_ac_add(struct acpi_device *device)
 #endif
 	if (result)
 		goto end;
-	ac1 = ac;
 	ac->charger.name = acpi_device_bid(device);
 	ac->charger.type = POWER_SUPPLY_TYPE_MAINS;
 	ac->charger.properties = ac_props;
@@ -369,6 +379,7 @@ static int acpi_ac_add(struct acpi_device *device)
 
 	acpi_ec_add_query_handler(ec, BYT_EC_SCI_ACINSERTION, NULL, ac_event_handler, BYT_EC_SCI_ACINSERTION);
 	acpi_ec_add_query_handler(ec, BYT_EC_SCI_ACREMOVAL, NULL, ac_event_handler, BYT_EC_SCI_ACREMOVAL);
+	ac1 = ac;
 
       end:
 	if (result) {
@@ -381,6 +392,28 @@ static int acpi_ac_add(struct acpi_device *device)
 	dmi_check_system(ac_dmi_table);
 	return result;
 }
+
+#ifdef CONFIG_PM_SLEEP
+static int acpi_ac_resume(struct device *dev)
+{
+	struct acpi_ac *ac;
+	unsigned old_state;
+
+	if (!dev)
+		return -EINVAL;
+
+	ac = acpi_driver_data(to_acpi_device(dev));
+	if (!ac)
+		return -EINVAL;
+
+	old_state = ac->state;
+	if (acpi_ac_get_state(ac))
+		return 0;
+	if (old_state != ac->state)
+		kobject_uevent(&ac->charger.dev->kobj, KOBJ_CHANGE);
+	return 0;
+}
+#endif
 
 static int acpi_ac_remove(struct acpi_device *device)
 {
