@@ -428,6 +428,14 @@ u32 intel_panel_get_max_backlight(struct drm_device *dev)
 		else
 			max = 255;
 #endif
+		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7))
+		{
+#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG
+			max = 255;
+#else
+			max = 100;
+#endif
+		}
 		DRM_DEBUG_DRIVER("max backlight PWM = %d\n", max);
 		return max;
 	}
@@ -591,10 +599,19 @@ void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 		power. To fix this issue if requested level is zero then
 		disable pwm and enabled it again if brightness changes */
 		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7)){
-			intel_mid_pmic_writeb(0x4E, level);
-			lpio_bl_write(0, LPIO_PWM_CTRL, 0x20c00);
-			lpio_bl_update(0, LPIO_PWM_CTRL);
-			lpio_bl_write_bits(0, LPIO_PWM_CTRL, 0x80000000,0x80000000);
+			//intel_mid_pmic_writeb(0x4E, level);
+			//	lpio_bl_write(0, LPIO_PWM_CTRL, 0x20c00);
+			//	lpio_bl_update(0, LPIO_PWM_CTRL);
+#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG
+			level = level*0xfd/max + 100;
+#else
+			level = level*0xfd/max+10;
+
+#endif
+			DRM_DEBUG_DRIVER("mipi_backlight level calc = %d\n", level);
+
+			lpio_bl_write_bits(0, LPIO_PWM_CTRL, (0xFF - level) ,0xFF);
+
 			lpio_bl_update(0, LPIO_PWM_CTRL);
 		} else {
 			lpio_bl_write_bits(0, LPIO_PWM_CTRL, ( 0xFF-level), 0xFF);
