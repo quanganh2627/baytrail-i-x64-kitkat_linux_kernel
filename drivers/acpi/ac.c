@@ -315,13 +315,6 @@ static int ac_event_handler(void *data)
 	case BYT_EC_SCI_ACINSERTION:
 	case BYT_EC_SCI_ACREMOVAL:
 		acpi_ac_get_state(ac1);
-		/* No need to depend on _PSR for state since BIOS is telling
-		 * us which event it is, based on that we update the state
-		 */
-		if (event == BYT_EC_SCI_ACINSERTION)
-			ac1->state = 0x1;
-		else if (event == BYT_EC_SCI_ACREMOVAL)
-			ac1->state = 0x0;
 		acpi_bus_generate_proc_event(ac1->device, event, (u32) ac1->state);
 		acpi_bus_generate_netlink_event(ac1->device->pnp.device_class,
 					dev_name(&ac1->device->dev), event,
