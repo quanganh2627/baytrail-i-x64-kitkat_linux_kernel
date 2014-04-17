@@ -75,32 +75,34 @@ intel_dp_init_edp_port(struct drm_device *dev)
 
 }
 
-
+extern uint32_t g_widi_connect_status;
 static int
-intel_dp_ctrl_lvds_panel(struct drm_device *dev, u32 ctrl)
+	intel_dp_ctrl_lvds_panel(struct drm_device *dev, u32 ctrl)
 {
-  struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	int val;
 	int ret;
-	DRM_DEBUG_KMS("ctrl:%d\n",ctrl);
-	//DLDO3
-  val = intel_mid_pmic_readb(0x12);
-  if(ctrl > 0)
-    val |= 1<<5;
-  else
-    val &= ~(1<<5);
-  ret = intel_mid_pmic_writeb(0x12, val);
-  
-  if(ctrl) {
-     //Bridge MDSI_A_TE GPIONC_12  => RST# active low
-    	vlv_gpio_nc_write(dev_priv,0x40c0,0x2000cc00);
-    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000005);
-    	usleep_range(2000,5000);
-    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000004);
-    	usleep_range(2000,5000);
-    	vlv_gpio_nc_write(dev_priv,0x40c8,0x00000005);
-  }
-  return ret;
+	DRM_DEBUG_KMS("ctrl:%d, widi:%d\n", ctrl, g_widi_connect_status);
+	/*DLDO3*/
+	val = intel_mid_pmic_readb(0x12);
+	if (ctrl > 0)
+		val |= 1<<5;
+	else {
+		if (!g_widi_connect_status)
+			val &= ~(1<<5);
+	}
+	ret = intel_mid_pmic_writeb(0x12, val);
+
+	if (ctrl) {
+		/*Bridge MDSI_A_TE GPIONC_12  => RST# active low*/
+		vlv_gpio_nc_write(dev_priv, 0x40c0, 0x2000cc00);
+		vlv_gpio_nc_write(dev_priv, 0x40c8, 0x00000005);
+		usleep_range(2000, 5000);
+		vlv_gpio_nc_write(dev_priv, 0x40c8, 0x00000004);
+		usleep_range(2000, 5000);
+		vlv_gpio_nc_write(dev_priv, 0x40c8, 0x00000005);
+	}
+	return ret;
 }
 #endif
 

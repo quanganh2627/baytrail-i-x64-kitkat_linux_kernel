@@ -38,6 +38,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
 
+
 /**
  * drm_modeset_lock_all - take all modeset locks
  * @dev: drm device
@@ -4079,3 +4080,18 @@ void drm_mode_config_cleanup(struct drm_device *dev)
 	idr_destroy(&dev->mode_config.crtc_idr);
 }
 EXPORT_SYMBOL(drm_mode_config_cleanup);
+uint32_t g_widi_connect_status = 0;
+
+int drm_mode_widi_info(struct drm_device *dev,
+		   void *data, struct drm_file *file_priv)
+{
+	struct drm_framebuffer *fb = NULL;
+
+	uint32_t *pconnected = data;
+	g_widi_connect_status = *pconnected;
+	DRM_DEBUG_KMS("connect status:%d\n", g_widi_connect_status);
+	return 0;
+
+}
+EXPORT_SYMBOL(drm_mode_widi_info);
+
