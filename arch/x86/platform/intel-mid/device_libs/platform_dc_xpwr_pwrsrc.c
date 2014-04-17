@@ -16,7 +16,6 @@ static void *get_platform_data(void)
 	 * PMIC itself.
 	 */
 	pdata.en_chrg_det = true;
-	pdata.mux_gpio = 131;   /* GPIO_S5[1] */
 #else
 	pdata.en_chrg_det = false;
 #endif
@@ -29,6 +28,7 @@ void *dc_xpwr_pwrsrc_pdata(void *info)
 #if defined(CONFIG_MRD8) || defined(CONFIG_MRD7P05)
 	int ret;
 
+	pdata.mux_gpio = 131;   /* GPIO_S5[1] */
 	ret = gpio_request(pdata.mux_gpio, "otg_gpio");
 	if (ret) {
 		pr_err("unable to request GPIO pin\n");
