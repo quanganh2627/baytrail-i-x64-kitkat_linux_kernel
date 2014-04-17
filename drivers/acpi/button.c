@@ -526,7 +526,10 @@ static int acpi_button_resume(struct device *dev)
 	if (button->type == ACPI_BUTTON_TYPE_LID)
 		return acpi_lid_send_state(device);
 #ifndef CONFIG_ACPI_VIRTUAL_POWER_BUTTON
-	else {
+	else if (button->type == ACPI_BUTTON_TYPE_POWER) {
+		/* Need to register for power button press and release again
+		   when the device resumes from s3 */
+		pwrb_dsm_init(button);
 		ret = ec_read(EC_S3_WAKEUP_STATUS, &val);
 		if (ret)
 			pr_err("%s: ec read fail\n", __func__);
