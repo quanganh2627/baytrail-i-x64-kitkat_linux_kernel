@@ -27,4 +27,9 @@ int i2c_sensor_hw_reset(struct i2c_client *client);
 int i2c_sensor_hw_suspend(struct i2c_client *client);
 int i2c_sensor_hw_resume(struct i2c_client *client);
 
+int i2c_touch_hw_init(struct i2c_client *client);
+int i2c_touch_hw_reset(struct i2c_client *client);
+int i2c_touch_hw_suspend(struct i2c_client *client);
+int i2c_touch_hw_resume(struct i2c_client *client);
+
 #endif
