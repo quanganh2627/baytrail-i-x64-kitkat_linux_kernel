@@ -634,9 +634,9 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				!DEV_SUPERSPEED(temp)) {
 			if ((temp & PORT_RESET) || !(temp & PORT_PE))
 				goto error;
-			if (time_after_eq(jiffies,
-					bus_state->resume_done[wIndex])) {
-				xhci_dbg(xhci, "Resume USB2 port %d\n",
+            if (time_after_eq(jiffies, bus_state->resume_done[wIndex])
+                    && (bus_state->resume_done[wIndex] != 0)) {
+				xhci_dbg(xhci, "kz Resume USB2 port %d\n",
 					wIndex + 1);
 				bus_state->resume_done[wIndex] = 0;
 				clear_bit(wIndex, &bus_state->resuming_ports);

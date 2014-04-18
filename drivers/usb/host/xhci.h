@@ -1576,6 +1576,7 @@ struct xhci_hcd {
 #define COMP_MODE_RCVRY_MSECS 2000
 	struct work_struct	pm_check;
 	int			pm_check_flag;
+    int    remote_time;
 	void __iomem		*pmc_base_addr;
 	struct work_struct	*reset_hcd_work;
 };
