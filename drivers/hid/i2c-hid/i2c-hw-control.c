@@ -28,9 +28,11 @@
 #include "i2c-hw-control.h"
 
 #define I2C_SENSOR_BUS_NUM 5
+#define I2C_TOUCH_BUS_NUM 6
 
 static int gpio_psh_ctl;
 static int gpio_psh_rst;
+static int touch_gpio;
 
 static struct i2c_hid_hw_data hw_data = {i2c_sensor_hw_init,
 					i2c_sensor_hw_reset,
@@ -53,6 +55,15 @@ int i2c_set_hwdata(struct i2c_client *client, struct i2c_hid_hw_data *ihid)
 		ihid->hw_suspend  = i2c_sensor_hw_suspend;
 		ihid->hw_resume  = i2c_sensor_hw_resume;
 	}
+
+	/* On byt-m board, touch is on bus number 6*/
+	if (client->adapter->nr == I2C_TOUCH_BUS_NUM) {
+		ihid->hw_init  = i2c_touch_hw_init;
+		ihid->hw_reset  = i2c_touch_hw_reset;
+		ihid->hw_suspend  = i2c_touch_hw_suspend;
+		ihid->hw_resume  = i2c_touch_hw_resume;
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(i2c_set_hwdata);
@@ -118,6 +129,48 @@ int i2c_sensor_hw_reset(struct i2c_client *client)
 	gpio_set_value(gpio_psh_rst, 1);
 	msleep(10);
 	dev_dbg(&client->dev, "I2C HID hardware reset : %s\n", __func__);
+	return 0;
+}
+
+int i2c_touch_hw_init(struct i2c_client *client)
+{
+	int ret;
+	touch_gpio = acpi_get_gpio_by_index(&client->dev, 1, NULL);
+	if (touch_gpio < 0) {
+		dev_err(&client->dev,
+		"failed to get touch power gpio from DSDT\n");
+	} else {
+		ret = gpio_request(touch_gpio, "ts_power");
+		if (ret) {
+			dev_err(&client->dev,
+			"fail to request touch_gpio pin\n");
+		} else {
+			gpio_export(touch_gpio, 1);
+			gpio_direction_output(touch_gpio, 1);
+		}
+	}
+	return 0;
+}
+
+int i2c_touch_hw_suspend(struct i2c_client *client)
+{
+	if (touch_gpio > 0)
+		gpio_set_value(touch_gpio, 0);
+	dev_dbg(&client->dev, "I2C HID touch suspend: %s\n", __func__);
+	return 0;
+}
+
+int i2c_touch_hw_resume(struct i2c_client *client)
+{
+	if (touch_gpio > 0)
+		gpio_set_value(touch_gpio, 1);
+	dev_dbg(&client->dev, "I2C HID touch resume: %s\n", __func__);
+	return 0;
+}
+
+int i2c_touch_hw_reset(struct i2c_client *client)
+{
+	dev_dbg(&client->dev, "I2C HID touch reset: %s\n", __func__);
 	return 0;
 }
 
