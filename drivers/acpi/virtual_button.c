@@ -35,17 +35,19 @@
 #define BYT_EC_SCI_HOME_BTN             0x85    /* SCI from home button */
 #define BYT_EC_SCI_POWER_BTN            0x86    /* SCI from power button */
 #define BYT_EC_SCI_RESUME		0x55	/* SCI from Resuming from S3 */
-#define VOL_UP_MASK			(1 << 0)
-#define VOL_DOWN_MASK			(1 << 1)
-#define VOL_HOME_MASK			(1 << 2)
-#define POWER_MASK			(1 << 3)
+#define BYT_EC_BUTTON_STATUS            0xC9
+#define POWER_MASK			(1 << 0)
+#define VOL_UP_MASK			(1 << 1)
+#define VOL_DOWN_MASK			(1 << 2)
+#define HOME_MASK			(1 << 3)
 
 #define	EC_S3_WAKEUP_STATUS		0xB7
 #define	PWRBTN_HID_WAKE			0x01
 #define	PWRBTN_HID_CLEAR		0x0
 
 struct virtual_button {
-	u8 key_press;
+	u8 last_stat;
+	struct mutex virtual_btn_mutex;
 	struct input_dev *input;
 };
 
@@ -102,39 +104,55 @@ static void power_button_work(int event)
 
 static int button_event_handler(void *data)
 {
+	u8 stat = 0;
+	u8 valid;
+	int ret;
 	int event;
 	event = (int *)data;
+
+	mutex_lock(&priv->virtual_btn_mutex);
 	switch (event) {
 	case BYT_EC_SCI_VOLUMEUP_BTN:
-		input_event(priv->input, EV_KEY,
-			KEY_VOLUMEUP, !(priv->key_press & VOL_UP_MASK));
-		priv->key_press ^= VOL_UP_MASK;
-		break;
 	case BYT_EC_SCI_VOLUMEDOWN_BTN:
-		input_event(priv->input, EV_KEY,
-			KEY_VOLUMEDOWN, !(priv->key_press & VOL_DOWN_MASK));
-		priv->key_press ^= VOL_DOWN_MASK;
-		break;
 	case BYT_EC_SCI_HOME_BTN:
-		input_event(priv->input, EV_KEY,
-			KEY_HOME, !(priv->key_press & VOL_HOME_MASK));
-		priv->key_press ^= VOL_HOME_MASK;
-		break;
 	case BYT_EC_SCI_POWER_BTN:
-		input_event(priv->input, EV_KEY,
-			KEY_POWER, !(priv->key_press & POWER_MASK));
-		priv->key_press ^= POWER_MASK;
-		acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
-		power_button_work(BYT_EC_SCI_POWER_BTN);
+		ret = ec_read(BYT_EC_BUTTON_STATUS, &stat);
+		if (ret) {
+			pr_err("%s: ec read fail\n", __func__);
+			mutex_unlock(&priv->virtual_btn_mutex);
+			return 0;
+		}
+		valid = stat ^ priv->last_stat;
+		if (valid & VOL_UP_MASK) {
+			input_event(priv->input, EV_KEY, KEY_VOLUMEUP,
+				!(stat & VOL_UP_MASK));
+		}
+		if (valid & VOL_DOWN_MASK) {
+			input_event(priv->input, EV_KEY, KEY_VOLUMEDOWN,
+				!(stat & VOL_DOWN_MASK));
+		}
+		if (valid & POWER_MASK) {
+			input_event(priv->input, EV_KEY, KEY_POWER,
+				!(stat & POWER_MASK));
+			acpi_clear_event(ACPI_EVENT_POWER_BUTTON);
+			power_button_work(BYT_EC_SCI_POWER_BTN);
+
+		}
+		if (valid & HOME_MASK) {
+			input_event(priv->input, EV_KEY, KEY_HOME,
+				!(stat & HOME_MASK));
+		}
+		input_sync(priv->input);
+		priv->last_stat = stat;
 		break;
 	case BYT_EC_SCI_RESUME:
 		power_button_work(BYT_EC_SCI_RESUME);
-		return 0;
+		break;
 	default:
 		pr_err("%s: non acpi button unhandled event\n", __func__);
-		return 0;
+		break;
 	}
-	input_sync(priv->input);
+	mutex_unlock(&priv->virtual_btn_mutex);
 	return 0;
 }
 
@@ -180,6 +198,11 @@ static int virtual_buttons_probe(struct platform_device *pdev)
 			"unable to register input dev, error %d\n", ret);
 		goto err;
 	}
+	mutex_init(&priv->virtual_btn_mutex);
+	priv->last_stat = VOL_UP_MASK |
+			  VOL_DOWN_MASK |
+			  HOME_MASK |
+			  POWER_MASK;
 	/* first_ec is defined in acpi ec driver */
 	if (first_ec == NULL) {
 		dev_err(&pdev->dev, "acpi ec ptr not found\n");
