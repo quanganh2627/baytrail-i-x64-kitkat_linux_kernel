@@ -281,6 +281,28 @@ static int alarmtimer_suspend(struct device *dev)
 	return ret;
 }
 
+
+/**
+ * alarmtimer_resume - Resume time callback
+ * @dev: unused
+ *
+ * We have just woken up. We now need to cancel all
+ * pending rtctimer alarms.
+ */
+static int alarmtimer_resume(struct device *dev)
+{
+	struct rtc_device *rtc;
+
+	rtc = alarmtimer_get_rtcdev();
+	if (!rtc)
+		return 0;
+
+	/* Cancel Pending timers */
+	rtc_timer_cancel(rtc, &rtctimer);
+	return 0;
+}
+
+
 static void write_rtc_wakeup(void)
 {
 	struct rtc_time tm;
@@ -330,6 +352,11 @@ static void write_rtc_wakeup(void)
 
 #else
 static int alarmtimer_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int alarmtimer_resume(struct device *dev)
 {
 	return 0;
 }
@@ -830,9 +857,11 @@ out:
 }
 
 
+
 /* Suspend hook structures */
 static const struct dev_pm_ops alarmtimer_pm_ops = {
 	.suspend = alarmtimer_suspend,
+	.resume = alarmtimer_resume,
 };
 
 static int alarm_reboot_callback(struct notifier_block *nfb,
