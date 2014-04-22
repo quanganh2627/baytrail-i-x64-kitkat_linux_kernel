@@ -131,6 +131,19 @@ MODULE_PARM_DESC(quirks, "supplemental list of device IDs and their quirks");
 	.initFunction = init_function,	\
 }
 
+/*hw dongle +*/
+#define HW_UNUSUAL_DEV(idVendor, cl, sc, pr, \
+		vendor_name, product_name, use_protocol, use_transport, \
+		init_function, Flags) \
+{ \
+	.vendorName = vendor_name, \
+	.productName = product_name, \
+	.useProtocol = use_protocol, \
+	.useTransport = use_transport, \
+	.initFunction = init_function, \
+}
+/*hw dongle -*/
+
 static struct us_unusual_dev us_unusual_dev_list[] = {
 #	include "unusual_devs.h"
 	{ }		/* Terminating entry */
@@ -141,6 +154,9 @@ static struct us_unusual_dev for_dynamic_ids =
 
 #undef UNUSUAL_DEV
 #undef COMPLIANT_DEV
+/*hw dongle +*/
+#undef HW_UNUSUAL_DEV
+/*hw dongle -*/
 #undef USUAL_DEV
 #undef UNUSUAL_VENDOR_INTF
 
