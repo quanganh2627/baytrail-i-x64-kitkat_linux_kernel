@@ -139,6 +139,34 @@ static int usb_stor_huawei_dongles_pid(struct us_data *us)
 	
 }
 
+/*
+ * It will send a scsi switch command called rewind' to huawei dongle.
+ * When the dongle receives this command at the first time,
+ * it will reboot immediately. After rebooted, it will ignore this command.
+ * So it is  unnecessary to read its response.
+ */
+static int usb_stor_huawei_scsi_init_1446(struct us_data *us)
+{
+        int result = 0;
+        int act_len = 0;
+        struct bulk_cb_wrap *bcbw = (struct bulk_cb_wrap *) us->iobuf;
+        char rewind_cmd[] = {0x11, 0x06, 0x20, 0x00, 0x00, 0x01, 0x01, 0x00,
+							 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+        bcbw->Signature = cpu_to_le32(US_BULK_CB_SIGN);
+        bcbw->Tag = 0;
+        bcbw->DataTransferLength = 0;
+        bcbw->Flags = bcbw->Lun = 0;
+        bcbw->Length = sizeof(rewind_cmd);
+        memset(bcbw->CDB, 0, sizeof(bcbw->CDB));
+        memcpy(bcbw->CDB, rewind_cmd, sizeof(rewind_cmd));
+
+        result = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe, bcbw,
+											US_BULK_CB_WRAP_LEN, &act_len);
+        usb_stor_dbg(us, "transfer actual length=%d, result=%d\n", act_len, result);
+        return result;
+}
+
 int usb_stor_huawei_scsi_init(struct us_data *us)
 {
 	int result = 0;
@@ -160,9 +188,11 @@ int usb_stor_huawei_init(struct us_data *us)
 	int result = 0;
 	
 	if(usb_stor_huawei_dongles_pid(us)){
-		if ((0x1446 <= le16_to_cpu(us->pusb_dev->descriptor.idProduct))){
+		if ((0x1446 < le16_to_cpu(us->pusb_dev->descriptor.idProduct))){
 			result = usb_stor_huawei_scsi_init(us);
-		}else{
+		} else if ((0x1446 == le16_to_cpu(us->pusb_dev->descriptor.idProduct))){
+			result = usb_stor_huawei_scsi_init_1446(us);
+		} else {
 			result = usb_stor_huawei_e220_init(us);
 		}
 	}
