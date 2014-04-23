@@ -2,6 +2,7 @@
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/power/dc_xpwr_battery.h>
+#include <asm/intel_em_config.h>
 
 #define THERM_CURVE_MAX_SAMPLES 18
 #define THERM_CURVE_MAX_VALUES	4
@@ -84,18 +85,36 @@ static int dc_xpwr_get_batt_temp(int adc_val, int *temp)
 	return 0;
 
 }
+static bool dollarcove_is_valid_batid(void)
+{
+	struct em_config_oem0_data data;
+	bool ret = true;
+
+	if (!em_config_get_oem0_data(&data))
+		ret = false;
+
+	return ret;
+}
 
 static void *get_platform_data(void)
 {
 	int i;
 
-	memcpy(pdata.battid, "INTN0001", strlen("INTN0001"));
+	if (dollarcove_is_valid_batid()) {
+		snprintf(pdata.battid, (BATTID_LEN + 1),
+				"%s", "INTN0001");
+		pdata.technology = POWER_SUPPLY_TECHNOLOGY_LION;
+	} else {
+		snprintf(pdata.battid, (BATTID_LEN + 1),
+				"%s", "UNKNOWNB");
+		pdata.technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+	}
 
 	pdata.batt_adc_to_temp = dc_xpwr_get_batt_temp;
 	pdata.design_cap = 4980;
 	pdata.design_min_volt = 3400;
 	pdata.design_max_volt = 4350;
-	pdata.max_temp = 55;
+	pdata.max_temp = 45;
 	pdata.min_temp = 0;
 
 	pdata.cap1 = 0x8D;

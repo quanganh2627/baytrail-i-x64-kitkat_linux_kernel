@@ -207,7 +207,6 @@ struct pmic_chrg_info {
 
 	int chrg_health;
 	int chrg_status;
-	int bat_health;
 	int cc;
 	int cv;
 	int inlmt;
@@ -489,6 +488,8 @@ static int get_charger_health(struct pmic_chrg_info *info)
 		health = POWER_SUPPLY_HEALTH_OVERHEAT;
 	else if (chrg_stat & CHRG_STAT_BAT_SAFE_MODE)
 		health = POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE;
+	else if (!info->present)
+		health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	else
 		health = POWER_SUPPLY_HEALTH_GOOD;
 
@@ -547,17 +548,6 @@ static int pmic_chrg_usb_set_property(struct power_supply *psy,
 		info->online = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
-		/*
-		 * X-Power Inlimit is getting set to default(500mA)
-		 * whenever we hit the Charger UVP condition and the
-		 * setting remains same even after UVP recovery.
-		 * As a WA to make sure the SW programmed INLMT intact
-		 * we are reprogramming the inlimit before enabling the charging.
-		 */
-		ret = pmic_chrg_set_inlmt(info, info->inlmt);
-		if (ret < 0)
-			dev_warn(&info->pdev->dev, "set inlimit failed\n");
-
 		ret = pmic_chrg_enable_charging(info, val->intval);
 		if (ret < 0)
 			dev_warn(&info->pdev->dev, "enable charging failed\n");
@@ -625,12 +615,6 @@ static int pmic_chrg_usb_set_property(struct power_supply *psy,
 		ret = -EINVAL;
 	}
 
-	/*
-	 * back to back or contineous read/writes to
-	 * PMIC is causing i2c semaphore hang issues.
-	 * adding a delay of 5ms to avoid the issue.
-	 */
-	usleep_range(5000, 10000);
 	mutex_unlock(&info->lock);
 	return ret;
 }
@@ -667,6 +651,18 @@ static int pmic_chrg_usb_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = get_charger_health(info);
+		/*
+		 * X-Power Inlimit is getting set to default(500mA)
+		 * whenever we hit the Charger UVP condition and the
+		 * setting remains same even after UVP recovery.
+		 * As a WA to make sure INLMT is intact, we are
+		 * reprogramming the inlimit.
+		 */
+		if (val->intval == POWER_SUPPLY_HEALTH_GOOD) {
+			ret = pmic_chrg_set_inlmt(info, info->inlmt);
+			if (ret < 0)
+				dev_warn(&info->pdev->dev, "set inlimit failed\n");
+		}
 		break;
 	case POWER_SUPPLY_PROP_MAX_CHARGE_CURRENT:
 		val->intval = info->max_cc;
@@ -713,12 +709,6 @@ static int pmic_chrg_usb_get_property(struct power_supply *psy,
 	}
 
 psy_get_prop_fail:
-	/*
-	 * back to back or contineous read/writes to
-	 * PMIC is causing i2c semaphore hang issues.
-	 * adding a delay of 5ms to avoid the issue.
-	 */
-	mdelay(5);
 	mutex_unlock(&info->lock);
 	return ret;
 }

@@ -82,7 +82,7 @@
 #define DC_FG_VLTFW_REG			0x3C
 #define FG_VLTFW_0C			0xA5	/* 0 DegC */
 #define DC_FG_VHTFW_REG			0x3D
-#define FG_VHTFW_56C			0x15	/* 56 DegC */
+#define FG_VHTFW_56C			0x1E	/* 45 DegC */
 
 #define DC_TEMP_IRQ_CFG_REG		0x42
 #define TEMP_IRQ_CFG_QWBTU		(1 << 0)
@@ -176,6 +176,7 @@
 #define NR_RETRY_CNT	3
 
 #define DEV_NAME			"dollar_cove_battery"
+#define BATT_OVP_OFFSET			50		/* 50mV */
 
 enum {
 	QWBTU_IRQ = 0,
@@ -333,7 +334,7 @@ static int pmic_fg_get_current(struct pmic_fg_info *info, int *cur)
 
 	pwr_stat = pmic_fg_reg_readb(info, DC_PS_STAT_REG);
 	if (pwr_stat < 0) {
-		dev_err(&info->pdev->dev, "PWR STAT read failed:%d\n", ret);
+		dev_err(&info->pdev->dev, "PWR STAT read failed:%d\n", pwr_stat);
 		return pwr_stat;
 	}
 
@@ -404,6 +405,11 @@ static int pmic_fg_battery_health(struct pmic_fg_info *info)
 	int temp, vocv;
 	int ret, health = POWER_SUPPLY_HEALTH_UNKNOWN;
 
+	if (info->pdata->technology != POWER_SUPPLY_TECHNOLOGY_LION) {
+		dev_err(&info->pdev->dev, "Invalid battery detected");
+		return POWER_SUPPLY_HEALTH_UNKNOWN;
+	}
+
 	ret = pmic_fg_get_btemp(info, &temp);
 	if (ret < 0)
 		goto health_read_fail;
@@ -412,10 +418,10 @@ static int pmic_fg_battery_health(struct pmic_fg_info *info)
 	if (ret < 0)
 		goto health_read_fail;
 
-	if (vocv > info->pdata->design_max_volt)
+	if (vocv > (info->pdata->design_max_volt + BATT_OVP_OFFSET))
 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
-	else if (temp > info->pdata->max_temp ||
-			temp < info->pdata->min_temp)
+	else if (temp >= info->pdata->max_temp ||
+			temp <= info->pdata->min_temp)
 		health = POWER_SUPPLY_HEALTH_OVERHEAT;
 	else if (vocv < info->pdata->design_min_volt)
 		health = POWER_SUPPLY_HEALTH_DEAD;
@@ -498,7 +504,7 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		val->intval = value * 10;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		val->intval = info->pdata->technology;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
@@ -535,12 +541,6 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		return -EINVAL;
 	}
 
-	/*
-	 * back to back or contineous read/writes to
-	 * PMIC is causing i2c semaphore hang issues.
-	 * adding a delay of 5ms to avoid the issue.
-	 */
-	usleep_range(5000, 10000);
 	mutex_unlock(&info->lock);
 	return 0;
 
