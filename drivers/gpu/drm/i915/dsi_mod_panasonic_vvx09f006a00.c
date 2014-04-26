@@ -234,6 +234,9 @@ static void vvx09f006a00_dpms(struct intel_dsi_device *dsi, bool enable)
 bool vvx09f006a00_init(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
+	struct drm_device *dev = intel_dsi->base.base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
 	DRM_DEBUG_KMS("Init: Panasonic panel\n");
 
 	if (!dsi) {
@@ -261,6 +264,8 @@ bool vvx09f006a00_init(struct intel_dsi_device *dsi)
 	intel_dsi->backlight_off_delay = 20;
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
+	/*init the panel bpp info*/
+	dev_priv->mipi.panel_bpp = PIPE_24BPP;
 
 	return true;
 }
