@@ -406,6 +406,7 @@ struct i2c_client *i2c_find_client_by_name(char *name)
 static void atomisp_unregister_acpi_devices(struct atomisp_platform_data *pdata)
 {
 	const char *subdev_name[] = {
+		"2-0036",	/* ov2722 driver*/
 #ifndef CONFIG_MRD7
 		"3-0053",	/* FFRD8 lm3554 */
 		"4-0036",	/* ov2722 */
