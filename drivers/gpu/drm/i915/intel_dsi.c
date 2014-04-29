@@ -101,6 +101,7 @@ static bool intel_dsi_compute_config(struct intel_encoder *encoder,
 	struct drm_display_mode *fixed_mode = intel_connector->panel.fixed_mode;
 	struct drm_display_mode *adjusted_mode = &config->adjusted_mode;
 	struct drm_display_mode *mode = &config->requested_mode;
+	struct intel_crtc_config *pipe_config;
 	struct intel_crtc *intel_crtc = encoder->new_crtc;
 	struct drm_device *dev = encoder->base.dev;
 
@@ -118,7 +119,10 @@ static bool intel_dsi_compute_config(struct intel_encoder *encoder,
 		return intel_dsi->dev.dev_ops->mode_fixup(&intel_dsi->dev,
 							  mode, adjusted_mode);
 
+	pipe_config->dither = pipe_config->pipe_bpp == 18 ? 1 : 0;
+
 	return true;
+
 }
 
 static void intel_dsi_pre_pll_enable(struct intel_encoder *encoder)
