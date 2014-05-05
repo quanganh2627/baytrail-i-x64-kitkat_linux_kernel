@@ -716,7 +716,6 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 #ifdef CONFIG_CRYSTAL_COVE
 static void scheduled_led_chip_programming(struct work_struct *work)
 {
-if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)	{
 	lp855x_ext_write_byte(LP8556_CFG9,
 			LP8556_VBOOST_MAX_NA_21V |
 			LP8556_JUMP_DIS |
@@ -734,7 +733,6 @@ if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)	{
 			LP8556_IBOOST_LIM_1_8A_NA);
 	lp855x_ext_write_byte(LP8556_LEDSTREN,
 			LP8556_5LEDSTR);
-}
 }
 #endif
 
@@ -810,8 +808,11 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 
 #ifndef CONFIG_MRD7
 			if (lpdata)
-				schedule_delayed_work(&dev_priv->bkl_delay_enable_work,
-								msecs_to_jiffies(30));
+			{
+				if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)
+					schedule_delayed_work(&dev_priv->bkl_delay_enable_work,
+									msecs_to_jiffies(30));
+			}
 #endif
 		} else {
 			intel_mid_pmic_writeb(0x4B, 0xFF);
