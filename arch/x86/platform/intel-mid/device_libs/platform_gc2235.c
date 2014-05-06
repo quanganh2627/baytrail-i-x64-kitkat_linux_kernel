@@ -106,6 +106,8 @@ static int gc2235_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 
 	if (flag) {
 		gpio_set_value(camera_power_down, 0);
+		/*PWDN to RST*/
+		usleep_range(1000, 1500);
 		gpio_set_value(camera_reset, 1);
 	} else {
 		gpio_set_value(camera_reset, 0);
