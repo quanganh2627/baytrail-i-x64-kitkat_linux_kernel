@@ -122,6 +122,10 @@ static void intel_fg_worker(struct work_struct *work)
 	if (ret)
 		dev_err(fg_info->dev, "Error while getting battery props\n");
 
+	ret = fg_info->input->get_v_avg(&ip.vavg);
+	if (ret)
+		dev_err(fg_info->dev, "\nError while getting V-AVG");
+
 	ret = fg_info->input->get_v_ocv(&ip.vocv);
 	if (ret)
 		dev_err(fg_info->dev, "\nError while getting OCV");
@@ -131,23 +135,33 @@ static void intel_fg_worker(struct work_struct *work)
 		dev_err(fg_info->dev, "\nError while getting Current Average");
 
 	if (fg_info->algo) {
-		fg_info->algo->fg_algo_process(&ip, &op);
+		ret = fg_info->algo->fg_algo_process(&ip, &op);
+		if (ret)
+			dev_err(fg_info->dev, "\nErr processing FG Algo primary");
 		/* update battery parameters */
 		fg_info->batt_params.capacity = op.soc;
 		fg_info->batt_params.charge_now = op.nac;
 		fg_info->batt_params.charge_full = op.fcc;
-		fg_info->batt_params.vbatt_now = ip.vbatt;
-		fg_info->batt_params.v_ocv_now = ip.vocv;
-		fg_info->batt_params.i_batt_now = ip.ibatt;
-		fg_info->batt_params.i_batt_avg = ip.iavg;
-		fg_info->batt_params.batt_temp_now = ip.bat_temp;
-		fg_info->batt_params.charge_counter += ip.delta_q;
-		if (op.calib_cc) {
-			ret = fg_info->input->calibrate_cc();
-			if (ret)
-				dev_err(fg_info->dev,
-					"error while calibrating CC\n");
-		}
+	} else if (fg_info->algo_sec) {
+		ret = fg_info->algo_sec->fg_algo_process(&ip, &op);
+		if (ret)
+			dev_err(fg_info->dev, "\nErr processing FG Algo Secondary");
+		/* update battery parameters from secondary Algo*/
+		fg_info->batt_params.capacity = op.soc;
+		fg_info->batt_params.charge_now = op.nac;
+		fg_info->batt_params.charge_full = op.fcc;
+	}
+	fg_info->batt_params.vbatt_now = ip.vbatt;
+	fg_info->batt_params.v_ocv_now = ip.vocv;
+	fg_info->batt_params.i_batt_now = ip.ibatt;
+	fg_info->batt_params.i_batt_avg = ip.iavg;
+	fg_info->batt_params.batt_temp_now = ip.bat_temp;
+	fg_info->batt_params.charge_counter += ip.delta_q;
+	if (op.calib_cc) {
+		ret = fg_info->input->calibrate_cc();
+		if (ret)
+			dev_err(fg_info->dev,
+				"error while calibrating CC\n");
 	}
 
 	mutex_unlock(&fg_info->lock);
@@ -211,7 +225,7 @@ static int intel_fuel_gauge_get_property(struct power_supply *psup,
 		val->intval = fg_info->batt_params.i_batt_avg;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (fg_info->algo)
+		if (fg_info->algo || fg_info->algo_sec)
 			val->intval = fg_info->batt_params.capacity;
 		else
 			val->intval = intel_fg_vbatt_soc_calc(fg_info,
@@ -308,10 +322,6 @@ static void intel_fuel_gauge_algo_init(struct intel_fg_info *fg_info)
 {
 	int ret;
 
-	ret = fg_info->input->calibrate_cc();
-	if (ret)
-		dev_err(fg_info->dev, "error in calibrating CC\n");
-
 	ret = fg_info->input->get_v_ocv_bootup(
 			&fg_info->batt_params.v_ocv_bootup);
 	if (ret)
@@ -347,7 +357,7 @@ int intel_fg_register_input(struct intel_fg_input *input)
 
 	info_ptr->input = input;
 	/* init fuel gauge lib's or algo's */
-	if (info_ptr->algo)
+	if (info_ptr->algo || info_ptr->algo_sec)
 		intel_fuel_gauge_algo_init(info_ptr);
 	else
 		intel_fg_init_batt_props(info_ptr);
@@ -367,7 +377,14 @@ int intel_fg_register_input(struct intel_fg_input *input)
 		dev_err(info_ptr->dev, "power supply class reg failed\n");
 		return ret;
 	}
-
+	/*Start Coulomb Counter Calibration*/
+	ret = info_ptr->input->calibrate_cc();
+	if (ret)
+		dev_err(info_ptr->dev, "error in calibrating CC\n");
+	/*If No FG Algo has been registered, schedule the worker thread
+		upon input driver registration*/
+	if (!info_ptr->algo && !info_ptr->algo_sec)
+		schedule_delayed_work(&info_ptr->fg_worker, 40 * HZ);
 	return 0;
 }
 EXPORT_SYMBOL(intel_fg_register_input);
@@ -375,7 +392,7 @@ EXPORT_SYMBOL(intel_fg_register_input);
 int intel_fg_unregister_input(struct intel_fg_input *input)
 {
 	if (!info_ptr || !info_ptr->input)
-		-ENODEV;
+		return -ENODEV;
 
 	flush_scheduled_work();
 	power_supply_unregister(&info_ptr->psy);
@@ -422,7 +439,7 @@ EXPORT_SYMBOL(intel_fg_register_algo);
 int intel_fg_unregister_algo(struct intel_fg_algo *algo)
 {
 	if (!info_ptr)
-		-ENODEV;
+		return -ENODEV;
 
 	mutex_lock(&info_ptr->lock);
 	if (algo->type == INTEL_FG_ALGO_PRIMARY) {

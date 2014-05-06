@@ -294,7 +294,8 @@ static int dc_ti_get_cc_delta(struct dc_ti_cc_info *info, int *acc_val)
 	dev_info(&info->pdev->dev, "delta_smpl:%d\n", delta_smpl);
 
 	/* ibatt_avg in uA */
-	info->ibatt_avg = (CC_ACC_TO_UA(delta_q)) / delta_smpl;
+	if (delta_smpl)
+		info->ibatt_avg = (CC_ACC_TO_UA(delta_q)) / delta_smpl;
 
 	/* convert CC to to uAhr */
 	delta_q = CC_ACC_TO_UA(delta_q);
