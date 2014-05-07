@@ -561,6 +561,8 @@ static void hsic_port_logical_disconnect(struct usb_device *hdev,
 	hsic.port_disconnect = 1;
 	ush_hsic_port_disable();
 
+	usb_set_change_bits(hdev, port);
+	usb_kick_khubd(hdev);
 }
 
 static void hsic_aux_work(struct work_struct *work)
