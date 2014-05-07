@@ -46,6 +46,7 @@
 #include <linux/dma_remapping.h>
 #include <linux/regulator/consumer.h>
 #include <asm/spid.h>
+#include <linux/shmem_fs.h>
 
 #define MAX_BRIGHTNESS	255
 
@@ -2284,7 +2285,9 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	intel_fb = to_intel_framebuffer(fb);
 	obj = intel_fb->obj;
 
-	intel_update_watermarks(dev);
+	if (intel_crtc->last_pixel_size < pixel_size)
+		intel_update_watermarks(dev);
+
 
 	reg = DSPCNTR(plane);
 	dspcntr = I915_READ(reg);
@@ -2337,10 +2340,19 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		rotate = true;
 
 	if (INTEL_INFO(dev)->gen >= 4) {
-		if (obj->tiling_mode != I915_TILING_NONE)
+		if (obj->tiling_mode != I915_TILING_NONE) {
 			dspcntr |= DISPPLANE_TILED;
-		else
+			dev_priv->is_tiled = true;
+		} else {
 			dspcntr &= ~DISPPLANE_TILED;
+			dev_priv->is_tiled = false;
+			/*
+			 * TODO: This is a hack to fix pdf flicker issue, need
+			 * to re work and provide a proper fix.
+			 */
+			if (IS_VALLEYVIEW(dev))
+				I915_WRITE(VLV_DDL1, 0x00000000);
+		}
 	}
 
 	if (IS_G4X(dev))
@@ -2350,6 +2362,15 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		dspcntr |= DISPPLANE_180_ROTATION_ENABLE;
 	else
 		dspcntr &= ~DISPPLANE_180_ROTATION_ENABLE;
+
+	if (IS_VALLEYVIEW(dev)) {
+		/* if panel fitter is enabled program the input src size */
+		if (intel_crtc->scaling_src_size &&
+			intel_crtc->config.gmch_pfit.control) {
+			I915_WRITE(PIPESRC(pipe), intel_crtc->scaling_src_size);
+			I915_WRITE(PFIT_CONTROL, intel_crtc->config.gmch_pfit.control);
+		}
+	}
 
 	I915_WRITE(reg, dspcntr);
 
@@ -2386,6 +2407,19 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		I915_WRITE(DSPADDR(plane), i915_gem_obj_ggtt_offset(obj) + linear_offset);
 	POSTING_READ(reg);
 
+	if (intel_crtc->last_pixel_size != pixel_size) {
+		/* Theoretically this vblank is required for 4->2 pixel size change.
+		 * DL vaue immediately get updated in hardware whereas primary plane
+		 * control register update happen in next vblank. So 4->2 transition
+		 * we need a vblank otherwise will may hit underrun. as we still
+		 * have underrun issue we enabled for 2->4 as well.
+		 */
+		intel_wait_for_vblank(dev, pipe);
+	}
+	if (intel_crtc->last_pixel_size > pixel_size)
+		intel_update_watermarks(dev);
+
+	intel_crtc->last_pixel_size = pixel_size;
 	return 0;
 }
 
@@ -4108,14 +4142,9 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	}
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
-		if (encoder->type != INTEL_OUTPUT_DSI) {
 			if (encoder->pre_enable)
 				encoder->pre_enable(encoder);
-		} else {
-			/* For DSI recommended to enable PORT before plane and pipe */
-			encoder->enable(encoder);
 		}
-	}
 
 	i9xx_pfit_enable(intel_crtc);
 
@@ -4130,10 +4159,8 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	intel_update_fbc(dev);
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
-		if (encoder->type != INTEL_OUTPUT_DSI)
-			/* For DSI already enabled above */
 			encoder->enable(encoder);
-	}
+		}
 }
 
 static void i9xx_crtc_enable(struct drm_crtc *crtc)
@@ -5365,8 +5392,12 @@ static void intel_set_pipe_timings(struct intel_crtc *intel_crtc)
 	/* pipesrc controls the size that is scaled from, which should
 	 * always be the user's requested size.
 	 */
-	I915_WRITE(PIPESRC(pipe),
-		   ((mode->hdisplay - 1) << 16) | (mode->vdisplay - 1));
+	 if (IS_VALLEYVIEW(dev) && intel_crtc->scaling_src_size &&
+			intel_crtc->config.gmch_pfit.control)
+		I915_WRITE(PIPESRC(pipe), intel_crtc->scaling_src_size);
+	else
+		I915_WRITE(PIPESRC(pipe),
+			((mode->hdisplay - 1) << 16) | (mode->vdisplay - 1));
 }
 
 static void intel_get_pipe_timings(struct intel_crtc *crtc,
@@ -7170,9 +7201,6 @@ static int intel_crtc_mode_set(struct drm_crtc *crtc,
 			drm_get_encoder_name(&encoder->base),
 			mode->base.id, mode->name);
 
-		if (encoder->type == INTEL_OUTPUT_DSI)
-			encoder->pre_enable(encoder);
-
 		encoder->mode_set(encoder);
 	}
 
@@ -8345,6 +8373,76 @@ static void intel_crtc_destroy(struct drm_crtc *crtc)
 	kfree(intel_crtc);
 }
 
+static inline void
+intel_use_srcatch_page_for_fb(struct drm_i915_gem_object *obj)
+{
+	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+	int ret;
+
+	/* A fb being flipped without having any allocated backing physical
+	 * space is most probably going to be used as a blanking buffer (black
+	 * colored). So instead of allocating the real backing physical space
+	 * for this buffer, we can try to currently back this object by a
+	 * scratch page, which is already allocated.
+	 * So we check if no shmem data pages have been allocated to the fb
+	 * we can back it by a scratch page and thus save time by avoiding
+	 * allocation of backing physical space & subsequent CPU cache flush.
+	 */
+	if (obj->base.filp) {
+		struct inode *inode = file_inode(obj->base.filp);
+		struct shmem_inode_info *info = SHMEM_I(inode);
+		if (!inode)
+			DRM_ERROR("No inode\n");
+		spin_lock(&info->lock);
+		ret = info->alloced;
+		spin_unlock(&info->lock);
+		if ((ret == 0) && (obj->pages == NULL)) {
+			/*
+			 * Set the 'pages' field with the object pointer
+			 * itself, this will avoid the need of a new field in
+			 * obj structure to identify the object backed up by a
+			 * scratch page and will also avoid the call to
+			 * 'get_pages', thus also saving on the time required
+			 * for allocation of 'scatterlist' structure.
+			 */
+			obj->pages = (struct sg_table *)(obj);
+
+			/*
+			 * To avoid calls to gtt prepare & finish, as those
+			 * will dereference the 'pages' field
+			 */
+			obj->has_dma_mapping = 1;
+			list_add_tail(&obj->global_list,
+					&dev_priv->mm.unbound_list);
+			trace_printk("Using Scratch page for obj %p\n", obj);
+		}
+	}
+}
+
+static inline void
+intel_drop_srcatch_page_for_fb(struct drm_i915_gem_object *obj)
+{
+	int ret;
+	/*
+	 * Unmap the object backed up by scratch page, as it is no
+	 * longer being scanned out and thus it can be now allowed
+	 * to be used as a normal object.
+	 * Assumption: The User space will ensure that only when the
+	 * object is no longer being scanned out, it will be reused
+	 * for rendering. This is a valid assumption as there is no
+	 * such handling in driver for other regular fb objects also.
+	 */
+	if ((unsigned long)obj->pages ==
+				(unsigned long)obj) {
+		ret = i915_gem_object_ggtt_unbind(obj);
+		/* EBUSY is ok: this means that pin count is still not zero */
+		if (ret && ret != -EBUSY)
+			DRM_ERROR("unbind error %d\n", ret);
+		i915_gem_object_put_pages(obj);
+		obj->has_dma_mapping = 0;
+	}
+}
+
 void intel_unpin_work_fn(struct work_struct *__work)
 {
 	struct intel_unpin_work *work =
@@ -8354,6 +8452,7 @@ void intel_unpin_work_fn(struct work_struct *__work)
 
 	mutex_lock(&dev->struct_mutex);
 	intel_unpin_fb_obj(work->old_fb_obj);
+	intel_drop_srcatch_page_for_fb(work->old_fb_obj);
 	drm_gem_object_unreference(&work->pending_flip_obj->base);
 	drm_gem_object_unreference(&work->old_fb_obj->base);
 
@@ -8692,6 +8791,7 @@ static int intel_gen7_queue_mmio_flip(struct drm_device *dev,
 	struct i915_flip_work *work = &flip_works[intel_crtc->plane];
 	int ret;
 
+	intel_use_srcatch_page_for_fb(obj);
 	ret = intel_pin_and_fence_fb_obj(dev, obj, obj->ring);
 	if (ret)
 		goto err;
@@ -10529,8 +10629,10 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	dev_priv->is_resuming = false;
 	dev_priv->s0ixstat = false;
 
-	if (dev_priv->dpst.state)
+	if (dev_priv->dpst.state) {
+		i915_dpst_set_default_luma(dev);
 		i915_dpst_enable_hist_interrupt(dev);
+	}
 
 	DRM_DEBUG_PM("Value in iClk5val = %x\n",
 		vlv_ccu_read(dev_priv, CCU_ICLK5_REG));
@@ -10584,6 +10686,7 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	intel_crtc->primary_alpha = false;
 	intel_crtc->sprite0_alpha = true;
 	intel_crtc->sprite1_alpha = true;
+	intel_crtc->last_pixel_size = 0;
 
 	/* Disable both bend spread initially */
 	dev_priv->clockspread = false;

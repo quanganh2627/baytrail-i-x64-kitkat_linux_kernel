@@ -384,6 +384,7 @@ static int pmc_devices_state_show(struct seq_file *s, void *unused)
 	unsigned int base_class, sub_class;
 	struct pci_dev *dev = NULL;
 	u16 pmcsr;
+	int cpu_dma_qos = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
 
 	pmc_cxt->residency_total = 0;
 
@@ -405,6 +406,13 @@ static int pmc_devices_state_show(struct seq_file *s, void *unused)
 	pr_info("func_dis = %x\n", reg_func_dis);
 	reg_func_dis2 = readl(pmc_cxt->func_dis2);
 	pr_info("func_dis2 = %x\n", reg_func_dis2);
+
+	seq_puts(s, "\nPM_QOS LATENCIES\n");
+	seq_printf(s, "CPU_DMA_QOS LATENCY= %d [us]\n\n", cpu_dma_qos);
+	seq_printf(s, "CSTATE_EXIT_LATENCY_C1 = %d [us]\n", CSTATE_EXIT_LATENCY_C1);
+	seq_printf(s, "CSTATE_EXIT_LATENCY_C6 = %d [us]\n", CSTATE_EXIT_LATENCY_C6);
+	seq_printf(s, "CSTATE_EXIT_LATENCY_S0i1 = %d [us]\n", CSTATE_EXIT_LATENCY_S0i1);
+	seq_printf(s, "CSTATE_EXIT_LATENCY_S0i3 = %d [us]\n\n", CSTATE_EXIT_LATENCY_S0i3);
 
 	if (platform_is(INTEL_ATOM_BYT)) {
 		nc_devices = nc_devices_byt;

@@ -761,15 +761,22 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 
 	pipe_config->has_dp_encoder = true;
 
-	if (is_edp(intel_dp) && intel_connector->panel.fixed_mode) {
-		intel_fixed_panel_mode(intel_connector->panel.fixed_mode,
-				       adjusted_mode);
-		if (!HAS_PCH_SPLIT(dev))
-			intel_gmch_panel_fitting(intel_crtc, pipe_config,
-						 intel_connector->panel.fitting_mode);
-		else
-			intel_pch_panel_fitting(intel_crtc, pipe_config,
-						intel_connector->panel.fitting_mode);
+	if (intel_connector->panel.fixed_mode) {
+		if (is_edp(intel_dp) || IS_VALLEYVIEW(dev)) {
+
+			intel_fixed_panel_mode(
+				intel_connector->panel.fixed_mode,
+				adjusted_mode);
+
+			if (!HAS_PCH_SPLIT(dev))
+				intel_gmch_panel_fitting(intel_crtc,
+					pipe_config,
+					intel_connector->panel.fitting_mode);
+			else
+				intel_pch_panel_fitting(intel_crtc,
+					pipe_config,
+					intel_connector->panel.fitting_mode);
+		}
 	}
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLCLK)
@@ -952,32 +959,6 @@ static void intel_dp_mode_set(struct intel_encoder *encoder)
 		intel_dp->DP |= DP_AUDIO_OUTPUT_ENABLE;
 		intel_write_eld(&encoder->base, adjusted_mode);
 	}
-
-	if (intel_dp->pfit) {
-		/* Enable panel fitter only if the scaling ratio is > 1 and the
-			input src size should be < 2kx2k */
-		if (((adjusted_mode->hdisplay < PFIT_SIZE_LIMIT) &&
-		(adjusted_mode->vdisplay < PFIT_SIZE_LIMIT)) &&
-		((adjusted_mode->hdisplay != crtc->base.fb->width) ||
-		(adjusted_mode->vdisplay != crtc->base.fb->height))) {
-			u32 val = 0;
-			if (intel_dp->pfit == AUTOSCALE)
-				val = PFIT_ENABLE | (crtc->pipe <<
-					PFIT_PIPE_SHIFT) | PFIT_SCALING_AUTO;
-			if (intel_dp->pfit == PILLARBOX)
-				val = PFIT_ENABLE | (crtc->pipe <<
-					PFIT_PIPE_SHIFT) | PFIT_SCALING_PILLAR;
-			else if (intel_dp->pfit == LETTERBOX)
-				val = PFIT_ENABLE | (crtc->pipe <<
-					PFIT_PIPE_SHIFT) | PFIT_SCALING_LETTER;
-			DRM_DEBUG_DRIVER("pfit val = %x", val);
-			I915_WRITE(PFIT_CONTROL, val);
-			crtc->config.gmch_pfit.control = val;
-			crtc->base.panning_en = true;
-		} else
-			DRM_DEBUG_DRIVER("Wrong panel fitter input src config");
-	 } else
-		crtc->base.panning_en = false;
 
 	intel_dp_init_link_config(intel_dp);
 
@@ -3396,6 +3377,7 @@ intel_dp_set_property(struct drm_connector *connector,
 	struct intel_connector *intel_connector = to_intel_connector(connector);
 	struct intel_encoder *intel_encoder = intel_attached_encoder(connector);
 	struct intel_dp *intel_dp = enc_to_intel_dp(&intel_encoder->base);
+	struct intel_crtc *intel_crtc = intel_encoder->new_crtc;
 	int ret;
 
 	ret = drm_object_property_set_value(&connector->base, property, val);
@@ -3467,14 +3449,30 @@ intel_dp_set_property(struct drm_connector *connector,
 	}
 
 	if (property == dev_priv->force_pfit_property) {
-		if (val == intel_dp->pfit)
+		if (intel_connector->panel.fitting_mode == val)
 			return 0;
+		intel_connector->panel.fitting_mode = val;
+		if (intel_crtc->config.gmch_pfit.control &&
+				intel_connector->panel.fitting_mode) {
+			u32 pfit_control = intel_crtc->config.gmch_pfit.control & MASK_PFIT_SCALING_MODE;
 
-		DRM_DEBUG_DRIVER("val = %d", (int)val);
-		intel_dp->pfit = val;
-		if (is_edp(intel_dp))
+			if (intel_connector->panel.fitting_mode == AUTOSCALE)
+				pfit_control |= PFIT_SCALING_AUTO;
+			else if (intel_connector->panel.fitting_mode == PILLARBOX)
+				pfit_control |= PFIT_SCALING_PILLAR;
+			else if (intel_connector->panel.fitting_mode == LETTERBOX)
+				pfit_control |= PFIT_SCALING_LETTER;
+
+			intel_crtc->config.gmch_pfit.control = pfit_control;
 			return 0;
-		goto done;
+		} else
+			goto done;
+	}
+
+	if (property == dev_priv->scaling_src_size_property) {
+		intel_crtc->scaling_src_size = val;
+		DRM_DEBUG_DRIVER("src size = %x", intel_crtc->scaling_src_size);
+		return 0;
 	}
 
 	return -EINVAL;
@@ -3613,6 +3611,7 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connect
 	intel_attach_force_audio_property(connector);
 	intel_attach_broadcast_rgb_property(connector);
 	intel_attach_force_pfit_property(connector);
+	intel_attach_scaling_src_size_property(connector);
 	intel_dp->color_range_auto = true;
 
 	if (is_edp(intel_dp)) {
@@ -4007,7 +4006,6 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	/* Preserve the current hw state. */
 	intel_dp->DP = I915_READ(intel_dp->output_reg);
 	intel_dp->attached_connector = intel_connector;
-	intel_dp->pfit = 0;
 
 	type = DRM_MODE_CONNECTOR_DisplayPort;
 	/*
@@ -4189,6 +4187,7 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 		kfree(intel_dig_port);
 		kfree(intel_connector);
 	}
+	intel_connector->panel.fitting_mode = 0;
 }
 
 int intel_edp_psr_ctl_ioctl(struct drm_device *device, void *data,

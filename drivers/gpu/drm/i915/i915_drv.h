@@ -1176,6 +1176,11 @@ enum drrs_support_type {
 	SEAMLESS_DRRS_SUPPORT = 2
 };
 
+struct intel_vbt_target_res {
+	int xres;
+	int yres;
+};
+
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
@@ -1229,7 +1234,9 @@ struct intel_vbt_data {
 	u16 pwm_frequency;
 
 	int child_dev_num;
+
 	struct child_device_config *child_dev;
+	struct intel_vbt_target_res target_res;
 };
 
 enum intel_ddb_partitioning {
@@ -1392,6 +1399,7 @@ typedef struct drm_i915_private {
 	bool clockbend;
 	bool unplug;
 	bool maxfifo_enabled;
+	bool is_tiled;
 	u32 gt_irq_mask;
 	u32 pm_irq_mask;
 
@@ -1415,6 +1423,9 @@ typedef struct drm_i915_private {
 	struct i915_drrs drrs;
 	struct intel_opregion opregion;
 	struct intel_vbt_data vbt;
+	/* Mismatch in required mode and panel native mode
+	indicating fb scaling */
+	bool scaling_reqd;
 
 	/* overlay */
 	struct intel_overlay *overlay;
@@ -1459,6 +1470,7 @@ typedef struct drm_i915_private {
 		u32 bin_data[DPST_BIN_COUNT];
 		u32 luma_data[DPST_LUMA_COUNT];
 		u32 num_interrupt;
+		u32 default_res;
 #endif
 	} dpst;
 
@@ -1553,6 +1565,7 @@ typedef struct drm_i915_private {
 	struct drm_property *broadcast_rgb_property;
 	struct drm_property *force_audio_property;
 	struct drm_property *force_pfit_property;
+	struct drm_property *scaling_src_size_property;
 
 	bool hw_contexts_disabled;
 	uint32_t hw_context_size;
@@ -2655,6 +2668,7 @@ u32 i915_dpst_compute_brightness(struct drm_device *dev, u32 brightness_val);
 void i915_dpst_irq_handler(struct drm_device *dev);
 int i915_dpst_disable_hist_interrupt(struct drm_device *dev);
 int i915_dpst_enable_hist_interrupt(struct drm_device *dev);
+int i915_dpst_set_default_luma(struct drm_device *dev);
 
 /* intel_acpi.c */
 #ifdef CONFIG_ACPI

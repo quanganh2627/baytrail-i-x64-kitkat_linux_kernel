@@ -412,6 +412,7 @@ struct intel_crtc {
 	bool primary_alpha;
 	bool sprite0_alpha;
 	bool sprite1_alpha;
+	uint32_t last_pixel_size;
 
 	/* reset counter value when the last flip was submitted */
 	unsigned int reset_counter;
@@ -419,6 +420,8 @@ struct intel_crtc {
 	/* Access to these should be protected by dev_priv->irq_lock. */
 	bool cpu_fifo_underrun_disabled;
 	bool pch_fifo_underrun_disabled;
+	/* panel fitter input src size */
+	uint32_t scaling_src_size;
 };
 
 struct intel_plane_wm_parameters {
@@ -678,6 +681,7 @@ extern void intel_attach_broadcast_rgb_property(struct drm_connector *connector)
 
 extern bool intel_pipe_has_type(const struct drm_crtc *crtc, int type);
 extern void intel_attach_force_pfit_property(struct drm_connector *connector);
+extern void intel_attach_scaling_src_size_property(struct drm_connector *connector);
 extern void intel_crt_init(struct drm_device *dev);
 extern void intel_hdmi_init(struct drm_device *dev,
 			    int hdmi_reg, enum port port);
