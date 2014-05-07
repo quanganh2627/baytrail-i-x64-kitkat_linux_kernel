@@ -45,9 +45,9 @@
 #define BYT_PLAT_CLK_3_HZ	25000000
 
 #define BYT_INTR_DEBOUNCE               0
-#define BYT_HS_INSERT_DET_DELAY         100
-#define BYT_HS_REMOVE_DET_DELAY         100
-#define BYT_BUTTON_PRESS_DELAY          50
+#define BYT_HS_INSERT_DET_DELAY         500
+#define BYT_HS_REMOVE_DET_DELAY         500
+#define BYT_BUTTON_PRESS_DELAY          100
 #define BYT_BUTTON_RELEASE_DELAY        50
 #define BYT_HS_DET_POLL_INTRVL          100
 #define BYT_BUTTON_EN_DELAY             1500
@@ -176,7 +176,7 @@ static int byt_check_jack_type(void)
 	} else {
 		jack_type = 0;
 	}
-	pr_debug("Jack type detected:%d", jack_type);
+	pr_debug("%s: Jack type detected:%d", __func__, jack_type);
 	return jack_type;
 }
 
@@ -188,48 +188,49 @@ static int byt_hs_detection(void)
 	struct snd_soc_jack *jack = gpio->jack;
 	struct snd_soc_codec *codec = jack->codec;
 	int status, jack_type = 0;
-	int ret, val;
+	int ret, val, instantaneous;
 	struct byt_mc_private *ctx =
 		 container_of(jack, struct byt_mc_private, jack);
 
 	/* Ack interrupt first */
 	val = snd_soc_read(codec, AIC31XX_INTRDACFLAG);
+	instantaneous = snd_soc_read(codec, AIC31XX_INTRFLAG);
 	mutex_lock(&ctx->jack_mlock);
 	/* Initialize jack status with previous status.
 	   The delayed work will confirm the event and
 	   send updated status later */
 	jack_type = jack->status;
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter: %s Page0/44=0x%x, Page0/46=0x%x",
+		__func__, val, instantaneous);
 
-	if (!jack->status) {
+	if ((!jack->status) && (val & AIC31XX_HSPLUG_MASK)) {
 		ctx->hs_det_retry = BYT_HS_DET_RETRY_COUNT;
 		ret = schedule_delayed_work(&ctx->hs_insert_work,
 				msecs_to_jiffies(ctx->hs_insert_det_delay));
 		if (!ret)
-			pr_debug("byt_check_hs_insert_status already queued");
+			pr_debug("%s:byt_check_hs_insert_status already queued", __func__);
 		else
 			pr_debug("%s:Check hs insertion  after %d msec",
 					__func__, ctx->hs_insert_det_delay);
-	}  else {
+	} else {
 		/* First check for accessory removal; If not removed,
 		   check for button events*/
 		status = aic31xx_query_jack_status(codec);
 		/* jd status low indicates accessory has been disconnected.
 		   However, confirm the removal in the delayed work */
-		if (!status) {
+		if ((!status) && (val & AIC31XX_HSPLUG_MASK)) {
 			/* Do not process button events while we make sure
 			   accessory is disconnected*/
 			ctx->process_button_events = false;
 			ret = schedule_delayed_work(&ctx->hs_remove_work,
 				msecs_to_jiffies(ctx->hs_remove_det_delay));
 			if (!ret)
-				pr_debug("byt_check_hs_remove_status already queued");
+				pr_debug("%s: byt_check_hs_remove_status already queued", __func__);
 			else
 				pr_debug("%s:Check hs removal after %d msec",
 						__func__,
 						ctx->hs_remove_det_delay);
-		} else { /* Must be button event.
-			  * Confirm the event in delayed work */
+		} else if (val & AIC31XX_BUTTONPRESS_MASK) {
 			if (((jack->status & SND_JACK_HEADSET) == SND_JACK_HEADSET) &&
 					ctx->process_button_events) {
 				ret = schedule_delayed_work(
@@ -237,12 +238,23 @@ static int byt_hs_detection(void)
 					msecs_to_jiffies(
 						ctx->button_press_delay));
 				if (!ret)
-					pr_debug("byt_check_hs_button_press_status already queued");
+					pr_debug("%s:byt_check_hs_button_press_status already queued", __func__);
 				else
 					pr_debug("%s:check BP/BR after %d msec",
 						__func__,
 						ctx->button_press_delay);
 			}
+		} else if (delayed_work_pending(&ctx->hs_button_press_work)) {
+			/** when HS is plugging out, BTN interrupts may be triggered
+			 *  This is fake BTN press, should be cancelled */
+			if ((instantaneous & AIC31XX_BTN_HS_STATUS_MASK) != AIC31XX_BTN_HS_STATUS_MASK) {
+				ret = cancel_delayed_work(&ctx->hs_button_press_work);
+				pr_debug("%s: cancel hs_button_press_work to avoid glitch rejection. ret=%s",
+					__func__, ret ? "true" : "false");
+			}
+		} else {
+			pr_debug("%s: do nothing. ADC INT flags =0x%X",
+				__func__, snd_soc_read(codec, AIC31XX_INTRADCFLAG));
 		}
 	}
 
@@ -279,7 +291,7 @@ static void byt_check_hs_insert_status(struct work_struct *work)
 	 * change from HP to HS
 	 */
 	if (ctx->hs_det_retry <= 0) /* end of retries; report the status */{
-		pr_debug("%d Jack type sent is %d\n", __LINE__, jack_type);
+		pr_debug("%s: end of retries, Jack type sent is %d\n", __func__, jack_type);
 		snd_soc_jack_report(jack, jack_type, gpio->report);
 	} else {
 		/* Schedule another detection try if headphone or
@@ -291,8 +303,8 @@ static void byt_check_hs_insert_status(struct work_struct *work)
 		if (jack_type == SND_JACK_HEADSET) {
 			ctx->hs_det_retry = 0;
 			/* HS detected, no more retries needed */
-			pr_debug("%d Jack type sent is %d\n",
-				 __LINE__, jack_type);
+			pr_debug("%s: SND_JACK_HEADSET, Jack type sent is %d\n",
+				 __func__, jack_type);
 			snd_soc_jack_report(jack, jack_type, gpio->report);
 		} else {
 			ctx->hs_det_retry--;
@@ -385,8 +397,8 @@ static void byt_check_hs_button_press_status(struct work_struct *work)
 			status = aic31xx_query_btn_press(codec);
 			if (status & SND_JACK_BTN_0) {
 				jack_type = SND_JACK_HEADSET | SND_JACK_BTN_0;
-				pr_debug("%d Jack type sent is %d\n",
-					 __LINE__, jack_type);
+				pr_debug("%s Jack type sent is %d\n",
+					 __func__, jack_type);
 				snd_soc_jack_report(jack,
 						 jack_type, gpio->report);
 				/* Since there is not button_relese interrupt
@@ -419,17 +431,16 @@ static void byt_check_hs_button_release_status(struct work_struct *work)
 	pr_debug("Enter:%s\n", __func__);
 	jack_type = jack->status;
 
-	if (((jack->status & SND_JACK_HEADSET) == SND_JACK_HEADSET)
-			&& ctx->process_button_events) {
+	if ((jack->status & SND_JACK_HEADSET) == SND_JACK_HEADSET) {
 
 		status = aic31xx_query_jack_status(codec);
-		if (status) { /* confirm jack is connected */
+		if (status && ctx->process_button_events) { /* confirm jack is connected */
 
 			status = aic31xx_query_btn_press(codec);
 			if (!(status & SND_JACK_BTN_0)) {
 				jack_type = SND_JACK_HEADSET;
-				pr_debug("%d Jack type sent is %d\n",
-					__LINE__, jack_type);
+				pr_debug("%s : Jack type sent is %d\n",
+					__func__, jack_type);
 				snd_soc_jack_report(jack, jack_type,
 					 gpio->report);
 			} else {
@@ -439,6 +450,11 @@ static void byt_check_hs_button_release_status(struct work_struct *work)
 					ctx->button_release_delay));
 			}
 
+		} else {
+			/* A BTN press event has already been sent */
+			/* send a BTN release to avoid long key press event */
+			snd_soc_jack_report(jack, SND_JACK_HEADSET,
+				gpio->report);
 		}
 	}
 
