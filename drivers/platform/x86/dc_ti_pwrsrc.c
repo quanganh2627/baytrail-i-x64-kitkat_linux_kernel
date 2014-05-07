@@ -184,6 +184,8 @@ static int dc_ti_pwrsrc_probe(struct platform_device *pdev)
 		goto intr_reg_failed;
 	}
 
+	/* Handle cold pwrsrc insertions */
+	handle_pwrsrc_event(info);
 	/* Unmask VBUS interrupt */
 	intel_mid_pmic_clearb(DC_PS_IRQ_MASK_REG, IRQ_MASK_VBUS);
 
