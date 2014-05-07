@@ -28,7 +28,6 @@
 #include <linux/irq.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
-#include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 
@@ -45,19 +44,6 @@ struct virtual_gpio_data {
 	struct platform_device	*pdev;
 };
 
-static int ush_pci_match(struct device *dev, void *data)
-{
-	struct pci_dev *pci_dev;
-
-	pci_dev = to_pci_dev(dev);
-
-	if ((pci_dev->vendor == PCI_VENDOR_ID_INTEL) &&
-		(pci_dev->device == PCI_DEVICE_ID_INTEL_BYT_USH))
-		return true;
-
-	return false;
-}
-
 static irqreturn_t virtual_gpio_irq_handler_isr(int irq, void *data)
 {
 	u32 gpe_sts_reg = inl(GPE0A_STS_PORT);
@@ -71,44 +57,6 @@ static irqreturn_t virtual_gpio_irq_handler_isr(int irq, void *data)
 
 	if (gpe_sts_reg & GPE0A_PME_STS_BIT)
 		outl(GPE0A_PME_STS_BIT, GPE0A_STS_PORT);
-
-	if (gpe_en_reg & GPE0A_PME_EN_BIT)
-		outl(gpe_en_reg, GPE0A_EN_PORT);
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t virtual_gpio_irq_threaded_handler_isr(int irq, void *data)
-{
-	u32 gpe_sts_reg = inl(GPE0A_STS_PORT);
-	u32 gpe_en_reg = inl(GPE0A_EN_PORT), temp = 0;
-	struct device *dev;
-	struct pci_dev *pci_dev;
-
-	if (gpe_en_reg & GPE0A_PME_EN_BIT) {
-		/* Clear the STS Bit */
-		temp = gpe_en_reg&(~GPE0A_PME_EN_BIT);
-		outl(temp, GPE0A_EN_PORT);
-	}
-
-	if (gpe_sts_reg & GPE0A_PME_STS_BIT)
-		outl(GPE0A_PME_STS_BIT, GPE0A_STS_PORT);
-
-	/* resume USH PCI device directly */
-	dev = bus_find_device(&pci_bus_type, NULL, NULL,
-			ush_pci_match);
-	if (dev) {
-		pci_dev = to_pci_dev(dev);
-
-		if (pci_dev->pme_poll)
-			pci_dev->pme_poll = false;
-
-		if (pci_dev->pme_support)
-			pci_check_pme_status(pci_dev);
-
-		pm_wakeup_event(&pci_dev->dev, 100);
-		pm_runtime_resume(&pci_dev->dev);
-	}
 
 	if (gpe_en_reg & GPE0A_PME_EN_BIT)
 		outl(gpe_en_reg, GPE0A_EN_PORT);
@@ -165,21 +113,14 @@ static void acpi_virtual_gpio_request_interrupts(struct virtual_gpio_data *gd)
 			continue;
 
 		irq_flags = IRQF_SHARED | IRQF_NO_SUSPEND;
-		if (acpi_gbl_reduced_hardware) {
-			irq_flags = IRQF_ONESHOT;
-			ret = devm_request_threaded_irq(dev, gd->irq,
-					NULL,
-					virtual_gpio_irq_threaded_handler_isr,
-					irq_flags,
-					VIRTUAL_GPIO_DRIVER_NAME,
-					ev_handle);
-		} else {
-			ret = devm_request_irq(dev, gd->irq,
-					virtual_gpio_irq_handler_isr,
-					irq_flags,
-					VIRTUAL_GPIO_DRIVER_NAME,
-					ev_handle);
-		}
+		if (acpi_gbl_reduced_hardware)
+			irq_flags = 0;
+
+		ret = devm_request_irq(dev, gd->irq,
+						virtual_gpio_irq_handler_isr,
+						irq_flags,
+						VIRTUAL_GPIO_DRIVER_NAME,
+						ev_handle);
 		if (ret)
 			dev_err(dev,
 				"Failed to request IRQ %d ACPI event handler\n",
