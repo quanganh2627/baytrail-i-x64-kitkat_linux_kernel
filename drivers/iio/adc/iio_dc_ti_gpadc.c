@@ -72,6 +72,8 @@
 
 #define DEV_NAME			"dollar_cove_ti_adc"
 
+#define SW_TRIM_VAL		1
+
 static struct gpadc_regmap_t {
 	char *name;
 	int rslth;	/* GPADC Conversion Result Register Addr High */
@@ -160,17 +162,28 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 	else
 		return -EINVAL;
 
-	adc_en_mask |= (CNTL_ADC_START | CNTL_ADC_EN);
-
 	mutex_lock(&info->lock);
 
+	/*As per the TI(PMIC Vendor), the ADC enable and ADC start commands
+	should not be sent together. Hence sending the commands separately*/
 	/* enable ADC channels */
+	ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG, (u8)CNTL_ADC_EN);
+	if (ret < 0)
+		goto done;
+
+	/*Now set the channel number */
 	ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG, (u8)adc_en_mask);
 	if (ret < 0)
 		goto done;
 
+	/*Start the ADC conversion for the selected channel */
+	ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG, (u8)CNTL_ADC_START);
+	if (ret < 0)
+		goto done;
+
 	if (info->irq >= 0) {
-		ret = wait_event_timeout(info->wait, 1, 1 * HZ);
+		/*TI(PMIC Vendor) recommends 5 sec timeout for conversion*/
+		ret = wait_event_timeout(info->wait, 1, 5 * HZ);
 		if (ret == 0) {
 			ret = -ETIMEDOUT;
 			dev_err(info->dev, "sample timeout, return %d\n", ret);
@@ -195,12 +208,16 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 			 * So the result's DATAH should be maksed(0x03)
 			 * and shifted(8 bits) before adding to the DATAL.
 			 */
-			res->data[i] = ((th & 0x3) << 8) + tl;
+			/*As per TI, The PMIC Silicon need S/W Trim.
+			Hence applying TRIM value*/
+			res->data[i] = (((th & 0x3) << 8) + tl) - SW_TRIM_VAL;
 		}
 	}
-
+	/*Clear IRQ Register */
+	intel_mid_pmic_clearb(DC_ADC_IRQ_MASK_REG, IRQ_MASK_ADC);
 	/* disable ADC channels */
-	intel_mid_pmic_clearb(DC_PMIC_ADC_CNTL_REG, (u8)adc_en_mask);
+	intel_mid_pmic_clearb(DC_PMIC_ADC_CNTL_REG, (u8)(adc_en_mask |
+				CNTL_ADC_START | CNTL_ADC_EN));
 done:
 	mutex_unlock(&info->lock);
 	return 0;

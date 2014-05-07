@@ -91,7 +91,7 @@
 
 #define DRV_NAME		"dollar_cove_ti_cc"
 
-#define THERM_CURVE_MAX_SAMPLES 18
+#define THERM_CURVE_MAX_SAMPLES 13
 #define THERM_CURVE_MAX_VALUES	4
 
 struct dc_ti_cc_info {
@@ -106,6 +106,75 @@ struct dc_ti_cc_info {
 
 static struct dc_ti_cc_info *info_ptr;
 
+static int const dc_ti_bptherm_curve_data[THERM_CURVE_MAX_SAMPLES]
+[THERM_CURVE_MAX_VALUES] = {
+	/* {temp_max, temp_min, adc_max, adc_min} */
+	{-5, -10, 834, 796},
+	{0, -5, 796, 753},
+	{5, 0, 753, 708},
+	{10, 5, 708, 660},
+	{15, 10, 660, 610},
+	{20, 15, 610, 561},
+	{25, 20, 561, 512},
+	{30, 25, 512, 464},
+	{35, 30, 464, 418},
+	{40, 35, 418, 376},
+	{45, 40, 376, 336},
+	{50, 45, 336, 299},
+	{55, 50, 299, 266},
+};
+/* Temperature Interpolation Macros */
+static int platform_interpolate_temp(int adc_val,
+	int adc_max, int adc_diff, int temp_diff)
+{
+	int ret;
+
+	pr_debug("%s\n", __func__);
+	ret = (adc_max - adc_val) * temp_diff;
+	return ret / adc_diff;
+}
+/* platform_adc_to_temp - Convert ADC code to temperature
+ * @adc_val : ADC sensor reading
+ * @tmp : finally read temperature
+ *
+ * Returns 0 on success or -ERANGE in error case
+ */
+static int platform_adc_to_temp(uint16_t adc_val, int *tmp)
+{
+	int temp = 0;
+	int i;
+
+	pr_debug("%s\n", __func__);
+
+/*
+* If the value returned as an ERANGE the battery icon shows an
+* exclaimation mark in the COS.In order to fix the issue, if
+* the ADC returns a value which is not in range specified, we
+* update the value within the bound.
+*/
+	adc_val = clamp_t(uint16_t, adc_val,
+			dc_ti_bptherm_curve_data[THERM_CURVE_MAX_SAMPLES-1][0],
+			dc_ti_bptherm_curve_data[0][2]);
+
+	for (i = 0; i < THERM_CURVE_MAX_SAMPLES; i++) {
+		/* linear approximation for battery pack temperature */
+		if (adc_val >= dc_ti_bptherm_curve_data[i][2]) {
+			temp = platform_interpolate_temp(adc_val,
+					dc_ti_bptherm_curve_data[i][2],
+					dc_ti_bptherm_curve_data[i][2] -
+					dc_ti_bptherm_curve_data[i][3],
+					dc_ti_bptherm_curve_data[i][0] -
+					dc_ti_bptherm_curve_data[i][1]);
+
+			temp += dc_ti_bptherm_curve_data[i][1];
+			break;
+		}
+	}
+
+	*tmp = temp;
+
+	return 0;
+}
 /**
  * dc_ti_read_adc_val - read ADC value of specified sensors
  * @channel: channel of the sensor to be sampled
@@ -155,20 +224,19 @@ vbatt_read_fail:
 
 static int dc_ti_adc_to_temp(struct dc_ti_cc_info *info, int adc_val, int *btemp)
 {
-	int val;
-	/*
-	 * Convert the ADC codes in to 10's of Kohms
-	 * by deviding the ADC code with 10 and pass it to
-	 * the Thermistor look up function.
-	 */
-	val = ADC_TO_BPTH_IN(adc_val);
-	adc_val = BPTH_IN_TO_RNTC(val);
+	int val = 0, ret_val = 0;
 
 	/*
-	 * Workaround: Report 30 DegC until we
-	 * get the Thermistor ADC conversion table.
+	 * Look up for the temperature value from
+	 * the Thermistor ADC conversion table.
 	 */
-	*btemp = 30 * 10;
+	ret_val = platform_adc_to_temp(adc_val, &val);
+	if (ret_val != 0) {
+		dev_err(&info->pdev->dev,
+				"Error while converting adc to temp :%d\n", ret_val);
+		return ret_val;
+	}
+	*btemp = val * 10;
 
 	return 0;
 }
