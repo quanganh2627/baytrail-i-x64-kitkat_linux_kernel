@@ -84,6 +84,26 @@ static int ov5693_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 		}
 	}
 
+#ifdef CONFIG_MRD8
+	pin = CAMERA_0_PWDN;
+	if (camera_power_down < 0) {
+		ret = gpio_request(pin, "camera_0_power");
+		if (ret) {
+			pr_err("%s: failed to request gpio(pin %d)\n",
+			       __func__, pin);
+			return ret;
+		}
+		camera_power_down = pin;
+		ret = gpio_direction_output(camera_power_down, 1);
+		if (ret) {
+			pr_err("%s: failed to set gpio(pin %d) direction\n",
+				   __func__, pin);
+			gpio_free(pin);
+			return ret;
+		}
+	}
+#endif
+
 	if (flag) {
 	#ifdef CONFIG_MRD8
 			gpio_set_value(camera_power_down, 1);
