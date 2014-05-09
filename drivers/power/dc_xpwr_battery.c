@@ -213,6 +213,7 @@ static enum power_supply_property pmic_fg_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
@@ -562,6 +563,7 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 		val->intval = value * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		ret = pmic_fg_get_current(info, &value);
 		if (ret < 0)
 			goto pmic_fg_read_err;
