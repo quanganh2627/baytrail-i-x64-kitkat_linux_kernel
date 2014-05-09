@@ -729,7 +729,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 			*/
 			pwm_base = compute_pwm_base(dev_priv->vbt.pwm_frequency);
 			pwm_base = pwm_base << 8;
-			lpio_bl_write(0, LPIO_PWM_CTRL, pwm_base);
+			lpio_bl_write(0, LPIO_PWM_CTRL, pwm_base | 0xFF);
 			lpio_bl_update(0, LPIO_PWM_CTRL);
 			lpio_bl_write_bits(0, LPIO_PWM_CTRL, 0x80000000,
 							0x80000000);
