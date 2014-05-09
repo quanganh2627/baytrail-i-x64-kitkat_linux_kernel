@@ -553,8 +553,8 @@ void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level)
 
 void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
 #ifdef CONFIG_CRYSTAL_COVE
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	/* For BYT-CR */
 	if (dev_priv->vbt.dsi.config->pmic_soc_blc) {
 		/* FixMe: if level is zero still a pulse is observed consuming
@@ -683,7 +683,6 @@ static void scheduled_led_chip_programming(struct work_struct *work)
 	lp855x_ext_write_byte(LP8556_LEDSTREN,
 			LP8556_5LEDSTR);
 }
-#endif
 
 static uint32_t compute_pwm_base(uint16_t freq)
 {
@@ -713,6 +712,7 @@ static uint32_t compute_pwm_base(uint16_t freq)
 
 	return base_unit;
 }
+#endif
 
 void intel_panel_enable_backlight(struct drm_device *dev,
 				  enum pipe pipe)
@@ -721,10 +721,10 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 	enum transcoder cpu_transcoder =
 		intel_pipe_to_cpu_transcoder(dev_priv, pipe);
 	unsigned long flags;
-	uint32_t pwm_base;
 
 	if (IS_VALLEYVIEW(dev) && dev_priv->is_mipi) {
 #ifdef CONFIG_CRYSTAL_COVE
+		uint32_t pwm_base;
 		uint32_t val;
 		/* For BYT-CR */
 		if (dev_priv->vbt.dsi.config->pmic_soc_blc) {
