@@ -234,4 +234,7 @@ static int __init wifi_regulator_init(void)
 	pr_err("%s: No SDIO host in platform devices\n", __func__);
 	return ret;
 }
+
+#ifndef CONFIG_MMC_MRVL_CWS
 rootfs_initcall(wifi_regulator_init);
+#endif

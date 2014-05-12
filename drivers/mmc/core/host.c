@@ -440,6 +440,7 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	err = idr_alloc(&mmc_host_idr, host, 0, 0, GFP_NOWAIT);
 	if (err >= 0)
 		host->index = err;
+        printk("##### Enter mmc_alloc_host, host->index=%d\n", host->index);
 	spin_unlock(&mmc_host_lock);
 	idr_preload_end();
 	if (err < 0)
@@ -566,3 +567,38 @@ void mmc_free_host(struct mmc_host *host)
 }
 
 EXPORT_SYMBOL(mmc_free_host);
+
+
+#ifdef CONFIG_MMC_MRVL_CWS
+static void* mmc_get_host_by_idx(unsigned index)
+{
+    struct mmc_host* host = NULL;
+    host = idr_find(&mmc_host_idr, index);
+    if(NULL != host)
+    {
+        return host;
+    }
+    else
+    {
+        pr_err("%s: Failed to find the mmc host from index:%d\n", index);
+        return NULL;
+    }
+}
+
+void sw_mci_rescan_card(unsigned insert, unsigned index)
+{
+        struct mmc_host* sw_rescan_host = NULL;
+        sw_rescan_host = mmc_get_host_by_idx(index);
+        printk("Enter sw_mci_rescan_card, current sw_rescan_host->index=%d\n", sw_rescan_host->index);
+        if(NULL != sw_rescan_host)
+        {
+            sw_rescan_host->caps &= ~(MMC_CAP_NONREMOVABLE); /* Clear the NONREMOVEABLE cap */
+            sw_rescan_host->rescan_disable = 0;  /* Clear the rescan_disable flsg */
+            printk("sw_rescan_host get!\n");
+            mmc_detect_change(sw_rescan_host, 0);
+        }
+        return;
+}
+EXPORT_SYMBOL_GPL(sw_mci_rescan_card);
+#endif
+

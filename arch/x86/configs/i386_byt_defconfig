@@ -3079,6 +3079,7 @@ CONFIG_MMC_BLOCK_BOUNCE=y
 # CONFIG_MMC_BLOCK_DEFERRED_RESUME is not set
 # CONFIG_SDIO_UART is not set
 # CONFIG_MMC_TEST is not set
+# CONFIG_MMC_MRVL_CWS is not set
 
 #
 # MMC/SD/SDIO Host Controller Drivers
