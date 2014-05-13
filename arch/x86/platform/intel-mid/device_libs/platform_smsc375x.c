@@ -47,14 +47,20 @@ void *smsc375x_platform_data(void)
 
 	smsc_pdata.enable_vbus = intel_bytcr_boost_enable;
 	smsc_pdata.disable_vbus = intel_bytcr_boost_disable;
+
 	if (ACPI_SUCCESS(acpi_get_devices("INT33F4",
 			pmic_acpi_parse, NULL, NULL)) && valid_entry) {
+#ifdef CONFIG_INTEL_MID_PMIC
 		pr_info("X-Power PMIC ACPI entry[INT33F4] found\n");
 		smsc_pdata.is_vbus_online = dc_xpwr_vbus_on_status;
-	} else if (ACPI_SUCCESS(acpi_get_devices("INT33F5",
+#endif
+	}
+	else if (ACPI_SUCCESS(acpi_get_devices("INT33F5",
 			pmic_acpi_parse, NULL, NULL)) && valid_entry) {
+#ifdef CONFIG_INTEL_MID_PMIC
 		pr_info("TI PMIC ACPI entry[INT33F5] found\n");
 		smsc_pdata.is_vbus_online = dc_ti_vbus_on_status;
+#endif
 	} else {
 #ifdef CONFIG_INTEL_CRYSTALCOVE_PWRSRC 
 		pr_info("default Crytsal Cove PMIC path\n");
