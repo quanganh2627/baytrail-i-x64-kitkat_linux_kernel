@@ -117,6 +117,7 @@
 #include "device_libs/platform_ov5693.h"
 #include "device_libs/platform_ov5648.h"
 #include "device_libs/platform_ov2680.h"
+#include "device_libs/platform_ov2680f.h"
 #include "device_libs/platform_wm5102.h"
 #include "device_libs/platform_ap1302.h"
 #include "device_libs/platform_csi_xactor.h"
@@ -305,7 +306,9 @@ struct devs_id __initconst device_ids[] = {
 	{"ov5648", SFI_DEV_TYPE_I2C, 0, &ov5648_platform_data,
                     &intel_register_i2c_camera_device},
 	{"ov2680", SFI_DEV_TYPE_I2C, 0, &ov2680_platform_data,
-                    &intel_register_i2c_camera_device},
+                                    &intel_register_i2c_camera_device},
+	{"ov2680f", SFI_DEV_TYPE_I2C, 0, &ov2680f_platform_data,
+                                    &intel_register_i2c_camera_device},
 	{"lm3559", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,
 					&intel_register_i2c_camera_device},
 	{"lm3560", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,

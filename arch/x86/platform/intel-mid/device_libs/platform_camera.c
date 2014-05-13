@@ -26,6 +26,7 @@
 #include "platform_gc5004.h"
 #include "platform_ov5648.h"
 #include "platform_ov2680.h"
+#include "platform_ov2680f.h"
 #include "platform_ov5693.h"
 #include "platform_lm3554.h"
 #include "platform_lm3642.h"
@@ -55,6 +56,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"ov5693", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov5648", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov2680", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
+	{"ov2680f", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"mt9d113", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9m114", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"mt9v113", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
@@ -129,7 +131,11 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 		{SFI_DEV_TYPE_I2C, 2, 0x21, 0x0, 0x0, "gc0339"},
 		{"gc0339", SFI_DEV_TYPE_I2C, 0, &gc0339_platform_data,
 			&intel_register_i2c_camera_device}
-	}
+	}, {
+        {SFI_DEV_TYPE_I2C, 2, 0x10, 0x0, 0x0, "ov2680f"},
+        {"ov2680f", SFI_DEV_TYPE_I2C, 0, &ov2680f_platform_data,
+            &intel_register_i2c_camera_device}
+    }
 };
 
 #elif defined CONFIG_MRD8
