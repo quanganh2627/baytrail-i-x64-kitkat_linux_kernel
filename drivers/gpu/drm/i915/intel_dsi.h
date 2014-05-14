@@ -218,6 +218,7 @@ extern struct intel_dsi_dev_ops auo_b080xan020_dsi_display_ops;
 extern struct intel_dsi_dev_ops rayken_rk785x32a1ci_dsi_display_ops;
 extern struct intel_dsi_dev_ops boe_bp080wx7_dsi_display_ops;
 extern struct intel_dsi_dev_ops boe_bp070wx2_dsi_display_ops;
+extern struct intel_dsi_dev_ops cpt_claa080wq05_dsi_display_ops;
 
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 
@@ -235,4 +236,5 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 #define MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID		0x09
 #define MIPI_DSI_BOE_BP080WX7_PANEL_ID                  0x0A
 #define MIPI_DSI_BOE_BP070WX2_PANEL_ID                  0x0B
+#define MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID 		0x0C
 #endif /* _INTEL_DSI_H */

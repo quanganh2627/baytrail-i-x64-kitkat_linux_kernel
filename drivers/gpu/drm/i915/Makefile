@@ -67,7 +67,8 @@ i915-y := i915_drv.o i915_dma.o i915_irq.o \
 	  dsi_mod_auo_b080ean011.o \
 	  dsi_mod_rayken_rk785x32a1ci.o \
 	  dsi_mod_boe_bp080wx7.o \
-          dsi_mod_boe_bp070wx2.o
+          dsi_mod_boe_bp070wx2.o \
+	  dsi_mod_cpt_claa080wq05.o
 
 i915-$(CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED) += tc35876x_vid.o
 

@@ -112,6 +112,13 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
                 .name = "boe-bp070wx2-dsi-vid-mode-display",
                 .dev_ops = &boe_bp070wx2_dsi_display_ops,
                 .lane_count = 4, /* XXX: this really doesn't belong here */
+        },
+	{
+                .panel_id = MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID,
+                .type = INTEL_DSI_VIDEO_MODE,
+                .name = "cpt-claa080wq05-dsi-vid-mode-display",
+                .dev_ops = &cpt_claa080wq05_dsi_display_ops,
+                .lane_count = 4, /* XXX: this really doesn't belong here */
         }
 };
 
