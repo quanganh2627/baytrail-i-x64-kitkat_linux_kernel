@@ -587,7 +587,7 @@ static int __init dc_xpwr_pwrsrc_init(void)
 {
 	return platform_driver_register(&dc_xpwr_pwrsrc_driver);
 }
-device_initcall(dc_xpwr_pwrsrc_init);
+late_initcall(dc_xpwr_pwrsrc_init);
 
 static void __exit dc_xpwr_pwrsrc_exit(void)
 {
