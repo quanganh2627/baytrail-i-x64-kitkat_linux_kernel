@@ -113,11 +113,13 @@ static void intel_fg_worker(struct work_struct *work)
 	struct fg_algo_op_params op;
 	int ret;
 
+	memset(&op, 0, sizeof(struct fg_algo_op_params));
+
 	mutex_lock(&fg_info->lock);
 
 	ret = fg_info->input->get_delta_q(&ip.delta_q);
 	if (ret)
-		dev_err(fg_info->dev, "\nError while getting delta Q");
+		dev_err(fg_info->dev, "Error while getting delta Q\n");
 
 	ret = fg_info->input->get_batt_params(&ip.vbatt,
 					&ip.ibatt, &ip.bat_temp);
@@ -126,28 +128,33 @@ static void intel_fg_worker(struct work_struct *work)
 
 	ret = fg_info->input->get_v_avg(&ip.vavg);
 	if (ret)
-		dev_err(fg_info->dev, "\nError while getting V-AVG");
+		dev_err(fg_info->dev, "Error while getting V-AVG\n");
 
 	ret = fg_info->input->get_v_ocv(&ip.vocv);
 	if (ret)
-		dev_err(fg_info->dev, "\nError while getting OCV");
+		dev_err(fg_info->dev, "Error while getting OCV\n");
 
 	ret = fg_info->input->get_i_avg(&ip.iavg);
 	if (ret)
-		dev_err(fg_info->dev, "\nError while getting Current Average");
+		dev_err(fg_info->dev, "Error while getting Current Average\n");
 
 	if (fg_info->algo) {
 		ret = fg_info->algo->fg_algo_process(&ip, &op);
-		if (ret)
-			dev_err(fg_info->dev, "\nErr processing FG Algo primary");
-		/* update battery parameters */
-		fg_info->batt_params.capacity = op.soc;
-		fg_info->batt_params.charge_now = op.nac;
-		fg_info->batt_params.charge_full = op.fcc;
+		if (ret) {
+			dev_err(fg_info->dev, "Err processing FG Algo primary\n");
+			fg_info->batt_params.capacity = intel_fg_vbatt_soc_calc(fg_info,
+										ip.vocv);
+		} else {
+			/* update battery parameters */
+			fg_info->batt_params.capacity = op.soc;
+			fg_info->batt_params.charge_now = op.nac;
+			fg_info->batt_params.charge_full = op.fcc;
+		}
+
 	} else if (fg_info->algo_sec) {
 		ret = fg_info->algo_sec->fg_algo_process(&ip, &op);
 		if (ret)
-			dev_err(fg_info->dev, "\nErr processing FG Algo Secondary");
+			dev_err(fg_info->dev, "Err processing FG Algo Secondary\n");
 		/* update battery parameters from secondary Algo*/
 		fg_info->batt_params.capacity = op.soc;
 		fg_info->batt_params.charge_now = op.nac;
@@ -331,10 +338,18 @@ static void intel_fuel_gauge_algo_init(struct intel_fg_info *fg_info)
 	ret = fg_info->input->get_v_ocv_bootup(
 			&fg_info->batt_params.v_ocv_bootup);
 	if (ret)
-		dev_err(fg_info->dev, "error in getting bootup voltage");
+		dev_err(fg_info->dev, "error in getting bootup voltage\n");
 	else
 		dev_info(fg_info->dev, "boot up voltage:%d\n",
 					fg_info->batt_params.v_ocv_bootup);
+
+	ret = fg_info->input->get_i_bat_bootup(
+			&fg_info->batt_params.i_bat_bootup);
+	if (ret)
+		dev_err(fg_info->dev, "error in getting bootup ibat\n");
+	else
+		dev_info(fg_info->dev, "boot up ibat:%d\n",
+					fg_info->batt_params.i_bat_bootup);
 
 	/* update battery adc params */
 	intel_fg_init_batt_props(info_ptr);

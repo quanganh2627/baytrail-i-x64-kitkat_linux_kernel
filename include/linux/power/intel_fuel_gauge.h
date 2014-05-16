@@ -52,6 +52,7 @@ struct fg_batt_params {
 	int v_ocv_bootup;
 	int v_ocv_now;
 	int vbatt_now;
+	int i_bat_bootup;
 	int i_batt_avg;
 	int i_batt_now;
 	int batt_temp_now;
@@ -81,6 +82,7 @@ struct intel_fg_input {
 	int (*get_batt_params)(int *vbat, int *ibat, int *bat_temp);
 	int (*get_v_ocv)(int *v_ocv);
 	int (*get_v_ocv_bootup)(int *v_ocv_bootup);
+	int (*get_i_bat_bootup)(int *i_bat_bootup);
 	int (*get_v_avg)(int *v_avg);
 	int (*get_i_avg)(int *i_avg);
 	int (*get_delta_q)(int *delta_q);

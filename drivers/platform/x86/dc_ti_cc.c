@@ -77,9 +77,9 @@
 
 #define CC_INTG_TO_UA(a)		(a * 183)
 
-#define CC_INTG_TO_MA(a)		((a * 366) / 1000)
+#define CC_INTG_TO_MA(a)		((a * 367) / 1000)
 
-#define CC_ACC_TO_UA(a)			(a * 366)
+#define CC_ACC_TO_UA(a)			(a * 367)
 
 #define CC_ACC_TO_UAH(a)		(a / 3600)
 
@@ -93,12 +93,14 @@
 
 #define THERM_CURVE_MAX_SAMPLES 13
 #define THERM_CURVE_MAX_VALUES	4
+#define RBATT_TYPICAL			150
 
 struct dc_ti_cc_info {
 	struct platform_device *pdev;
 
 	int		vbat_socv;
 	int		vbat_bocv;
+	int		ibat_boot;
 	int		ibatt_avg;
 	unsigned int	smpl_ctr_prev;
 	long		cc_val_prev;
@@ -359,6 +361,8 @@ static int dc_ti_get_cc_delta(struct dc_ti_cc_info *info, int *acc_val)
 		val = (int)((CC_SMPL_CTR_MAX_VAL/4) - info->smpl_ctr_prev);
 		delta_smpl = val + smpl_ctr;
 	}
+	/*Apply SW Trim as specified by PMIC Vendor*/
+	delta_q += ((84 * 4 * delta_smpl)/10);
 	dev_info(&info->pdev->dev, "delta_smpl:%d\n", delta_smpl);
 
 	/* ibatt_avg in uA */
@@ -464,6 +468,30 @@ ibatt_read_failed:
 	return ret;
 }
 
+static int dc_ti_fg_get_ibatt_bootup(struct dc_ti_cc_info *info,
+					int *ibatt_boot)
+{
+	int ret;
+
+	ret = intel_mid_pmic_setb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
+	if (ret < 0) {
+		dev_err(&info->pdev->dev, "Failed to set CC_CTR_EN bit:%d\n", ret);
+		return ret;
+	}
+	/* Coulomb Counter need 250ms to give the first IBAT sample */
+	msleep(250);
+	ret = dc_ti_fg_get_ibatt(info, ibatt_boot);
+	if (ret)
+		dev_err(&info->pdev->dev, "Failed to read IBAT bootup:%d\n", ret);
+
+	ret |= intel_mid_pmic_clearb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
+	if (ret < 0) {
+		dev_err(&info->pdev->dev, "Failed to clr CC_CTR_EN bit:%d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
 static void dc_ti_calibrate_cc(struct dc_ti_cc_info *info)
 {
 	int ret;
@@ -534,18 +562,32 @@ get_params_fail:
 
 static int dc_ti_cc_get_vocv(int *vocv)
 {
-	int ret;
+	int ret, ibatt;
 
+	ret = dc_ti_fg_get_ibatt(info_ptr, &ibatt);
+	if (ret < 0)
+		goto get_vocv_fail;
 	ret = dc_ti_fg_get_vbatt(info_ptr, vocv);
+	if (ret < 0)
+		goto get_vocv_fail;
 	/*
 	 * TODO: Ibatt adjustments.
 	 */
+	*vocv = (*vocv - ((ibatt * RBATT_TYPICAL)/1000));
+
+get_vocv_fail:
 	return ret;
 }
 
 static int dc_ti_cc_get_vocv_bootup(int *vocv_bootup)
 {
 	*vocv_bootup = info_ptr->vbat_bocv;
+	return 0;
+}
+
+static int dc_ti_cc_get_ibat_bootup(int *ibat_bootup)
+{
+	*ibat_bootup = info_ptr->ibat_boot;
 	return 0;
 }
 
@@ -583,6 +625,7 @@ static struct intel_fg_input fg_input = {
 	.get_batt_params = &dc_ti_cc_get_batt_params,
 	.get_v_ocv = &dc_ti_cc_get_vocv,
 	.get_v_ocv_bootup = &dc_ti_cc_get_vocv_bootup,
+	.get_i_bat_bootup = &dc_ti_cc_get_ibat_bootup,
 	.get_v_avg = &dc_ti_cc_get_vavg,
 	.get_i_avg = &dc_ti_cc_get_iavg,
 	.get_delta_q = &dc_ti_cc_get_deltaq,
@@ -602,7 +645,9 @@ static int dc_ti_cc_probe(struct platform_device *pdev)
 
 	info->pdev = pdev;
 	platform_set_drvdata(pdev, info);
-	dc_ti_read_ocv(info, &info->vbat_bocv);
+	/*Read VBATT Into VOCV*/
+	dc_ti_fg_get_vbatt(info, &info->vbat_bocv);
+	dc_ti_fg_get_ibatt_bootup(info, &info->ibat_boot);
 	dc_ti_cc_init_data(info);
 	info_ptr = info;
 
