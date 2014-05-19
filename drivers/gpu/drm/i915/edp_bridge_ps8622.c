@@ -50,6 +50,7 @@
 #include <linux/acpi_gpio.h>
 #include <drm/drmP.h>
 
+#if 0
 #undef DRM_DEBUG_KMS
 #define DRM_DEBUG_KMS(fmt, args...)				\
 	do {								\
@@ -60,6 +61,7 @@ extern void my_drm_ut_debug_printk(unsigned int request_level,
 			 const char *prefix,
 			 const char *function_name,
 			 const char *format, ...);
+#endif
 
 int ps8622_i2c_Read(struct i2c_client *client, u8 addr,
 	char *writebuf, int writelen,

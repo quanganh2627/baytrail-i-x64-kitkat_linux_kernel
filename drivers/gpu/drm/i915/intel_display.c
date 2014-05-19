@@ -48,6 +48,7 @@
 #include <asm/spid.h>
 #include <linux/shmem_fs.h>
 
+#if 0
 #undef DRM_DEBUG_KMS
 #define DRM_DEBUG_KMS(fmt, args...)				\
 	do {								\
@@ -73,6 +74,7 @@ void my_drm_ut_debug_printk(unsigned int request_level,
 		va_end(args);
 	}
 }
+#endif
 
 #define MAX_BRIGHTNESS	255
 

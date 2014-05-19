@@ -37,6 +37,8 @@
 #include "i915_drv.h"
 #include "linux/mfd/intel_mid_pmic.h"
 #include <linux/pwm.h>
+
+#if 0
 #undef DRM_DEBUG_KMS
 #define DRM_DEBUG_KMS(fmt, args...)				\
 	do {								\
@@ -47,6 +49,8 @@ extern void my_drm_ut_debug_printk(unsigned int request_level,
 			 const char *prefix,
 			 const char *function_name,
 			 const char *format, ...);
+#endif
+
 #ifdef CONFIG_MRD7
 extern void ps8622_send_init_cmd(void);
 extern int ps8622_init(void) ;

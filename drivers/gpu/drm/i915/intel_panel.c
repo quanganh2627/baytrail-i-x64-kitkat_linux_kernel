@@ -38,6 +38,7 @@
 #include <asm/spid.h>
 #include "intel_dsi.h"
 
+#if 0
 #undef DRM_DEBUG_DRIVER
 #undef DRM_DEBUG_KMS
 #define DRM_DEBUG_KMS(fmt, args...)				\
@@ -50,6 +51,7 @@
 		my_drm_ut_debug_printk(DRM_UT_KMS, DRM_NAME, 		\
 					 __func__, fmt, ##args);	\
 	} while (0)
+#endif
 
 extern void my_drm_ut_debug_printk(unsigned int request_level,
 			 const char *prefix,
