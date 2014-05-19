@@ -71,6 +71,9 @@
 
 #define _COMPONENT		ACPI_BATTERY_COMPONENT
 
+/* Battery temperature related macros*/
+#define BAT_TEMP_CONV_FACTOR         27315 /* K = C + 273.15*/
+
 ACPI_MODULE_NAME("battery");
 
 MODULE_AUTHOR("Paul Diefenbaugh");
@@ -150,6 +153,7 @@ struct acpi_battery {
 	int capacity_granularity_1;
 	int capacity_granularity_2;
 	int alarm;
+	int temperature;
 	char model_number[32];
 	char serial_number[32];
 	char type[32];
@@ -206,12 +210,15 @@ static int acpi_battery_is_charged(struct acpi_battery *battery)
 	return 0;
 }
 
+static int acpi_battery_get_temperature(struct acpi_battery *battery);
+
 static int acpi_battery_get_property(struct power_supply *psy,
 				     enum power_supply_property psp,
 				     union power_supply_propval *val)
 {
 	int ret = 0;
 	int comp_cap = 0;
+	int temp_ret = 0;
 	struct acpi_battery *battery = to_acpi_battery(psy);
 
 	if (acpi_battery_present(battery)) {
@@ -300,6 +307,18 @@ static int acpi_battery_get_property(struct power_supply *psy,
 		} else
 			val->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		temp_ret = acpi_battery_get_temperature(battery);
+		if (temp_ret < 0)
+			ret = temp_ret;
+		else{
+			/*
+			* convert temperature from degree kelvin
+			* to degree celsius: T(C) = T(K) - 273.15
+			*/
+			val->intval = (((int)battery->temperature) - (BAT_TEMP_CONV_FACTOR / 100));
+		}
+		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = battery->model_number;
 		break;
@@ -344,6 +363,7 @@ static enum power_supply_property energy_battery_props[] = {
 	POWER_SUPPLY_PROP_ENERGY_FULL,
 	POWER_SUPPLY_PROP_ENERGY_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
@@ -409,6 +429,10 @@ static struct acpi_offsets extended_info_offsets[] = {
 	{offsetof(struct acpi_battery, serial_number), 1},
 	{offsetof(struct acpi_battery, type), 1},
 	{offsetof(struct acpi_battery, oem_info), 1},
+};
+
+static struct acpi_offsets temperature_offsets[] = {
+	{offsetof(struct acpi_battery, temperature), 0},
 };
 
 static int extract_package(struct acpi_battery *battery,
@@ -570,6 +594,36 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 		battery->capacity_now = battery->capacity_now *
 		    10000 / battery->design_voltage;
 	}
+	return result;
+}
+
+/*Method to read the battery temperature.
+*Temperature is returned in degree Celcius
+*/
+static int acpi_battery_get_temperature(struct acpi_battery *battery)
+{
+	int result = 0;
+	acpi_status status = 0;
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+
+	if (!acpi_battery_present(battery))
+		return 0;
+
+	mutex_lock(&battery->lock);
+	status = acpi_evaluate_object(battery->device->handle, "BTMP",
+					NULL, &buffer);
+	mutex_unlock(&battery->lock);
+
+	if (ACPI_FAILURE(status)) {
+		ACPI_EXCEPTION((AE_INFO, status, "Evaluating BTMP"));
+		return -ENODEV;
+	}
+
+	result = extract_package(battery, buffer.pointer,
+				temperature_offsets, ARRAY_SIZE(temperature_offsets));
+
+	kfree(buffer.pointer);
+
 	return result;
 }
 
