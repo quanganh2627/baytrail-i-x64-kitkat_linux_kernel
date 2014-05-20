@@ -55,3 +55,4 @@ int usb_stor_huawei_init(struct us_data *us);
 
 /* This functinal is used for ZTE USB devices. added by Mario Lu from intel */
 int usb_stor_zte_init(struct us_data *us);
+int usb_stor_ZTE_AC580_init(struct us_data *us);

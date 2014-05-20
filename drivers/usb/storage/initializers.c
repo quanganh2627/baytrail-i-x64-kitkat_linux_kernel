@@ -183,3 +183,13 @@ int usb_stor_zte_init(struct us_data *us)
 	usb_stor_dbg(us, "usb_stor_zte_init result is %d\n", result);
 	return 0;
 }
+int usb_stor_ZTE_AC580_init(struct us_data *us) // PID = 0x0026
+{
+	int result;
+	result = usb_stor_control_msg(us, us->send_ctrl_pipe,
+				      0xA1, /* request */
+				      0xC0, /* requesttype*/
+				      0x01, 0x0, NULL, 0x0, 1000);
+	usb_stor_dbg(us,"zte usb_stor_zte_init result is %d\n", result);
+	return 0;
+}

@@ -314,6 +314,12 @@ static int ehci_pci_setup(struct usb_hcd *hcd)
 			pm_runtime_set_active(&pdev->dev);
 #endif
 		} else if (pdev->device == 0x119D) {
+#ifdef WIFI_ONLY
+			/* disable HSIC controller */
+			pr_info("yangyi enter right\n");
+			pci_set_power_state(pdev, PCI_D3cold);
+			return -ENODEV;
+#endif		
 			ehci_info(ehci, "Detected HSIC HC\n");
 			hcd->has_tt = 1;
 			ehci->has_hostpc = 1;

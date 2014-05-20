@@ -429,6 +429,10 @@ void *modem_platform_data(void *data)
 	char *mdm_name = data;
 	struct mcd_base_info *mcd_info;
 	pr_debug("SFI %s: modem info setup\n", __func__);
+#ifdef WIFI_ONLY
+	pr_info("%s,do not enable modem\n", __func__);
+        	return NULL;
+#endif
 
 	mcd_info = kzalloc(sizeof(*mcd_info), GFP_KERNEL);
 	if (!mcd_info)
