@@ -488,6 +488,9 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 		intel_mid_pmic_setb(DC_BC_GLOBAL_REG, BC_GLOBAL_RUN);
 	}
 
+	/*Tune Buck frequency as 2 for stability*/
+	intel_mid_pmic_writeb(0x3B, 0x2);
+
 	if (info->pdata->en_chrg_det)
 		ret = handle_chrg_det_event(info);
 	else
