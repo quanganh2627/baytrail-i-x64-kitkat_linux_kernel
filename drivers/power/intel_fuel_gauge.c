@@ -46,6 +46,7 @@
 #include <asm/intel_em_config.h>
 
 #define DRIVER_NAME		"intel_fuel_gauge"
+#define BATT_OVP_OFFSET		50000 /* 50mV */
 
 struct intel_fg_info {
 	struct device *dev;
@@ -67,7 +68,7 @@ static struct intel_fg_batt_spec bspec = {
 	.volt_min_design = 3400000,
 	.volt_max_design = 4350000,
 	.temp_min = 0,
-	.temp_max = 600,
+	.temp_max = 450,
 	.charge_full_design = 4980000,
 };
 
@@ -178,7 +179,8 @@ static int intel_fg_battery_health(struct intel_fg_info *info)
 
 	if (!info->batt_params.is_valid_battery)
 		health = POWER_SUPPLY_HEALTH_UNKNOWN;
-	else if (bat->vbatt_now > info->batt_spec->volt_max_design)
+	else if (bat->vbatt_now > info->batt_spec->volt_max_design
+			+ BATT_OVP_OFFSET)
 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	else if (bat->batt_temp_now > info->batt_spec->temp_max ||
 			bat->batt_temp_now < info->batt_spec->temp_min)
