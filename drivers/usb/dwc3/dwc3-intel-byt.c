@@ -636,7 +636,7 @@ static int dwc3_intel_byt_set_power(struct usb_phy *_otg,
 	}
 
 	spin_lock_irqsave(&otg->lock, flags);
-	otg->charging_cap.ma = ma;
+	otg->charging_cap.ma = 1500;
 	spin_unlock_irqrestore(&otg->lock, flags);
 
 	dwc3_intel_byt_notify_charger_type(otg,
@@ -680,6 +680,7 @@ static int dwc3_intel_byt_notify_charger_type(struct dwc_otg2 *otg,
 			((otg->charging_cap.ma != 100) &&
 			 (otg->charging_cap.ma != 150) &&
 			 (otg->charging_cap.ma != 500) &&
+			 (otg->charging_cap.ma != 1500) &&
 			 (otg->charging_cap.ma != 900))) {
 		otg_err(otg, "%s: invalid SDP current!\n", __func__);
 		return -EINVAL;
