@@ -889,7 +889,5 @@ config TOUCHSCREEN_TPS6507X
 	  module will be called tps6507x_ts.
 
 source "drivers/input/touchscreen/focaltech/Kconfig"
-source "drivers/input/touchscreen/ilitek/Kconfig"
-source "drivers/input/touchscreen/silead/Kconfig"
 
 endif
