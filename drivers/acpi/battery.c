@@ -35,6 +35,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <asm/unaligned.h>
+#include <linux/workqueue.h>
 
 #ifdef CONFIG_ACPI_PROCFS_POWER
 #include <linux/proc_fs.h>
@@ -64,6 +65,9 @@
 
 /* 6% is minimun threshold  for platform shutdown*/
 #define EC_BAT_SAFE_MIN_CAPACITY        6
+
+/* resume work delay time in ms*/
+#define BAT_WORK_DELAY_TIME        3000
 
 #define _COMPONENT		ACPI_BATTERY_COMPONENT
 
@@ -125,7 +129,7 @@ struct acpi_battery {
 	struct mutex sysfs_lock;
 	struct power_supply bat;
 	struct acpi_device *device;
-	struct notifier_block pm_nb;
+	struct delayed_work work;
 	unsigned long update_time;
 	int revision;
 	int rate_now;
@@ -1097,19 +1101,19 @@ static void acpi_battery_notify(struct acpi_device *device, u32 event)
 		power_supply_changed(&battery->bat);
 }
 
-static int battery_notify(struct notifier_block *nb,
-			       unsigned long mode, void *_unused)
+static void bat_work(struct work_struct *work)
 {
-	struct acpi_battery *battery = container_of(nb, struct acpi_battery,
-						    pm_nb);
-	switch (mode) {
-	case PM_POST_HIBERNATION:
-	case PM_POST_SUSPEND:
-		acpi_battery_refresh(battery);
-		break;
+	struct acpi_battery *battery = container_of(to_delayed_work(work), struct acpi_battery,
+					work);
+	int power_unit;
+	battery->update_time = 0;
+	power_unit = battery->power_unit;
+	acpi_battery_update(battery);
+	if (power_unit != battery->power_unit) {
+		/* The battery has changed its reporting units. */
+		sysfs_remove_battery(battery);
+		sysfs_add_battery(battery);
 	}
-
-	return 0;
 }
 
 static int acpi_battery_add(struct acpi_device *device)
@@ -1138,6 +1142,7 @@ static int acpi_battery_add(struct acpi_device *device)
 	device->driver_data = battery;
 	mutex_init(&battery->lock);
 	mutex_init(&battery->sysfs_lock);
+	INIT_DELAYED_WORK(&battery->work, bat_work);
 	if (ACPI_SUCCESS(acpi_get_handle(battery->device->handle,
 			"_BIX", &handle)))
 		clear_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags);
@@ -1158,8 +1163,6 @@ static int acpi_battery_add(struct acpi_device *device)
 		ACPI_BATTERY_DEVICE_NAME, acpi_device_bid(device),
 		device->status.battery_present ? "present" : "absent");
 
-	battery->pm_nb.notifier_call = battery_notify;
-	register_pm_notifier(&battery->pm_nb);
 
 	return result;
 
@@ -1178,13 +1181,14 @@ static int acpi_battery_remove(struct acpi_device *device)
 	if (!device || !acpi_driver_data(device))
 		return -EINVAL;
 	battery = acpi_driver_data(device);
-	unregister_pm_notifier(&battery->pm_nb);
+
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	acpi_battery_remove_fs(device);
 #endif
 	sysfs_remove_battery(battery);
 	mutex_destroy(&battery->lock);
 	mutex_destroy(&battery->sysfs_lock);
+	cancel_delayed_work_sync(&battery->work);
 	kfree(battery);
 	return 0;
 }
@@ -1201,14 +1205,27 @@ static int acpi_battery_resume(struct device *dev)
 	battery = acpi_driver_data(to_acpi_device(dev));
 	if (!battery)
 		return -EINVAL;
+	/* schedule the battery resume work after display is up,
+	   using 3 second wait time for the display to come up*/
+	schedule_delayed_work(&battery->work,
+		msecs_to_jiffies(BAT_WORK_DELAY_TIME));
 
-	battery->update_time = 0;
-	acpi_battery_update(battery);
+	return 0;
+}
+static int acpi_battery_suspend(struct device *dev)
+{
+	struct acpi_battery *battery;
+	if (!dev)
+		return -EINVAL;
+	battery = acpi_driver_data(to_acpi_device(dev));
+	if (!battery)
+		return -EINVAL;
+	cancel_delayed_work_sync(&battery->work);
 	return 0;
 }
 #endif
 
-static SIMPLE_DEV_PM_OPS(acpi_battery_pm, NULL, acpi_battery_resume);
+static SIMPLE_DEV_PM_OPS(acpi_battery_pm, acpi_battery_suspend, acpi_battery_resume);
 
 static struct acpi_driver acpi_battery_driver = {
 	.name = "battery",
