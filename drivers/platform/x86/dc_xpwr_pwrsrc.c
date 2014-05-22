@@ -104,6 +104,9 @@ enum {
 	BC_USB_CHNG_IRQ,
 };
 
+bool xpower_pmic;
+EXPORT_SYMBOL(xpower_pmic);
+
 static const char *dc_extcon_cable[] = {
 	PWRSRC_EXTCON_CABLE_USB,
 	NULL,
@@ -440,6 +443,7 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 	struct dc_pwrsrc_info *info;
 	int ret, i;
 
+	xpower_pmic = true;
 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		dev_err(&pdev->dev, "mem alloc failed\n");
