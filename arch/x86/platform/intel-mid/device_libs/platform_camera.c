@@ -434,8 +434,7 @@ static void atomisp_unregister_acpi_devices(struct atomisp_platform_data *pdata)
 #ifndef CONFIG_MRD7
 		"3-0053",	/* FFRD8 lm3554 */
 		"4-0036",	/* ov2722 */
-		"3-0010",	/* ov5693 */
-		//"4-0010",	/* imx1xx Sensor*/
+		"4-0010",	/* imx1xx Sensor*/
 		"4-0053",	/* FFRD10 lm3554 */
 		"4-0054",	/* imx1xx EEPROM*/
 		"4-000c",	/* imx1xx driver*/
