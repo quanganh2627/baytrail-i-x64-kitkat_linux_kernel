@@ -110,10 +110,12 @@
 #define CHRG_ILIM_3000MA		0x6	/* 3000mA */
 
 #define DC_CHRG_VLTFC_REG		0x38
-#define CHRG_VLTFC_N5C			0xCA	/* -5 DegC */
+#define CHRG_VLTFC_0C			0xB5	/* 0  DegC */
+/*#define CHRG_VLTFC_N5C		0xCA */	/* -5 DegC */
 
 #define DC_CHRG_VHTFC_REG		0x39
-#define CHRG_VHTFC_60C			0x12	/* 60 DegC */
+#define CHRG_VHTFC_55C			0x16	/* 55 DegC */
+/*#define CHRG_VHTFC_60C		0x12 */	/* 60 DegC */
 
 #define DC_PWRSRC_IRQ_CFG_REG		0x40
 #define PWRSRC_IRQ_CFG_VBUS_LOW		(1 << 2)
@@ -857,8 +859,8 @@ static int dc_xpwr_handle_otg_event(struct notifier_block *nb,
 static void pmic_chrg_init_hw_regs(struct pmic_chrg_info *info)
 {
 	/* program temperature thresholds */
-	intel_mid_pmic_writeb(DC_CHRG_VLTFC_REG, CHRG_VLTFC_N5C);
-	intel_mid_pmic_writeb(DC_CHRG_VHTFC_REG, CHRG_VHTFC_60C);
+	intel_mid_pmic_writeb(DC_CHRG_VLTFC_REG, CHRG_VLTFC_0C);
+	intel_mid_pmic_writeb(DC_CHRG_VHTFC_REG, CHRG_VHTFC_55C);
 
 	/* do not turn-off charger o/p after charge cycle ends */
 	intel_mid_pmic_setb(DC_CHRG_CNTL2_REG, CNTL2_CHG_OUT_TURNON);

@@ -81,9 +81,11 @@
 #define CV_4350				4350	/* 4350mV */
 
 #define DC_FG_VLTFW_REG			0x3C
-#define FG_VLTFW_0C			0xA5	/* 0 DegC */
+#define FG_VLTFW_N5C			0xE9	/* -5 DegC */
+/*#define FG_VLTFW_0C			0xA5*/	/* 0 DegC */
 #define DC_FG_VHTFW_REG			0x3D
-#define FG_VHTFW_56C			0x1E	/* 45 DegC */
+#define FG_VHTFW_60C			0x23	/* 60 DegC */
+/*#define FG_VHTFW_56C			0x15*/	/* 56 DegC */
 
 #define DC_TEMP_IRQ_CFG_REG		0x42
 #define TEMP_IRQ_CFG_QWBTU		(1 << 0)
@@ -1009,8 +1011,8 @@ static int pmic_fg_set_config_params(struct dc_xpwr_fg_cfg *cfg, int len)
 static void pmic_fg_init_hw_regs(struct pmic_fg_info *info)
 {
 	/* program temperature thresholds */
-	intel_mid_pmic_writeb(DC_FG_VLTFW_REG, FG_VLTFW_0C);
-	intel_mid_pmic_writeb(DC_FG_VHTFW_REG, FG_VHTFW_56C);
+	intel_mid_pmic_writeb(DC_FG_VLTFW_REG, FG_VLTFW_N5C);
+	intel_mid_pmic_writeb(DC_FG_VHTFW_REG, FG_VHTFW_60C);
 
 	/* enable interrupts */
 	intel_mid_pmic_setb(DC_TEMP_IRQ_CFG_REG, TEMP_IRQ_CFG_MASK);
