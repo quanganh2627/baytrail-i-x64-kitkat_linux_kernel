@@ -61,6 +61,7 @@ struct fg_batt_params {
 	int charge_counter;
 	int status;
 	bool boot_flag;
+	bool is_valid_battery;
 };
 
 struct fg_algo_params {

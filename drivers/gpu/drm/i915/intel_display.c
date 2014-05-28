@@ -2407,17 +2407,10 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		I915_WRITE(DSPADDR(plane), i915_gem_obj_ggtt_offset(obj) + linear_offset);
 	POSTING_READ(reg);
 
-	if (intel_crtc->last_pixel_size != pixel_size) {
-		/* Theoretically this vblank is required for 4->2 pixel size change.
-		 * DL vaue immediately get updated in hardware whereas primary plane
-		 * control register update happen in next vblank. So 4->2 transition
-		 * we need a vblank otherwise will may hit underrun. as we still
-		 * have underrun issue we enabled for 2->4 as well.
-		 */
-		intel_wait_for_vblank(dev, pipe);
-	}
-	if (intel_crtc->last_pixel_size > pixel_size)
+	if (intel_crtc->last_pixel_size > pixel_size) {
+		dev_priv->pf_change_status[plane] |= BPP_CHANGED_PRIMARY;
 		intel_update_watermarks(dev);
+	}
 
 	intel_crtc->last_pixel_size = pixel_size;
 	return 0;
@@ -11047,6 +11040,17 @@ intel_user_framebuffer_create(struct drm_device *dev,
 		return ERR_PTR(-ENOENT);
 
 	obj->user_fb = 1;
+	if (obj->tiling_mode == I915_TILING_X) {
+		/* Tiled(X) Scanout buffers are more suitable
+		   for allocation from stolen area, as its very
+		   unlikely that they will be accessed directly
+		   from the CPU side and any allocation from
+		   stolen area is not directly CPU accessible,
+		   only through the aperture space it can be
+		   accessed */
+		i915_gem_object_move_to_stolen(obj);
+	}
+
 	return intel_framebuffer_create(dev, mode_cmd, obj);
 }
 
@@ -11410,6 +11414,7 @@ void intel_modeset_init(struct drm_device *dev)
 					      pipe_name(i), sprite_name(i, j), ret);
 		}
 	}
+	memset(&dev_priv->pf_change_status, 0, sizeof(dev_priv->pf_change_status));
 
 	intel_cpu_pll_init(dev);
 	intel_shared_dpll_init(dev);

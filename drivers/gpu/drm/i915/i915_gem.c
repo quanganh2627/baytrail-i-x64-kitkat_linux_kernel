@@ -1423,6 +1423,8 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 			goto out;
 	}
 
+	i915_gem_object_shmem_preallocate(obj);
+
 	ret = i915_mutex_lock_interruptible(dev);
 	if (ret)
 		goto out;
@@ -1919,6 +1921,103 @@ i915_gem_shrink_all(struct drm_i915_private *dev_priv)
 	list_for_each_entry_safe(obj, next, &dev_priv->mm.unbound_list,
 				 global_list)
 		i915_gem_object_put_pages(obj);
+}
+
+void
+i915_gem_object_shmem_preallocate(struct drm_i915_gem_object *obj)
+{
+	int page_count, i;
+	struct address_space *mapping;
+	struct page *page;
+	gfp_t gfp;
+
+	if (obj->pages)
+		return;
+
+	if (obj->madv != I915_MADV_WILLNEED) {
+		DRM_ERROR("Attempt to preallocate a purgeable object\n");
+		return;
+	}
+
+	if (obj->base.filp) {
+		int ret;
+		struct inode *inode = file_inode(obj->base.filp);
+		struct shmem_inode_info *info = SHMEM_I(inode);
+		if (!inode)
+			return;
+		/* The alloced field stores how many data pages are allocated
+		 * to the file. If already shmem space has been allocated for
+		 * the object, then we can simply return */
+		spin_lock(&info->lock);
+		ret = info->alloced;
+		spin_unlock(&info->lock);
+		if (ret > 0) {
+			DRM_DEBUG_DRIVER("Already shmem space alloced for obj %p, %d pages\n",
+					obj, ret);
+			return;
+		}
+	} else {
+		DRM_DEBUG_DRIVER("Attempt to preallocate a non-shmem backed obj %p, size=%x, user_fb=%d, stolen=%p, vmap=%d\n",
+				obj, (u32)obj->base.size, obj->user_fb, obj->stolen,
+				i915_gem_is_userptr_object(obj));
+		return;
+	}
+
+	BUG_ON(obj->pages_pin_count);
+
+	/* Assert that the object is not currently in any GPU domain. As it
+	 * wasn't in the GTT, there shouldn't be any way it could have been in
+	 * a GPU cache
+	 */
+	BUG_ON(obj->base.read_domains & I915_GEM_GPU_DOMAINS);
+	BUG_ON(obj->base.write_domain & I915_GEM_GPU_DOMAINS);
+
+	trace_i915_gem_obj_prealloc_start(obj, obj->base.size, obj->user_fb);
+
+	page_count = obj->base.size / PAGE_SIZE;
+
+	/* Get the list of pages out of our struct file
+	 * Fail silently without starting the shrinker
+	 */
+	mapping = file_inode(obj->base.filp)->i_mapping;
+	gfp = mapping_gfp_mask(mapping);
+	gfp |= __GFP_NORETRY | __GFP_NOWARN | __GFP_NO_KSWAPD;
+	gfp &= ~(__GFP_IO | __GFP_WAIT);
+	for (i = 0; i < page_count; i++) {
+		page = shmem_read_mapping_page_gfp(mapping, i, gfp);
+		if (IS_ERR(page)) {
+			DRM_DEBUG_DRIVER("Failure for obj(%p) size(%x) at page(%d)\n",
+					obj, (u32)obj->base.size, i);
+			return;
+		}
+		/* Flush the cpu cache for the page now itself */
+		drm_clflush_pages(&page, 1);
+
+		/* Decrement the extra ref count on the returned page,
+		   otherwise when 'get_pages_gtt' will be called later on
+		   in the regular path, it will also increment the ref count,
+		   which will disturb the ref count management */
+		page_cache_release(page);
+	}
+
+	/*
+	 * Reset the CPU domain now itself, so as to avoid the cache
+	 * flush later (under 'struct_mutex' lock), as the all pages
+	 * have been cache flushed.
+	 * Hope this is safe enough to be done here.
+	 * But can't think of a scenario where this could cause a problem.
+	 * When an object has been passed to execbuffer Ioctl, would there be
+	 * any other concurrent operation likely to be done on that object,
+	 * considering this object was having no backing physical store
+	 * allocated for it (hence will not have a mapping in GTT also or
+	 * will be a part of bound/unbound list, hence not visible to Gem
+	 * shrinker also). The same doubt is there for the other case
+	 * also when an object is being accessed through the mmap_gtt
+	 * interface, which resulted in a Page fault.
+	 */
+	obj->base.write_domain = 0;
+
+	trace_i915_gem_obj_prealloc_end(obj);
 }
 
 static int
@@ -3999,21 +4098,6 @@ i915_gem_object_pin(struct drm_i915_gem_object *obj,
 			ret = i915_vma_unbind(vma);
 			if (ret)
 				return ret;
-		}
-	}
-
-	if (obj->user_fb == 1) {
-		if (obj->pages == NULL) {
-			if (obj->tiling_mode == I915_TILING_X) {
-				/* Tiled(X) Scanout buffers are more suitable
-				   for allocation from stolen area, as its very
-				   unlikely that they will be accessed directly
-				   from the CPU side and any allocation from
-				   stolen area is not directly CPU accessible,
-				   only through the aperture space it can be
-				   accessed */
-				i915_gem_object_move_to_stolen(obj);
-			}
 		}
 	}
 

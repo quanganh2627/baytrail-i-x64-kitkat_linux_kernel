@@ -43,8 +43,10 @@
 #include <linux/reboot.h>
 #include <linux/notifier.h>
 #include <linux/power/intel_fuel_gauge.h>
+#include <asm/intel_em_config.h>
 
 #define DRIVER_NAME		"intel_fuel_gauge"
+#define BATT_OVP_OFFSET		50000 /* 50mV */
 
 struct intel_fg_info {
 	struct device *dev;
@@ -66,7 +68,7 @@ static struct intel_fg_batt_spec bspec = {
 	.volt_min_design = 3400000,
 	.volt_max_design = 4350000,
 	.temp_min = 0,
-	.temp_max = 600,
+	.temp_max = 450,
 	.charge_full_design = 4980000,
 };
 
@@ -174,7 +176,11 @@ static int intel_fg_battery_health(struct intel_fg_info *info)
 	struct fg_batt_params *bat = &info->batt_params;
 	int health;
 
-	if (bat->vbatt_now > info->batt_spec->volt_max_design)
+
+	if (!info->batt_params.is_valid_battery)
+		health = POWER_SUPPLY_HEALTH_UNKNOWN;
+	else if (bat->vbatt_now > info->batt_spec->volt_max_design
+			+ BATT_OVP_OFFSET)
 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	else if (bat->batt_temp_now > info->batt_spec->temp_max ||
 			bat->batt_temp_now < info->batt_spec->temp_min)
@@ -466,6 +472,7 @@ EXPORT_SYMBOL(intel_fg_unregister_algo);
 static int intel_fuel_gauge_probe(struct platform_device *pdev)
 {
 	struct intel_fg_info *fg_info;
+	struct em_config_oem0_data oem0_data;
 	int ret = 0;
 
 	fg_info = devm_kzalloc(&pdev->dev, sizeof(*fg_info), GFP_KERNEL);
@@ -481,6 +488,12 @@ static int intel_fuel_gauge_probe(struct platform_device *pdev)
 	mutex_init(&fg_info->lock);
 	INIT_DELAYED_WORK(&fg_info->fg_worker, &intel_fg_worker);
 	fg_info->batt_params.status = POWER_SUPPLY_STATUS_DISCHARGING;
+
+	if (em_config_get_oem0_data(&oem0_data))
+		fg_info->batt_params.is_valid_battery = true;
+	else
+		fg_info->batt_params.is_valid_battery = false;
+
 	info_ptr = fg_info;
 
 	return 0;
