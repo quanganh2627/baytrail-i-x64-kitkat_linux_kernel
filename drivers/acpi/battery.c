@@ -451,6 +451,7 @@ static int acpi_battery_get_status(struct acpi_battery *battery)
 static int acpi_battery_get_info(struct acpi_battery *battery)
 {
 	int result = -EFAULT;
+	int old_full_charge_capacity;
 	acpi_status status = 0;
 	char *name = test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags)?
 			"_BIX" : "_BIF";
@@ -459,6 +460,10 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 
 	if (!acpi_battery_present(battery))
 		return 0;
+
+	if (battery->full_charge_capacity)
+		old_full_charge_capacity = battery->full_charge_capacity;
+
 	mutex_lock(&battery->lock);
 	status = acpi_evaluate_object(battery->device->handle, name,
 						NULL, &buffer);
@@ -476,6 +481,12 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 		result = extract_package(battery, buffer.pointer,
 				info_offsets, ARRAY_SIZE(info_offsets));
 	kfree(buffer.pointer);
+
+	if (!battery->full_charge_capacity) {
+		printk(KERN_WARNING PREFIX "full_charge_capacity is 0! Use older value\n");
+		battery->full_charge_capacity = old_full_charge_capacity;
+	}
+
 	if (test_bit(ACPI_BATTERY_QUIRK_PERCENTAGE_CAPACITY, &battery->flags))
 		battery->full_charge_capacity = battery->design_capacity;
 	if (test_bit(ACPI_BATTERY_QUIRK_THINKPAD_MAH, &battery->flags) &&
@@ -499,6 +510,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 static int acpi_battery_get_state(struct acpi_battery *battery)
 {
 	int result = 0;
+	int old_capacity_now;
 	acpi_status status = 0;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 
@@ -509,6 +521,9 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 	    time_before(jiffies, battery->update_time +
 			msecs_to_jiffies(cache_time)))
 		return 0;
+
+	if (battery->capacity_now)
+		old_capacity_now = battery->capacity_now;
 
 	mutex_lock(&battery->lock);
 	status = acpi_evaluate_object(battery->device->handle, "_BST",
@@ -524,6 +539,11 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 				 state_offsets, ARRAY_SIZE(state_offsets));
 	battery->update_time = jiffies;
 	kfree(buffer.pointer);
+
+	if (!battery->capacity_now) {
+		printk(KERN_WARNING PREFIX "capacity_now is 0! Use older value\n");
+		battery->capacity_now = old_capacity_now;
+	}
 
 	/* For buggy DSDTs that report negative 16-bit values for either
 	 * charging or discharging current and/or report 0 as 65536
