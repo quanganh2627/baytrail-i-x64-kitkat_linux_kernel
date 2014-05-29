@@ -73,6 +73,11 @@
 
 /* Battery temperature related macros*/
 #define BAT_TEMP_CONV_FACTOR         27315 /* K = C + 273.15*/
+/* Battery operating temperature range is 0C to 40C while
+ * charging.
+ */
+#define BAT_CHRG_OVER_TEMP           40  /* 40 C ~313.1K */
+#define BAT_CHRG_UNDER_TEMP          0  /* 0 C ~273.1K */
 
 ACPI_MODULE_NAME("battery");
 
@@ -240,6 +245,32 @@ static int acpi_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = acpi_battery_present(battery);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+
+		temp_ret = acpi_battery_get_temperature(battery);
+		if (temp_ret < 0)
+			ret = temp_ret;
+		else{
+			/*
+			* convert temperature from degree kelvin
+			* to degree celsius: T(C) = T(K) - 273.15
+			*/
+			val->intval = (((int)battery->temperature) -
+					(BAT_TEMP_CONV_FACTOR / 100));
+		}
+
+		/*We are treating both hot and cold as  overheat cases.
+		*So report overheat in both high and low temp cases.
+		*/
+		if ((val->intval >= BAT_CHRG_OVER_TEMP)
+			| (val->intval <= BAT_CHRG_UNDER_TEMP)) {
+			val->intval = POWER_SUPPLY_HEALTH_OVERHEAT;
+			break;
+		} else
+			val->intval = POWER_SUPPLY_HEALTH_GOOD;
+
+
+		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = acpi_battery_technology(battery);
 		break;
@@ -354,6 +385,7 @@ static enum power_supply_property charge_battery_props[] = {
 static enum power_supply_property energy_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
