@@ -275,8 +275,13 @@ notify_otg_em:
 	} else {
 		if (notify_otg) {
 			/* close mux path to enable device mode */
+#ifdef CONFIG_MRD7
+			ret = smsc375x_write_reg(client, SMSC375X_REG_CFG,
+					(cfg & ~CFG_EN_MUX2) | CFG_EN_MUX1);
+#else
 			ret = smsc375x_write_reg(client, SMSC375X_REG_CFG,
 					(cfg & ~CFG_EN_MUX1) | CFG_EN_MUX2);
+#endif
 			if (ret < 0)
 				goto dev_det_i2c_failed;
 			atomic_notifier_call_chain(&chip->otg->notifier,
