@@ -149,7 +149,7 @@ static int smsc375x_detect_dev(struct smsc375x_chip *chip)
 	static bool notify_otg, notify_charger;
 	static char *cable;
 	static struct power_supply_cable_props cable_props;
-	int stat, cfg, ret, vbus_mask = 0;
+	int stat, cfg, ret, vbus_mask = 0, i;
 	u8 chrg_type;
 	bool vbus_attach = false;
 
@@ -187,11 +187,27 @@ static int smsc375x_detect_dev(struct smsc375x_chip *chip)
 		return ret;
 	}
 	/* check charger detection completion status */
+#ifndef CONFIG_MRD7
 	ret = smsc375x_read_reg(client, SMSC375X_REG_STAT);
 	if (ret < 0)
 		goto dev_det_i2c_failed;
 	else
 		stat = ret;
+#else
+	for (i = 0; i < 10; i++) {
+		ret = smsc375x_read_reg(client, SMSC375X_REG_STAT);
+		if (ret < 0)
+			goto dev_det_i2c_failed;
+		else
+			stat = ret;
+		if (stat & STAT_CHRG_DET_DONE) {
+			dev_info(&chip->client->dev, "index i:%d\n", i);
+			break;
+		} else {
+			msleep(250);
+		}
+	}
+#endif
 
 	if (!(stat & STAT_CHRG_DET_DONE)) {
 		dev_info(&chip->client->dev, "DET failed");
@@ -318,7 +334,12 @@ static irqreturn_t smsc375x_irq_handler(int irq, void *data)
 
 	dev_info(&chip->client->dev, "SMSC USB INT!\n");
 
+#ifdef CONFIG_MRD7
+	/* INT functionality of smsc375x is not stable */
+	/* smsc375x_detect_dev(chip); */
+#else
 	smsc375x_detect_dev(chip);
+#endif
 
 	pm_runtime_put_sync(&chip->client->dev);
 	return IRQ_HANDLED;
