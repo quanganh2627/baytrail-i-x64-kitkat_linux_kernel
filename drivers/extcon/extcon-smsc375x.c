@@ -469,6 +469,7 @@ static void smsc375x_pwrsrc_event_worker(struct work_struct *work)
 	 * So we are reading the status register as WA
 	 * to invoke teh MUX INT in case of connect events.
 	 */
+#ifndef CONFIG_MRD7
 	if (!chip->pdata->is_vbus_online()) {
 		ret = smsc375x_detect_dev(chip);
 	} else {
@@ -481,7 +482,9 @@ static void smsc375x_pwrsrc_event_worker(struct work_struct *work)
 	}
 	if (ret < 0)
 		dev_warn(&chip->client->dev, "pwrsrc evt error\n");
-
+#else
+	smsc375x_detect_dev(chip);
+#endif
 	pm_runtime_put_sync(&chip->client->dev);
 }
 
