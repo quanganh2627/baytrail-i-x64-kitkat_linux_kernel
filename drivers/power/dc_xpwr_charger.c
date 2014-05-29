@@ -227,6 +227,8 @@ struct pmic_chrg_info {
 	struct delayed_work chrg_full_wrkr;
 };
 
+static struct pmic_chrg_info *g_info;
+
 static enum power_supply_property pmic_chrg_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
@@ -1009,6 +1011,8 @@ static int pmic_chrg_probe(struct platform_device *pdev)
 		goto psy_reg_failed;
 	}
 	INIT_DELAYED_WORK(&info->chrg_full_wrkr, xpwr_full_worker);
+
+	g_info = info;
 
 	return 0;
 

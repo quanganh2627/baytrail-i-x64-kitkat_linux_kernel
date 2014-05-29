@@ -328,8 +328,9 @@ static void smsc375x_otg_event_worker(struct work_struct *work)
 {
 	struct smsc375x_chip *chip =
 	    container_of(work, struct smsc375x_chip, otg_work);
-	int ret;
+	int ret, cfg;
 
+#ifndef CONFIG_MRD7
 	pm_runtime_get_sync(&chip->client->dev);
 
 	if (chip->id_short)
@@ -349,6 +350,25 @@ static void smsc375x_otg_event_worker(struct work_struct *work)
 	schedule_work(&chip->vbus_work);
 
 	pm_runtime_put_sync(&chip->client->dev);
+#else
+	/* wait for dc_xpwr_charger to enable the boost */
+	msleep(100);
+
+	cfg = smsc375x_read_reg(chip->client, SMSC375X_REG_CFG);
+	if (cfg < 0)
+		goto dev_det_i2c_failed;
+
+	ret = smsc375x_write_reg(chip->client, SMSC375X_REG_CFG,
+				 (cfg & ~CFG_EN_MUX1) | CFG_EN_MUX2);
+	if (ret < 0)
+		goto dev_det_i2c_failed;
+
+	return;
+
+dev_det_i2c_failed:
+	dev_err(&chip->client->dev, "failed to switch MUX to host side\n");
+	return;
+#endif
 }
 
 static int smsc375x_handle_otg_notification(struct notifier_block *nb,
