@@ -26,7 +26,15 @@
 #include "platform_ov5693.h"
 
 /* workround - pin defined for byt */
-#define CAMERA_0_RESET	126
+#ifdef CONFIG_MRD8
+#define CAMERA_0_RESET 119
+#define CAMERA_0_PWDN 123
+#define CAM28_EN 119
+#define AFVCC28_EN 118
+#else
+ #define CAMERA_0_RESET	126
+#endif
+
 #define CAMERA_1P8_EN	128
 #ifdef CONFIG_VLV2_PLAT_CLK
 #define OSC_CAM0_CLK 0x0
@@ -36,6 +44,11 @@
 #define VPROG_2P8V 0x66
 #define VPROG_1P8V 0x5D
 #endif
+
+#ifdef CONFIG_MRD8
+static int camera_power_down;
+#endif
+
 static int camera_vprog1_on;
 static int camera_reset;
 
@@ -70,10 +83,23 @@ static int ov5693_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 			return ret;
 		}
 	}
-	if (flag)
-		gpio_set_value(camera_reset, 1);
-	else
-		gpio_set_value(camera_reset, 0);
+
+	if (flag) {
+	#ifdef CONFIG_MRD8
+			gpio_set_value(camera_power_down, 1);
+	#endif
+			gpio_set_value(camera_reset, 1);
+	
+	} else {
+			gpio_set_value(camera_reset, 0);
+	#ifdef CONFIG_MRD8
+			gpio_set_value(camera_power_down, 0);
+			gpio_free(camera_reset);
+			gpio_free(camera_power_down);
+			camera_reset = -1;
+			camera_power_down = -1;
+	#endif
+	}
 
 	return 0;
 }
@@ -114,6 +140,8 @@ static int ov5693_power_ctrl(struct v4l2_subdev *sd, int flag)
 	int ret = 0;
 	int pin = CAMERA_1P8_EN;
 
+#ifndef CONFIG_MRD8
+
 	ret = gpio_request(pin, "camera_v1p8_en");
 	if (ret) {
 		pr_err("Request camera_v1p8_en failed.\n");
@@ -125,6 +153,8 @@ static int ov5693_power_ctrl(struct v4l2_subdev *sd, int flag)
 		}
 	}
 	gpio_direction_output(pin, 0);
+#endif
+
 
 	if (flag) {
 		if (!camera_vprog1_on) {
@@ -142,8 +172,11 @@ static int ov5693_power_ctrl(struct v4l2_subdev *sd, int flag)
 #else
 			pr_err("ov5693 power is not set.\n");
 #endif
+
+#ifndef CONFIG_MRD8
 			/* enable 1.8v power */
 			gpio_set_value(pin, 1);
+#endif
 
 			camera_vprog1_on = 1;
 			usleep_range(10000, 11000);
@@ -158,13 +191,17 @@ static int ov5693_power_ctrl(struct v4l2_subdev *sd, int flag)
 #else
 			pr_err("ov5693 power is not set.\n");
 #endif
+#ifndef CONFIG_MRD8
 			/* disable 1.8v power */
 			gpio_set_value(pin, 0);
+#endif
 			camera_vprog1_on = 0;
 		}
 	}
 
+#ifndef CONFIG_MRD8
 	gpio_free(pin);
+#endif
 	return 0;
 }
 
@@ -184,5 +221,10 @@ static struct camera_sensor_platform_data ov5693_sensor_platform_data = {
 void *ov5693_platform_data(void *info)
 {
 	camera_reset = -1;
+	#ifdef CONFIG_MRD8
+		camera_power_down = -1;
+		camera_vprog1_on = 0;
+	#endif
+
 	return &ov5693_sensor_platform_data;
 }

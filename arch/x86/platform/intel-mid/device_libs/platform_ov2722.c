@@ -28,7 +28,13 @@
 #include "platform_ov2722.h"
 
 /* workround - pin defined for byt */
+#ifdef CONFIG_MRD8
+#define CAMERA_1_RESET 120 /*MCSI_GPIO[10]:NC_25 MRD7 GPIONC_18+102: CAM2_RESET_N: 17:CAM1*/
+#else
 #define CAMERA_1_RESET 127
+#endif
+
+
 #define CAMERA_1_RESET_CRV2 120
 #define CAMERA_1_PWDN 124
 #ifdef CONFIG_VLV2_PLAT_CLK
@@ -301,6 +307,11 @@ static int ov2722_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 			gpio_set_value(gp_camera1_power_down, 1);
 		else
 			gpio_set_value(gp_camera1_power_down, 0);
+
+		gpio_free(gp_camera1_reset);
+		gpio_free(gp_camera1_power_down);
+		gp_camera1_reset = -1;
+		gp_camera1_power_down = -1;
 	}
 
 	return 0;

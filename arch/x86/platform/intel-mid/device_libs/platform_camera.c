@@ -21,11 +21,15 @@
 #include "platform_imx175.h"
 #include "platform_imx134.h"
 #include "platform_ov2722.h"
+#include "platform_gc0339.h"
 #include "platform_gc2235.h"
 #include "platform_ov5693.h"
 #include "platform_lm3554.h"
 #include "platform_lm3642.h"
 #include "platform_ap1302.h"
+#ifdef CONFIG_CRYSTAL_COVE
+#include <linux/mfd/intel_mid_pmic.h>
+#endif
 
 /*
  * TODO: Check whether we can move this info to OEM table or
@@ -42,6 +46,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"imx132", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov9724", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov2722", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
+	{"gc0339", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov5693", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9d113", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9m114", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
@@ -96,6 +101,35 @@ static struct camera_device_table byt_ffrd8_cam_table[] = {
 	}
 };
 
+#ifdef CONFIG_MRD7
+static struct camera_device_table byt_crv2_cam_table[] = {
+    {
+    	{   SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235"},
+    	    {"gc2235", SFI_DEV_TYPE_I2C, 0, &gc2235_platform_data,
+    	        &intel_register_i2c_camera_device}
+    	}, {
+    		{SFI_DEV_TYPE_I2C, 2, 0x21, 0x0, 0x0, "gc0339"},
+    		{"gc0339", SFI_DEV_TYPE_I2C, 0, &gc0339_platform_data,
+    			&intel_register_i2c_camera_device}
+	}
+};
+
+#elif defined CONFIG_MRD8
+static struct camera_device_table byt_crv2_cam_table[] = {
+         {
+                 {SFI_DEV_TYPE_I2C, 2, 0x10, 0x0, 0x0, "ov5693"},
+                 {"ov5693", SFI_DEV_TYPE_I2C, 0, &ov5693_platform_data,
+                         &intel_register_i2c_camera_device}
+         }, {
+                 {SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "ov2722"},
+                 {"ov2722", SFI_DEV_TYPE_I2C, 0, &ov2722_platform_data,
+                         &intel_register_i2c_camera_device}
+         }
+};
+
+#else
+
+
 static struct camera_device_table byt_crv2_cam_table[] = {
 	{
 		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235"},
@@ -119,6 +153,7 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 			&intel_register_i2c_camera_device}
 	}
 };
+#endif
 
 static struct atomisp_camera_caps default_camera_caps;
 
@@ -371,6 +406,7 @@ struct i2c_client *i2c_find_client_by_name(char *name)
 static void atomisp_unregister_acpi_devices(struct atomisp_platform_data *pdata)
 {
 	const char *subdev_name[] = {
+#ifndef CONFIG_MRD7
 		"3-0053",	/* FFRD8 lm3554 */
 		"4-0036",	/* ov2722 */
 		"4-0010",	/* imx1xx Sensor*/
@@ -389,6 +425,7 @@ static void atomisp_unregister_acpi_devices(struct atomisp_platform_data *pdata)
 		"INTCF0B:00",	/* From ACPI ov2722 */
 		"INTCF1A:00",	/* From ACPI imx175 */
 		"INTCF1C:00",	/* From ACPI lm3554 */
+#endif
 #endif
 	};
 	struct device *dev;
@@ -452,6 +489,62 @@ const struct atomisp_camera_caps *atomisp_get_default_camera_caps(void)
 }
 EXPORT_SYMBOL_GPL(atomisp_get_default_camera_caps);
 
+int gc_camera_set_pmic(bool flag)
+{
+	/*MRD7 0x1A:default0x00-11=1.8v; 0x28:default0x17, =21=2.8?*/
+        /*MRD7 0x12, bit4; 0x13, bit5*/
+	//u8 reg_addr[CAMERA_POWER_NUM] = {VPROG_1P8V, VPROG_2P8V};
+	//u8 reg_value[2] = {VPROG_DISABLE, VPROG_ENABLE};
+	u8 reg_addr[CAMERA_POWER_NUM] = {0x12, 0x13};
+	u8 reg_value[2] = {0x2, 0x20};
+	u8 reg_adjust_addr[2] = {0x1A, 0x28};
+	u8 reg_adjust_value[2] = {22, 21}; /* 1.8v for ELDO2, 2.8v for ALDO1 */
+	static struct vprog_status status;
+	static DEFINE_MUTEX(mutex_power);
+	int ret = 0;
+
+	mutex_lock(&mutex_power);
+	/*
+	 * only set power at:
+	 * first to power on
+	 * last to power off
+	 */
+	if ((flag && status.user == 0)
+	    || (!flag && status.user == 1))
+//		ret = intel_mid_pmic_writeb(reg_addr[pin], reg_value[flag]);
+	{
+		if (flag)
+		{
+			ret = intel_mid_pmic_writeb(reg_adjust_addr[CAMERA_1P8V], reg_adjust_value[CAMERA_1P8V]);
+			ret |= intel_mid_pmic_setb(reg_addr[CAMERA_1P8V], reg_value[CAMERA_1P8V]);
+			ret |= intel_mid_pmic_writeb(reg_adjust_addr[CAMERA_2P8V], reg_adjust_value[CAMERA_2P8V]);
+			ret |= intel_mid_pmic_setb(reg_addr[CAMERA_2P8V], reg_value[CAMERA_2P8V]);
+		}
+		else
+		{
+			ret |= intel_mid_pmic_clearb(reg_addr[CAMERA_2P8V], reg_value[CAMERA_2P8V]);
+			ret |= intel_mid_pmic_clearb(reg_addr[CAMERA_1P8V], reg_value[CAMERA_1P8V]);
+		}
+	}
+
+
+
+	/* no update counter if config failed */
+	if (ret)
+		goto done;
+
+	if (flag)
+		status.user++;
+	else
+		if (status.user)
+			status.user--;
+done:
+	mutex_unlock(&mutex_power);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(gc_camera_set_pmic);
+
+
 static int camera_af_power_gpio = -1;
 
 static int camera_af_power_ctrl(struct v4l2_subdev *sd, int flag)
@@ -492,6 +585,67 @@ const struct camera_af_platform_data *camera_get_af_platform_data(void)
 	return &platform_data;
 }
 EXPORT_SYMBOL_GPL(camera_get_af_platform_data);
+
+#ifdef CONFIG_CRYSTAL_COVE
+
+
+/*
+ * WA for BTY as simple VRF management
+ */
+int camera_set_pmic_power(enum camera_pmic_pin pin, bool flag)
+{
+	/*MRD7 0x1A:default0x00-11=1.8v; 0x28:default0x17, =21=2.8?*/
+        /*MRD7 0x12, bit4; 0x13, bit5*/
+	//u8 reg_addr[CAMERA_POWER_NUM] = {VPROG_1P8V, VPROG_2P8V};
+	//u8 reg_value[2] = {VPROG_DISABLE, VPROG_ENABLE};
+	u8 reg_addr[CAMERA_POWER_NUM] = {0x12, 0x13};
+	u8 reg_value[2] = {0x2, 0x20};
+	u8 reg_adjust_addr[2] = {0x1A, 0x28};
+	u8 reg_adjust_value[2] = {22, 21}; /* 1.8v for ELDO2, 2.8v for ALDO1 */
+
+	static struct vprog_status status[CAMERA_POWER_NUM];
+	static DEFINE_MUTEX(mutex_power);
+	int ret = 0;
+
+	mutex_lock(&mutex_power);
+	/*
+	 * only set power at:
+	 * first to power on
+	 * last to power off
+	 */
+	if ((flag && status[pin].user == 0)
+	    || (!flag && status[pin].user == 1))
+//		ret = intel_mid_pmic_writeb(reg_addr[pin], reg_value[flag]);
+	{
+		if (flag)
+		{
+			ret = intel_mid_pmic_writeb(reg_adjust_addr[pin], reg_adjust_value[pin]);
+			ret |= intel_mid_pmic_setb(reg_addr[pin], reg_value[pin]);
+		}
+		else
+		{
+			ret |= intel_mid_pmic_clearb(reg_addr[pin], reg_value[pin]);
+		}
+	}
+
+
+
+	/* no update counter if config failed */
+	if (ret)
+		goto done;
+
+	if (flag)
+		status[pin].user++;
+	else
+		if (status[pin].user)
+			status[pin].user--;
+done:
+	mutex_unlock(&mutex_power);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(camera_set_pmic_power);
+#endif
+
 
 #ifdef CONFIG_ACPI
 void __init camera_init_device(void)
