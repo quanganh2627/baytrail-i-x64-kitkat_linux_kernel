@@ -63,10 +63,10 @@ int rt5645_update_eqmode(
 
 	dev_dbg(codec->dev, "%s(): mode=%d\n", __func__, mode);
 	if (mode != NORMAL) {
-		for (i = 0; i <= EQ_REG_NUM; i++)
+		for (i = 0; i < EQ_REG_NUM; i++)
 			rt5645_hweq_param[mode].reg[i] = eqreg[channel][i];
 
-		for (i = 0; i <= EQ_REG_NUM; i++) {
+		for (i = 0; i < EQ_REG_NUM; i++) {
 			if (rt5645_hweq_param[mode].reg[i])
 				ioctl_ops->index_write(codec, rt5645_hweq_param[mode].reg[i],
 						rt5645_hweq_param[mode].value[i]);

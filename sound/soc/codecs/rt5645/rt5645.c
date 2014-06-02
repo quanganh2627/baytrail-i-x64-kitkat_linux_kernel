@@ -2793,7 +2793,7 @@ static int rt5645_pll_calc(const unsigned int freq_in,
 
 	if (RT5645_PLL_INP_MAX < freq_in || RT5645_PLL_INP_MIN > freq_in)
 		return -EINVAL;
-
+	n = m = m_t = 0; /*KW issue WA.*/
 	k = 100000000 / freq_out - 2;
 	if (k > RT5645_PLL_K_MAX)
 		k = RT5645_PLL_K_MAX;
