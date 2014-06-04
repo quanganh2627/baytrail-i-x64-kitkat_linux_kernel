@@ -266,11 +266,7 @@ static void intel_dsi_enable(struct intel_encoder *encoder)
 static void intel_dsi_disable(struct intel_encoder *encoder)
 {
 	struct drm_device *dev = encoder->base.dev;
-	struct drm_i915_private *dev_priv = encoder->base.dev->dev_private;
-	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
-	int pipe = intel_crtc->pipe;
-	u32 tmp;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -288,33 +284,7 @@ static void intel_dsi_disable(struct intel_encoder *encoder)
 		intel_dsi->hs = 0;
 		dpi_send_cmd(intel_dsi, SHUTDOWN);
 		usleep_range(1000, 1500);
-
-		I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, DPI_ENABLE);
-		POSTING_READ(MIPI_PORT_CTRL(pipe));
-		usleep_range(2000, 2500);
 	}
-
-	/* Panel commands can be sent when clock is in LP11 */
-	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
-
-	tmp = I915_READ(MIPI_CTRL(pipe));
-	tmp &= ~ESCAPE_CLOCK_DIVIDER_MASK;
-	I915_WRITE(MIPI_CTRL(pipe), tmp |
-			intel_dsi->escape_clk_div <<
-			ESCAPE_CLOCK_DIVIDER_SHIFT);
-
-	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
-
-	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
-	tmp &= ~VID_MODE_FORMAT_MASK;
-	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
-
-	I915_WRITE(MIPI_DEVICE_READY(pipe), 0x1);
-
-	/* if disable packets are sent before sending shutdown packet then in
-	 * some next enable sequence send turn on packet error is observed */
-	if (intel_dsi->dev.dev_ops->disable)
-		intel_dsi->dev.dev_ops->disable(&intel_dsi->dev);
 }
 
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
@@ -327,24 +297,24 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 
 	DRM_DEBUG_KMS("\n");
 
-	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_ENTER,
-							ULPS_STATE_MASK);
+	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_ENTER | DEVICE_READY,
+							ULPS_STATE_MASK | DEVICE_READY);
 	usleep_range(2000, 2500);
 
-	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_EXIT,
-							ULPS_STATE_MASK);
+	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_EXIT | DEVICE_READY,
+							ULPS_STATE_MASK | DEVICE_READY);
 	usleep_range(2000, 2500);
 
-	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_ENTER,
-							ULPS_STATE_MASK);
+	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), ULPS_STATE_ENTER | DEVICE_READY,
+							ULPS_STATE_MASK | DEVICE_READY);
 	usleep_range(2000, 2500);
-
-	I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, LP_OUTPUT_HOLD);
-	usleep_range(1000, 1500);
 
 	if (wait_for(((I915_READ(MIPI_PORT_CTRL(pipe)) & 0x20000)
 					== 0x00000), 30))
 		DRM_ERROR("DSI LP not going Low\n");
+
+	I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, LP_OUTPUT_HOLD);
+	usleep_range(1000, 1500);
 
 	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), 0x00, DEVICE_READY);
 	usleep_range(2000, 2500);
@@ -376,8 +346,46 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder)
 
 static void intel_dsi_post_disable(struct intel_encoder *encoder)
 {
-	DRM_DEBUG_KMS("\n");
+	struct drm_i915_private *dev_priv = encoder->base.dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+	struct intel_dsi *intel_dsi = enc_to_intel_dsi(&encoder->base);
+	int pipe = intel_crtc->pipe;
+	u32 tmp;
 
+	wait_for_dsi_fifo_empty(intel_dsi);
+
+	I915_WRITE_BITS(MIPI_PORT_CTRL(pipe), 0, DPI_ENABLE);
+	POSTING_READ(MIPI_PORT_CTRL(pipe));
+	usleep_range(2000, 2500);
+
+	/* Panel commands can be sent when clock is in LP11 */
+	tmp = I915_READ(MIPI_DEVICE_READY(pipe));
+	tmp &= ~DEVICE_READY;
+	I915_WRITE(MIPI_DEVICE_READY(pipe), tmp);
+
+	tmp = I915_READ(MIPI_CTRL(pipe));
+	tmp &= ~ESCAPE_CLOCK_DIVIDER_MASK;
+	I915_WRITE(MIPI_CTRL(pipe), tmp |
+		intel_dsi->escape_clk_div <<
+			ESCAPE_CLOCK_DIVIDER_SHIFT);
+
+	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
+	tmp &= ~VID_MODE_FORMAT_MASK;
+	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
+
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+
+	tmp = I915_READ(MIPI_DEVICE_READY(pipe));
+	tmp &= DEVICE_READY;
+	I915_WRITE(MIPI_DEVICE_READY(pipe), tmp);
+
+	/* if disable packets are sent before sending shutdown packet then in
+	* some next enable sequence send turn on packet error is observed */
+
+	if (intel_dsi->dev.dev_ops->disable)
+		intel_dsi->dev.dev_ops->disable(&intel_dsi->dev);
+
+	wait_for_dsi_fifo_empty(intel_dsi);
 	intel_dsi_clear_device_ready(encoder);
 }
 

@@ -1772,6 +1772,20 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 	if (host->vmmc && vdd_bit != -1) {
 		spin_unlock_irqrestore(&host->lock, flags);
 		mmc_regulator_set_ocr(host->mmc, host->vmmc, vdd_bit);
+		if (host->vqmmc) {
+			int ret;
+			if (!host->mmc->regulator_enabled &&
+					host->vqmmc_enabled) {
+				ret = regulator_disable(host->vqmmc);
+				if (!ret)
+					host->vqmmc_enabled = false;
+			} else if (host->mmc->regulator_enabled &&
+					!host->vqmmc_enabled) {
+				ret = regulator_enable(host->vqmmc);
+				if (!ret)
+					host->vqmmc_enabled = true;
+			}
+		}
 		spin_lock_irqsave(&host->lock, flags);
 	}
 
@@ -2101,7 +2115,7 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 			gpio_set_value(host->gpio_1p8_en, 0);
 
 		if (host->vqmmc) {
-			ret = regulator_set_voltage(host->vqmmc, 2700000, 3600000);
+			ret = regulator_set_voltage(host->vqmmc, 3300000, 3600000);
 			if (ret) {
 				pr_warning("%s: Switching to 3.3V signalling voltage "
 						" failed\n", mmc_hostname(host->mmc));
@@ -2128,7 +2142,7 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 	case MMC_SIGNAL_VOLTAGE_180:
 		if (host->vqmmc) {
 			ret = regulator_set_voltage(host->vqmmc,
-					1700000, 1950000);
+					1800000, 1950000);
 			if (ret) {
 				pr_warning("%s: Switching to 1.8V signalling voltage "
 						" failed\n", mmc_hostname(host->mmc));
@@ -4317,7 +4331,9 @@ int sdhci_add_host(struct sdhci_host *host)
 			pr_warn("%s: Failed to enable vqmmc regulator: %d\n",
 				mmc_hostname(mmc), ret);
 			host->vqmmc = NULL;
-		}
+		} else
+			/* disable vqmmc regulator until there is a device */
+			regulator_disable(host->vqmmc);
 	}
 
 	if (host->quirks2 & SDHCI_QUIRK2_NO_1_8_V)
@@ -4410,7 +4426,7 @@ int sdhci_add_host(struct sdhci_host *host)
 	 */
 	max_current_caps = sdhci_readl(host, SDHCI_MAX_CURRENT);
 	if (!max_current_caps && host->vmmc) {
-		u32 curr = regulator_get_current_limit(host->vmmc);
+		int curr = regulator_get_current_limit(host->vmmc);
 		if (curr > 0) {
 
 			/* convert to SDHCI_MAX_CURRENT format */

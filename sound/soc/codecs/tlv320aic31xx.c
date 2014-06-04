@@ -1214,7 +1214,7 @@ int aic31xx_query_jack_status(struct snd_soc_codec *codec)
 	default:
 		break;
 	}
-	dev_dbg(codec->dev, "Jack Status returned is %x\n", state);
+	dev_dbg(codec->dev, "AIC31XX_HSDETECT=0x%X, Jack Status returned is %x\n", status, state);
 	return state;
 }
 EXPORT_SYMBOL_GPL(aic31xx_query_jack_status);
@@ -1224,9 +1224,11 @@ int aic31xx_query_btn_press(struct snd_soc_codec *codec)
 	int state = 0, status;
 
 	status = snd_soc_read(codec, AIC31XX_INTRFLAG);
-	if (status & AIC31XX_BTNPRESS_STATUS_MASK)
+	dev_dbg(codec->dev, "Status(P0/46): %x\n", status);
+	/** when HS is plugging out, BTN interrupts may be triggered
+	*  It is fake BTN press, should not be reported */
+	if ((status & AIC31XX_BTN_HS_STATUS_MASK) == AIC31XX_BTN_HS_STATUS_MASK)
 		return state | SND_JACK_BTN_0;
-	dev_dbg(codec->dev, "BTN Status returned is %x\n", state);
 	return state;
 
 }
@@ -1336,7 +1338,11 @@ static int aic31xx_codec_probe(struct snd_soc_codec *codec)
 	 * start we will be working with internal clock
 	 */
 	snd_soc_update_bits(codec, AIC31XX_HSDETECT,
-			AIC31XX_JACK_DEBOUCE_MASK, 0x14);
+			AIC31XX_JACK_DEBOUCE_MASK, 0x0);
+
+	/* set debounce time for button */
+	snd_soc_update_bits(codec, AIC31XX_HSDETECT,
+			AIC31XX_BTN_DEBOUCE_MASK, 0x03);
 
 	/*Reconfiguring CM to band gap mode*/
 	snd_soc_update_bits(codec, AIC31XX_HPPOP, 0xff, 0xAE);
