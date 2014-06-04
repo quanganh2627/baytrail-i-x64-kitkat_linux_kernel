@@ -603,6 +603,8 @@ void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level)
 void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 {
 #ifdef CONFIG_CRYSTAL_COVE
+	u32 max = intel_panel_get_max_backlight(dev);
+
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	if (BYT_CR_CONFIG) {
  		/* FixMe: if level is zero still a pulse is observed consuming
