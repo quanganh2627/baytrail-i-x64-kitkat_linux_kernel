@@ -18,7 +18,7 @@
 
 static struct intel_mid_gps_platform_data gps_data = {
 	.gpio_reset  = -EINVAL,
-	.gpio_enable = -EINVAL,
+	.gpio_enable = 152,
 	.gpio_hostwake = -EINVAL,
 	.reset  = RESET_ON,
 	.enable = ENABLE_OFF,
@@ -33,20 +33,18 @@ static struct platform_device intel_mid_gps_device = {
 	},
 };
 
-void  __init *intel_mid_gps_device_init(void *info)
+int  __init intel_mid_gps_device_init(void)
 {
-	struct sfi_device_table_entry *entry = info;
 	int ret = 0;
 
-	gps_data.gpio_reset  = get_gpio_by_name(GPS_GPIO_RESET);
-	gps_data.gpio_enable = get_gpio_by_name(GPS_GPIO_ENABLE);
-	gps_data.gpio_hostwake = get_gpio_by_name(GPS_GPIO_HOSTWAKE);
-	gps_data.hsu_port = entry->host_num;
+	gps_data.hsu_port = 1;
 
 	ret = platform_device_register(&intel_mid_gps_device);
 
 	if (ret < 0)
 		pr_err("platform_device_register failed for intel_mid_gps\n");
 
-	return NULL;
+	return ret;
 }
+
+device_initcall(intel_mid_gps_device_init);
