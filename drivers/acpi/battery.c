@@ -255,8 +255,8 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			* convert temperature from degree kelvin
 			* to degree celsius: T(C) = T(K) - 273.15
 			*/
-			val->intval = (((int)battery->temperature) -
-					(BAT_TEMP_CONV_FACTOR / 100));
+			val->intval = (((int)battery->temperature * 10) -
+					(BAT_TEMP_CONV_FACTOR / 10));
 		}
 
 		/*We are treating both hot and cold as  overheat cases.
@@ -347,7 +347,8 @@ static int acpi_battery_get_property(struct power_supply *psy,
 		        * convert temperature from degree kelvin
 			* to degree celsius: T(C) = T(K) - 273.15
 			*/
-			val->intval = (((int)battery->temperature) - (BAT_TEMP_CONV_FACTOR / 100));
+			val->intval = (((int)battery->temperature * 10) -
+					(BAT_TEMP_CONV_FACTOR / 10));
 		}
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
