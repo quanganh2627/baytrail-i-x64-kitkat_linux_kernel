@@ -70,6 +70,7 @@
 /*
  * I2C devices
  */
+#include "device_libs/platform_ov2685.h"
 #include "device_libs/platform_max7315.h"
 #include "device_libs/platform_tca6416.h"
 #include "device_libs/platform_mpu3050.h"
@@ -110,13 +111,18 @@
 #include "device_libs/platform_ov9724.h"
 #include "device_libs/platform_ov2722.h"
 #include "device_libs/platform_gc0339.h"
+#include "device_libs/platform_gc2155.h"
 #include "device_libs/platform_gc2235.h"
 #include "device_libs/platform_gc5004.h"
+#include "device_libs/platform_gc0310.h"
+#include "device_libs/platform_bf3905.h"
+#include "device_libs/platform_bf3a20.h"
 #include "device_libs/platform_lm3559.h"
 #include "device_libs/platform_ov8830.h"
 #include "device_libs/platform_ov5693.h"
 #include "device_libs/platform_ov5648.h"
-#include "device_libs/platform_ov2680.h"
+#include "device_libs/platform_ov2680b.h"
+#include "device_libs/platform_ov8858.h"
 #include "device_libs/platform_ov2680f.h"
 #include "device_libs/platform_wm5102.h"
 #include "device_libs/platform_ap1302.h"
@@ -293,18 +299,30 @@ struct devs_id __initconst device_ids[] = {
 					&intel_register_i2c_camera_device},
 	{"ov2722", SFI_DEV_TYPE_I2C, 0, &ov2722_platform_data,
 					&intel_register_i2c_camera_device},					
+	{"ov2685", SFI_DEV_TYPE_I2C, 0, &ov2685_platform_data,
+					&intel_register_i2c_camera_device},
+	{"bf3905", SFI_DEV_TYPE_I2C, 0, &bf3905_platform_data,
+					&intel_register_i2c_camera_device},
 	{"gc0339", SFI_DEV_TYPE_I2C, 0, &gc0339_platform_data,
-				   &intel_register_i2c_camera_device},
+					&intel_register_i2c_camera_device},
+	{"gc2155", SFI_DEV_TYPE_I2C, 0, &gc2155_platform_data,
+					&intel_register_i2c_camera_device},
 	{"gc2235", SFI_DEV_TYPE_I2C, 0, &gc2235_platform_data,
 					&intel_register_i2c_camera_device},
 	{"gc5004", SFI_DEV_TYPE_I2C, 0, &gc5004_platform_data,
-                    &intel_register_i2c_camera_device},
+					&intel_register_i2c_camera_device},
+	{"gc0310", SFI_DEV_TYPE_I2C, 0, &gc0310_platform_data,
+ 					&intel_register_i2c_camera_device},
 	{"ov5648", SFI_DEV_TYPE_I2C, 0, &ov5648_platform_data,
-                    &intel_register_i2c_camera_device},
-	{"ov2680", SFI_DEV_TYPE_I2C, 0, &ov2680_platform_data,
-                                    &intel_register_i2c_camera_device},
+ 					&intel_register_i2c_camera_device},
+	{"ov8858", SFI_DEV_TYPE_I2C, 0, &ov8858_platform_data,
+					&intel_register_i2c_camera_device},
+	{"ov2680b", SFI_DEV_TYPE_I2C, 0, &ov2680b_platform_data,
+					&intel_register_i2c_camera_device},
+	{"bf3a20", SFI_DEV_TYPE_I2C, 0, &bf3a20_platform_data,
+					&intel_register_i2c_camera_device},
 	{"ov2680f", SFI_DEV_TYPE_I2C, 0, &ov2680f_platform_data,
-                                    &intel_register_i2c_camera_device},
+					&intel_register_i2c_camera_device},
 	{"lm3559", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,
 					&intel_register_i2c_camera_device},
 	{"lm3560", SFI_DEV_TYPE_I2C, 0, &lm3559_platform_data_func,

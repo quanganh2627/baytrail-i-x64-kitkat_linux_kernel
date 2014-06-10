@@ -1,5 +1,5 @@
 /*
- * platform_ov2680.c: ov2680 platform data initilization file
+ * platform_ov8858.c: ov8858 platform data initilization file
  *
  * (C) Copyright 2013 Intel Corporation
  * Author:
@@ -19,13 +19,11 @@
 #include <linux/mfd/intel_mid_pmic.h>
 #include <linux/vlv2_plat_clock.h>
 #include "platform_camera.h"
-#include "platform_ov2680.h"
+#include "platform_ov8858.h"
 
 /* workround - pin defined for byt */
 #define CAMERA_0_RESET 119 //meng 0924 :MCSI_GPIO[09]
 #define CAMERA_0_PWDN 123 //MCSI_GPIO[06]-active low to power down in P1
-#define CAM28_EN 119 //ECS-BYT: MCSI_GPIO[02], camera VDD2.8 control, active high.
-#define AFVCC28_EN 118 //ECS-BYT: MCSI_GPIO[01], camera VCM2.8 control, active high.
 #ifdef CONFIG_VLV2_PLAT_CLK 
 #define OSC_CAM0_CLK 0x0
 #define CLK_19P2MHz 0x1
@@ -39,83 +37,92 @@
 static int camera_reset;
 static int camera_power_down;
 static int camera_vprog1_on;
-static int camera_p28_en;
-static int camera_vcm28_en;
+
 
 /*
- * camera sensor - ov2680 platform data
+ * OV8858 platform data
  */
 
-static int ov2680_gpio_ctrl(struct v4l2_subdev *sd, int flag)
+static int ov8858_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 {
 	int ret;
 	int pin;
-
-		/*
-		 * FIXME: WA using hardcoded GPIO value here.
-		 * The GPIO value would be provided by ACPI table, which is
-		 * not implemented currently
-		 */
-		if (camera_reset < 0) {
-			ret = gpio_request(CAMERA_0_RESET, "camera_0_reset");
-			if (ret) {
-				pr_err("%s: failed to request gpio(pin %d)\n",
-				__func__, CAMERA_0_RESET);
-				return -EINVAL;
-			}
-		}
-		camera_reset = CAMERA_0_RESET;
-		ret = gpio_direction_output(camera_reset, 1);
+	/*
+	 * FIXME: WA using hardcoded GPIO value here.
+	 * The GPIO value would be provided by ACPI table, which is
+	 * not implemented currently
+	 */
+	if (camera_reset < 0) {
+		ret = gpio_request(CAMERA_0_RESET, "camera_0_reset");
 		if (ret) {
-			pr_err("%s: failed to set gpio(pin %d) direction\n",
-				__func__, camera_reset);
-			gpio_free(camera_reset);
+			pr_err("%s: failed to request gpio(pin %d)\n",
+			__func__, CAMERA_0_RESET);
+			return -EINVAL;
 		}
-
-		/*
-		 * FIXME: WA using hardcoded GPIO value here.
-		 * The GPIO value would be provided by ACPI table, which is
-		 * not implemented currently.
-		 */
-		pin = CAMERA_0_PWDN;
-		if (camera_power_down < 0) {
-			ret = gpio_request(pin, "camera_0_power");
-			if (ret) {
-				pr_err("%s: failed to request gpio(pin %d)\n",
-					__func__, pin);
-				return ret;
-			}
-		}
-		camera_power_down = pin;
-
-		ret = gpio_direction_output(pin, 1);
+	}
+	camera_reset = CAMERA_0_RESET;
+	ret = gpio_direction_output(camera_reset, 1);
+	if (ret) {
+		pr_err("%s: failed to set gpio(pin %d) direction\n",
+			__func__, camera_reset);
+		gpio_free(camera_reset);
+	}
+	/*
+	 * FIXME: WA using hardcoded GPIO value here.
+	 * The GPIO value would be provided by ACPI table, which is
+	 * not implemented currently.
+	 */
+	pin = CAMERA_0_PWDN;
+	if (camera_power_down < 0) {
+		ret = gpio_request(pin, "camera_0_power");
 		if (ret) {
-			pr_err("%s: failed to set gpio(pin %d) direction\n",
+			pr_err("%s: failed to request gpio(pin %d)\n",
 				__func__, pin);
-			gpio_free(pin);
 			return ret;
 		}
+	}
+	camera_power_down = pin;
 
-		
+	ret = gpio_direction_output(pin, 1);
+	if (ret) {
+		pr_err("%s: failed to set gpio(pin %d) direction\n",
+			__func__, pin);
+		gpio_free(pin);
+		return ret;
+	}
+
+
 	if (flag) {
 		gpio_set_value(camera_power_down, 1);
+		
+		usleep_range(1000, 1500);
 		
 		gpio_set_value(camera_reset, 1);
 
 	} else {
 		gpio_set_value(camera_reset, 0);
+#if 0
+		if (spid.hardware_id == BYT_TABLET_BLK_8PR0)
+			gpio_set_value(camera_power_down, 1);
+		else if(spid.hardware_id == BYT_TABLET_BLK_WISKYP1)//config for P1
+			gpio_set_value(camera_power_down, 0);
+		else
+#endif
 		gpio_set_value(camera_power_down, 0);
-		gpio_free(camera_reset);
+	  	gpio_free(camera_reset);
 		gpio_free(camera_power_down);
 		camera_reset = -1;
 		camera_power_down = -1;
+		usleep_range(1000, 1500);
 	}
+
 	return 0;
 }
 
-static int ov2680_flisclk_ctrl(struct v4l2_subdev *sd, int flag)
+static int ov8858_flisclk_ctrl(struct v4l2_subdev *sd, int flag)
 {
 	static const unsigned int clock_khz = 19200;
+
 #ifdef CONFIG_VLV2_PLAT_CLK
 	if (flag) {
 		int ret;
@@ -125,20 +132,25 @@ static int ov2680_flisclk_ctrl(struct v4l2_subdev *sd, int flag)
 	}
 	return vlv2_plat_configure_clock(OSC_CAM0_CLK, flag);
 #endif
-	return 0;
+	if (intel_mid_identify_cpu() != INTEL_MID_CPU_CHIP_VALLEYVIEW2)
+		return intel_scu_ipc_osc_clk(OSC_CLK_CAM0,
+			flag ? clock_khz : 0);
+	else
+		return 0;
 }
 
 /*
- * The power_down gpio pin is to control OV2680's
+ * The power_down gpio pin is to control OV8858's
  * internal power state.
  */
-static int ov2680_power_ctrl(struct v4l2_subdev *sd, int flag)
+static int ov8858_power_ctrl(struct v4l2_subdev *sd, int flag)
 {
 	int ret = 0;
 
-	if (flag) {
+	if (flag) {	
 		if (!camera_vprog1_on) {
 #ifdef CONFIG_CRYSTAL_COVE
+
 			/*
 			 * This should call VRF APIs.
 			 *
@@ -167,30 +179,31 @@ static int ov2680_power_ctrl(struct v4l2_subdev *sd, int flag)
 				camera_vprog1_on = 0;
 			return ret;
 		}
+		ret = 0;
 	}
+
 	return ret;
 }
 
-static int ov2680_csi_configure(struct v4l2_subdev *sd, int flag)
+static int ov8858_csi_configure(struct v4l2_subdev *sd, int flag)
 {
-    static const int LANES = 1;
+  	static const int LANES = 2;
 	return camera_sensor_csi(sd, ATOMISP_CAMERA_PORT_PRIMARY, LANES,
 		ATOMISP_INPUT_FORMAT_RAW_10, atomisp_bayer_order_bggr, flag); 
 }
 
-static struct camera_sensor_platform_data ov2680_sensor_platform_data = {
-	.gpio_ctrl	= ov2680_gpio_ctrl,
-	.flisclk_ctrl	= ov2680_flisclk_ctrl,
-	.power_ctrl	= ov2680_power_ctrl,
-	.csi_cfg	= ov2680_csi_configure,
+static struct camera_sensor_platform_data ov8858_sensor_platform_data = {
+	.gpio_ctrl	= ov8858_gpio_ctrl,
+	.flisclk_ctrl	= ov8858_flisclk_ctrl,
+	.power_ctrl	= ov8858_power_ctrl,
+	.csi_cfg	= ov8858_csi_configure,
 };
 
-void *ov2680_platform_data(void *info)
+void *ov8858_platform_data(void *info)
 {
 	camera_reset = -1;
 	camera_power_down = -1;
 	camera_vprog1_on = 0;
 
-	return &ov2680_sensor_platform_data;
+	return &ov8858_sensor_platform_data;
 }
-
