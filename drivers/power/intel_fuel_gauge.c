@@ -48,6 +48,19 @@
 #define DRIVER_NAME		"intel_fuel_gauge"
 #define BATT_OVP_OFFSET		50000 /* 50mV */
 
+#define INTEL_FG_WAKELOCK_TIMEOUT   (1 * HZ)
+#define INTEL_FG_DISP_LOWBATT_TIMEOUT   (3 * HZ)
+#define SOC_WARN_LVL1	14
+#define SOC_WARN_LVL2	4
+#define SOC_WARN_LVL3	0
+
+#define BOUND(min_val, x, max_val) min(max(x, min_val), max_val)
+
+struct intel_fg_wakeup_event {
+	int soc_bfr_sleep;
+	bool wake_enable;
+	struct wake_lock wakelock;
+};
 struct intel_fg_info {
 	struct device *dev;
 	struct intel_fg_batt_spec *batt_spec;
@@ -58,6 +71,7 @@ struct intel_fg_info {
 	struct power_supply psy;
 	struct mutex lock;
 
+	struct intel_fg_wakeup_event wake_ui;
 	struct fg_batt_params batt_params;
 };
 
@@ -92,6 +106,44 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 };
 
+/**
+ * intel_fg_check_low_batt_event - Checks low batt condition
+ * @info : Pointer to the intel_fg_info structure instance
+ *
+ * Returns 0 if success
+ */
+static int intel_fg_check_low_batt_event(struct intel_fg_info *info)
+{
+	int ret;
+
+	/*
+	 * Compare the previously stored capacity before going to suspend mode,
+	 * with the current capacity during resume, along with the SOC_WARN_LVLs
+	 * and if the new SOC during resume has fell below any of the low batt
+	 * warning levels, hold the wake lock for 1 sec so that Android user
+	 * space will have sufficient time to display the warning message.
+	 */
+	if (BOUND(info->batt_params.capacity, SOC_WARN_LVL1,
+				info->wake_ui.soc_bfr_sleep) == SOC_WARN_LVL1)
+		info->wake_ui.wake_enable = true;
+	else if (BOUND(info->batt_params.capacity, SOC_WARN_LVL2,
+				info->wake_ui.soc_bfr_sleep) == SOC_WARN_LVL2)
+		info->wake_ui.wake_enable = true;
+	else if (info->batt_params.capacity == SOC_WARN_LVL3)
+		info->wake_ui.wake_enable = true;
+	else {
+		if (wake_lock_active(&info_ptr->wake_ui.wakelock))
+			wake_unlock(&info_ptr->wake_ui.wakelock);
+		info->wake_ui.wake_enable = false;
+	}
+
+	if (info->wake_ui.wake_enable) {
+		wake_lock_timeout(&info_ptr->wake_ui.wakelock,
+			INTEL_FG_DISP_LOWBATT_TIMEOUT);
+		info->wake_ui.wake_enable = false;
+	}
+	return ret;
+}
 static int intel_fg_vbatt_soc_calc(struct intel_fg_info *info, int vbatt)
 {
 	int soc;
@@ -138,8 +190,10 @@ static void intel_fg_worker(struct work_struct *work)
 	if (ret)
 		dev_err(fg_info->dev, "Error while getting Current Average\n");
 
+	mutex_unlock(&fg_info->lock);
 	if (fg_info->algo) {
 		ret = fg_info->algo->fg_algo_process(&ip, &op);
+		mutex_lock(&fg_info->lock);
 		if (ret) {
 			dev_err(fg_info->dev, "Err processing FG Algo primary\n");
 			fg_info->batt_params.capacity = intel_fg_vbatt_soc_calc(fg_info,
@@ -153,6 +207,7 @@ static void intel_fg_worker(struct work_struct *work)
 
 	} else if (fg_info->algo_sec) {
 		ret = fg_info->algo_sec->fg_algo_process(&ip, &op);
+		mutex_lock(&fg_info->lock);
 		if (ret)
 			dev_err(fg_info->dev, "Err processing FG Algo Secondary\n");
 		/* update battery parameters from secondary Algo*/
@@ -174,8 +229,10 @@ static void intel_fg_worker(struct work_struct *work)
 	}
 
 	mutex_unlock(&fg_info->lock);
-	schedule_delayed_work(&fg_info->fg_worker, 30 * HZ);
 	power_supply_changed(&fg_info->psy);
+	if (fg_info->wake_ui.wake_enable)
+		intel_fg_check_low_batt_event(fg_info);
+	schedule_delayed_work(&fg_info->fg_worker, 30 * HZ);
 }
 
 static int intel_fg_battery_health(struct intel_fg_info *info)
@@ -509,6 +566,9 @@ static int intel_fuel_gauge_probe(struct platform_device *pdev)
 	else
 		fg_info->batt_params.is_valid_battery = false;
 
+	wake_lock_init(&fg_info->wake_ui.wakelock, WAKE_LOCK_SUSPEND,
+				"intel_fg_wakelock");
+
 	info_ptr = fg_info;
 
 	return 0;
@@ -517,12 +577,20 @@ static int intel_fuel_gauge_probe(struct platform_device *pdev)
 static int intel_fuel_gauge_remove(struct platform_device *pdev)
 {
 	struct intel_fg_info *fg_info = platform_get_drvdata(pdev);
+	wake_lock_destroy(&fg_info->wake_ui.wakelock);
 
 	return 0;
 }
 
 static int intel_fuel_gauge_suspend(struct device *dev)
 {
+	/*
+	 * Store the current SOC value before going to suspend as
+	 * this value will be used by the worker function in resume to
+	 * check whether the low battery threshold has been crossed.
+	 */
+	info_ptr->wake_ui.soc_bfr_sleep = info_ptr->batt_params.capacity;
+	cancel_delayed_work_sync(&info_ptr->fg_worker);
 	return 0;
 }
 static bool intel_fuel_gauge_suspend_again(void)
@@ -531,6 +599,18 @@ static bool intel_fuel_gauge_suspend_again(void)
 }
 static int intel_fuel_gauge_resume(struct device *dev)
 {
+	/*
+	 * Set the wake_enable flag as true and schedule the
+	 * work queue at 0 secs so that the worker function is
+	 * scheduled immediately at the next available tick.
+	 * Once the intel_fg_worker function starts executing
+	 * It can check and clear the wake_enable flag and hold
+	 * the wakelock if low batt warning notification has to
+	 * be sent
+	 */
+	wake_lock_timeout(&info_ptr->wake_ui.wakelock, INTEL_FG_WAKELOCK_TIMEOUT);
+	info_ptr->wake_ui.wake_enable = true;
+	schedule_delayed_work(&info_ptr->fg_worker, 0);
 	return 0;
 }
 
