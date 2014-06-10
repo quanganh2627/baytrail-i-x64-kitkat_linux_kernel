@@ -152,7 +152,14 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.name = "toshiba-tc35876x-dsi-vid-mode-display",
 			.dev_ops = &tc35876x_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
-		}
+		},
+		{
+                        .panel_id = MIPI_DSI_INNOLUX_N080ICE_PANEL_ID,
+                        .type = INTEL_DSI_VIDEO_MODE,
+                        .name = "innolux-dsi-vid-mode-display",
+                        .dev_ops = &n080ice_gb1_dsi_display_ops,
+                        .lane_count = 4, /* XXX: this really doesn't belong here */
+                }
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
