@@ -119,7 +119,7 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
 		{
-			.panel_id = LVDS_DSI_TC35876X_CDY_BI097XN0,
+			.panel_id = LVDS_DSI_TC35876X_CDY_BI097XN02,
 			.type = INTEL_DSI_VIDEO_MODE,
 			.name = "toshiba-tc35876x-dsi-vid-mode-display",
 			.dev_ops = &tc35876x_dsi_display_ops,
@@ -990,7 +990,6 @@ bool intel_dsi_init(struct drm_device *dev)
 	 * If no  param and no VBT initialize with
 	 * default ASUS panel ID for now */
 
-i915_mipi_panel_id = LVDS_DSI_TC35876X_CDY_BI097XN0;
 	if (i915_mipi_panel_id <= 0) {
 		/* check if panel id available from VBT */
 		if (!dev_priv->vbt.dsi.panel_id) {

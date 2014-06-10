@@ -234,7 +234,7 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 #define MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID		0x0B
 /*LVDS supported list based on Toshiba Video Bridge*/
 #define LVDS_DSI_TC35876X_CPT_CLAA070WP03		0x20
-#define LVDS_DSI_TC35876X_CDY_BI097XN0			0x21
+#define LVDS_DSI_TC35876X_CDY_BI097XN02			0x21
 #define LVDS_DSI_TC35876X_AUO_B101EAN01_2		0x22
 #define LVDS_DSI_TC35876X_AUO_B101XTN01_1		0x23
 #define LVDS_DSI_TC35876X_CMI_N101ICG_L21		0x24

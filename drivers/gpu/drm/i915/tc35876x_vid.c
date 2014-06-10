@@ -474,7 +474,7 @@ static void  tc35876x_get_panel_info(int pipe,
 			connector->display_info.width_mm = 262;
 			connector->display_info.height_mm = 144;
 			}
-		else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+		else if(LVDS_DSI_TC35876X_CDY_BI097XN02 == i915_mipi_panel_id){
 			connector->display_info.width_mm = 196;
 			connector->display_info.height_mm = 147;
 			}
@@ -551,7 +551,7 @@ static struct drm_display_mode *tc35876x_get_modes(
 		mode->vsync_end = mode->vsync_start + 7; //VSYNC
 		mode->vtotal = mode->vsync_end +8; //HBP
 		}
-	else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+	else if(LVDS_DSI_TC35876X_CDY_BI097XN02 == i915_mipi_panel_id){
 		DRM_DEBUG_KMS("tc35876x_get_modes enter CENTURY_BI097XN02");
 		mode->hdisplay = 1024;
 		mode->vdisplay = 768;
@@ -769,7 +769,7 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 		/* b088 low 16bits */
 		intel_dsi->clk_hs_to_lp_count = 0x14;
 		}
-	else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+	else if(LVDS_DSI_TC35876X_CDY_BI097XN02 == i915_mipi_panel_id){
 		//333M
 		/*b044*/
 		intel_dsi->hs_to_lp_count = 0x39;
