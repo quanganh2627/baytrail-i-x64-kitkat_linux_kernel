@@ -30,6 +30,9 @@ obj-$(subst m,y,$(CONFIG_VLV2_PLAT_CLK)) += platform_vlv2_plat_clk.o
 ifdef CONFIG_INTEL_BYT_THERMAL
 obj-$(subst m,y,$(CONFIG_INTEL_BYT_THERMAL)) += platform_byt_thermal.o
 else
+ifdef CONFIG_INTEL_BYT_CR_THERMAL
+obj-$(subst m,y,$(CONFIG_INTEL_BYT_CR_THERMAL)) += platform_byt_thermal.o
+endif
 obj-$(subst m,y,$(CONFIG_INTEL_BYT_EC_THERMAL)) += platform_byt_thermal.o
 endif
 obj-$(subst m,y,$(CONFIG_SENSORS_THERMAL_MRFLD)) += platform_mrfl_thermal.o

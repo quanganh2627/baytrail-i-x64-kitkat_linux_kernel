@@ -127,8 +127,8 @@ static const struct iio_chan_spec const dc_xpwr_adc_channels[] = {
 
 static struct iio_map iio_maps[] = {
 	ADC_MAP("CH0", "THERMAL", "BATTEMP"),
-	ADC_MAP("CH1", "THERMAL", "PMICTEMP"),
-	ADC_MAP("CH2", "THERMAL", "SYSTEMP0"),
+	ADC_MAP("CH1", "byt_cr_thermal", "PMICTEMP"),
+	ADC_MAP("CH2", "byt_cr_thermal", "SYSTEMP0"),
 	ADC_MAP("CH3", "CURRENT", "BATCCUR"),
 	ADC_MAP("CH4", "CURRENT", "BATDCUR"),
 	ADC_MAP("CH5", "VIBAT", "VBAT"),
