@@ -215,7 +215,6 @@ static int acpi_battery_is_charged(struct acpi_battery *battery)
 	return 0;
 }
 
-static int acpi_battery_get_temperature(struct acpi_battery *battery);
 
 static int acpi_battery_get_property(struct power_supply *psy,
 				     enum power_supply_property psp,
@@ -246,18 +245,11 @@ static int acpi_battery_get_property(struct power_supply *psy,
 		val->intval = acpi_battery_present(battery);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
-
-		temp_ret = acpi_battery_get_temperature(battery);
-		if (temp_ret < 0)
-			ret = temp_ret;
-		else{
-			/*
-			* convert temperature from degree kelvin
-			* to degree celsius: T(C) = T(K) - 273.15
-			*/
-			val->intval = (((int)battery->temperature * 10) -
+		/* convert temperature from degree kelvin
+		* to degree celsius: T(C) = T(K) - 273.15
+		*/
+		val->intval = (((int)battery->temperature * 10) -
 					(BAT_TEMP_CONV_FACTOR / 10));
-		}
 
 		/*We are treating both hot and cold as  overheat cases.
 		*So report overheat in both high and low temp cases.
@@ -339,17 +331,12 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		temp_ret = acpi_battery_get_temperature(battery);
-		if (temp_ret < 0 )
-			ret = temp_ret;
-		else{
-			/*
-		        * convert temperature from degree kelvin
-			* to degree celsius: T(C) = T(K) - 273.15
-			*/
-			val->intval = (((int)battery->temperature * 10) -
+		/*
+		* convert temperature from degree kelvin
+		* to degree celsius: T(C) = T(K) - 273.15
+		*/
+		val->intval = (((int)battery->temperature * 10) -
 					(BAT_TEMP_CONV_FACTOR / 10));
-		}
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = battery->model_number;
@@ -518,6 +505,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 			"_BIX" : "_BIF";
 
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct acpi_buffer buffer_tmp = { ACPI_ALLOCATE_BUFFER, NULL };
 
 	if (!acpi_battery_present(battery))
 		return 0;
@@ -565,6 +553,19 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 		   it's impossible to tell if they would need an adjustment
 		   or not if their values were higher.  */
 	}
+
+	mutex_lock(&battery->lock);
+	status = acpi_evaluate_object(battery->device->handle, "BTMP",
+				NULL, &buffer_tmp);
+	mutex_unlock(&battery->lock);
+
+	if (ACPI_FAILURE(status)) {
+		ACPI_EXCEPTION((AE_INFO, status, "Evaluating BTMP"));
+		return -ENODEV;
+	}
+	result = extract_package(battery, buffer_tmp.pointer,
+			temperature_offsets, ARRAY_SIZE(temperature_offsets));
+	kfree(buffer_tmp.pointer);
 	return result;
 }
 
@@ -627,36 +628,6 @@ static int acpi_battery_get_state(struct acpi_battery *battery)
 		battery->capacity_now = battery->capacity_now *
 		    10000 / battery->design_voltage;
 	}
-	return result;
-}
-
-/*Method to read the battery temperature.
-*Temperature is returned in degree Celcius
-*/
-static int acpi_battery_get_temperature(struct acpi_battery *battery)
-{
-	int result = 0;
-	acpi_status status = 0;
-	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
-
-	if (!acpi_battery_present(battery))
-		return 0;
-
-	mutex_lock(&battery->lock);
-	status = acpi_evaluate_object(battery->device->handle, "BTMP",
-					NULL, &buffer);
-	mutex_unlock(&battery->lock);
-
-	if (ACPI_FAILURE(status)) {
-		ACPI_EXCEPTION((AE_INFO, status, "Evaluating BTMP"));
-		return -ENODEV;
-	}
-
-	result = extract_package(battery, buffer.pointer,
-				temperature_offsets, ARRAY_SIZE(temperature_offsets));
-
-	kfree(buffer.pointer);
-
 	return result;
 }
 
