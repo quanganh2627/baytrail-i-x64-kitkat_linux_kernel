@@ -1129,6 +1129,9 @@ static int acm_probe(struct usb_interface *intf,
 	struct device *tty_dev;
 	int rv = -ENOMEM;
 
+	usb_dev->persist_enabled = 0;
+	dev_info(&intf->dev, "set persist_enabled to 0");
+
 	/* normal quirks */
 	quirks = (unsigned long)id->driver_info;
 

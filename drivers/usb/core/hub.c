@@ -8,6 +8,7 @@
  *
  */
 
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/module.h>
