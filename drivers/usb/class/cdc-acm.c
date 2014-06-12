@@ -764,6 +764,9 @@ static int acm_tty_write(struct tty_struct *tty,
 	int wbn;
 	struct acm_wb *wb;
 
+	if (acm->dev->state == USB_STATE_NOTATTACHED)
+		return 0;
+
 	if (!count)
 		return 0;
 
