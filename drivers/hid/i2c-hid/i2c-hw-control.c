@@ -33,6 +33,7 @@
 static int gpio_psh_ctl;
 static int gpio_psh_rst;
 static int touch_gpio;
+static int touch_reset_gpio;
 
 static struct i2c_hid_hw_data hw_data = {i2c_sensor_hw_init,
 					i2c_sensor_hw_reset,
@@ -149,6 +150,21 @@ int i2c_touch_hw_init(struct i2c_client *client)
 			gpio_direction_output(touch_gpio, 1);
 		}
 	}
+
+	touch_reset_gpio = acpi_get_gpio_by_index(&client->dev, 0, NULL);
+	if (touch_reset_gpio < 0) {
+		dev_err(&client->dev,
+		"failed to get touch reset gpio from DSDT\n");
+	} else {
+		ret = gpio_request(touch_reset_gpio, "ts_reset");
+		if (ret) {
+			dev_err(&client->dev,
+			"fail to request touch_reset_gpio pin\n");
+		} else {
+			gpio_export(touch_reset_gpio, 1);
+			gpio_direction_output(touch_reset_gpio, 1);
+		}
+	}
 	return 0;
 }
 
@@ -162,14 +178,22 @@ int i2c_touch_hw_suspend(struct i2c_client *client)
 
 int i2c_touch_hw_resume(struct i2c_client *client)
 {
-	if (touch_gpio > 0)
+	if (touch_gpio > 0) {
 		gpio_set_value(touch_gpio, 1);
+		msleep(100);
+	}
 	dev_dbg(&client->dev, "I2C HID touch resume: %s\n", __func__);
 	return 0;
 }
 
 int i2c_touch_hw_reset(struct i2c_client *client)
 {
+	if (touch_reset_gpio > 0) {
+		gpio_set_value(touch_reset_gpio, 0);
+		usleep_range(1000, 2000);
+		gpio_set_value(touch_reset_gpio, 1);
+		msleep(100);
+	}
 	dev_dbg(&client->dev, "I2C HID touch reset: %s\n", __func__);
 	return 0;
 }
