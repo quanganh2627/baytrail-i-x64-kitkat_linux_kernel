@@ -1510,6 +1510,9 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 	int planea_prec = 0, planea_dl = 0, planeb_prec = 0, planeb_dl = 0;
 	int cursora_prec = 0, cursora_dl = 0, cursorb_prec = 0, cursorb_dl = 0;
 	int plane_prec_mult = 0, cursor_prec_mult = 0;
+	int sprite_prec = 0, sprite_dl = 0, sprite_prec_mult = 0;
+	struct drm_plane *plane;
+
 	/* Precision multiplier is either 64 or 32 */
 	struct vlv_MA_component_enabled enable;
 
@@ -1583,6 +1586,36 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 				DDL_CURSORB_SHIFT), 0xff000000);
 	} else
 		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0xff000000);
+
+
+	/* Sprite C & D */
+	enable.plane_enabled  = false;
+	enable.cursor_enabled = false;
+
+	list_for_each_entry(plane, &dev->mode_config.plane_list, head) {
+		struct intel_plane *intel_plane = to_intel_plane(plane);
+
+		/* Sprites C & D are assigned to Pipe B */
+		if (1 == intel_plane->pipe) {
+			int mask = intel_plane->plane ? 0xff << DDL_SPRITEB_SHIFT :
+											0xff << DDL_SPRITEA_SHIFT;
+
+			enable.sprite_enabled = is_sprite_enabled(dev_priv, 1,
+										intel_plane->plane);
+
+			if (vlv_compute_drain_latency(dev, 1, NULL, NULL, NULL,
+					NULL, &sprite_prec_mult, &sprite_dl,
+					intel_plane->last_pixel_size, enable)) {
+				sprite_prec = (sprite_prec_mult ==
+						DRAIN_LATENCY_PRECISION_32) ?
+						DDL_SPRITEA_PRECISION_32 :
+						DDL_SPRITEA_PRECISION_64;
+				I915_WRITE_BITS(VLV_DDL2, sprite_prec | (sprite_dl <<
+						DDL_SPRITEA_SHIFT), mask);
+			} else
+				I915_WRITE_BITS(VLV_DDL2, 0x0000, mask);
+		}
+	}
 }
 
 #define single_plane_enabled(mask) is_power_of_2(mask)
