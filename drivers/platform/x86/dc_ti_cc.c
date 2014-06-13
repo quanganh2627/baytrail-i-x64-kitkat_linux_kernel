@@ -91,8 +91,8 @@
 
 #define DRV_NAME		"dollar_cove_ti_cc"
 
-#define THERM_CURVE_MAX_SAMPLES 13
-#define THERM_CURVE_MAX_VALUES	4
+#define THERM_CURVE_MAX_SAMPLES		13
+#define THERM_CURVE_MAX_VALUES		4
 #define RBATT_TYPICAL			150
 
 struct dc_ti_cc_info {
@@ -361,8 +361,7 @@ static int dc_ti_get_cc_delta(struct dc_ti_cc_info *info, int *acc_val)
 		val = (int)((CC_SMPL_CTR_MAX_VAL/4) - info->smpl_ctr_prev);
 		delta_smpl = val + smpl_ctr;
 	}
-	/*Apply SW Trim as specified by PMIC Vendor*/
-	delta_q += ((84 * 4 * delta_smpl)/10);
+
 	dev_info(&info->pdev->dev, "delta_smpl:%d\n", delta_smpl);
 
 	/* ibatt_avg in uA */
@@ -646,7 +645,7 @@ static int dc_ti_cc_probe(struct platform_device *pdev)
 	info->pdev = pdev;
 	platform_set_drvdata(pdev, info);
 	/*Read VBATT Into VOCV*/
-	dc_ti_fg_get_vbatt(info, &info->vbat_bocv);
+	dc_ti_cc_get_vocv(&info->vbat_bocv);
 	dc_ti_fg_get_ibatt_bootup(info, &info->ibat_boot);
 	dc_ti_cc_init_data(info);
 	info_ptr = info;
