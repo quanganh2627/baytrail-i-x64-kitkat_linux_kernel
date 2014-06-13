@@ -45,14 +45,22 @@
 #include <linux/power/intel_fuel_gauge.h>
 #include <asm/intel_em_config.h>
 
-#define DRIVER_NAME		"intel_fuel_gauge"
-#define BATT_OVP_OFFSET		50000 /* 50mV */
+#define DRIVER_NAME	"intel_fuel_gauge"
 
-#define INTEL_FG_WAKELOCK_TIMEOUT   (1 * HZ)
+#define INTEL_FG_WAKELOCK_TIMEOUT	(1 * HZ)
 #define INTEL_FG_DISP_LOWBATT_TIMEOUT   (3 * HZ)
-#define SOC_WARN_LVL1	14
-#define SOC_WARN_LVL2	4
-#define SOC_WARN_LVL3	0
+#define SOC_WARN_LVL1			14
+#define SOC_WARN_LVL2			4
+#define SOC_WARN_LVL3			0
+
+#define BATT_OVP_OFFSET			50000 /* 50mV */
+
+#define FG_ADC_VBATT_OFF_ADJ		5000 /* 5mV */
+#define FG_ADC_IBATT_OFF_ADJ		30000 /* 30mA */
+
+#define FG_OCV_SMOOTH_DIV_NOR		20
+#define FG_OCV_SMOOTH_DIV_FULL		100
+#define FG_OCV_SMOOTH_CAP_LIM		97
 
 #define BOUND(min_val, x, max_val) min(max(x, min_val), max_val)
 
@@ -157,6 +165,45 @@ static int intel_fg_vbatt_soc_calc(struct intel_fg_info *info, int vbatt)
 	return soc;
 }
 
+static int intel_fg_apply_volt_smooth(int vocv, int vbatt, int ibatt, int cap)
+{
+	static int vsocv = -1;
+	int vdiff;
+
+	if (vsocv == -1) {
+		vsocv = vocv;
+		return vsocv;
+	}
+
+	/*
+	 * for fully charged battery vbatt
+	 * and ocv should be same.
+	 */
+	if (cap >= FG_OCV_SMOOTH_CAP_LIM &&
+			ibatt >= FG_ADC_IBATT_OFF_ADJ)
+		vocv = vbatt;
+
+	vdiff = vocv - vsocv;
+	/*
+	 * handle leakage current or CC errors
+	 * scenarios for OCV calculation.
+	 */
+	if ((ibatt > -FG_ADC_IBATT_OFF_ADJ &&
+		ibatt < FG_ADC_IBATT_OFF_ADJ) && (cap < 100)) {
+		vsocv += vdiff / FG_OCV_SMOOTH_DIV_FULL;
+		return vsocv;
+	}
+
+	/* round off to +/- 5000uV */
+	if (vdiff <= FG_ADC_VBATT_OFF_ADJ &&
+			vdiff >= -FG_ADC_VBATT_OFF_ADJ)
+		vsocv = vocv;
+	else
+		vsocv += vdiff / FG_OCV_SMOOTH_DIV_NOR;
+
+	return vsocv;
+}
+
 static void intel_fg_worker(struct work_struct *work)
 {
 	struct intel_fg_info *fg_info = container_of(work,
@@ -216,7 +263,8 @@ static void intel_fg_worker(struct work_struct *work)
 		fg_info->batt_params.charge_full = op.fcc;
 	}
 	fg_info->batt_params.vbatt_now = ip.vbatt;
-	fg_info->batt_params.v_ocv_now = ip.vocv;
+	fg_info->batt_params.v_ocv_now = intel_fg_apply_volt_smooth(ip.vocv, ip.vbatt,
+						ip.ibatt, op.soc);
 	fg_info->batt_params.i_batt_now = ip.ibatt;
 	fg_info->batt_params.i_batt_avg = ip.iavg;
 	fg_info->batt_params.batt_temp_now = ip.bat_temp;
