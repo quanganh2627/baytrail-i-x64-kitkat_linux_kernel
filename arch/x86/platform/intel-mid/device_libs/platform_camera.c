@@ -28,6 +28,7 @@
 #include "platform_gc5004.h"
 #include "platform_gc0310.h"
 #include "platform_ov2685.h"
+#include "platform_gc0310soc.h"
 #include "platform_ov5648.h"
 #include "platform_ov2680b.h"
 #include "platform_ov2680f.h"
@@ -60,6 +61,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"bf3905", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc0339", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc0310", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
+	{"gc0310soc", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc2155", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"gc2235", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"gc5004", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
@@ -168,6 +170,10 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 		{"gc0310", SFI_DEV_TYPE_I2C, 0, &gc0310_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
+		{SFI_DEV_TYPE_I2C, 2, 0x21, 0x0, 0x0, "gc0310soc"},
+		{"gc0310soc", SFI_DEV_TYPE_I2C, 0, &gc0310soc_platform_data,
+			&intel_register_i2c_camera_device}
+	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x6f, 0x0, 0x0, "bf3905"},
 		{"bf3905", SFI_DEV_TYPE_I2C, 0, &bf3905_platform_data,
 			&intel_register_i2c_camera_device}
@@ -192,9 +198,13 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 		{SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "ov2722"},
 		{"ov2722", SFI_DEV_TYPE_I2C, 0, &ov2722_platform_data,
 			&intel_register_i2c_camera_device}
-	},	{
+	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2155"},
 		{"gc2155", SFI_DEV_TYPE_I2C, 0, &gc2155_platform_data,
+			&intel_register_i2c_camera_device}
+	}, {
+		{SFI_DEV_TYPE_I2C, 2, 0x21, 0x0, 0x0, "gc0310soc"},
+		{"gc0310soc", SFI_DEV_TYPE_I2C, 0, &gc0310soc_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "gc5004"},
