@@ -409,11 +409,6 @@ static int sdhci_acpi_sd_probe_slot(struct platform_device *pdev)
 			INTEL_MID_BOARD(2, TABLET, BYT, BLB, ENG))
 		host->quirks2 |= SDHCI_QUIRK2_NO_1_8_V;
 
-	/* Bay Lake board also need to disable 1.8V for UHS card */
-	if (INTEL_MID_BOARD(2, TABLET, BYT, BLK, PRO) ||
-			INTEL_MID_BOARD(2, TABLET, BYT, BLK, ENG))
-		host->quirks2 |= SDHCI_QUIRK2_NO_1_8_V;
-
 	/*
 	 * CHT A0 workaround
 	 */
