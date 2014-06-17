@@ -125,18 +125,6 @@ static int camera_pmic_set(bool flag)
 				regulator_disable(v2p8_reg);
 			break;
 		case PMIC_XPOWER:
-			/* ALDO1 */
-			ret = intel_mid_pmic_writeb(0x28, 0x16);
-			if (ret)
-				return ret;
-
-			/* PMIC Output CTRL 3 for ALDO1 */
-			val = intel_mid_pmic_readb(0x13);
-			val |= (1 << 5);
-			ret = intel_mid_pmic_writeb(0x13, val);
-			if (ret)
-				return ret;
-
 			/* ELDO2 */
 			ret = intel_mid_pmic_writeb(0x1A, 0x16);
 			if (ret)
@@ -146,6 +134,20 @@ static int camera_pmic_set(bool flag)
 			val = intel_mid_pmic_readb(0x12);
 			val |= (1 << 1);
 			ret = intel_mid_pmic_writeb(0x12, val);
+			if (ret)
+				return ret;
+
+			usleep_range(5000,6000);
+
+			/* ALDO1 */
+			ret = intel_mid_pmic_writeb(0x28, 0x16);
+			if (ret)
+				return ret;
+
+			/* PMIC Output CTRL 3 for ALDO1 */
+			val = intel_mid_pmic_readb(0x13);
+			val |= (1 << 5);
+			ret = intel_mid_pmic_writeb(0x13, val);
 			break;
 		case PMIC_TI:
 			/* LDO9 */
