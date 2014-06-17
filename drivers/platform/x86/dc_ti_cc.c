@@ -91,7 +91,7 @@
 
 #define DRV_NAME		"dollar_cove_ti_cc"
 
-#define THERM_CURVE_MAX_SAMPLES		13
+#define THERM_CURVE_MAX_SAMPLES		16
 #define THERM_CURVE_MAX_VALUES		4
 #define RBATT_TYPICAL			150
 
@@ -125,6 +125,9 @@ static int const dc_ti_bptherm_curve_data[THERM_CURVE_MAX_SAMPLES]
 	{45, 40, 376, 336},
 	{50, 45, 336, 299},
 	{55, 50, 299, 266},
+	{60, 55, 266, 236},
+	{65, 60, 236, 209},
+	{70, 65, 209, 185},
 };
 /* Temperature Interpolation Macros */
 static int platform_interpolate_temp(int adc_val,
@@ -156,12 +159,13 @@ static int platform_adc_to_temp(uint16_t adc_val, int *tmp)
 * update the value within the bound.
 */
 	adc_val = clamp_t(uint16_t, adc_val,
-			dc_ti_bptherm_curve_data[THERM_CURVE_MAX_SAMPLES-1][0],
+			dc_ti_bptherm_curve_data[THERM_CURVE_MAX_SAMPLES-1][3],
 			dc_ti_bptherm_curve_data[0][2]);
 
 	for (i = 0; i < THERM_CURVE_MAX_SAMPLES; i++) {
 		/* linear approximation for battery pack temperature */
-		if (adc_val >= dc_ti_bptherm_curve_data[i][2]) {
+		if (adc_val >= dc_ti_bptherm_curve_data[i][3] &&
+			adc_val <= dc_ti_bptherm_curve_data[i][2]) {
 			temp = platform_interpolate_temp(adc_val,
 					dc_ti_bptherm_curve_data[i][2],
 					dc_ti_bptherm_curve_data[i][2] -
