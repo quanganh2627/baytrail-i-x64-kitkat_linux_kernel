@@ -203,8 +203,12 @@ static void  populate_platform_data(void)
 	 */
 	} else if ((INTEL_MID_BOARD(1, TABLET, BYT))) {
 		if (INTEL_MID_BOARD(3, TABLET, BYT, BLK, PRO, CRV2)) {
+#if (defined(CONFIG_MRD7) || defined(CONFIG_MRD8))
+			set_byt_platform_config();
+#else
 			set_byt_cr_platform_config();
 			pr_info("Selecting byt-cr stream map\n");
+#endif
 		} else {
 			set_byt_platform_config();
 		}
