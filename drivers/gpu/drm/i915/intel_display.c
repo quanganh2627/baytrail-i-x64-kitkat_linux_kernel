@@ -2069,7 +2069,7 @@ intel_pin_and_fence_fb_obj(struct drm_device *dev,
 
 	switch (obj->tiling_mode) {
 	case I915_TILING_NONE:
-		if (IS_BROADWATER(dev) || IS_CRESTLINE(dev))
+		if (IS_BROADWATER(dev) || IS_CRESTLINE(dev) || IS_VALLEYVIEW(dev))
 			alignment = 128 * 1024;
 		else if (INTEL_INFO(dev)->gen >= 4)
 			alignment = 4 * 1024;
@@ -2354,6 +2354,15 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 			 */
 			if (IS_VALLEYVIEW(dev))
 				I915_WRITE(VLV_DDL1, 0x00000000);
+			/*
+			 * TODO:In linear mode disable maxfifo, hack to the
+			 * FADiag app flicker issue.
+			 */
+			if (dev_priv->maxfifo_enabled) {
+				I915_WRITE(FW_BLC_SELF_VLV, ~FW_CSPWRDWNEN);
+				dev_priv->maxfifo_enabled = false;
+				intel_wait_for_vblank(dev, pipe);
+			}
 		}
 	}
 

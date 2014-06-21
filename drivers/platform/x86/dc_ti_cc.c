@@ -97,6 +97,7 @@
 
 struct dc_ti_cc_info {
 	struct platform_device *pdev;
+	struct work_struct	init_work;
 
 	int		vbat_socv;
 	int		vbat_bocv;
@@ -429,7 +430,8 @@ static void dc_ti_cc_init_data(struct dc_ti_cc_info *info)
 	info->smpl_ctr_prev = smpl_ctr;
 
 cc_read_failed:
-	dev_err(&info->pdev->dev, "pmic read failed\n");
+	if (ret < 0)
+		dev_err(&info->pdev->dev, "pmic read failed\n");
 	return;
 }
 
@@ -631,10 +633,47 @@ static struct intel_fg_input fg_input = {
 	.calibrate_cc = &dc_ti_cc_calibrate,
 };
 
+static void dc_ti_update_boot_ocv(struct dc_ti_cc_info *info)
+{
+	int ret;
+
+	ret = intel_mid_pmic_setb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
+	if (ret < 0)
+		dev_err(&info->pdev->dev, "Failed to set CC_CTR_EN bit:%d\n", ret);
+	/*
+	 * coulomb counter need 250ms
+	 * to give the first IBAT sample.
+	 */
+	msleep(250);
+
+	ret = dc_ti_cc_get_vocv(&info->vbat_bocv);
+	if (ret)
+		dev_err(&info->pdev->dev, "Failed to read IBAT bootup:%d\n", ret);
+
+	ret = intel_mid_pmic_clearb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
+	if (ret < 0)
+		dev_err(&info->pdev->dev, "Failed to clr CC_CTR_EN bit:%d\n", ret);
+}
+
+static void dc_ti_cc_init_worker(struct work_struct *work)
+{
+	struct dc_ti_cc_info *info =
+	    container_of(work, struct dc_ti_cc_info, init_work);
+	int ret;
+
+	/* read bootup OCV */
+	dc_ti_update_boot_ocv(info);
+	dc_ti_cc_init_data(info);
+	info_ptr = info;
+
+	ret = intel_fg_register_input(&fg_input);
+	if (ret < 0)
+		dev_err(&info->pdev->dev, "intel FG registration failed\n");
+}
+
 static int dc_ti_cc_probe(struct platform_device *pdev)
 {
 	struct dc_ti_cc_info *info;
-	int ret;
 
 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
 	if (!info) {
@@ -644,17 +683,15 @@ static int dc_ti_cc_probe(struct platform_device *pdev)
 
 	info->pdev = pdev;
 	platform_set_drvdata(pdev, info);
-	/*Read VBATT Into VOCV*/
-	dc_ti_cc_get_vocv(&info->vbat_bocv);
-	dc_ti_fg_get_ibatt_bootup(info, &info->ibat_boot);
-	dc_ti_cc_init_data(info);
-	info_ptr = info;
+	INIT_WORK(&info->init_work, dc_ti_cc_init_worker);
 
-	ret = intel_fg_register_input(&fg_input);
-	if (ret < 0)
-		dev_err(&pdev->dev, "intel FG registration failed\n");
+	/*
+	 * scheduling the init worker
+	 * to reduce the boot time.
+	 */
+	schedule_work(&info->init_work);
 
-	return ret;
+	return 0;
 }
 
 static int dc_ti_cc_remove(struct platform_device *pdev)

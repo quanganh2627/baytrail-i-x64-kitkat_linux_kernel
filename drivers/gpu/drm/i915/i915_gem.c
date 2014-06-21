@@ -1367,6 +1367,121 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
+int i915_gem_add_clear_obj_cmd(struct drm_i915_gem_object *obj)
+{
+	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+	struct intel_ring_buffer *ring = &dev_priv->ring[BCS];
+	u32 offset = i915_gem_obj_ggtt_offset(obj);
+	int ret;
+
+	ret = intel_ring_begin(ring, 6);
+	if (ret)
+		return ret;
+
+	intel_ring_emit(ring, COLOR_BLT_CMD |
+		XY_SRC_COPY_BLT_WRITE_ALPHA | XY_SRC_COPY_BLT_WRITE_RGB);
+	intel_ring_emit(ring, BLT_DEPTH_32 | PAT_ROP_GXCOPY | BLT_PITCH_SIZE);
+	intel_ring_emit(ring, (DIV_ROUND_UP(obj->base.size, BLT_PITCH_SIZE) <<
+						BLT_HEIGHT_SHIFT) | BLT_PITCH_SIZE);
+	intel_ring_emit(ring, offset);
+	intel_ring_emit(ring, 0);
+	intel_ring_emit(ring, MI_NOOP);
+	intel_ring_advance(ring);
+	return 0;
+}
+
+int i915_gem_memset_obj_hw(struct drm_i915_gem_object *obj)
+{
+	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+	struct intel_ring_buffer *ring = &dev_priv->ring[BCS];
+	unsigned alignment = 0;
+	bool map_and_fenceable =  true;
+	bool nonblocking = false;
+	u32 seqno;
+	int ret;
+
+	ret = i915_gem_obj_ggtt_pin(obj, alignment, map_and_fenceable,
+		nonblocking);
+	if (ret) {
+		DRM_ERROR("Mapping of obj to GTT failed\n");
+		return ret;
+	}
+
+	/* Adding commands to the blitter ring to
+	 * clear out the contents of the buffer object
+	 */
+	ret = i915_gem_add_clear_obj_cmd(obj);
+	if (ret) {
+		DRM_ERROR("couldn't add commands in blitter ring\n");
+		i915_gem_object_unpin(obj);
+		return ret;
+	}
+
+	seqno = intel_ring_get_seqno(ring);
+
+	obj->base.read_domains = I915_GEM_DOMAIN_RENDER;
+	obj->base.write_domain = I915_GEM_DOMAIN_RENDER;
+
+	i915_gem_object_move_to_active(obj, ring);
+
+	obj->dirty = 1;
+	obj->last_write_seqno = seqno;
+
+	/* Unconditionally force add_request to emit a full flush. */
+	ring->gpu_caches_dirty = true;
+
+	/* Add a breadcrumb for the completion of the batch buffer */
+	(void)i915_add_request(ring, NULL);
+
+	i915_gem_object_unpin(obj);
+
+	return 0;
+}
+
+void i915_gem_memset_obj_sw(struct drm_i915_gem_object *obj)
+{
+	int ret;
+	char __iomem *base;
+	int size = obj->base.size;
+	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+	unsigned alignment = 0;
+	bool map_and_fenceable =  true;
+	bool nonblocking = false;
+
+	ret = i915_gem_obj_ggtt_pin(obj, alignment, map_and_fenceable,
+			nonblocking);
+	if (ret) {
+		DRM_ERROR("Mapping of obj to GTT failed\n");
+		return;
+	}
+
+	/* Get the CPU virtual address of the frame buffer */
+	base = ioremap_wc(dev_priv->gtt.mappable_base +
+			i915_gem_obj_ggtt_offset(obj), size);
+	if (base == NULL) {
+		DRM_ERROR("Mapping of obj to CPU failed\n");
+		i915_gem_object_unpin(obj);
+		return;
+	}
+
+	memset_io(base, 0, size);
+
+	iounmap(base);
+	i915_gem_object_unpin(obj);
+
+	DRM_DEBUG_DRIVER("Obj(%p) cleared using CPU virtual address %p\n",
+			obj, base);
+}
+
+void i915_gem_memset_obj(struct drm_i915_gem_object *obj)
+{
+	int ret;
+	i915_gem_object_flush_cpu_write_domain(obj, false);
+	ret = i915_gem_memset_obj_hw(obj);
+	if (ret)
+		i915_gem_memset_obj_sw(obj);
+}
+
 /**
  * i915_gem_fault - fault a page into the GTT
  * vma: VMA in question
@@ -1426,8 +1541,10 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	i915_gem_object_shmem_preallocate(obj);
 
 	ret = i915_mutex_lock_interruptible(dev);
-	if (ret)
+	if (ret) {
+		i915_gem_check_undo_prealloc_pages(obj);
 		goto out;
+	}
 
 	/* keep the check under struct_mutex to avoid sync problem */
 	if (dev_priv->pm.shutdown_in_progress) {
@@ -1450,6 +1567,11 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	ret = i915_gem_obj_ggtt_pin(obj,  0, true, false);
 	if (ret)
 		goto unlock;
+
+	if (obj->require_clear) {
+		i915_gem_memset_obj(obj);
+		obj->require_clear = false;
+	}
 
 	ret = i915_gem_object_set_to_gtt_domain(obj, write);
 	if (ret)
@@ -1482,6 +1604,7 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 unpin:
 	i915_gem_object_unpin(obj);
 unlock:
+	i915_gem_check_undo_prealloc_pages(obj);
 	mutex_unlock(&dev->struct_mutex);
 out:
 	switch (ret) {
@@ -1979,12 +2102,13 @@ i915_gem_object_shmem_preallocate(struct drm_i915_gem_object *obj)
 	/* Get the list of pages out of our struct file
 	 * Fail silently without starting the shrinker
 	 */
+	obj->require_clear = 1;
 	mapping = file_inode(obj->base.filp)->i_mapping;
 	gfp = mapping_gfp_mask(mapping);
 	gfp |= __GFP_NORETRY | __GFP_NOWARN | __GFP_NO_KSWAPD;
 	gfp &= ~(__GFP_IO | __GFP_WAIT);
 	for (i = 0; i < page_count; i++) {
-		page = shmem_read_mapping_page_gfp(mapping, i, gfp);
+		page = shmem_read_mapping_page_gfp_noclear(mapping, i, gfp);
 		if (IS_ERR(page)) {
 			DRM_DEBUG_DRIVER("Failure for obj(%p) size(%x) at page(%d)\n",
 					obj, (u32)obj->base.size, i);
@@ -2018,6 +2142,27 @@ i915_gem_object_shmem_preallocate(struct drm_i915_gem_object *obj)
 	obj->base.write_domain = 0;
 
 	trace_i915_gem_obj_prealloc_end(obj);
+}
+
+void i915_gem_check_undo_prealloc_pages(struct drm_i915_gem_object *obj)
+{
+	struct i915_vma *vma, *v;
+	/* If somehow the object couldn't be cleared out completely after
+	 * preallocation, then in order to prevent the leak of uncleared
+	 * pages to User, the preallocation work shall be undone.
+	 */
+	if (obj->require_clear) {
+		DRM_ERROR("undo_prealloc: relinquish backing pages\n");
+		list_for_each_entry_safe(vma, v, &obj->vma_list, vma_link)
+			WARN_ON(i915_vma_unbind(vma));
+
+		i915_gem_object_put_pages(obj);
+
+		/* Relinquish the backing shmem pages to kernel */
+		shmem_truncate_range(file_inode(obj->base.filp),
+				0, (loff_t)-1);
+		obj->require_clear = false;
+	}
 }
 
 static int

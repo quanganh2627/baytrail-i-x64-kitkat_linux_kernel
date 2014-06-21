@@ -1425,6 +1425,7 @@ typedef struct drm_i915_private {
 	} hpd_stats[HPD_NUM_PINS];
 	u32 hpd_event_bits;
 	struct timer_list hotplug_reenable_timer;
+	u32 hotplug_status;
 
 	int num_plane;
 
@@ -1817,6 +1818,12 @@ struct drm_i915_gem_object {
 	 */
 
 	unsigned int user_fb:1;
+
+	/*
+	 * Do the pages of an object, obtained from shmem, need to be cleared
+	 * after their pre-allocation
+	 */
+	unsigned int require_clear:1;
 
 	/*
 	 * Is the object to be mapped as read-only to the GPU
@@ -2305,6 +2312,11 @@ void i915_set_reset_status(struct intel_ring_buffer *ring,
 
 void
 i915_gem_object_shmem_preallocate(struct drm_i915_gem_object *obj);
+void i915_gem_check_undo_prealloc_pages(struct drm_i915_gem_object *obj);
+int i915_gem_add_clear_obj_cmd(struct drm_i915_gem_object *obj);
+int i915_gem_memset_obj_hw(struct drm_i915_gem_object *obj);
+void i915_gem_memset_obj_sw(struct drm_i915_gem_object *obj);
+void i915_gem_memset_obj(struct drm_i915_gem_object *obj);
 
 /**
  * Returns true if seq1 is later than seq2.
