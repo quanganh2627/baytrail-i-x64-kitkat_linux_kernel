@@ -54,7 +54,7 @@ static struct soc_throttle_data vlv2_soc_data[] = {
 		.floor_freq = 0x00,
 	},
 	{
-		.power_limit = 0x6D, /* 3.5W */
+		.power_limit = 0x41, /* 2.1W */
 		.floor_freq = 0x01,
 	},
 	{
