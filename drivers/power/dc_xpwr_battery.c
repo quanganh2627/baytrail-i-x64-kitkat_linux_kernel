@@ -910,9 +910,10 @@ static void pmic_fg_init_config_regs(struct pmic_fg_info *info)
 		dev_warn(&info->pdev->dev, "FG CNTL reg read err!!\n");
 	} else if ((ret & FG_CNTL_OCV_ADJ_EN) && (ret & FG_CNTL_CAP_ADJ_EN)) {
 		dev_info(&info->pdev->dev, "FG data is already initialized\n");
-		info->fg_init_done = true;
-		pmic_fg_dump_init_regs(info);
-		return;
+		/* comment the following for FW may have touched the regsiters */
+		/* info->fg_init_done = true; */
+		/* pmic_fg_dump_init_regs(info); */
+		/* return; */
 	} else {
 		dev_info(&info->pdev->dev, "FG data need to be initialized\n");
 	}
