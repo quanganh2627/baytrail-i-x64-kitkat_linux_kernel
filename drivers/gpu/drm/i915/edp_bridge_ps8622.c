@@ -107,6 +107,7 @@ int ps8622_read_reg(struct i2c_client *client, u8 addr, u8 regaddr, u8 *regvalue
 static int ps8622_i2c_write(struct i2c_client *client, u8 addr, u8 reg, u8 val)
 {
         int ret;
+		int retry = 0;
 
         struct i2c_adapter *adap = client->adapter;
         struct i2c_msg msg;
@@ -117,7 +118,12 @@ static int ps8622_i2c_write(struct i2c_client *client, u8 addr, u8 reg, u8 val)
         msg.len = sizeof(data);
         msg.buf = data;
 
-        ret = i2c_transfer(adap, &msg, 1);
+		for (retry=0; retry<10; retry++) {
+			ret = i2c_transfer(adap, &msg, 1);
+			if (1 == ret)
+				break;
+			usleep_range(500, 2000);
+		}
         if (ret < 0){
 				 DRM_DEBUG_KMS("(0x%02x,0x%02x,0x%02x) I2C failed: %d\n",
                         addr , reg, val, ret);
