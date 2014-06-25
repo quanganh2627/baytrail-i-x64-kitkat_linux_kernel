@@ -468,8 +468,8 @@ static void intel_fuel_gauge_algo_init(struct intel_fg_info *fg_info)
 		fg_info->algo_sec->init_done = true;
 	}
 		fg_info->batt_params.boot_flag = false;
-
-	schedule_delayed_work(&fg_info->fg_worker, 20 * HZ);
+	/* Schedule worker in 5 Sec to update the FG status during bootup.*/
+	schedule_delayed_work(&fg_info->fg_worker, 5 * HZ);
 }
 
 int intel_fg_register_input(struct intel_fg_input *input)
