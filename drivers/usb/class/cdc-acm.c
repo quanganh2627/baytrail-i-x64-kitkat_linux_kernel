@@ -1132,6 +1132,14 @@ static int acm_probe(struct usb_interface *intf,
 	struct device *tty_dev;
 	int rv = -ENOMEM;
 
+	if (usb_dev != NULL) {
+		dev_dbg(&intf->dev, "cdc acm probe\n");
+		if((usb_dev->descriptor.idVendor == 0x058b) && (usb_dev->descriptor.idProduct == 0x0041)) {
+			dev_dbg(&intf->dev, "skip_normal_probe\n");
+			return -ENODEV;
+		}
+	}
+
 	usb_dev->persist_enabled = 0;
 	dev_info(&intf->dev, "set persist_enabled to 0");
 

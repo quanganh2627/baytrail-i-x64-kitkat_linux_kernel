@@ -559,6 +559,7 @@ static const struct option_blacklist_info telit_le920_blacklist = {
 /*hw dongle -*/
 
 static const struct usb_device_id option_ids[] = {
+	{ USB_DEVICE(0x058b, 0x0041) },
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_COLT) },
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_RICOLA) },
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_RICOLA_LIGHT) },
