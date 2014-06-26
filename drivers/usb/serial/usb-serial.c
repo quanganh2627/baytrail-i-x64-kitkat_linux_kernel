@@ -1104,6 +1104,7 @@ static void usb_serial_disconnect(struct usb_interface *interface)
 
 	/* let the last holder of this object cause it to be cleaned up */
 	usb_serial_put(serial);
+	msleep(500);
 	dev_info(dev, "device disconnected\n");
 }
 
