@@ -1061,16 +1061,15 @@ static int i2c_hid_suspend(struct device *dev)
 	if (device_may_wakeup(&client->dev))
 		enable_irq_wake(client->irq);
 
+	/* Save some power */
+	i2c_hid_set_power(client, I2C_HID_PWR_SLEEP);
+
 	if (hw_data->hw_suspend) {
 		ret = hw_data->hw_suspend(client);
 #ifndef CONFIG_ENABLE_S3
 		return ret;
 #endif
 	}
-
-	/* Save some power */
-	i2c_hid_set_power(client, I2C_HID_PWR_SLEEP);
-
 	return 0;
 }
 
