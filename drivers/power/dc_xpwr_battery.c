@@ -582,10 +582,14 @@ static int pmic_fg_get_battery_property(struct power_supply *psy,
 			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		ret = pmic_fg_get_capacity(info);
-		if (ret < 0)
-			goto pmic_fg_read_err;
-		val->intval = ret;
+		if (info->status == POWER_SUPPLY_STATUS_FULL)
+			val->intval = 100;
+		else {
+			ret = pmic_fg_get_capacity(info);
+			if (ret < 0)
+				goto pmic_fg_read_err;
+			val->intval = ret;
+		}
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		ret = pmic_fg_get_btemp(info, &value);
