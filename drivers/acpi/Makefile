@@ -74,6 +74,7 @@ obj-$(CONFIG_ACPI_CUSTOM_METHOD)+= custom_method.o
 obj-$(CONFIG_ACPI_BGRT)		+= bgrt.o
 obj-$(CONFIG_ACPI_I2C)		+= acpi_i2c.o
 obj-$(CONFIG_ACPI_VIRTUAL_BUTTON) += virtual_button.o
+obj-$(CONFIG_ACPI_PIND) 	+= pind.o
 
 # processor has its own "processor." module_param namespace
 processor-y			:= processor_driver.o processor_throttling.o

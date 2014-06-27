@@ -410,6 +410,14 @@ config ACPI_VIRTUAL_POWER_BUTTON
 	help
 	  Adds Power Button to virtual button driver.
 
+config ACPI_PIND
+	bool "PIND Driver for Platform Indicator devices"
+	depends on INPUT
+	default n
+	help
+	  This driver handles ACPI Platform Indicator device PIND which supports
+	  platform events, buttons and indicators.
+
 source "drivers/acpi/apei/Kconfig"
 
 endif	# ACPI
