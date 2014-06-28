@@ -2156,25 +2156,10 @@ static void hcd_resume_work(struct work_struct *work)
 void usb_hcd_resume_root_hub (struct usb_hcd *hcd)
 {
 	unsigned long flags;
-	struct usb_device *udev = hcd->self.root_hub;
-	struct usb_device *child;
-	int port1;
-	bool child_present = 0;
 
-	usb_hub_for_each_child(udev, port1, child) {
-		if (child) {
-			child_present = 1;
-			break;
-		}
-	}
 	spin_lock_irqsave (&hcd_root_hub_lock, flags);
 	if (hcd->rh_registered) {
-		/* Check if a device is connected on the hub. If there is
-		 * no device we dont set the wakeup pending bit, we just
-		 * let the wakeup thread finish execution
-		 */
-		if (child_present)
-			set_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
+		set_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
 		queue_work(pm_wq, &hcd->wakeup_work);
 	}
 	spin_unlock_irqrestore (&hcd_root_hub_lock, flags);
