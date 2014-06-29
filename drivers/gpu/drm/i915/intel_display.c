@@ -2069,7 +2069,7 @@ intel_pin_and_fence_fb_obj(struct drm_device *dev,
 
 	switch (obj->tiling_mode) {
 	case I915_TILING_NONE:
-		if (IS_BROADWATER(dev) || IS_CRESTLINE(dev) || IS_VALLEYVIEW(dev))
+		if (IS_BROADWATER(dev) || IS_CRESTLINE(dev))
 			alignment = 128 * 1024;
 		else if (INTEL_INFO(dev)->gen >= 4)
 			alignment = 4 * 1024;
@@ -2348,12 +2348,6 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		} else {
 			dspcntr &= ~DISPPLANE_TILED;
 			dev_priv->is_tiled = false;
-			/*
-			 * TODO: This is a hack to fix pdf flicker issue, need
-			 * to re work and provide a proper fix.
-			 */
-			if (IS_VALLEYVIEW(dev))
-				I915_WRITE(VLV_DDL1, 0x00000000);
 			/*
 			 * TODO:In linear mode disable maxfifo, hack to the
 			 * FADiag app flicker issue.

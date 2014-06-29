@@ -1526,20 +1526,12 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 				DDL_PLANEA_PRECISION_32 :
 				DDL_PLANEA_PRECISION_64;
 
-		/*
-		 * TODO: This is a hack to fix pdf flicker issue, need
-		 * to re work and provide a proper fix.
-		 */
-		if (((I915_READ(DSPCNTR(PLANE_A))) &
-				DISPPLANE_TILED) | dev_priv->is_tiled) {
-			if (dev_priv->pf_change_status[PIPE_A] & BPP_CHANGED_PRIMARY) {
-						dev_priv->pf_change_status[PIPE_A] |=
-								(planea_prec | planea_dl);
-			} else
-				I915_WRITE_BITS(VLV_DDL1, planea_prec | planea_dl,
-					0x000000ff);
+		if (dev_priv->pf_change_status[PIPE_A] & BPP_CHANGED_PRIMARY) {
+			dev_priv->pf_change_status[PIPE_A] |=
+						(planea_prec | planea_dl);
 		} else
-			I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x000000ff);
+			I915_WRITE_BITS(VLV_DDL1, planea_prec | planea_dl,
+				0x000000ff);
 	} else
 		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x000000ff);
 
@@ -1641,12 +1633,7 @@ static void valleyview_update_wm(struct drm_device *dev)
 		      planeb_wm, cursorb_wm,
 		      plane_sr, cursor_sr);
 #endif
-	/*
-	 * TODO: when in linear memory dont enable maxfifo. Need to check with
-	 * the hardware team on this. This solves the FADiag app flicker
-	 */
-	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled &
-			dev_priv->is_tiled) {
+	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled) {
 		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
 		dev_priv->maxfifo_enabled = true;
 	} else if (dev_priv->maxfifo_enabled && !is_maxfifo_needed(dev_priv)) {
@@ -3310,12 +3297,7 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 	enable.cursor_enabled = false;
 	enable.sprite_enabled = enabled;
 
-	/*
-	 * TODO: when in linear memory dont enable maxfifo. Need to check with
-	 * the hardware team on this. This solves the FADiag app flicker
-	 */
-	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled &
-			dev_priv->is_tiled) {
+	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled) {
 		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
 		dev_priv->maxfifo_enabled = true;
 	} else if (dev_priv->maxfifo_enabled && !is_maxfifo_needed(dev_priv)) {
@@ -3346,22 +3328,13 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 					DDL_SPRITEB_PRECISION_64;
 		}
 
-		/*
-		 * TODO: This is a hack to fix pdf flicker issue, need
-		 * to re work and provide a proper fix.
-		 */
-		if (((I915_READ(SPCNTR(intel_plane->plane, intel_plane->pipe)))
-					& DISPPLANE_TILED) | dev_priv->is_tiled) {
-			if (dev_priv->pf_change_status[intel_plane->pipe] &
+		if (dev_priv->pf_change_status[intel_plane->pipe] &
 				(BPP_CHANGED_SPRITEA | BPP_CHANGED_SPRITEB)) {
-				dev_priv->pf_change_status[intel_plane->pipe] |=
-								(sprite_prec | (sprite_dl << shift));
-			} else {
-				I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
-					sprite_prec | (sprite_dl << shift), mask);
-			}
+			dev_priv->pf_change_status[intel_plane->pipe] |=
+					(sprite_prec | (sprite_dl << shift));
 		} else
-			I915_WRITE_BITS(VLV_DDL(intel_plane->pipe), 0x00, mask);
+			I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
+				sprite_prec | (sprite_dl << shift), mask);
 	} else
 		I915_WRITE_BITS(VLV_DDL(intel_plane->pipe), 0x00, mask);
 

@@ -155,8 +155,7 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 	else if (ch & ADC_CHANNEL1_MASK)
 		adc_en_mask = CNTL_ADC_CH_SEL_PMICTEMP;
 	else if (ch & ADC_CHANNEL2_MASK)
-		adc_en_mask = (CNTL_ADC_CH_SEL_BPTHERM |
-					CNTL_EN_EXT_BPTH_BIAS);
+		adc_en_mask = CNTL_ADC_CH_SEL_BPTHERM;
 	else if (ch & ADC_CHANNEL3_MASK)
 		adc_en_mask = CNTL_ADC_CH_SEL_SYSTHERM;
 	else
@@ -164,6 +163,20 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 
 	mutex_lock(&info->lock);
 
+	/*
+	 * If channel BPTHERM has been selected, first enable the BPTHERM BIAS
+	 * which provides the VREFT Voltage reference to convert BPTHERM Input
+	 * voltage to temperature.
+	 * As per PMIC Vendor specifications, BPTHERM BIAS should be enabled
+	 * 35msecs before ADC_EN command for all the temperatures.
+	 */
+	if (adc_en_mask & CNTL_ADC_CH_SEL_BPTHERM) {
+		ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG,
+				(u8)CNTL_EN_EXT_BPTH_BIAS);
+		if (ret < 0)
+			goto done;
+		msleep(35);
+	}
 	/*As per the TI(PMIC Vendor), the ADC enable and ADC start commands
 	should not be sent together. Hence sending the commands separately*/
 	/* enable ADC channels */
@@ -175,6 +188,16 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 	ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG, (u8)adc_en_mask);
 	if (ret < 0)
 		goto done;
+
+	/*
+	 * As per PMIC Vendor, a minimum of 50 micro seconds delay is required
+	 * between ADC Enable and ADC START commands. This is also recommended
+	 * by Intel Hardware team after the timing analysis of GPADC signals.
+	 * Since the I2C Write trnsaction to set the channel number also
+	 * imparts 25 micro seconds of delay, so we need to wait for another
+	 * 25 micro seconds before issuing ADC START command.
+	 */
+	usleep_range(25, 40);
 
 	/*Start the ADC conversion for the selected channel */
 	ret = intel_mid_pmic_setb(DC_PMIC_ADC_CNTL_REG, (u8)CNTL_ADC_START);
@@ -196,7 +219,7 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 		 * need to wait for atleast 50mSec to for the ADC
 		 * conversion to get completed.
 		 */
-		mdelay(50);
+		msleep(50);
 	}
 
 	for (i = 0; i < GPADC_CH_NUM; i++) {
@@ -218,6 +241,8 @@ int iio_dc_ti_gpadc_sample(struct iio_dev *indio_dev,
 	/* disable ADC channels */
 	intel_mid_pmic_clearb(DC_PMIC_ADC_CNTL_REG, (u8)(adc_en_mask |
 				CNTL_ADC_START | CNTL_ADC_EN));
+	if (adc_en_mask & CNTL_ADC_CH_SEL_BPTHERM)
+		intel_mid_pmic_clearb(DC_PMIC_ADC_CNTL_REG, CNTL_EN_EXT_BPTH_BIAS);
 done:
 	mutex_unlock(&info->lock);
 	return 0;

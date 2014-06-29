@@ -2290,6 +2290,14 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	ier = sdhci_readl(host, SDHCI_INT_ENABLE);
 	sdhci_clear_set_irqs(host, ier, SDHCI_INT_DATA_AVAIL);
 
+	if (host->quirks2 & SDHCI_QUIRK2_TUNING_POLL) {
+		/* disable IRQ notify to host */
+		sdhci_writel(host, 0, SDHCI_SIGNAL_ENABLE);
+		/* enable CPU irq and use spin lock instead */
+		spin_unlock_irqrestore(&host->lock, flags);
+		spin_lock(&host->lock);
+	}
+
 	/*
 	 * set the data timeout register to be max value
 	 */
@@ -2459,6 +2467,12 @@ out:
 	 */
 	if (err && (host->flags & SDHCI_USING_RETUNING_TIMER))
 		err = 0;
+
+	if (host->quirks2 & SDHCI_QUIRK2_TUNING_POLL) {
+		/* disable CPU irq and use spin lock irqsave */
+		spin_unlock(&host->lock);
+		spin_lock_irqsave(&host->lock, flags);
+	}
 
 	sdhci_clear_set_irqs(host, SDHCI_INT_DATA_AVAIL, ier);
 	spin_unlock_irqrestore(&host->lock, flags);
