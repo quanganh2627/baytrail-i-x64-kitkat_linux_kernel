@@ -1440,7 +1440,7 @@ static bool g4x_compute_srwm(struct drm_device *dev,
 			      *display_wm, *cursor_wm,
 			      display, cursor);
 }
-
+extern int hdmi_enable_flag;
 static bool vlv_compute_drain_latency(struct drm_device *dev,
 				int plane,
 				int *plane_prec_mult,
@@ -1455,7 +1455,7 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 	int clock, pixel_size;
 	int entries;
 	bool latencyprogrammed = false;
-
+	int hdmi_status = hdmi_enable_flag;
 	crtc = intel_get_crtc_for_plane(dev, plane);
 	if (!intel_crtc_active(crtc))
 		return false;
@@ -1472,7 +1472,10 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 		entries = DIV_ROUND_UP(clock, 1000) * pixel_size;
 		*plane_prec_mult = (entries > 256) ?
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
-		*plane_dl = (64 * (*plane_prec_mult) * 4) / entries;
+		if(hdmi_status)
+			*plane_dl = 0;
+		else
+			*plane_dl = (64 * (*plane_prec_mult) * 4) / entries;
 		latencyprogrammed = true;
 	}
 
@@ -1480,7 +1483,10 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 		entries = DIV_ROUND_UP(clock, 1000) * 4;	/* BPP is always 4 for cursor */
 		*cursor_prec_mult = (entries > 256) ?
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
-		*cursor_dl = (64 * (*cursor_prec_mult) * 4) / entries;
+		if(hdmi_status)
+			*cursor_dl = 0;
+		else
+			*cursor_dl = (64 * (*cursor_prec_mult) * 4) / entries;
 		latencyprogrammed = true;
 	}
 
@@ -1488,7 +1494,10 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 		entries = DIV_ROUND_UP(clock, 1000) * sprite_pixel_size;
 		*sprite_prec_mult = (entries > 256) ?
 			DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
-		*sprite_dl = (64 * (*sprite_prec_mult) * 4) / entries;
+		if(hdmi_status)
+			*sprite_dl = 0;
+		else
+			*sprite_dl = (64 * (*sprite_prec_mult) * 4) / entries;
 		latencyprogrammed = true;
 	}
 
