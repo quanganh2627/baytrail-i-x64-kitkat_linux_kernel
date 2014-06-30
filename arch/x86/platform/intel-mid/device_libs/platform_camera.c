@@ -53,7 +53,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"imx135", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"imx135fuji", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"imx134", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
-	{"gc2235", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
+	{"gc2235b", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"bf3a20", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"imx132", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov9724", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
@@ -63,7 +63,6 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"gc0310", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc0310soc", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc2155", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
-	{"gc2235", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"gc5004", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov5693", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov5648", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
@@ -134,8 +133,8 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 		{"gc2155", SFI_DEV_TYPE_I2C, 0, &gc2155_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
-		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235"},
-		{"gc2235", SFI_DEV_TYPE_I2C, 0, &gc2235_platform_data,
+		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235b"},
+		{"gc2235b", SFI_DEV_TYPE_I2C, 0, &gc2235b_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x36, 0x0, 0x0, "gc5004"},
@@ -234,8 +233,8 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 
 static struct camera_device_table byt_crv2_cam_table[] = {
 	{
-		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235"},
-		{"gc2235", SFI_DEV_TYPE_I2C, 0, &gc2235_platform_data,
+		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "gc2235b"},
+		{"gc2235b", SFI_DEV_TYPE_I2C, 0, &gc2235b_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x10, 0x0, 0x0, "imx134"},

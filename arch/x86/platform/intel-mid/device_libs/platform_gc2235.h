@@ -12,5 +12,5 @@
 #ifndef _PLATFORM_GC2235_H_
 #define _PLATFORM_GC2235_H_
 
-extern void *gc2235_platform_data(void *info) __attribute__((weak));
+extern void *gc2235b_platform_data(void *info) __attribute__((weak));
 #endif

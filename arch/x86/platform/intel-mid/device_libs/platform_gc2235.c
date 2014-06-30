@@ -200,7 +200,7 @@ static struct camera_sensor_platform_data gc2235_sensor_platform_data = {
 	.csi_cfg	= gc2235_csi_configure,
 };
 
-void *gc2235_platform_data(void *info)
+void *gc2235b_platform_data(void *info)
 {
 	camera_reset = -1;
 	camera_power_down = -1;
