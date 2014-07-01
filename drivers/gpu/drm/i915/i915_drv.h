@@ -1224,6 +1224,7 @@ struct intel_vbt_data {
 	 * These values correspond to the VBT values for drrs mode.
 	 */
 	enum drrs_support_type drrs_type;
+	unsigned int drrs_min_vrefresh;
 
 	/* eDP */
 	int edp_rate;
