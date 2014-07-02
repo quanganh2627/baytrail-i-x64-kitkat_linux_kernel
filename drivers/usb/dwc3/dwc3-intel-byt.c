@@ -655,7 +655,10 @@ static int dwc3_intel_byt_set_power(struct usb_phy *_otg,
 	}
 
 	spin_lock_irqsave(&otg->lock, flags);
-	otg->charging_cap.ma = 1500;
+	if (sdp_charging(otg))
+		otg->charging_cap.ma = 1500;
+	else
+		otg->charging_cap.ma = ma;
 	spin_unlock_irqrestore(&otg->lock, flags);
 
 	dwc3_intel_byt_notify_charger_type(otg,
