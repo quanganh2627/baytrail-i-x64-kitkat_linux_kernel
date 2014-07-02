@@ -380,7 +380,6 @@ static void cpufreq_interactive_timer(unsigned long data)
 {
 	u64 now;
 	unsigned int delta_time;
-	unsigned int cur;
 	u64 cputime_speedadj;
 	int cpu_load;
 	struct cpufreq_interactive_cpuinfo *pcpu =
@@ -409,10 +408,15 @@ static void cpufreq_interactive_timer(unsigned long data)
 
 	do_div(cputime_speedadj, delta_time);
 	loadadjfreq = (unsigned int)cputime_speedadj * 100;
-	cur = pcpu->policy->cur;
-	if (cur == 0)
-		goto rearm;
-	cpu_load = loadadjfreq / cur;
+	/* scaling current freq becoming "0" eventhough cpu min freq is not "0".
+	 * interactive governor is not able to select or getback to select the m
+	 * in/max freq. range because of this. Setting current freq to min able
+	 * to get back to the freq limits. seeing the issues when bios change
+	 * the max freq limit because of thermal scenario.
+	 */
+	if (pcpu->policy->cur == 0)
+		pcpu->policy->cur = pcpu->policy->min;
+	cpu_load = loadadjfreq / pcpu->policy->cur;
 	boosted = tunables->boost_val || now < tunables->boostpulse_endtime;
 
 	if (cpu_load >= tunables->go_hispeed_load || boosted) {
