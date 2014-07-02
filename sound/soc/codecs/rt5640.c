@@ -558,11 +558,11 @@ void rt5640_enable_ovcd_interrupt(struct snd_soc_codec *codec,
 	unsigned int ovcd_en; /* OVCD circuit enable/disable */
 	unsigned int bp_en;/* Button interrupt enable/disable*/
 	if (enable) {
-		pr_debug("enabling ovc detection and button intr");
+		pr_debug("enabling ovc detection and button intr\n");
 		ovcd_en = RT5640_MIC1_OVCD_EN;
 		bp_en = RT5640_IRQ_MB1_OC_NOR;
 	} else {
-		pr_debug("disabling ovc detection and button intr");
+		pr_debug("disabling ovc detection and button intr\n");
 		ovcd_en = RT5640_MIC1_OVCD_DIS;
 		bp_en = RT5640_IRQ_MB1_OC_BP;
 	}
@@ -626,10 +626,10 @@ int rt5640_detect_hs_type(struct snd_soc_codec *codec, int jack_insert)
 			  ground ring. i.e the accessory does not have mic. i.e accessory
 			  is Headphone*/
 			rt5640->jack_type = RT5640_HEADPHO_DET;
-			pr_debug("%s:detected headphone", __func__);
+			pr_debug("%s:detected headphone\n", __func__);
 		} else {
 			rt5640->jack_type = RT5640_HEADSET_DET;
-			pr_debug("%s:detected headset", __func__);
+			pr_debug("%s:detected headset\n", __func__);
 		}
 		snd_soc_update_bits(codec, RT5640_IRQ_CTRL2,
 				    RT5640_MB1_OC_CLR, 0);
@@ -639,7 +639,7 @@ int rt5640_detect_hs_type(struct snd_soc_codec *codec, int jack_insert)
 		rt5640_enable_ovcd_interrupt(codec, false);
 	} else {
 		rt5640_enable_ovcd_interrupt(codec, false);
-		pr_debug("%s:NO Jack detected", __func__);
+		pr_debug("%s:NO Jack detected\n", __func__);
 		rt5640->jack_type = RT5640_NO_JACK;
 	}
 
@@ -3466,7 +3466,7 @@ static int rt5640_i2c_probe(struct i2c_client *i2c,
 	struct rt5640_priv *rt5640;
 	int ret;
 
-	pr_debug("%s enter", __func__);
+	pr_debug("%s enter\n", __func__);
 	rt5640 = kzalloc(sizeof(struct rt5640_priv), GFP_KERNEL);
 	if (NULL == rt5640)
 		return -ENOMEM;

@@ -196,7 +196,7 @@ static int byt_check_jack_type(void)
 	status = byt_check_jd_status(ctx);
 	/* jd status low indicates some accessory has been connected */
 	if (!status) {
-		pr_debug("Jack insert intr");
+		pr_debug("Jack insert intr\n");
 		/* Do not process button events until accessory is detected as headset*/
 		ctx->process_button_events = false;
 		byt_set_mic_bias_ldo(codec, true);
@@ -218,7 +218,7 @@ static int byt_check_jack_type(void)
 	} else
 		jack_type = 0;
 
-	pr_debug("Jack type detected:%d", jack_type);
+	pr_debug("Jack type detected:%d\n", jack_type);
 
 	return jack_type;
 }
@@ -237,7 +237,7 @@ static int byt_jack_codec_gpio_intr(void)
 	/* Initialize jack status with previous status. The delayed work will confirm
 	   the event and send updated status later */
 	jack_type = jack->status;
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	if (ctx->use_soc_jd_gpio) {
 		/* Must be button event. Confirm the event in delayed work*/
 		if (((jack->status & SND_JACK_HEADSET) == SND_JACK_HEADSET) &&
@@ -245,9 +245,9 @@ static int byt_jack_codec_gpio_intr(void)
 			ret = schedule_delayed_work(&ctx->hs_button_work,
 					msecs_to_jiffies(ctx->button_det_delay));
 			if (!ret)
-				pr_debug("byt_check_hs_button_status already queued");
+				pr_debug("byt_check_hs_button_status already queued\n");
 			else
-				pr_debug("%s:check BP/BR after %d msec",
+				pr_debug("%s:check BP/BR after %d msec\n",
 						__func__, ctx->button_det_delay);
 		}
 	} else {
@@ -256,9 +256,9 @@ static int byt_jack_codec_gpio_intr(void)
 			ret = schedule_delayed_work(&ctx->hs_insert_work,
 					msecs_to_jiffies(ctx->hs_insert_det_delay));
 			if (!ret)
-				pr_debug("byt_check_hs_insert_status already queued");
+				pr_debug("byt_check_hs_insert_status already queued\n");
 			else
-				pr_debug("%s:Check hs insertion  after %d msec",
+				pr_debug("%s:Check hs insertion  after %d msec\n",
 						__func__, ctx->hs_insert_det_delay);
 
 		} else {
@@ -274,9 +274,9 @@ static int byt_jack_codec_gpio_intr(void)
 				ret = schedule_delayed_work(&ctx->hs_remove_work,
 						msecs_to_jiffies(ctx->hs_remove_det_delay));
 				if (!ret)
-					pr_debug("byt_check_hs_remove_status already queued");
+					pr_debug("byt_check_hs_remove_status already queued\n");
 				else
-					pr_debug("%s:Check hs removal after %d msec",
+					pr_debug("%s:Check hs removal after %d msec\n",
 							__func__, ctx->hs_remove_det_delay);
 			} else { /* Must be button event. Confirm the event in delayed work*/
 				if (((jack->status & SND_JACK_HEADSET) == SND_JACK_HEADSET) &&
@@ -284,16 +284,16 @@ static int byt_jack_codec_gpio_intr(void)
 					ret = schedule_delayed_work(&ctx->hs_button_work,
 							msecs_to_jiffies(ctx->button_det_delay));
 					if (!ret)
-						pr_debug("byt_check_hs_button_status already queued");
+						pr_debug("byt_check_hs_button_status already queued\n");
 					else
-						pr_debug("%s:check BP/BR after %d msec",
+						pr_debug("%s:check BP/BR after %d msec\n",
 								__func__, ctx->button_det_delay);
 				}
 			}
 		}
 	}
 
-	pr_debug("Exit:%s", __func__);
+	pr_debug("Exit:%s\n", __func__);
 	mutex_unlock(&ctx->jack_mlock);
 	return jack_type;
 }
@@ -308,7 +308,7 @@ static void byt_check_hs_insert_status(struct work_struct *work)
 	int jack_type = 0;
 
 	mutex_lock(&ctx->jack_mlock);
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 
 	jack_type = byt_check_jack_type();
 
@@ -330,12 +330,12 @@ static void byt_check_hs_insert_status(struct work_struct *work)
 			ctx->hs_det_retry--;
 			schedule_delayed_work(&ctx->hs_insert_work,
 					msecs_to_jiffies(ctx->hs_det_poll_intrvl));
-			pr_debug("%s:re-try hs detection after %d msec",
+			pr_debug("%s:re-try hs detection after %d msec\n",
 					__func__, ctx->hs_det_poll_intrvl);
 		}
 	}
 
-	pr_debug("Exit:%s", __func__);
+	pr_debug("Exit:%s\n", __func__);
 	mutex_unlock(&ctx->jack_mlock);
 }
 /* Checks jack removal. */
@@ -352,7 +352,7 @@ static void byt_check_hs_remove_status(struct work_struct *work)
 	cancel_delayed_work_sync(&ctx->hs_insert_work);
 
 	mutex_lock(&ctx->jack_mlock);
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* Initialize jack_type with previous status.
 	   If the event was an invalid one, we return the preious state*/
 	jack_type = jack->status;
@@ -360,7 +360,7 @@ static void byt_check_hs_remove_status(struct work_struct *work)
 	if (jack->status) { /* jack is in connected state; look for removal event */
 		status = byt_check_jd_status(ctx);
 		if (status) { /* jd status high implies accessory disconnected */
-			pr_debug("Jack remove event");
+			pr_debug("Jack remove event\n");
 			ctx->process_button_events = false;
 			cancel_delayed_work_sync(&ctx->hs_button_en_work);
 			status = rt5640_detect_hs_type(codec, false);
@@ -374,12 +374,12 @@ static void byt_check_hs_remove_status(struct work_struct *work)
 			   But as soon as the interrupt thread(byt_jack/_bp_detection) detected a jack
 			   removal, button processing gets disabled. Hence re-enable button processing
 			   in the case of headset */
-			pr_debug(" spurious Jack remove event for headset; re-enable button events");
+			pr_debug(" spurious Jack remove event for headset; re-enable button events\n");
 			ctx->process_button_events = true;
 		}
 	}
 	snd_soc_jack_report(jack, jack_type, gpio->report);
-	pr_debug("Exit:%s", __func__);
+	pr_debug("Exit:%s\n", __func__);
 	mutex_unlock(&ctx->jack_mlock);
 }
 /* Check for button press/release */
@@ -393,7 +393,7 @@ static void byt_check_hs_button_status(struct work_struct *work)
 	int ret;
 
 	mutex_lock(&ctx->jack_mlock);
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* Initialize jack_type with previous status.
 	   If the event was an invalid one, we return the preious state*/
 	jack_type = jack->status;
@@ -407,12 +407,12 @@ static void byt_check_hs_button_status(struct work_struct *work)
 			status = rt5640_check_bp_status(codec);
 			if (jack->status & SND_JACK_BTN_0) { /* if button was previosly in pressed state*/
 				if (!status) {
-					pr_debug("BR event received");
+					pr_debug("BR event received\n");
 					jack_type = SND_JACK_HEADSET;
 				}
 			} else { /* If button was previously in released state */
 				if (status) {
-					pr_debug("BP event received");
+					pr_debug("BP event received\n");
 					jack_type = SND_JACK_HEADSET | SND_JACK_BTN_0;
 				}
 			}
@@ -427,15 +427,15 @@ static void byt_check_hs_button_status(struct work_struct *work)
 			ret = schedule_delayed_work(&ctx->hs_remove_work,
 					msecs_to_jiffies(ctx->hs_remove_det_delay));
 			if (!ret)
-				pr_debug("byt_check_hs_remove_status already queued");
+				pr_debug("byt_check_hs_remove_status already queued\n");
 			else
-				pr_debug("%s:Check hs removal after %d msec",
+				pr_debug("%s:Check hs removal after %d msec\n",
 						__func__, ctx->hs_remove_det_delay);
 		}
 
 	}
 	snd_soc_jack_report(jack, jack_type, gpio->report);
-	pr_debug("Exit:%s", __func__);
+	pr_debug("Exit:%s\n", __func__);
 	mutex_unlock(&ctx->jack_mlock);
 }
 
@@ -449,16 +449,16 @@ static int byt_jack_soc_gpio_intr(void)
 
 	mutex_lock(&ctx->jack_mlock);
 
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 
 	if (!jack->status) {
 		ctx->hs_det_retry = BYT_HS_DET_RETRY_COUNT;
 		ret = schedule_delayed_work(&ctx->hs_insert_work,
 				msecs_to_jiffies(ctx->hs_insert_det_delay));
 		if (!ret)
-			pr_debug("byt_check_hs_insert_status already queued");
+			pr_debug("byt_check_hs_insert_status already queued\n");
 		else
-			pr_debug("%s:Check hs insertion  after %d msec",
+			pr_debug("%s:Check hs insertion  after %d msec\n",
 					__func__, ctx->hs_insert_det_delay);
 
 	} else {
@@ -472,14 +472,14 @@ static int byt_jack_soc_gpio_intr(void)
 			ret = schedule_delayed_work(&ctx->hs_remove_work,
 					msecs_to_jiffies(ctx->hs_remove_det_delay));
 			if (!ret)
-				pr_debug("byt_check_hs_remove_status already queued");
+				pr_debug("byt_check_hs_remove_status already queued\n");
 			else
-				pr_debug("%s:Check hs removal after %d msec",
+				pr_debug("%s:Check hs removal after %d msec\n",
 						__func__, ctx->hs_remove_det_delay);
 		}
 	}
 	mutex_unlock(&ctx->jack_mlock);
-	pr_debug("Exit:%s", __func__);
+	pr_debug("Exit:%s\n", __func__);
 	/* return previous status */
 	return jack->status;
 
@@ -502,7 +502,7 @@ static inline struct snd_soc_codec *byt_get_codec(struct snd_soc_card *card)
 
 	list_for_each_entry(codec, &card->codec_dev_list, card_list) {
 		if (!strstr(codec->name, "rt5640.2-001c")) {
-			pr_debug("codec was %s", codec->name);
+			pr_debug("codec was %s\n", codec->name);
 			continue;
 		} else {
 			found = true;
@@ -510,7 +510,7 @@ static inline struct snd_soc_codec *byt_get_codec(struct snd_soc_card *card)
 		}
 	}
 	if (found == false) {
-		pr_err("%s: cant find codec", __func__);
+		pr_err("%s: cant find codec\n", __func__);
 		return NULL;
 	}
 	return codec;
@@ -623,7 +623,7 @@ static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	unsigned int fmt;
 
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* I2S Slave Mode*/
 	fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 	      SND_SOC_DAIFMT_CBS_CFS;
@@ -641,7 +641,7 @@ static int byt_aif2_hw_params(struct snd_pcm_substream *substream,
 	unsigned int fmt;
 	int ret;
 
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* I2S  Slave Mode*/
 	fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 	      SND_SOC_DAIFMT_CBS_CFS;
@@ -675,7 +675,7 @@ static int byt_compr_set_params(struct snd_compr_stream *cstream)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	unsigned int fmt;
 
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* I2S  Slave Mode*/
 	fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 	      SND_SOC_DAIFMT_CBS_CFS;
@@ -908,7 +908,7 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	struct snd_soc_card *card = runtime->card;
 	struct byt_mc_private *ctx = snd_soc_card_get_drvdata(runtime->card);
 
-	pr_debug("Enter:%s", __func__);
+	pr_debug("Enter:%s\n", __func__);
 	/* Set codec bias level */
 	byt_set_bias_level(card, dapm, SND_SOC_BIAS_OFF);
 	card->dapm.idle_bias_off = true;
@@ -1158,7 +1158,7 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	}
 	/* get the codec -> SoC GPIO */
 	codec_gpio = acpi_get_gpio_by_index(&pdev->dev, 0, NULL);  /* GPIO_SUS4 */
-	pr_debug("%s: GPIOs - codec %d", __func__, codec_gpio);
+	pr_debug("%s: GPIOs - codec %d\n", __func__, codec_gpio);
 	hs_gpio[BYT_CODEC_GPIO_IDX].gpio = codec_gpio;
 
 
@@ -1203,14 +1203,14 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 		/*Get the direct jack detect GPIO (jack -> soc GPIO). */
 		jd_gpio = acpi_get_gpio("\\_SB.GPO2", 27);
 		if (jd_gpio >= 0) {
-			pr_info("%s: GPIOs - Jack detection %d", __func__, jd_gpio);
+			pr_info("%s: GPIOs - Jack detection %d\n", __func__, jd_gpio);
 
 			hs_gpio[BYT_JD_GPIO_IDX].gpio = jd_gpio;
 			/* One GPIO for codec interrupt and other for jack detection */
 			drv->num_jack_gpios = 2;
 			drv->use_soc_jd_gpio = true;
 		} else
-			pr_err("%s: Could not get Jack det GPIO. Use codec GPIO instead", __func__);
+			pr_err("%s: Could not get Jack det GPIO. Use codec GPIO instead\n", __func__);
 
 
 		/* Configure GPIO_SCORE56 for BT SCO workaround on FFRD8 PR1 */
