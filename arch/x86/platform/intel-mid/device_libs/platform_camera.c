@@ -593,6 +593,7 @@ const struct atomisp_camera_caps *atomisp_get_default_camera_caps(void)
 }
 EXPORT_SYMBOL_GPL(atomisp_get_default_camera_caps);
 
+static struct vprog_status status[CAMERA_POWER_NUM] = {0};
 int gc_camera_set_pmic(bool flag)
 {
 	/*MRD7 0x1A:default0x00-11=1.8v; 0x28:default0x17, =21=2.8?*/
@@ -603,9 +604,10 @@ int gc_camera_set_pmic(bool flag)
 	u8 reg_value[2] = {0x2, 0x20};
 	u8 reg_adjust_addr[2] = {0x1A, 0x28};
 	u8 reg_adjust_value[2] = {22, 21}; /* 1.8v for ELDO2, 2.8v for ALDO1 */
-	static struct vprog_status status;
+//	static struct vprog_status status;
 	static DEFINE_MUTEX(mutex_power);
 	int ret = 0;
+	int user = status[CAMERA_1P8V].user + status[CAMERA_2P8V].user;
 
 	mutex_lock(&mutex_power);
 	/*
@@ -613,8 +615,8 @@ int gc_camera_set_pmic(bool flag)
 	 * first to power on
 	 * last to power off
 	 */
-	if ((flag && status.user == 0)
-	    || (!flag && status.user == 1))
+	if ((flag && user == 0)
+	    || (!flag && user == 2))
 //		ret = intel_mid_pmic_writeb(reg_addr[pin], reg_value[flag]);
 	{
 		if (flag)
@@ -637,11 +639,14 @@ int gc_camera_set_pmic(bool flag)
 	if (ret)
 		goto done;
 
-	if (flag)
-		status.user++;
-	else
-		if (status.user)
-			status.user--;
+	if (flag){
+		status[CAMERA_1P8V].user++;
+		status[CAMERA_2P8V].user++;
+	} else
+		if (user/2){
+			status[CAMERA_1P8V].user--;
+			status[CAMERA_2P8V].user--;
+		}
 done:
 	mutex_unlock(&mutex_power);
 	return ret;
@@ -707,7 +712,7 @@ int camera_set_pmic_power(enum camera_pmic_pin pin, bool flag)
 	u8 reg_adjust_addr[2] = {0x1A, 0x28};
 	u8 reg_adjust_value[2] = {22, 21}; /* 1.8v for ELDO2, 2.8v for ALDO1 */
 
-	static struct vprog_status status[CAMERA_POWER_NUM];
+//	static struct vprog_status status[CAMERA_POWER_NUM];
 	static DEFINE_MUTEX(mutex_power);
 	int ret = 0;
 
