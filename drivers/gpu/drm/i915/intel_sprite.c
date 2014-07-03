@@ -456,7 +456,7 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_crtc *crtc,
 	if (event == NULL)
 		POSTING_READ(SPSURF(pipe, plane));
 
-	if (intel_plane->last_pixel_size > pixel_size) {
+	if (intel_plane->last_pixel_size != pixel_size) {
 		if (plane == PLANE_A)
 			dev_priv->pf_change_status[pipe] |= BPP_CHANGED_SPRITEA;
 		else
