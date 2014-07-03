@@ -9250,6 +9250,7 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 					DRM_ERROR("Failed to alloc memory - page_flip\n");
 					disp->errored |= (1 << i);
 					ret = -ENOMEM;
+					continue;
 				}
 				/*
 				 * for primary and secondary planes page flip call drm
@@ -9280,6 +9281,7 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 					DRM_ERROR("Failed to alloc memory - set_plane\n");
 					disp->errored |= (1 << i);
 					ret = -ENOMEM;
+					continue;
 				}
 				/*
 				 * for sprite plane call update_plane or setplane, which
