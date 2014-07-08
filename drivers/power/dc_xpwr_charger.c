@@ -813,7 +813,7 @@ static void dc_xpwr_otg_event_worker(struct work_struct *work)
 		dev_warn(&info->pdev->dev, "vbus path disable failed\n");
 
 	if (info->pdata->otg_gpio >= 0) {
-#ifdef CONFIG_MRD7
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
 		gpio_direction_output(info->pdata->otg_gpio, info->id_short);
 #else
 		gpio_direction_output(info->pdata->otg_gpio, !info->id_short);
