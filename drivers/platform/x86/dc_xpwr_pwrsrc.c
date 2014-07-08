@@ -104,6 +104,7 @@ enum {
 	MV_CHNG_IRQ,
 	BC_USB_CHNG_IRQ,
 };
+static int s0i3_wa;
 
 static const char *dc_extcon_cable[] = {
 	PWRSRC_EXTCON_CABLE_USB,
@@ -172,6 +173,12 @@ int dc_xpwr_vbus_on_status(void)
 }
 EXPORT_SYMBOL(dc_xpwr_vbus_on_status);
 
+inline int need_s0i3_wa(void)
+{
+	return s0i3_wa;
+}
+EXPORT_SYMBOL(need_s0i3_wa);
+
 static int handle_pwrsrc_event(struct dc_pwrsrc_info *info)
 {
 	if (dc_xpwr_vbus_on_status()) {
@@ -202,6 +209,8 @@ static int handle_chrg_det_event(struct dc_pwrsrc_info *info)
 		dev_info(&info->pdev->dev, "get vbus stat error\n");
 		return ret;
 	}
+
+	s0i3_wa = 0;
 
 	if ((ret & PS_STAT_VBUS_PRESENT) && !info->id_short) {
 		dev_info(&info->pdev->dev, "VBUS present\n");
@@ -259,6 +268,7 @@ static int handle_chrg_det_event(struct dc_pwrsrc_info *info)
 		dev_info(&info->pdev->dev,
 				"DCP cable connecetd\n");
 		notify_charger = true;
+		s0i3_wa = 1;
 		cable_props.chrg_evt = POWER_SUPPLY_CHARGER_EVENT_CONNECT;
 		cable_props.chrg_type = POWER_SUPPLY_CHARGER_TYPE_USB_DCP;
 		cable_props.ma = DC_XPWR_CHARGE_CUR_DCP;

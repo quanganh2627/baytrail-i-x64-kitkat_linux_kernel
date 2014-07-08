@@ -11,6 +11,7 @@ struct dc_xpwr_pwrsrc_pdata {
 
 #ifdef CONFIG_INTEL_MID_PMIC
 int dc_xpwr_vbus_on_status(void);
+int need_s0i3_wa(void);
 #else
 static int dc_xpwr_vbus_on_status(void)
 {
