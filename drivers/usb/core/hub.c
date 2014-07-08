@@ -2122,6 +2122,8 @@ void usb_disconnect(struct usb_device **pdev)
 	hub_free_dev(udev);
 
 	put_device(&udev->dev);
+
+	msleep(1000);
 }
 
 #ifdef CONFIG_USB_ANNOUNCE_NEW_DEVICES

@@ -173,6 +173,9 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
  * We need to register our own PCI probe function (instead of the USB core's
  * function) in order to create a second roothub under xHCI.
  */
+ 
+struct usb_device *xhci_root_hub = NULL; /* Root hub */
+static struct wake_lock	xhci_wake_lock; 
 static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int retval;
@@ -218,6 +221,10 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	 */
 	if (xhci->quirks & XHCI_LPM_SUPPORT)
 		hcd_to_bus(xhci->shared_hcd)->root_hub->lpm_capable = 1;
+	
+	xhci_root_hub = hcd->self.root_hub;
+	
+	wake_lock_init(&xhci_wake_lock, WAKE_LOCK_SUSPEND, "xhci_wake_lock");
 
 	return 0;
 
@@ -246,13 +253,27 @@ static void xhci_pci_remove(struct pci_dev *dev)
 	}
 	usb_hcd_pci_remove(dev);
 	kfree(xhci);
+	
+	wake_lock_destroy(&xhci_wake_lock);
 }
 
 #ifdef CONFIG_PM
+void usb_reattach_modem()
+{
+	trace_printk("[%s]\n",__func__);
+	pr_info("[%s]\n",__func__);
+	wake_lock_timeout(&xhci_wake_lock,msecs_to_jiffies(3 * 60 * 1000));
+	pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,3 * 60 * 1000);
+	pm_runtime_get_sync(&xhci_root_hub->dev);
+	pm_runtime_put_sync(&xhci_root_hub->dev);
+}
+
 static int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
+
+	pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,0);
 
 	/*
 	 * Systems with the TI redriver that loses port status change events

@@ -69,6 +69,7 @@ static struct acm *acm_table[ACM_TTY_MINORS];
 static struct dentry *acm_debug_root;
 static struct dentry *acm_debug_data_dump_enable;
 static u32 acm_data_dump_enable;
+u32 usb_acm_connect_flg = 0;
 
 static DEFINE_MUTEX(acm_table_lock);
 
@@ -608,6 +609,7 @@ static int acm_tty_install(struct tty_driver *driver, struct tty_struct *tty)
 	if (!acm)
 		return -ENODEV;
 
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	retval = tty_standard_install(driver, tty);
 	if (retval)
 		goto error_init_termios;
@@ -625,7 +627,11 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 {
 	struct acm *acm = tty->driver_data;
 
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(tty->dev, "%s\n", __func__);
+	
+	if (acm->dev->state == USB_STATE_NOTATTACHED)
+		return -ENODEV;
 
 	return tty_port_open(&acm->port, tty, filp);
 }
@@ -635,8 +641,9 @@ static int acm_port_activate(struct tty_port *port, struct tty_struct *tty)
 	struct acm *acm = container_of(port, struct acm, port);
 	int retval = -ENODEV;
 
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
-
+	
 	mutex_lock(&acm->mutex);
 	if (acm->disconnected)
 		goto disconnected;
@@ -698,6 +705,7 @@ static void acm_port_destruct(struct tty_port *port)
 {
 	struct acm *acm = container_of(port, struct acm, port);
 
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 
 	acm_release_minor(acm);
@@ -711,6 +719,7 @@ static void acm_port_shutdown(struct tty_port *port)
 	struct acm *acm = container_of(port, struct acm, port);
 	int i;
 
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 
 	mutex_lock(&acm->mutex);
@@ -734,6 +743,7 @@ static void acm_port_shutdown(struct tty_port *port)
 static void acm_tty_cleanup(struct tty_struct *tty)
 {
 	struct acm *acm = tty->driver_data;
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 	tty_port_put(&acm->port);
 }
@@ -741,6 +751,7 @@ static void acm_tty_cleanup(struct tty_struct *tty)
 static void acm_tty_hangup(struct tty_struct *tty)
 {
 	struct acm *acm = tty->driver_data;
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 	tty_port_hangup(&acm->port);
 }
@@ -748,6 +759,7 @@ static void acm_tty_hangup(struct tty_struct *tty)
 static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 {
 	struct acm *acm = tty->driver_data;
+	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 	/* Set flow_stopped to enable flush buffer*/
 	tty->flow_stopped = 1;
@@ -1542,6 +1554,7 @@ skip_countries:
 				"acm_data_dump_enable",	0644, acm_debug_root,
 				&acm_data_dump_enable);
 	}
+	usb_acm_connect_flg = 1;
 
 	return 0;
 alloc_fail8:
@@ -1587,6 +1600,7 @@ static void stop_data_traffic(struct acm *acm)
 	cancel_work_sync(&acm->work);
 }
 
+void usb_reattach_modem();
 static void acm_disconnect(struct usb_interface *intf)
 {
 	struct acm *acm = usb_get_intfdata(intf);
@@ -1594,8 +1608,15 @@ static void acm_disconnect(struct usb_interface *intf)
 	struct tty_struct *tty;
 	int i;
 
+	if(usb_acm_connect_flg)
+	{	
+		usb_acm_connect_flg = 0;
+		usb_reattach_modem();
+	}
+	
 	dev_dbg(&intf->dev, "%s\n", __func__);
-
+	pr_info("wgq[%s]\n",__func__);
+	
 	/* sibling interface is already cleaning up */
 	if (!acm)
 		return;
