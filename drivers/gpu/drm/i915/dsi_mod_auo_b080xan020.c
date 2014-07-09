@@ -79,7 +79,7 @@ static struct drm_display_mode *b080xan02_get_modes(
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -88,7 +88,6 @@ static struct drm_display_mode *b080xan02_get_modes(
 
 	return mode;
 }
-
 
 static void  b080xan02_get_panel_info(int pipe,
 					struct drm_connector *connector)
@@ -117,7 +116,7 @@ static enum drm_connector_status b080xan02_detect(
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	
+
 	dev_priv->is_mipi = true;	
 
 	return connector_status_connected;
@@ -135,26 +134,19 @@ void b080xan02_panel_reset(struct intel_dsi_device *dsi)
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00); 
-	vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004); //low 
-	msleep(20); 
-	vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005); //high
-	msleep(20);
-#endif 
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
 
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 	
 }
 
@@ -184,8 +176,8 @@ static void b080xan02_enable(struct intel_dsi_device *dsi)
 static void b080xan02_disable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-
 	DRM_DEBUG_KMS("\n");
+
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x28);
 	msleep(81);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x10);
@@ -239,7 +231,7 @@ bool b080xan02_init(struct intel_dsi_device *dsi)
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
 	//dev_priv->mipi.panel_bpp = 24;
-	
+
 	intel_dsi->lane_count = 4;
 
 	return true;
@@ -252,11 +244,11 @@ void b080xan02_send_otp_cmds(struct intel_dsi_device *dsi)
 
 	DRM_DEBUG_KMS("\n");
 
-    intel_dsi->hs = 0;
-    dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
-    msleep(100);
+	intel_dsi->hs = 0;
+	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
+	msleep(100);
 
-    intel_dsi->hs = 1;
+	intel_dsi->hs = 1;
 
 }
 

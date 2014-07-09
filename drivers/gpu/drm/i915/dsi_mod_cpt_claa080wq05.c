@@ -67,7 +67,6 @@ static u8 cpt_init_sequence20_2[] 		= {0xE1, 0x03, 0x10, 0x1C, 0xA0, 0x10};					
 static u8 cpt_init_sequence21[] 			= {0xFD, 0x16, 0x10, 0x11, 0x20, 0x09};												// DDI Analog interface Setting
 static u8 cpt_init_sequence22[] 			= {0xC3, 0x40, 0x00, 0x28};																		// BC_CTRL Enable(Power IC Enable)
 
-
 void claa080wq05_send_otp_cmds(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
@@ -98,11 +97,10 @@ void claa080wq05_send_otp_cmds(struct intel_dsi_device *dsi)
 	dsi_vc_dcs_write(intel_dsi, 0, cpt_init_sequence22, sizeof(cpt_init_sequence22));
 }
 
-
 static void  claa080wq05_get_panel_info(int pipe,
 					struct drm_connector *connector)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	if (!connector) {
 		DRM_DEBUG_KMS("Cpt: Invalid input to get_info\n");
 		return;
@@ -132,7 +130,7 @@ static struct drm_display_mode *claa080wq05_get_modes(
 	struct intel_dsi_device *dsi)
 {
 	struct drm_display_mode *mode = NULL;
-DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	/* Allocate */
 	mode = kzalloc(sizeof(*mode), GFP_KERNEL);
 	if (!mode) {
@@ -155,7 +153,7 @@ DRM_DEBUG_KMS("\n");
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -168,7 +166,7 @@ DRM_DEBUG_KMS("\n");
 
 static bool claa080wq05_get_hw_state(struct intel_dsi_device *dev)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return true;
 }
 
@@ -196,32 +194,20 @@ void claa080wq05_reset(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(85000, 90000);
-	msleep(20);
-#endif
 
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
 
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 }
 
 static int claa080wq05_mode_valid(struct intel_dsi_device *dsi,

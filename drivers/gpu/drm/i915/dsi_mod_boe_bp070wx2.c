@@ -65,12 +65,6 @@ static u8 boe_init_sequence_21[]      = {0xFE, 0x00, 0x0D, 0x03, 0x21, 0x00, 0x0
 static u8 boe_init_sequence_22[]      = {0xC3, 0x40, 0x00, 0x28};
 
 
-
-
-
-
-
-
 void bp070wx2_send_otp_cmds(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
@@ -105,7 +99,7 @@ void bp070wx2_send_otp_cmds(struct intel_dsi_device *dsi)
 static void  bp070wx2_get_panel_info(int pipe,
 					struct drm_connector *connector)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	if (!connector) {
 		DRM_DEBUG_KMS("Cpt: Invalid input to get_info\n");
 		return;
@@ -135,7 +129,7 @@ static struct drm_display_mode *bp070wx2_get_modes(
 	struct intel_dsi_device *dsi)
 {
 	struct drm_display_mode *mode = NULL;
-DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	/* Allocate */
 	mode = kzalloc(sizeof(*mode), GFP_KERNEL);
 	if (!mode) {
@@ -158,7 +152,7 @@ DRM_DEBUG_KMS("\n");
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -171,7 +165,7 @@ DRM_DEBUG_KMS("\n");
 
 static bool bp070wx2_get_hw_state(struct intel_dsi_device *dev)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return true;
 }
 
@@ -199,38 +193,26 @@ void bp070wx2_panel_reset(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(85000, 90000);
-	msleep(20);
-#endif
 
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
 
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 }
 
 static int bp070wx2_mode_valid(struct intel_dsi_device *dsi,
 		   struct drm_display_mode *mode)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return MODE_OK;
 }
 
@@ -244,8 +226,7 @@ static void bp070wx2_enable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	DRM_DEBUG_KMS("\n");
-	//dsi_vc_dcs_write(intel_dsi, 0, boe_password, sizeof(boe_password));
-	//dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
+
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_22, sizeof(boe_init_sequence_22));
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x35);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
@@ -340,5 +321,4 @@ struct intel_dsi_dev_ops boe_bp070wx2_dsi_display_ops = {
 	.enable = bp070wx2_enable,
 	.disable = bp070wx2_disable,
 	.send_otp_cmds = bp070wx2_send_otp_cmds,
-
 };

@@ -40,7 +40,6 @@
 #include "intel_dsi_cmd.h"
 #include "dsi_mod_boe_bp080wx7.h"
 
-#if 1
 static u8 boe_init_sequence_01[]      = {0xF0, 0x5A, 0x5A};
 static u8 boe_init_sequence_02[]      = {0xF1, 0x5A, 0x5A};
 static u8 boe_init_sequence_03[]      = {0xFC, 0xA5, 0xA5};
@@ -70,21 +69,13 @@ static u8 boe_init_sequence_26[]      = {0xFB, 0x1E, 0x34, 0x22, 0x25, 0x17, 0x1
 static u8 boe_init_sequence_27[]      = {0xFA, 0x1C, 0x34, 0x1C, 0x1F, 0x13, 0x17, 0x1A, 0x18, 0x18, 0x1E, 0x20, 0x21, 0x21, 0x21, 0x23, 0x22, 0x2A};
 static u8 boe_init_sequence_28[]      = {0xFB, 0x1A, 0x34, 0x1A, 0x1D, 0x11, 0x15, 0x18, 0x16, 0x16, 0x1C, 0x20, 0x20, 0x20, 0x1F, 0x23, 0x23, 0x2B};	
 static u8 boe_init_sequence_c3[]      = {0xC3, 0x40, 0x00, 0x28};
-//static u8 boe_init_sequence_35[]      = {0x35, 0x00};
-//static u8 boe_init_sequence_29[]      = {0x29, 0xF0};
-//static u8 boe_init_sequence_tst[]      = {0xD0, 0x00, 0x10};
-#endif
-
 
 void bp080wx7_send_otp_cmds(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 
 	DRM_DEBUG_KMS("\n");
-#if 1
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_01, sizeof(boe_init_sequence_01));
-//	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_tst, sizeof(boe_init_sequence_tst));
-//	return;
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_02, sizeof(boe_init_sequence_02));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_03, sizeof(boe_init_sequence_03));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_04, sizeof(boe_init_sequence_04));
@@ -112,14 +103,12 @@ void bp080wx7_send_otp_cmds(struct intel_dsi_device *dsi)
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_26, sizeof(boe_init_sequence_26));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_27, sizeof(boe_init_sequence_27));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_28, sizeof(boe_init_sequence_28));
-#endif
 }
-
 
 static void  bp080wx7_get_panel_info(int pipe,
 					struct drm_connector *connector)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	if (!connector) {
 		DRM_DEBUG_KMS("Cpt: Invalid input to get_info\n");
 		return;
@@ -149,7 +138,7 @@ static struct drm_display_mode *bp080wx7_get_modes(
 	struct intel_dsi_device *dsi)
 {
 	struct drm_display_mode *mode = NULL;
-DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	/* Allocate */
 	mode = kzalloc(sizeof(*mode), GFP_KERNEL);
 	if (!mode) {
@@ -172,7 +161,7 @@ DRM_DEBUG_KMS("\n");
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -185,7 +174,7 @@ DRM_DEBUG_KMS("\n");
 
 static bool bp080wx7_get_hw_state(struct intel_dsi_device *dev)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return true;
 }
 
@@ -195,8 +184,10 @@ static enum drm_connector_status bp080wx7_detect(
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
- 	dev_priv->is_mipi = true;
+
 	DRM_DEBUG_KMS("\n");
+	dev_priv->is_mipi = true;
+
 	return connector_status_connected;
 }
 
@@ -213,38 +204,26 @@ void bp080wx7_panel_reset(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(85000, 90000);
-	msleep(20);
-#endif
 
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-                vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-                /* panel disable */
-                vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-                vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-                usleep_range(100000, 120000);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
 
-                /* panel enable */
-                vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-                vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-                usleep_range(100000, 120000);
-                vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 }
 
 static int bp080wx7_mode_valid(struct intel_dsi_device *dsi,
 		   struct drm_display_mode *mode)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return MODE_OK;
 }
 
@@ -258,22 +237,12 @@ static void bp080wx7_enable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	DRM_DEBUG_KMS("\n");
-#if 0
-	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
-	msleep(30);
-	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_22, sizeof(boe_init_sequence_22));
-	msleep(120);
-	//dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_35, sizeof(boe_init_sequence_35));
-	dsi_vc_dcs_write_0(intel_dsi, 0, 0x35);	
-	dsi_vc_dcs_write_0(intel_dsi, 0, 0x29);
-	msleep(30);
-#endif
- 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_c3, sizeof(boe_init_sequence_c3));
-        dsi_vc_dcs_write_0(intel_dsi, 0, 0x35);
-        dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
-        msleep(5);
-        dsi_vc_dcs_write_0(intel_dsi, 0, 0x29);
 
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_c3, sizeof(boe_init_sequence_c3));
+	dsi_vc_dcs_write_0(intel_dsi, 0, 0x35);
+	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
+	msleep(5);
+	dsi_vc_dcs_write_0(intel_dsi, 0, 0x29);
 }
 static void bp080wx7_disable(struct intel_dsi_device *dsi)
 {
@@ -311,7 +280,6 @@ bool bp080wx7_init(struct intel_dsi_device *dsi)
 		DRM_DEBUG_KMS("Init: Invalid input to bp080wx7\n");
 		return false;
 	}
-#if 0
 	intel_dsi->eotp_pkt = 1;
 	intel_dsi->operation_mode = DSI_VIDEO_MODE;
 	intel_dsi->video_mode_type = DSI_VIDEO_NBURST_SEVENT;
@@ -321,15 +289,15 @@ bool bp080wx7_init(struct intel_dsi_device *dsi)
 	intel_dsi->rst_timer_val = 0xffff;
 	intel_dsi->bw_timer = 0x820;
 	/*b044*/
-	intel_dsi->hs_to_lp_count = 0x46;
+	intel_dsi->hs_to_lp_count = 0x18;
 	/*b060*/
-	intel_dsi->lp_byte_clk = 0x04;
+	intel_dsi->lp_byte_clk = 0x03;
 	/*b080*/
-	intel_dsi->dphy_reg = 0x3F10430D;
+	intel_dsi->dphy_reg = 0x170d340b;
 	/* b088 high 16bits */
-	intel_dsi->clk_lp_to_hs_count = 0x24;
+	intel_dsi->clk_lp_to_hs_count = 0x1e;
 	/* b088 low 16bits */
-	intel_dsi->clk_hs_to_lp_count = 0x0f;
+	intel_dsi->clk_hs_to_lp_count = 0x0d;
 	/* BTA sending at the last blanking line of VFP is disabled */
 	intel_dsi->video_frmt_cfg_bits = 1<<3;
 	intel_dsi->lane_count = 4;
@@ -338,39 +306,8 @@ bool bp080wx7_init(struct intel_dsi_device *dsi)
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
 	//dev_priv->mipi.panel_bpp = 24;
+
 	return true;
-#endif 
-/**********************merge from auo ean**********************************************/
-	intel_dsi->eotp_pkt = 1;
-        intel_dsi->operation_mode = DSI_VIDEO_MODE;
-        intel_dsi->video_mode_type = DSI_VIDEO_NBURST_SEVENT;
-        intel_dsi->pixel_format = VID_MODE_FORMAT_RGB888;
-        intel_dsi->port_bits = 0;
-        intel_dsi->turn_arnd_val = 0x14;
-        intel_dsi->rst_timer_val = 0xffff;
-        intel_dsi->bw_timer = 0x820;
-        /*b044*/
-        intel_dsi->hs_to_lp_count = 0x18;
-        /*b060*/
-        intel_dsi->lp_byte_clk = 0x03;
-        /*b080*/
-        intel_dsi->dphy_reg = 0x170d340b;
-        /* b088 high 16bits */
-        intel_dsi->clk_lp_to_hs_count = 0x1e;
-        /* b088 low 16bits */
-        intel_dsi->clk_hs_to_lp_count = 0x0d;
-        /* BTA sending at the last blanking line of VFP is disabled */
-        intel_dsi->video_frmt_cfg_bits = 1<<3;
-        intel_dsi->lane_count = 4;
-
-        intel_dsi->backlight_off_delay = 20;
-        intel_dsi->send_shutdown = true;
-        intel_dsi->shutdown_pkt_delay = 20;
-        //dev_priv->mipi.panel_bpp = 24;
-
-        return true;
-
-
 }
 
 

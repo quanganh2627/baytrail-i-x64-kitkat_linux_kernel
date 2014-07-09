@@ -204,15 +204,12 @@ static inline struct intel_dsi *enc_to_intel_dsi(struct drm_encoder *encoder)
 
 extern void vlv_enable_dsi_pll(struct intel_encoder *encoder);
 extern void vlv_disable_dsi_pll(struct intel_encoder *encoder);
-
 extern struct intel_dsi_dev_ops auo_b101uan01_dsi_display_ops;
 extern struct intel_dsi_dev_ops panasonic_vvx09f006a00_dsi_display_ops;
 extern struct intel_dsi_dev_ops auo_b080xat_dsi_display_ops;
 extern struct intel_dsi_dev_ops jdi_lpm070w425b_dsi_display_ops;
 extern struct intel_dsi_dev_ops vbt_generic_dsi_display_ops;
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED
 extern struct intel_dsi_dev_ops tc35876x_dsi_display_ops;
-#endif
 extern struct intel_dsi_dev_ops auo_b080ean011_dsi_display_ops;
 extern struct intel_dsi_dev_ops auo_b080xan020_dsi_display_ops;
 extern struct intel_dsi_dev_ops rayken_rk785x32a1ci_dsi_display_ops;
@@ -223,18 +220,23 @@ extern struct intel_dsi_dev_ops cpt_claa080wq05_dsi_display_ops;
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 
 #define	MIPI_DSI_UNDEFINED_PANEL_ID			0x00
+#define LVDS_DSI_TC35876X_AUTO_DETECT			0xFF
 #define	MIPI_DSI_GENERIC_PANEL_ID			0x01
 #define	MIPI_DSI_AUO_B101UAN01_PANEL_ID			0x02
 #define	MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID	0x03
 #define	MIPI_DSI_AUO_B080XAT_PANEL_ID			0x04
 #define	MIPI_DSI_JDI_LPM070W425B_PANEL_ID		0x05
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED
-#define MIPI_DSI_TOSHIBA_TC35876X_PANEL_ID              0x08
-#endif
-#define MIPI_DSI_AUO_B080EAN01_PANEL_ID                 0x06
-#define MIPI_DSI_AUO_B080XAN020_PANEL_ID                0x07
-#define MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID		0x09
-#define MIPI_DSI_BOE_BP080WX7_PANEL_ID                  0x0A
-#define MIPI_DSI_BOE_BP070WX2_PANEL_ID                  0x0B
-#define MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID 		0x0C
+#define MIPI_DSI_AUO_B080EAN01_PANEL_ID			0x06
+#define MIPI_DSI_AUO_B080XAN020_PANEL_ID		0x07
+#define MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID		0x08
+#define MIPI_DSI_BOE_BP080WX7_PANEL_ID			0x09
+#define MIPI_DSI_BOE_BP070WX2_PANEL_ID			0x0A
+#define MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID		0x0B
+/*LVDS supported list based on Toshiba Video Bridge*/
+#define LVDS_DSI_TC35876X_CPT_CLAA070WP03		0x20
+#define LVDS_DSI_TC35876X_CDY_BI097XN0			0x21
+#define LVDS_DSI_TC35876X_AUO_B101EAN01_2		0x22
+#define LVDS_DSI_TC35876X_AUO_B101XTN01_1		0x23
+#define LVDS_DSI_TC35876X_CMI_N101ICG_L21		0x24
+#define LVDS_DSI_TC35876X_BOE_BP101WX4_300		0x25
 #endif /* _INTEL_DSI_H */

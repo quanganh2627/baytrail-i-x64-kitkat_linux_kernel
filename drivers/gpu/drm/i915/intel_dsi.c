@@ -39,87 +39,120 @@
 
 /* the sub-encoders aka panel drivers */
 static const struct intel_dsi_device intel_dsi_devices[] = {
-	{
-		.panel_id = MIPI_DSI_GENERIC_PANEL_ID,
-		.type = INTEL_DSI_VIDEO_MODE,
-		.name = "vbt-generic-dsi-vid-mode-display",
-		.dev_ops = &vbt_generic_dsi_display_ops,
-	},
-	{
-		.panel_id = MIPI_DSI_AUO_B101UAN01_PANEL_ID,
-		.type = INTEL_DSI_VIDEO_MODE,
-		.name = "auo-b101uan01-dsi-vid-mode-display",
-		.dev_ops = &auo_b101uan01_dsi_display_ops,
-	},
-	{
-		.panel_id = MIPI_DSI_AUO_B080XAT_PANEL_ID,
-		.type = INTEL_DSI_VIDEO_MODE,
-		.name = "auo-b080xat-dsi-vid-mode-display",
-		.dev_ops = &auo_b080xat_dsi_display_ops,
-	},
-	{
-		.panel_id = MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID,
-		.type = INTEL_DSI_VIDEO_MODE,
-		.name = "auo-panasonic-dsi-vid-mode-display",
-		.dev_ops = &panasonic_vvx09f006a00_dsi_display_ops,
-	},
-	{
-		.panel_id = MIPI_DSI_JDI_LPM070W425B_PANEL_ID,
-		.type = INTEL_DSI_VIDEO_MODE,
-		.name = "jdi-lpm070w425b-dsi-vid-mode-display",
-		.dev_ops = &jdi_lpm070w425b_dsi_display_ops,
-	},
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED
-        {
-                .panel_id = MIPI_DSI_TOSHIBA_TC35876X_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "toshiba-tc35876x-dsi-vid-mode-display",
-                .dev_ops = &tc35876x_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-#endif
-	{
-                .panel_id = MIPI_DSI_AUO_B080XAN020_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "auo-b080xan020-dsi-vid-mode-display",
-                .dev_ops = &auo_b080xan020_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-        {
-                .panel_id = MIPI_DSI_AUO_B080EAN01_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "auo-b080ean01-dsi-vid-mode-display",
-                .dev_ops = &auo_b080ean011_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-        {
-                .panel_id = MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "rayken-rk785x32a1ci-dsi-vid-mode-display",
-                .dev_ops = &rayken_rk785x32a1ci_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-	{
-                .panel_id = MIPI_DSI_BOE_BP080WX7_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "boe-bp080wx7-dsi-vid-mode-display",
-                .dev_ops = &boe_bp080wx7_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-	{
-                .panel_id = MIPI_DSI_BOE_BP070WX2_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "boe-bp070wx2-dsi-vid-mode-display",
-                .dev_ops = &boe_bp070wx2_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        },
-	{
-                .panel_id = MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID,
-                .type = INTEL_DSI_VIDEO_MODE,
-                .name = "cpt-claa080wq05-dsi-vid-mode-display",
-                .dev_ops = &cpt_claa080wq05_dsi_display_ops,
-                .lane_count = 4, /* XXX: this really doesn't belong here */
-        }
+		{
+			.panel_id = MIPI_DSI_GENERIC_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "vbt-generic-dsi-vid-mode-display",
+			.dev_ops = &vbt_generic_dsi_display_ops,
+		},
+		{
+			.panel_id = MIPI_DSI_AUO_B101UAN01_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "auo-b101uan01-dsi-vid-mode-display",
+			.dev_ops = &auo_b101uan01_dsi_display_ops,
+		},
+		{
+			.panel_id = MIPI_DSI_AUO_B080XAT_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "auo-b080xat-dsi-vid-mode-display",
+			.dev_ops = &auo_b080xat_dsi_display_ops,
+		},
+		{
+			.panel_id = MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "auo-panasonic-dsi-vid-mode-display",
+			.dev_ops = &panasonic_vvx09f006a00_dsi_display_ops,
+		},
+		{
+			.panel_id = MIPI_DSI_JDI_LPM070W425B_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "jdi-lpm070w425b-dsi-vid-mode-display",
+			.dev_ops = &jdi_lpm070w425b_dsi_display_ops,
+		},
+		{
+			.panel_id = MIPI_DSI_AUO_B080XAN020_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "auo-b080xan020-dsi-vid-mode-display",
+			.dev_ops = &auo_b080xan020_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = MIPI_DSI_AUO_B080EAN01_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "auo-b080ean01-dsi-vid-mode-display",
+			.dev_ops = &auo_b080ean011_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "rayken-rk785x32a1ci-dsi-vid-mode-display",
+			.dev_ops = &rayken_rk785x32a1ci_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = MIPI_DSI_BOE_BP080WX7_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "boe-bp080wx7-dsi-vid-mode-display",
+			.dev_ops = &boe_bp080wx7_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = MIPI_DSI_BOE_BP070WX2_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "boe-bp070wx2-dsi-vid-mode-display",
+			.dev_ops = &boe_bp070wx2_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "cpt-claa080wq05-dsi-vid-mode-display",
+			.dev_ops = &cpt_claa080wq05_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_CPT_CLAA070WP03,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_CDY_BI097XN0,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_AUO_B101EAN01_2,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_AUO_B101XTN01_1,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_CMI_N101ICG_L21,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
+		{
+			.panel_id = LVDS_DSI_TC35876X_BOE_BP101WX4_300,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "toshiba-tc35876x-dsi-vid-mode-display",
+			.dev_ops = &tc35876x_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		}
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
@@ -217,7 +250,7 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	/* Panel Enable */
 	if (BYT_CR_CONFIG) {
 		/*  cabc disable */
-	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){		
+	if(((dev_priv->mipi_panel_id) < LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){		
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);}
 
@@ -265,9 +298,9 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), DEVICE_READY,
 			DEVICE_READY | ULPS_STATE_MASK);
 	usleep_range(2000, 2500);
-if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id == MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){	
-        vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-        vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
+if(((dev_priv->mipi_panel_id) >= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id == MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){	
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005); //high
         usleep_range(1000, 2000);	}
 	
 }
@@ -432,7 +465,7 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder)
 	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
 	tmp &= ~VID_MODE_FORMAT_MASK;
 	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
-	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
+	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	tmp = I915_READ(MIPI_DEVICE_READY(pipe));
@@ -555,7 +588,7 @@ static void set_dsi_timings(struct drm_encoder *encoder,
 	 * clock is to be filled with NULL packets. Refer to acer panel
 	 * spec for more details.
 	 */
-	if ((dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAT_PANEL_ID) || (dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID)|| (dev_priv->mipi_panel_id == MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
+	if (((dev_priv->mipi_panel_id) >= LVDS_DSI_TC35876X_CPT_CLAA070WP03) || (dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID) || (dev_priv->mipi_panel_id == MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 		hactive = (hactive * 10) / 8;
 
 	I915_WRITE(MIPI_HACTIVE_AREA_COUNT(pipe), hactive);
@@ -667,7 +700,7 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 		I915_WRITE(MIPI_DBI_BW_CTRL(pipe), intel_dsi->bw_timer);
 	}
-	if((dev_priv->mipi_panel_id != 8) || (dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)|| (dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
+	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) || (dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)|| (dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -698,7 +731,7 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 	if (intel_dsi->clock_stop)
 		val |= CLOCKSTOP;
-	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
+	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
 
 	val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
@@ -853,7 +886,7 @@ void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 		 * commands to panel */
 
 		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
-		if((dev_priv->mipi_panel_id != 8) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
+		if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 		val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -957,10 +990,7 @@ bool intel_dsi_init(struct drm_device *dev)
 	 * If no  param and no VBT initialize with
 	 * default ASUS panel ID for now */
 
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED
-i915_mipi_panel_id = MIPI_DSI_TOSHIBA_TC35876X_PANEL_ID;
-#else
-#endif
+i915_mipi_panel_id = LVDS_DSI_TC35876X_CDY_BI097XN0;
 	if (i915_mipi_panel_id <= 0) {
 		/* check if panel id available from VBT */
 		if (!dev_priv->vbt.dsi.panel_id) {

@@ -40,20 +40,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 
-
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_AUO_B101XTN01_1
-#define AUO_B101XTN01_1
-#elif defined (CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_AUO_B101EAN02_0)
-#define AUO_B101EAN01_2
-#elif defined (CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CPT_CLA070WP03)
-#define CLA_A070WP03
-#elif defined (CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG)
-#define CMI_N101ICG
-#elif defined (CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CENTURY_BI097XN02)
-#define CENTURY_BI097XN02
-#else
-#define AUO_B101XTN01_1
-#endif
 //TC358764XBG
 /*GPIO Pins */
 #define GPIO_MIPI_BRIDGE_RESET	153		//GPIO_S5_23 changed to PANEL0_BKLTCTL/GPIONC_5
@@ -61,22 +47,6 @@
 #define GPIO_PANEL_STANDBY	154		//GPIO_S5_8 SOC_LCD_PWDN
 #define GPIO_PANEL_EN		58			//GPIO_S0_58 //Do not require , in AIC , PANEL Power connected to 3P3S +V3P3S_LCD
 
-#ifdef CENTURY_BI097XN02
-#define TC35876X_PANEL_WIDTH	196
-#define TC35876X_PANEL_HEIGHT	147
-#elif defined CLA_A070WP03
-#define TC35876X_PANEL_WIDTH    150
-#define TC35876X_PANEL_HEIGHT   94
-#elif defined AUO_B101XTN01_1
-#define TC35876X_PANEL_WIDTH    243
-#define TC35876X_PANEL_HEIGHT   147	
-#elif defined AUO_B101EAN01_2
-#define TC35876X_PANEL_WIDTH    227
-#define TC35876X_PANEL_HEIGHT   147
-#elif defined CMI_N101ICG
-#define TC35876X_PANEL_WIDTH    262
-#define TC35876X_PANEL_HEIGHT   144		
-#endif
 /* bridge registers */
 /* DSI PPI Layer Registers */
 #define PPI_STARTPPI		0x0104
@@ -391,17 +361,14 @@ void tc35876x_configure_lvds_bridge(void)
 
 	DRM_DEBUG_KMS("\n");
 	
-
 	tc35876x_regr(i2c, IDREG, &id);
 	DRM_INFO("tc35876x ID 0x%08x\n", id);
-
 
 	ppi_lptxtimecnt = 4;
 	txtagocnt = (5 * ppi_lptxtimecnt - 3) / 4;
 	txtasurecnt = 3 * ppi_lptxtimecnt / 2;
 
-	tc35876x_regw(i2c, PPI_TX_RX_TA, FLD_VAL(txtagocnt, 26, 16) |
-		FLD_VAL(txtasurecnt, 10, 0));
+	tc35876x_regw(i2c, PPI_TX_RX_TA, FLD_VAL(txtagocnt, 26, 16) |FLD_VAL(txtasurecnt, 10, 0));
 	tc35876x_regw(i2c, PPI_LPTXTIMECNT, FLD_VAL(ppi_lptxtimecnt, 10, 0));
 	tc35876x_regw(i2c, PPI_D0S_CLRSIPOCOUNT, FLD_VAL(1, 5, 0));
 	tc35876x_regw(i2c, PPI_D1S_CLRSIPOCOUNT, FLD_VAL(1, 5, 0));
@@ -421,12 +388,11 @@ void tc35876x_configure_lvds_bridge(void)
 
 	/* Setting video panel control register,0x00000120 VTGen=ON ?!?!? */
 //	tc35876x_regw(i2c, VPCTRL, BIT(5)|BIT(0)); //RGB666 
-	#ifdef	AUO_B101EAN01_2
+	if((LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id) || (LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id))
 	tc35876x_regw(i2c, VPCTRL, BIT(5)|BIT(8)); //RGB88
-	#else
+	else
 	//tc35876x_regw(i2c, VPCTRL, BIT(5)|BIT(0)); //RGB666
 	tc35876x_regw(i2c, VPCTRL, 0x00a00021); //RGB666
-	#endif
 	/* Horizontal back porch and horizontal pulse width. 0x00280028 */
 	tc35876x_regw(i2c, HTIM1, FLD_VAL(40, 24, 16) | FLD_VAL(40, 8, 0));
 
@@ -444,10 +410,7 @@ void tc35876x_configure_lvds_bridge(void)
 
 	/* Soft reset LCD controller. */
 	tc35876x_regw(i2c, SYSRST, BIT(2));
-	
-
-#ifdef AUO_B101EAN01_2	
-	{
+if((LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id) || (LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id)){
 	/*modify by PJ7 for grandhill&flaghill LCD,2013-07-01*/
 	tc35876x_regw(i2c, LVMX0003,
 		INPUT_MUX(INPUT_R3, INPUT_R2, INPUT_R1, INPUT_R0));
@@ -464,9 +427,7 @@ void tc35876x_configure_lvds_bridge(void)
 	tc35876x_regw(i2c, LVMX2427,
 		INPUT_MUX(INPUT_R6, INPUT_DE, INPUT_VSYNC, INPUT_HSYNC));
 	/*modify end*/
-	}
-#else
-	{
+	}else{
         /*modify by lucheng megered from MFLD */
        tc35876x_regw(i2c, LVMX0003,
                 INPUT_MUX(INPUT_R5, INPUT_R4, INPUT_R3, INPUT_R2));
@@ -484,8 +445,6 @@ void tc35876x_configure_lvds_bridge(void)
                 INPUT_MUX(INPUT_R0, INPUT_DE, INPUT_VSYNC, INPUT_HSYNC));
         /*modify end*/
         }
-
-#endif
 	/* Enable LVDS transmitter. */
 	tc35876x_regw(i2c, LVCFG, BIT(0));
 	/* Clear notifications. Don't write reserved bits. Was write 0xffffffff
@@ -503,8 +462,34 @@ static void  tc35876x_get_panel_info(int pipe,
 	}
 
 	if (pipe == 0) {
-		connector->display_info.width_mm = TC35876X_PANEL_WIDTH;
-		connector->display_info.height_mm = TC35876X_PANEL_HEIGHT;
+		if(LVDS_DSI_TC35876X_CPT_CLAA070WP03 == i915_mipi_panel_id){
+			connector->display_info.width_mm = 150;
+			connector->display_info.height_mm = 94;
+			}
+		else if(LVDS_DSI_TC35876X_AUO_B101XTN01_1 == i915_mipi_panel_id){
+			connector->display_info.width_mm = 243;
+			connector->display_info.height_mm = 147;
+			}
+		else if(LVDS_DSI_TC35876X_CMI_N101ICG_L21 == i915_mipi_panel_id){
+			connector->display_info.width_mm = 262;
+			connector->display_info.height_mm = 144;
+			}
+		else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+			connector->display_info.width_mm = 196;
+			connector->display_info.height_mm = 147;
+			}
+		else if(LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id){
+			connector->display_info.width_mm = 227;
+			connector->display_info.height_mm = 147;
+			}
+		else if(LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id) {
+			connector->display_info.width_mm = 216;
+			connector->display_info.height_mm = 135;
+			}
+		else{
+			DRM_DEBUG_KMS("tc35876x_get_panel_info enter oops !!!");
+			}
+
 	}
 
 	return;
@@ -533,69 +518,65 @@ static struct drm_display_mode *tc35876x_get_modes(
 		DRM_DEBUG_KMS("panel: No memory\n");
 		return NULL;
 	}
-#ifdef CLA_A070WP03
-	DRM_DEBUG_KMS("tc35876x_get_modes enter CLA_A070WP03");
-	mode->hdisplay = 800;
-	mode->vdisplay = 1280;
-	mode->hsync_start = mode->hdisplay + 20;
-	mode->hsync_end = mode->hsync_start + 24;
-	mode->htotal = mode->hsync_end + 20;
+	if(LVDS_DSI_TC35876X_CPT_CLAA070WP03 == i915_mipi_panel_id){
+		DRM_DEBUG_KMS("tc35876x_get_modes enter CLA_A070WP03");
+		mode->hdisplay = 800;
+		mode->vdisplay = 1280;
+		mode->hsync_start = mode->hdisplay + 20;
+		mode->hsync_end = mode->hsync_start + 24;
+		mode->htotal = mode->hsync_end + 20;
+		mode->vsync_start = mode->vdisplay + 3;
+		mode->vsync_end = mode->vsync_start + 2;
+		mode->vtotal = mode->vsync_end +3;
+		}
+	else if(LVDS_DSI_TC35876X_AUO_B101XTN01_1 == i915_mipi_panel_id){
+		DRM_DEBUG_KMS("tc35876x_get_modes enter AUO_B101XTN01_1");
+		mode->hdisplay = 1364;
+		mode->vdisplay = 768;
+		mode->hsync_start = mode->hdisplay + 30;
+		mode->hsync_end = mode->hsync_start + 30;
+		mode->htotal = mode->hsync_end + 30;
+		mode->vsync_start = mode->vdisplay + 10;
+		mode->vsync_end = mode->vsync_start + 10;
+		mode->vtotal = mode->vsync_end + 36;
+		}
+	else if(LVDS_DSI_TC35876X_CMI_N101ICG_L21 == i915_mipi_panel_id){
+		DRM_DEBUG_KMS("tc35876x_get_modes enter CMI_N101ICG");
+		mode->hdisplay = 1280;
+		mode->vdisplay = 800;
+		mode->hsync_start = mode->hdisplay + 48;  //HFP
+		mode->hsync_end = mode->hsync_start + 32; //HSYNC
+		mode->htotal = mode->hsync_end + 80; //HBP
+		mode->vsync_start = mode->vdisplay + 8; //VFP
+		mode->vsync_end = mode->vsync_start + 7; //VSYNC
+		mode->vtotal = mode->vsync_end +8; //HBP
+		}
+	else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+		DRM_DEBUG_KMS("tc35876x_get_modes enter CENTURY_BI097XN02");
+		mode->hdisplay = 1024;
+		mode->vdisplay = 768;
+		mode->hsync_start = mode->hdisplay + 30;  //HFP
+		mode->hsync_end = mode->hsync_start + 20; //HSYNC
+		mode->htotal = mode->hsync_end + 30; //HBP
+		mode->vsync_start = mode->vdisplay + 16; //VFP
+		mode->vsync_end = mode->vsync_start + 10; //VSYNC
+		mode->vtotal = mode->vsync_end +16; //HBP
+		}
+	else if((LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id) ||(LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id)) {
+		DRM_DEBUG_KMS("tc35876x_get_modes enter AUO_B101EAN01_2");
+		mode->hdisplay = 1280;
+		mode->vdisplay = 800;
+		mode->hsync_start = mode->hdisplay + 30;  //HFP
+		mode->hsync_end = mode->hsync_start + 20; //HSYNC
+		mode->htotal = mode->hsync_end + 30; //HBP
+		mode->vsync_start = mode->vdisplay + 4; //VFP
+		mode->vsync_end = mode->vsync_start + 2; //VSYNC
+		mode->vtotal = mode->vsync_end +4; //HBP
+		}
+	else{
+		DRM_DEBUG_KMS("tc35876x_get_modes enter oops !!!");
+		}
 
-	mode->vsync_start = mode->vdisplay + 3;
-	mode->vsync_end = mode->vsync_start + 2;
-	mode->vtotal = mode->vsync_end +3;
-#endif
-#ifdef AUO_B101XTN01_1
-	DRM_DEBUG_KMS("tc35876x_get_modes enter AUO_B101XTN01_1");
-	mode->hdisplay = 1364;
-	mode->vdisplay = 768;
-	mode->hsync_start = mode->hdisplay + 30;
-	mode->hsync_end = mode->hsync_start + 30;
-	mode->htotal = mode->hsync_end + 30;
-
-	mode->vsync_start = mode->vdisplay + 10;
-	mode->vsync_end = mode->vsync_start + 10;
-	mode->vtotal = mode->vsync_end + 36;
- 
-#endif
-#ifdef CMI_N101ICG
-	 DRM_DEBUG_KMS("tc35876x_get_modes enter CMI_N101ICG");
-	mode->hdisplay = 1280;
-	mode->vdisplay = 800;
-	mode->hsync_start = mode->hdisplay + 48;  //HFP
-	mode->hsync_end = mode->hsync_start + 32; //HSYNC
-	mode->htotal = mode->hsync_end + 80; //HBP
-
-	mode->vsync_start = mode->vdisplay + 8; //VFP
-	mode->vsync_end = mode->vsync_start + 7; //VSYNC
-	mode->vtotal = mode->vsync_end +8; //HBP
-#endif
-#ifdef CENTURY_BI097XN02
-	DRM_DEBUG_KMS("tc35876x_get_modes enter CENTURY_BI097XN02");
-        mode->hdisplay = 1024;
-        mode->vdisplay = 768;
-        mode->hsync_start = mode->hdisplay + 450;  //HFP
-        mode->hsync_end = mode->hsync_start + 160; //HSYNC
-        mode->htotal = mode->hsync_end + 450; //HBP
-
-        mode->vsync_start = mode->vdisplay + 16; //VFP
-        mode->vsync_end = mode->vsync_start + 10; //VSYNC
-        mode->vtotal = mode->vsync_end +16; //HBP
-	
-#endif
-#ifdef AUO_B101EAN01_2
-	DRM_DEBUG_KMS("tc35876x_get_modes enter AUO_B101EAN01_2");
-	mode->hdisplay = 1280;
-        mode->vdisplay = 800;
-        mode->hsync_start = mode->hdisplay + 30;  //HFP
-        mode->hsync_end = mode->hsync_start + 20; //HSYNC
-        mode->htotal = mode->hsync_end + 30; //HBP
-
-        mode->vsync_start = mode->vdisplay + 4; //VFP
-        mode->vsync_end = mode->vsync_start + 2; //VSYNC
-        mode->vtotal = mode->vsync_end +4; //HBP
-
-#endif	
 	mode->vrefresh = 60;
 	mode->clock = mode->vrefresh * mode->htotal * mode->vtotal / 1000;
 	DRM_DEBUG_KMS("hdisplay is %d\n", mode->hdisplay);
@@ -607,9 +588,7 @@ static struct drm_display_mode *tc35876x_get_modes(
 	DRM_DEBUG_KMS("VSE is %d\n", mode->vsync_end);
 	DRM_DEBUG_KMS("vtotal is %d\n", mode->vtotal);
 	DRM_DEBUG_KMS("clock is %d\n", mode->clock);
-
 	//mode->type |= DRM_MODE_TYPE_PREFERRED;
-
 	drm_mode_set_name(mode);
 	drm_mode_set_crtcinfo(mode, 0);
 	mode->type |= DRM_MODE_TYPE_PREFERRED;
@@ -684,34 +663,16 @@ static void tc35876x_enable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct intel_dsi *intel_dsi_clone = container_of(dsi, struct intel_dsi, dev);
-        struct drm_device *dev = intel_dsi->base.base.dev;
-        struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_device *dev = intel_dsi->base.base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	bool old_value;
-	DRM_DEBUG_KMS(" reset issued here\n"); 
-/***************************************************************************************/
-	dev_priv = dev_priv;
-//        vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-//        vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-//        usleep_range(1000, 2000);
-//        vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-//        usleep_range(1000, 2000);
-
 	DRM_DEBUG_KMS("Config bridge chip in enable function\n");
-        old_value = 0;
-        old_value = intel_dsi_clone->hs;
-        intel_dsi_clone->hs = 0;
-        tc35876x_configure_lvds_bridge();
-        intel_dsi_clone->hs = old_value;	
-
-
-/***************************************************************************************/
-
-#if 0
-	dsi_vc_dcs_write_0(intel_dsi,0,0x11);
-	msleep(50);
-	dsi_vc_dcs_write_0(intel_dsi,0,0x29);
-	msleep(50);
-#endif
+	old_value = 0;
+	dev_priv = dev_priv;
+	old_value = intel_dsi_clone->hs;
+	intel_dsi_clone->hs = 0;
+	tc35876x_configure_lvds_bridge();
+	intel_dsi_clone->hs = old_value;	
 }
 static void tc35876x_disable(struct intel_dsi_device *dsi)
 {
@@ -721,16 +682,16 @@ static void tc35876x_disable(struct intel_dsi_device *dsi)
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);                                                                                           
 	DRM_DEBUG_KMS("\n");
 	dsi_vc_dcs_write_0(intel_dsi,0,0x11);
-        msleep(50);
-        dsi_vc_dcs_write_0(intel_dsi,0,0x29);
-        msleep(50);
+	msleep(50);
+	dsi_vc_dcs_write_0(intel_dsi,0,0x29);
+	msleep(50);
 #endif
 }
 
 bool tc35876x_init(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-	
+
 #ifdef BRIDGE_INT_CMD_WITH_I2C
 
 	/* schematic's i2c bus start at 0, but ACPI start at 1 */
@@ -769,73 +730,75 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 	 */
 
 	DRM_DEBUG_KMS("Init: tc35876x panel\n");
-	printk("Init: tc35876x panel\n");
 
 	if (!dsi) {
 		DRM_DEBUG_KMS("Init: Invalid input to tc35876x_init\n");
 		return false;
 	}
-#ifdef CLA_A070WP03
-	intel_dsi->dphy_reg = 0x160d3610;
 
+	if(LVDS_DSI_TC35876X_CPT_CLAA070WP03 == i915_mipi_panel_id){
+		intel_dsi->dphy_reg = 0x160d3610;
+		intel_dsi->hs_to_lp_count = 0x18;
+		intel_dsi->lp_byte_clk = 0x03;
+		intel_dsi->clk_lp_to_hs_count = 0x18;
+		intel_dsi->clk_hs_to_lp_count = 0x0b;
+		}
+	else if(LVDS_DSI_TC35876X_AUO_B101XTN01_1 == i915_mipi_panel_id){
+		//333M
+		/*b044*/
+		intel_dsi->hs_to_lp_count = 0x2B;
+		/*b060*/
+		intel_dsi->lp_byte_clk = 0x06;
+		/*b080*/
+		intel_dsi->dphy_reg = 0x2A18681F;
+		/* b088 high 16bits */
+		intel_dsi->clk_lp_to_hs_count = 0x2B;
+		/* b088 low 16bits */
+		intel_dsi->clk_hs_to_lp_count = 0x14;
+		}
+	else if(LVDS_DSI_TC35876X_CMI_N101ICG_L21 == i915_mipi_panel_id){
+		//333M
+		/*b044*/
+		intel_dsi->hs_to_lp_count = 0x2B;
+		/*b060*/
+		intel_dsi->lp_byte_clk = 0x06;
+		/*b080*/
+		intel_dsi->dphy_reg = 0x2A18681F;
+		/* b088 high 16bits */
+		intel_dsi->clk_lp_to_hs_count = 0x2B;
+		/* b088 low 16bits */
+		intel_dsi->clk_hs_to_lp_count = 0x14;
+		}
+	else if(LVDS_DSI_TC35876X_CDY_BI097XN0 == i915_mipi_panel_id){
+		//333M
+		/*b044*/
+		intel_dsi->hs_to_lp_count = 0x39;
+		/*b060*/
+		intel_dsi->lp_byte_clk = 0x08;
+		/*b080*/
+		intel_dsi->dphy_reg = 0x2A18681F;
+		/* b088 high 16bits */
+		intel_dsi->clk_lp_to_hs_count = 0x39;
+		/* b088 low 16bits */
+		intel_dsi->clk_hs_to_lp_count = 0x1A;
+		}
+	else if((LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id) ||(LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id)) {
+		//333M
+		/*b044*/
+		intel_dsi->hs_to_lp_count = 0x27;
+		/*b060*/
+		intel_dsi->lp_byte_clk = 0x05;
+		/*b080*/
+		intel_dsi->dphy_reg = 0x2A18681F;
+		/* b088 high 16bits */
+		intel_dsi->clk_lp_to_hs_count = 0x27;
+		/* b088 low 16bits */
+		intel_dsi->clk_hs_to_lp_count = 0x12;
+		}
+	else{
+		DRM_DEBUG_KMS("tc35876x_init enter oops !!!");
+		}
 
-	intel_dsi->hs_to_lp_count = 0x18;
-	intel_dsi->lp_byte_clk = 0x03;
-	intel_dsi->clk_lp_to_hs_count = 0x18;
-	intel_dsi->clk_hs_to_lp_count = 0x0b;
-#endif
-#ifdef AUO_B101XTN01_1
-   //333M
-	/*b044*/
-	intel_dsi->hs_to_lp_count = 0x2B;
-	/*b060*/
-	intel_dsi->lp_byte_clk = 0x06;
-	/*b080*/
-	intel_dsi->dphy_reg = 0x2A18681F;
-	/* b088 high 16bits */
-	intel_dsi->clk_lp_to_hs_count = 0x2B;
-	/* b088 low 16bits */
-	intel_dsi->clk_hs_to_lp_count = 0x14;
-#endif
-#ifdef CMI_N101ICG
-   //333M
-	/*b044*/
-	intel_dsi->hs_to_lp_count = 0x2B;
-	/*b060*/
-	intel_dsi->lp_byte_clk = 0x06;
-	/*b080*/
-	intel_dsi->dphy_reg = 0x2A18681F;
-	/* b088 high 16bits */
-	intel_dsi->clk_lp_to_hs_count = 0x2B;
-	/* b088 low 16bits */
-	intel_dsi->clk_hs_to_lp_count = 0x14;
-#endif
-#ifdef CENTURY_BI097XN02
-   //333M
-        /*b044*/
-        intel_dsi->hs_to_lp_count = 0x39;
-        /*b060*/
-        intel_dsi->lp_byte_clk = 0x08;
-        /*b080*/
-        intel_dsi->dphy_reg = 0x2A18681F;
-        /* b088 high 16bits */
-        intel_dsi->clk_lp_to_hs_count = 0x39;
-        /* b088 low 16bits */
-        intel_dsi->clk_hs_to_lp_count = 0x1A;
-#endif
-#ifdef AUO_B101EAN01_2
-//333M
-        /*b044*/
-        intel_dsi->hs_to_lp_count = 0x27;
-        /*b060*/
-        intel_dsi->lp_byte_clk = 0x05;
-        /*b080*/
-        intel_dsi->dphy_reg = 0x2A18681F;
-        /* b088 high 16bits */
-        intel_dsi->clk_lp_to_hs_count = 0x27;
-        /* b088 low 16bits */
-        intel_dsi->clk_hs_to_lp_count = 0x12;
-#endif
 	intel_dsi->eotp_pkt = 1;
 	intel_dsi->operation_mode = DSI_VIDEO_MODE;
 	intel_dsi->video_mode_type = DSI_VIDEO_BURST;//DSI_VIDEO_NBURST_SEVENT;
@@ -852,8 +815,7 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 	intel_dsi->backlight_off_delay = 20;
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
-	
-	
+
 #ifdef BRIDGE_INT_CMD_WITH_I2C
 	DRM_DEBUG_KMS("i2c init: tc35876x panel, busnum:%d\n",i2c_busnum);
 

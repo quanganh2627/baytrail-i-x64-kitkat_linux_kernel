@@ -130,7 +130,7 @@ void b080ean011_send_otp_cmds(struct intel_dsi_device *dsi)
 static void  b080ean011_get_panel_info(int pipe,
 					struct drm_connector *connector)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	if (!connector) {
 		DRM_DEBUG_KMS("Cpt: Invalid input to get_info\n");
 		return;
@@ -160,7 +160,7 @@ static struct drm_display_mode *b080ean011_get_modes(
 	struct intel_dsi_device *dsi)
 {
 	struct drm_display_mode *mode = NULL;
-DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	/* Allocate */
 	mode = kzalloc(sizeof(*mode), GFP_KERNEL);
 	if (!mode) {
@@ -183,7 +183,7 @@ DRM_DEBUG_KMS("\n");
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -196,7 +196,7 @@ DRM_DEBUG_KMS("\n");
 
 static bool b080ean011_get_hw_state(struct intel_dsi_device *dev)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return true;
 }
 
@@ -224,38 +224,24 @@ void b080ean011_panel_reset(struct intel_dsi_device *dsi)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(2000, 2500);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(85000, 90000);
-	msleep(20);
-#endif
 
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
-
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
-
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 }
 
 static int b080ean011_mode_valid(struct intel_dsi_device *dsi,
 		   struct drm_display_mode *mode)
 {
-    DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	return MODE_OK;
 }
 
@@ -274,7 +260,7 @@ static void b080ean011_enable(struct intel_dsi_device *dsi)
 	msleep(30);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x29);
 	msleep(30);
-  dsi_vc_dcs_write(intel_dsi, 0, auo_enable_ic_power, sizeof(auo_enable_ic_power));
+	dsi_vc_dcs_write(intel_dsi, 0, auo_enable_ic_power, sizeof(auo_enable_ic_power));
 }
 static void b080ean011_disable(struct intel_dsi_device *dsi)
 {
@@ -341,7 +327,6 @@ bool b080ean011_init(struct intel_dsi_device *dsi)
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
 	//dev_priv->mipi.panel_bpp = 24;
-
 	return true;
 }
 
@@ -363,5 +348,4 @@ struct intel_dsi_dev_ops auo_b080ean011_dsi_display_ops = {
 	.enable = b080ean011_enable,
 	.disable = b080ean011_disable,
 	.send_otp_cmds = b080ean011_send_otp_cmds,
-
 };

@@ -434,18 +434,6 @@ u32 intel_panel_get_max_backlight(struct drm_device *dev)
 		else
 			max = 255;
 #endif
-		if((dev_priv->mipi_panel_id == 7)||
-		(dev_priv->mipi_panel_id == 8)||
-		(dev_priv->mipi_panel_id == 9)||
-		(dev_priv->mipi_panel_id == MIPI_DSI_BOE_BP080WX7_PANEL_ID)||
-		(dev_priv->mipi_panel_id == MIPI_DSI_BOE_BP070WX2_PANEL_ID))
-		{
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG
-			max = 255;
-#else
-			max = 100;
-#endif
-		}
 		DRM_DEBUG_DRIVER("max backlight PWM = %d\n", max);
 		return max;
 	}
@@ -606,33 +594,25 @@ void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 	u32 max = intel_panel_get_max_backlight(dev);
 
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	
+	DRM_DEBUG_DRIVER("mipi_backlight level = %d\n", level);
 	if (BYT_CR_CONFIG) {
- 		/* FixMe: if level is zero still a pulse is observed consuming
- 		power. To fix this issue if requested level is zero then
- 		disable pwm and enabled it again if brightness changes */
-		if((dev_priv->mipi_panel_id == 7)||
-		(dev_priv->mipi_panel_id == 8)||
-		(dev_priv->mipi_panel_id == 9)||
-		(dev_priv->mipi_panel_id == MIPI_DSI_BOE_BP080WX7_PANEL_ID)||
-		(dev_priv->mipi_panel_id == MIPI_DSI_BOE_BP070WX2_PANEL_ID)){
- 		//intel_mid_pmic_writeb(0x4E, level);
- 	//	lpio_bl_write(0, LPIO_PWM_CTRL, 0x20c00);
- 	//	lpio_bl_update(0, LPIO_PWM_CTRL);
-#ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG
+	/* FixMe: if level is zero still a pulse is observed consuming
+	power. To fix this issue if requested level is zero then
+	disable pwm and enabled it again if brightness changes */
+	if((dev_priv->mipi_panel_id) >= MIPI_DSI_AUO_B080EAN01_PANEL_ID){
+		if(LVDS_DSI_TC35876X_CMI_N101ICG_L21 == dev_priv->mipi_panel_id)
 			level = level*0xfd/max + 100;
-#else
-			level = level*0xfd/max+10;
-
-#endif
-			DRM_DEBUG_DRIVER("mipi_backlight level calc = %d\n", level);
-
-			lpio_bl_write_bits(0, LPIO_PWM_CTRL, (0xFF - level) ,0xFF);
-
-			lpio_bl_update(0, LPIO_PWM_CTRL);
-		} else {
-			lpio_bl_write_bits(0, LPIO_PWM_CTRL, ( 0xFF-level), 0xFF);
-			lpio_bl_update(0, LPIO_PWM_CTRL);
-		}
+		else
+			level = level*0xfd/max + 10;
+	DRM_DEBUG_DRIVER("mipi_backlight level calc = %d\n", level);
+	lpio_bl_write_bits(0, LPIO_PWM_CTRL, (0xFF - level) ,0xFF);
+	lpio_bl_update(0, LPIO_PWM_CTRL);
+	}
+	else{
+	lpio_bl_write_bits(0, LPIO_PWM_CTRL, ( 0xFF-level), 0xFF);
+	lpio_bl_update(0, LPIO_PWM_CTRL);
+	}
 	} else
 		intel_mid_pmic_writeb(0x4E, level);
 #else

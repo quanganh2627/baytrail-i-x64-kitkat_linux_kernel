@@ -39,8 +39,6 @@
 #include "intel_dsi.h"
 #include "intel_dsi_cmd.h"
 #include "dsi_mod_rayken_rk785x32a1ci.h"
-
-
 #include "linux/lnw_gpio.h"
 #include "linux/gpio.h"
 
@@ -79,7 +77,7 @@ static struct drm_display_mode *rk785x32a1ci_get_modes(
 
 	mode->vrefresh = 60;
 	mode->clock =  mode->vrefresh * mode->vtotal *
-		mode->htotal / 1000;
+	mode->htotal / 1000;
 
 	/* Configure */
 	drm_mode_set_name(mode);
@@ -99,8 +97,8 @@ static void  rk785x32a1ci_get_panel_info(int pipe,
 	}
 
 	if (pipe == 0) {
-		connector->display_info.width_mm = 160;
-		connector->display_info.height_mm = 120;
+	connector->display_info.width_mm = 160;
+	connector->display_info.height_mm = 120;
 	}
 
 	return;
@@ -117,7 +115,7 @@ static enum drm_connector_status rk785x32a1ci_detect(
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	
+
 	dev_priv->is_mipi = true;	
 
 	return connector_status_connected;
@@ -135,26 +133,20 @@ void rk785x32a1ci_panel_reset(struct intel_dsi_device *dsi)
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	DRM_DEBUG_KMS("\n");
-#if 0
-	vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00); 
-	vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004); //low 
-	msleep(20); 
-	vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005); //high
-	msleep(20);
-#endif
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
 
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
+	/* panel disable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+	usleep_range(100000, 120000);
+
+	/* panel enable */
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 	
 }
 
@@ -174,7 +166,7 @@ static void rk785x32a1ci_enable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	//bool mode;
-	
+
 	DRM_DEBUG_KMS("\n");
 
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
@@ -240,9 +232,7 @@ bool rk785x32a1ci_init(struct intel_dsi_device *dsi)
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
 	//dev_priv->mipi.panel_bpp = 24;
-	
 	intel_dsi->lane_count = 4;
-
 	return true;
 }
 
@@ -250,14 +240,14 @@ bool rk785x32a1ci_init(struct intel_dsi_device *dsi)
 void rk785x32a1ci_send_otp_cmds(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-
+	
 	DRM_DEBUG_KMS("\n");
 
-    intel_dsi->hs = 0;
-    dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
-    msleep(100);
-
-    intel_dsi->hs = 1;
+	intel_dsi->hs = 0;
+	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
+	msleep(100);
+	
+	intel_dsi->hs = 1;
 
 }
 
@@ -269,7 +259,6 @@ void rk785x32a1ci_enable_panel_power(struct intel_dsi_device *dsi)
 
 	DRM_DEBUG_KMS("\n");
 
-
 }
 
 void rk785x32a1ci_disable_panel_power(struct intel_dsi_device *dsi)
@@ -279,7 +268,6 @@ void rk785x32a1ci_disable_panel_power(struct intel_dsi_device *dsi)
 //	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("\n");
-
 
 }
 
@@ -300,6 +288,6 @@ struct intel_dsi_dev_ops rayken_rk785x32a1ci_dsi_display_ops = {
 	.enable = rk785x32a1ci_enable,
 	.disable = rk785x32a1ci_disable,
 	.send_otp_cmds = rk785x32a1ci_send_otp_cmds,
-//	.enable_panel_power = rk785x32a1ci_enable_panel_power,
+	//.enable_panel_power = rk785x32a1ci_enable_panel_power,
 	.disable_panel_power = rk785x32a1ci_disable_panel_power,
 };
