@@ -36,6 +36,7 @@
 #include <linux/pwm.h>
 #include <linux/platform_data/lp855x.h>
 #include <asm/spid.h>
+#include "intel_dsi.h"
 
 #undef DRM_DEBUG_DRIVER
 #undef DRM_DEBUG_KMS
@@ -582,12 +583,21 @@ void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level)
 void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 {
 #ifdef CONFIG_CRYSTAL_COVE
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	if (BYT_CR_CONFIG) {
 		/* FixMe: if level is zero still a pulse is observed consuming
 		power. To fix this issue if requested level is zero then
 		disable pwm and enabled it again if brightness changes */
-		lpio_bl_write_bits(0, LPIO_PWM_CTRL, (0xff - level), 0xFF);
-		lpio_bl_update(0, LPIO_PWM_CTRL);
+		if(dev_priv->mipi_panel_id == 8) {
+			intel_mid_pmic_writeb(0x4E, level);
+			lpio_bl_write(0, LPIO_PWM_CTRL, 0x20c00);
+			lpio_bl_update(0, LPIO_PWM_CTRL);
+			lpio_bl_write_bits(0, LPIO_PWM_CTRL, 0x80000000,0x80000000);
+			lpio_bl_update(0, LPIO_PWM_CTRL);
+		} else {
+			lpio_bl_write_bits(0, LPIO_PWM_CTRL, ( 0xFF-level), 0xFF);
+			lpio_bl_update(0, LPIO_PWM_CTRL);
+		}
 	} else
 		intel_mid_pmic_writeb(0x4E, level);
 #else
@@ -706,6 +716,7 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 #ifdef CONFIG_CRYSTAL_COVE
 static void scheduled_led_chip_programming(struct work_struct *work)
 {
+if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)	{
 	lp855x_ext_write_byte(LP8556_CFG9,
 			LP8556_VBOOST_MAX_NA_21V |
 			LP8556_JUMP_DIS |
@@ -723,7 +734,7 @@ static void scheduled_led_chip_programming(struct work_struct *work)
 			LP8556_IBOOST_LIM_1_8A_NA);
 	lp855x_ext_write_byte(LP8556_LEDSTREN,
 			LP8556_5LEDSTR);
-
+}
 }
 #endif
 
@@ -809,11 +820,14 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 			/* Control Backlight Slope programming for LP8556 IC*/
 			if (lpdata && (spid.hardware_id == BYT_TABLET_BLK_8PR1)) {
 				mdelay(2);
+				if(dev_priv->mipi_panel_id == MIPI_DSI_PANASONIC_VXX09F006A00_PANEL_ID)
+				{
 				if (lp855x_ext_write_byte(LP8556_CFG3, LP8556_MODE_SL_50MS_FL_HV_PWM_12BIT))
 					DRM_ERROR("Backlight slope programming failed\n");
 				else
 					DRM_INFO("Backlight slope programming success\n");
 				mdelay(2);
+				}
 			}
 #endif
 		}
