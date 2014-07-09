@@ -52,7 +52,7 @@ extern void my_drm_ut_debug_printk(unsigned int request_level,
 #endif
 
 #ifdef CONFIG_MRD7
-extern void ps8622_send_init_cmd(void);
+extern void ps8622_send_init_cmd(struct intel_dp *intel_dp);
 extern int ps8622_init(void) ;
 #endif
 
@@ -81,11 +81,13 @@ intel_dp_init_edp_port(struct drm_device *dev)
 
 extern uint32_t g_widi_connect_status;
 static int
-	intel_dp_ctrl_lvds_panel(struct drm_device *dev, u32 ctrl)
+intel_dp_ctrl_lvds_panel(struct drm_device *dev, struct intel_dp *intel_dp, u32 ctrl)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int val;
 	int ret;
+	if (ctrl && intel_dp->bridge_setup_done)
+		return 1;
 	DRM_DEBUG_KMS("ctrl:%d, widi:%d\n", ctrl, g_widi_connect_status);
 	/*DLDO3*/
 	val = intel_mid_pmic_readb(0x12);
@@ -872,17 +874,15 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		bpp = dev_priv->vbt.edp_bpp;
 	}
 
-	/* @uma commented due to conflict */
-	/*
-	if (is_edp(intel_dp) && dev_priv->edp.bpp)
-		bpp = min_t(int, bpp, dev_priv->edp.bpp);
-	*/
 	if (is_edp(intel_dp) && dev_priv->vbt.edp_bpp) {
 		DRM_DEBUG_KMS("clamping bpp for eDP panel to BIOS-provided %i\n",
 			dev_priv->vbt.edp_bpp);
 		bpp = min_t(int, bpp, dev_priv->vbt.edp_bpp);
 	}
-
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
+		bpp = 24;
+		DRM_DEBUG_KMS("forcing the kernel bpp as 24!\n");
+#endif
 	if (is_edp(intel_dp))
 		pipe_config->dither = pipe_config->pipe_bpp == 18 ? 1 : 0;
 
@@ -920,7 +920,11 @@ found:
 	if (intel_dp->color_range)
 		pipe_config->limited_color_range = true;
 
+#if defined(CONFIG_MRD8)
+	intel_dp->link_bw = DP_LINK_BW_2_7;
+#else
 	intel_dp->link_bw = bws[clock];
+#endif
 	intel_dp->lane_count = lane_count;
 	pipe_config->pipe_bpp = bpp;
 	pipe_config->port_clock = drm_dp_bw_code_to_link_rate(intel_dp->link_bw);
@@ -2095,7 +2099,8 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	if (!(port == PORT_A || IS_VALLEYVIEW(dev)))
 		intel_dp_link_down(intel_dp);
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, 0);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp,  0);
+	intel_dp->bridge_setup_done = false;
 #endif
 }
 
@@ -2123,8 +2128,8 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 		return;
 	ironlake_edp_panel_vdd_on(intel_dp);
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, 1);
-	ps8622_send_init_cmd();
+	intel_dp_ctrl_lvds_panel(dev, intel_dp,  1);
+	ps8622_send_init_cmd(intel_dp);
 #endif
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
 	intel_dp_start_link_train(intel_dp);
@@ -3095,6 +3100,10 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 					   sizeof(intel_dp->dpcd)) == 0)
 		return false; /* aux transfer failed */
 
+#ifdef CONFIG_MRD8
+	intel_dp->dpcd[DP_MAX_LINK_RATE] = DP_LINK_BW_2_7;
+#endif
+
 	hex_dump_to_buffer(intel_dp->dpcd, sizeof(intel_dp->dpcd),
 			   32, 1, dpcd_hex_dump, sizeof(dpcd_hex_dump), false);
 	DRM_DEBUG_KMS("DPCD: %s\n", dpcd_hex_dump);
@@ -3388,7 +3397,9 @@ intel_dp_detect(struct drm_connector *connector, bool force)
 
 	if (status != connector_status_connected)
 		return status;
-
+#ifdef CONFIG_MRD7
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
+#endif
 	intel_dp_probe_oui(intel_dp);
 
 	if (intel_dp->force_audio != HDMI_AUDIO_AUTO) {
@@ -4007,8 +4018,9 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 	if (!is_edp(intel_dp))
 		return true;
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, 1);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
 	intel_dp_init_edp_port(dev);
+	ps8622_send_init_cmd(intel_dp);
 #endif
 	intel_dp_init_panel_power_sequencer(dev, intel_dp, &power_seq);
 
@@ -4087,8 +4099,11 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	enum port port = intel_dig_port->port;
 	const char *name = NULL;
 	int type, error;
+	DRM_DEBUG_KMS("\n");
+
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, 1);
+	intel_dp->bridge_setup_done = false;
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
 	intel_dp_init_edp_port(dev);
 #endif
 	/* Preserve the current hw state. */

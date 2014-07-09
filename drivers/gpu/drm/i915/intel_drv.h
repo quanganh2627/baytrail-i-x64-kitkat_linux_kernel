@@ -595,6 +595,7 @@ struct intel_dp {
 	bool psr_setup_done;
 	struct intel_connector *attached_connector;
 	struct drrs_info drrs_state;
+	bool bridge_setup_done;
 };
 
 struct intel_digital_port {
