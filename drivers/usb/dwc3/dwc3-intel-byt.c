@@ -224,7 +224,7 @@ static void set_sus_phy(struct dwc_otg2 *otg, int bit)
 	otg_write(otg, GUSB3PIPECTL0, data);
 }
 
-static int dwc3_check_gpio_id(struct dwc_otg2 *otg2)
+int dwc3_check_gpio_id(struct dwc_otg2 *otg2)
 {
 	struct dwc_otg2 *otg = dwc3_get_otg();
 	struct intel_dwc_otg_pdata *data;
@@ -271,6 +271,25 @@ static int dwc3_check_gpio_id(struct dwc_otg2 *otg2)
 
 	return -ENODEV;
 }
+
+void dwc3_trigger_gpio_id_check(void)
+{
+	struct dwc_otg2 *otg = dwc3_get_otg();
+	struct intel_dwc_otg_pdata *data;
+	int id;
+
+	data = (struct intel_dwc_otg_pdata *)otg->otg_data;
+
+	id = dwc3_check_gpio_id(otg);
+	if (id == 0 || id == 1) {
+		data->id = id;
+		dev_info(otg->dev, "[manually trigger] ID notification (id = %d)\n",
+			 data->id);
+		atomic_notifier_call_chain(&otg->usb2_phy.notifier,
+					   USB_EVENT_ID, &id);
+	}
+}
+EXPORT_SYMBOL(dwc3_trigger_gpio_id_check);
 
 static irqreturn_t dwc3_gpio_id_irq(int irq, void *dev)
 {

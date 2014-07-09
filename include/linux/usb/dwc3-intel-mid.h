@@ -22,6 +22,8 @@
 
 #include "otg.h"
 
+void dwc3_trigger_gpio_id_check(void);
+
 enum intel_mid_pmic_type {
 	NO_PMIC,
 	SHADY_COVE,

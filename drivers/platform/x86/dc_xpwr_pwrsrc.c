@@ -38,6 +38,7 @@
 #include <linux/mfd/intel_mid_pmic.h>
 #include <asm/dc_xpwr_pwrsrc.h>
 #include <linux/gpio.h>
+#include <linux/usb/dwc3-intel-mid.h>
 
 #define DC_PS_STAT_REG			0x00
 #define PS_STAT_VBUS_TRIGGER		(1 << 0)
@@ -523,6 +524,8 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 		ret = handle_pwrsrc_event(info);
 	if (ret < 0)
 		dev_warn(&info->pdev->dev, "error in PWRSRC evt handling\n");
+
+	dwc3_trigger_gpio_id_check();
 
 	return 0;
 

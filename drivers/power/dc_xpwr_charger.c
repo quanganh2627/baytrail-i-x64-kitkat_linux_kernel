@@ -42,6 +42,7 @@
 #include <linux/acpi.h>
 #include <linux/mfd/intel_mid_pmic.h>
 #include <linux/power/dc_xpwr_charger.h>
+#include <linux/usb/dwc3-intel-mid.h>
 
 #define DC_PS_STAT_REG			0x00
 #define PS_STAT_VBUS_TRIGGER		(1 << 0)
@@ -1017,6 +1018,8 @@ static int pmic_chrg_probe(struct platform_device *pdev)
 		goto psy_reg_failed;
 	}
 	INIT_DELAYED_WORK(&info->chrg_full_wrkr, xpwr_full_worker);
+
+	dwc3_trigger_gpio_id_check();
 
 	g_info = info;
 
