@@ -816,10 +816,14 @@ static void dc_xpwr_otg_event_worker(struct work_struct *work)
 
 	if (info->pdata->otg_gpio >= 0) {
 #if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
-		gpio_direction_output(info->pdata->otg_gpio, info->id_short);
-#else
-		gpio_direction_output(info->pdata->otg_gpio, !info->id_short);
+		ret = dc_xpwr_turn_otg_vbus(info, info->id_short);
+#else		
+		ret = dc_xpwr_turn_otg_vbus(info, !info->id_short);
 #endif
+		if (ret < 0)
+			dev_err(&info->pdev->dev,
+					"VBUS ON/OFF FAILED: %d\n",
+					ret);
 	}
 	mutex_unlock(&info->lock);
 }
