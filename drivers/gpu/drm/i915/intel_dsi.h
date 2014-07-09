@@ -217,6 +217,7 @@ extern struct intel_dsi_dev_ops boe_bp080wx7_dsi_display_ops;
 extern struct intel_dsi_dev_ops boe_bp070wx2_dsi_display_ops;
 extern struct intel_dsi_dev_ops cpt_claa080wq05_dsi_display_ops;
 extern struct intel_dsi_dev_ops n080ice_gb1_dsi_display_ops;
+extern struct intel_dsi_dev_ops sdc_bp080wx7_dsi_display_ops;
 
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 
@@ -234,6 +235,7 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 #define MIPI_DSI_BOE_BP070WX2_PANEL_ID			0x0A
 #define MIPI_DSI_CPT_CLAA080WQ05_PANEL_ID		0x0B
 #define MIPI_DSI_INNOLUX_N080ICE_PANEL_ID		0x0C
+#define MIPI_DSI_SDC_BP080WX7_PANEL_ID			0x0D
 /*LVDS supported list based on Toshiba Video Bridge*/
 #define LVDS_DSI_TC35876X_CPT_CLAA070WP03		0x20
 #define LVDS_DSI_TC35876X_CDY_BI097XN02			0x21
