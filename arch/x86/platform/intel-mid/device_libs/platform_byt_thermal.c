@@ -88,8 +88,8 @@ static struct intel_mid_thermal_sensor byt_cr_sensors[] = {
 	{
 		.name = "skin1",
 		.index = 1,
-		.slope = 914,
-		.intercept = 467,
+		.slope = 1000,
+		.intercept = 0,
 		.temp_correlation = linear_correlation,
 	},
 
