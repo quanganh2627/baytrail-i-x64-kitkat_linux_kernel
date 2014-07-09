@@ -434,7 +434,7 @@ u32 intel_panel_get_max_backlight(struct drm_device *dev)
 		else
 			max = 255;
 #endif
-		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7))
+		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7)||(dev_priv->mipi_panel_id == 9))
 		{
 #ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_CMI_N1ICG
 			max = 255;
@@ -604,7 +604,7 @@ void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 		/* FixMe: if level is zero still a pulse is observed consuming
 		power. To fix this issue if requested level is zero then
 		disable pwm and enabled it again if brightness changes */
-		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7)){
+		if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == 7)||(dev_priv->mipi_panel_id == 9)){
 			//intel_mid_pmic_writeb(0x4E, level);
 			//	lpio_bl_write(0, LPIO_PWM_CTRL, 0x20c00);
 			//	lpio_bl_update(0, LPIO_PWM_CTRL);
