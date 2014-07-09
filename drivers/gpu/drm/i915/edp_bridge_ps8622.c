@@ -53,7 +53,7 @@
 #undef DRM_DEBUG_KMS
 #define DRM_DEBUG_KMS(fmt, args...)				\
 	do {								\
-		my_drm_ut_debug_printk(DRM_UT_KMS, DRM_NAME, 		\
+		my_drm_ut_debug_printk(DRM_UT_KMS, DRM_NAME,		\
 					 __func__, fmt, ##args);	\
 	} while (0)
 extern void my_drm_ut_debug_printk(unsigned int request_level,
@@ -62,8 +62,8 @@ extern void my_drm_ut_debug_printk(unsigned int request_level,
 			 const char *format, ...);
 
 int ps8622_i2c_Read(struct i2c_client *client, u8 addr,
-        char *writebuf, int writelen, 
-        char *readbuf, int readlen)
+	char *writebuf, int writelen,
+	char *readbuf, int readlen)
 {
 	int ret = 0;
 
@@ -129,12 +129,12 @@ static int ps8622_send_config(struct i2c_client *client)
             DRM_DEBUG_KMS("not i2c client\n");
             return -ENODEV;
         }
-       	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-       	    DRM_DEBUG_KMS("i2c_check_functionality() failed\n");
-        		return -ENODEV;
-       	} else {
-       	    DRM_DEBUG_KMS("i2c_check_functionality() ok\n");
-       	}
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+		DRM_DEBUG_KMS("i2c_check_functionality() failed\n");
+			return -ENODEV;
+	} else {
+	    DRM_DEBUG_KMS("i2c_check_functionality() ok\n");
+	}
         usleep_range(2000, 5000);
         err |= ps8622_i2c_write(client, 0x14, 0xa1, 0x01); /* HPD low */
         /* SW setting */
@@ -213,14 +213,10 @@ static int ps8622_send_config(struct i2c_client *client)
                                                   * */
         err |= ps8622_i2c_write(client, 0x18, 0x10, 0x16); /* Enable SSC set by register
                                                   * */
-        err |= ps8622_i2c_write(client, 0x18, 0x59, 0x60); 
-
-        err |= ps8622_i2c_write(client, 0x18, 0x54, 0x14); 
-
-        err |= ps8622_i2c_write(client, 0x10, 0x3C, 0x40); 
-        err |= ps8622_i2c_write(client, 0x10, 0x05, 0x0C); 
-
-
+	err |= ps8622_i2c_write(client, 0x18, 0x59, 0x60);
+	err |= ps8622_i2c_write(client, 0x18, 0x54, 0x14);
+	err |= ps8622_i2c_write(client, 0x10, 0x3C, 0x40);
+	err |= ps8622_i2c_write(client, 0x10, 0x05, 0x0C);
         err |= ps8622_i2c_write(client, 0x14, 0xa1, 0x91); /* HPD high */
 
         usleep_range(2000, 5000);
@@ -250,7 +246,7 @@ int ps8622_bridge_probe(struct i2c_client *client,
 	ps8622_client = client;
 	return 0;
 }
-	
+
 static
 const struct i2c_device_id ps8622_bridge_id[] = {
 	{ "i2c_disp_brig", 0 },
@@ -267,32 +263,33 @@ struct i2c_driver ps8622_bridge_i2c_driver = {
 struct i2c_board_info ps8622_i2c_info = {
 		.type = "i2c_disp_brig",
 		.addr = 0x10,
-};	
+};
 
 int ps8622_init(void) {
     int ret = 0;
     int i2c_busnum = 4; /*  MRD 7 in I2C 3 */
     struct i2c_adapter *adapter;
 	  struct i2c_client *client;
-   	adapter = i2c_get_adapter(i2c_busnum);
-   	DRM_DEBUG_KMS("\n");
+	adapter = i2c_get_adapter(i2c_busnum);
+	DRM_DEBUG_KMS("\n");
     if (!adapter) {
-    		DRM_DEBUG_KMS("i2c_get_adapter(%d) failed\n", i2c_busnum);
-    		return -EINVAL;
+		DRM_DEBUG_KMS("i2c_get_adapter(%d) failed\n", i2c_busnum);
+		return -EINVAL;
     }
 
-	  client = i2c_new_device(adapter, &ps8622_i2c_info);
-   	if (!client) {
-    		DRM_DEBUG_KMS("i2c_new_device() failed\n");
-    		i2c_put_adapter(adapter);
-    		return -EINVAL;
-    }
-    ret = i2c_add_driver(&ps8622_bridge_i2c_driver);
-    if (ret) {
-    		DRM_DEBUG_KMS("add bridge I2C driver faild\n");
-    		return -EINVAL;
-    }
-    return 0;
+	client = i2c_new_device(adapter, &ps8622_i2c_info);
+	if (!client) {
+		DRM_DEBUG_KMS("i2c_new_device() failed\n");
+		i2c_put_adapter(adapter);
+		return -EINVAL;
+	}
+	ret = i2c_add_driver(&ps8622_bridge_i2c_driver);
+	if (ret) {
+		DRM_DEBUG_KMS("add bridge I2C driver faild\n");
+		i2c_unregister_device(client);
+		return -EINVAL;
+	}
+	return 0;
 }
 
 void ps8622_send_init_cmd(void) {
