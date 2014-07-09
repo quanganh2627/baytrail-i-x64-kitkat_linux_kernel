@@ -214,7 +214,7 @@ extern struct intel_dsi_dev_ops vbt_generic_dsi_display_ops;
 extern struct intel_dsi_dev_ops tc35876x_dsi_display_ops;
 #endif
 extern struct intel_dsi_dev_ops auo_b080ean011_dsi_display_ops;
-
+extern struct intel_dsi_dev_ops auo_b080xan020_dsi_display_ops;
 
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 
@@ -228,5 +228,5 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 #define MIPI_DSI_TOSHIBA_TC35876X_PANEL_ID              0x08
 #endif
 #define MIPI_DSI_AUO_B080EAN01_PANEL_ID                 0x06
-
+#define MIPI_DSI_AUO_B080XAN020_PANEL_ID                0x07
 #endif /* _INTEL_DSI_H */

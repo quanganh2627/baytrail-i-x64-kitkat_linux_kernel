@@ -78,6 +78,13 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
                 .lane_count = 4, /* XXX: this really doesn't belong here */
         },
 #endif
+	{
+                .panel_id = MIPI_DSI_AUO_B080XAN020_PANEL_ID,
+                .type = INTEL_DSI_VIDEO_MODE,
+                .name = "auo-b080xan020-dsi-vid-mode-display",
+                .dev_ops = &auo_b080xan020_dsi_display_ops,
+                .lane_count = 4, /* XXX: this really doesn't belong here */
+        },
         {
                 .panel_id = MIPI_DSI_AUO_B080EAN01_PANEL_ID,
                 .type = INTEL_DSI_VIDEO_MODE,
@@ -182,7 +189,7 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	/* Panel Enable */
 	if (BYT_CR_CONFIG) {
 		/*  cabc disable */
-	if(dev_priv->mipi_panel_id != 8){		
+	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)){		
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);}
 
@@ -230,7 +237,7 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), DEVICE_READY,
 			DEVICE_READY | ULPS_STATE_MASK);
 	usleep_range(2000, 2500);
-if(dev_priv->mipi_panel_id == 8){	
+if((dev_priv->mipi_panel_id == 8)||(dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID)){	
         vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
         vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
         usleep_range(1000, 2000);	}
@@ -397,7 +404,7 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder)
 	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
 	tmp &= ~VID_MODE_FORMAT_MASK;
 	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
-	if(dev_priv->mipi_panel_id != 8)
+	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID))
 		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	tmp = I915_READ(MIPI_DEVICE_READY(pipe));
@@ -520,7 +527,7 @@ static void set_dsi_timings(struct drm_encoder *encoder,
 	 * clock is to be filled with NULL packets. Refer to acer panel
 	 * spec for more details.
 	 */
-	if (dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAT_PANEL_ID)
+	if ((dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAT_PANEL_ID) || (dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID))
 		hactive = (hactive * 10) / 8;
 
 	I915_WRITE(MIPI_HACTIVE_AREA_COUNT(pipe), hactive);
@@ -632,7 +639,7 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 		I915_WRITE(MIPI_DBI_BW_CTRL(pipe), intel_dsi->bw_timer);
 	}
-	if(dev_priv->mipi_panel_id != 8)
+	if((dev_priv->mipi_panel_id != 8) || (dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -663,7 +670,7 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 	if (intel_dsi->clock_stop)
 		val |= CLOCKSTOP;
-	if(dev_priv->mipi_panel_id != 8)
+	if((dev_priv->mipi_panel_id != 8)||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
 
 	val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
@@ -818,7 +825,7 @@ void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 		 * commands to panel */
 
 		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
-		if(dev_priv->mipi_panel_id != 8)
+		if((dev_priv->mipi_panel_id != 8) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID))
 		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 		val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -921,7 +928,6 @@ bool intel_dsi_init(struct drm_device *dev)
 	 * If no kernel param use panel id from VBT
 	 * If no  param and no VBT initialize with
 	 * default ASUS panel ID for now */
-
 #ifdef CONFIG_DISPLAY_BRIDGE_TOSHIBA_TC35876X_ENABLED
 i915_mipi_panel_id = MIPI_DSI_TOSHIBA_TC35876X_PANEL_ID;
 #else
