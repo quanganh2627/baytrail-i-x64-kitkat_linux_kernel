@@ -686,6 +686,7 @@ static void mt_sync_frame(struct mt_device *td, struct input_dev *input)
 	input_mt_sync_frame(input);
 	input_sync(input);
 	td->num_received = 0;
+	td->num_expected = 0;
 }
 
 static int mt_touch_event(struct hid_device *hid, struct hid_field *field,
