@@ -37,8 +37,6 @@
 #endif
 static int camera_vprog1_on;
 static int gp_camera1_power_down;
-static int gp_camera1_reset;
-static int camera28_en;
 
 /*
  * GC0310 platform data
@@ -70,6 +68,7 @@ static int gc0310_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 		 * The GPIO value would be provided by ACPI table, which is
 		 * not implemented currently.
 		 */
+/*
 		pin = CAMERA_1_RESET;
 		if (gp_camera1_reset < 0) {
 			ret = gpio_request(pin, "camera_1_reset");
@@ -87,7 +86,7 @@ static int gc0310_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 			gpio_free(pin);
 			return ret;
 		}
-
+*/
 		/*
 		 * FIXME: WA using hardcoded GPIO value here.
 		 * The GPIO value would be provided by ACPI table, which is
@@ -119,16 +118,15 @@ static int gc0310_gpio_ctrl(struct v4l2_subdev *sd, int flag)
 	if (flag) {
 		gpio_set_value(gp_camera1_power_down, 0);
 
-		msleep(20);
-		gpio_set_value(gp_camera1_reset, 1);
+		msleep(10);
+		gpio_set_value(gp_camera1_power_down, 1);
+		msleep(10);
+		gpio_set_value(gp_camera1_power_down, 0);
 	} else {
 
 		gpio_set_value(gp_camera1_power_down, 1);
 
-		gpio_set_value(gp_camera1_reset, 0);
-		gpio_free(gp_camera1_reset);
 		gpio_free(gp_camera1_power_down);
-		gp_camera1_reset = -1;
 		gp_camera1_power_down = -1;
 	}
 
@@ -215,7 +213,5 @@ static struct camera_sensor_platform_data gc0310_sensor_platform_data = {
 void *gc0310_platform_data(void *info)
 {
 	gp_camera1_power_down = -1;
-	gp_camera1_reset = -1;
-	camera28_en = -1;
 	return &gc0310_sensor_platform_data;
 }
