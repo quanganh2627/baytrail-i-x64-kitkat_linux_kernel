@@ -24,7 +24,6 @@
 /* workround - pin defined for byt */
 #define CAMERA_1_RESET 120
 #define CAMERA_1_PWDN 124
-#define CAM28_EN 119
 #ifdef CONFIG_VLV2_PLAT_CLK
 #define OSC_CAM1_CLK 0x1
 #define CLK_19P2MHz 0x1
@@ -38,7 +37,6 @@
 static int camera_vprog1_on;
 static int gp_camera1_power_down;
 static int gp_camera1_reset;
-static int camera28_en;
 
 /*
  * BF3905 platform data
@@ -151,24 +149,6 @@ static int bf3905_flisclk_ctrl(struct v4l2_subdev *sd, int flag)
 static int bf3905_power_ctrl(struct v4l2_subdev *sd, int flag)
 {
 		int ret = 0;
-		if (camera28_en < 0) {
-				pr_err("%s: gpio_request:(pin %d)\n", __func__, CAM28_EN);
-				ret = gpio_request(CAM28_EN, "camera_0_power");
-				if (ret) {
-						pr_err("%s: failed to request gpio(pin %d)\n",
-										__func__, CAM28_EN);
-						return ret;
-				}
-		}
-		camera28_en = CAM28_EN;
-
-		ret = gpio_direction_output(camera28_en, 1);
-		if (ret) {
-				pr_err("%s: failed to set gpio(pin %d) direction\n",
-								__func__, camera28_en);
-				gpio_free(camera28_en);
-				return ret;
-		}
 
 		if (flag) {
 				if (!camera_vprog1_on) {
@@ -186,7 +166,6 @@ static int bf3905_power_ctrl(struct v4l2_subdev *sd, int flag)
 #endif
 						if (!ret)
 								camera_vprog1_on = 1;
-						gpio_set_value(camera28_en, 1);
 						msleep(10);
 						return ret;
 				}
@@ -200,9 +179,6 @@ static int bf3905_power_ctrl(struct v4l2_subdev *sd, int flag)
 #endif
 						if (!ret)
 								camera_vprog1_on = 0;
-						gpio_set_value(camera28_en, 0);
-						gpio_free(camera28_en);
-						camera28_en = -1;
 						return ret;
 				}
 		}
@@ -228,6 +204,5 @@ void *bf3905_platform_data(void *info)
 		camera_vprog1_on = 0;
 		gp_camera1_power_down = -1;
 		gp_camera1_reset = -1;
-		camera28_en = -1;
 		return &bf3905_sensor_platform_data;
 }
