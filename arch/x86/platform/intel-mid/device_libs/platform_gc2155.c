@@ -289,7 +289,7 @@ static int gc2155_flisclk_ctrl(struct v4l2_subdev *sd, int flag)
 	int ret = 0;
 #ifdef CONFIG_VLV2_PLAT_CLK
 	if (flag) {
-		ret = vlv2_plat_set_clock_freq(OSC_CAM0_CLK, 0x0 /*CLK_19P2MHz*/);
+		ret = vlv2_plat_set_clock_freq(OSC_CAM0_CLK, 0x1 /*CLK_19P2MHz*/);
 		if (ret)
 			return ret;
 	}
