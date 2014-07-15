@@ -117,6 +117,8 @@
 /*CC Accumulator Bit unit 3.662uV/10mohm */
 #define MAX_CC_SCALE			3662
 
+#define OCV_AVG_SAMPLE_CNT		3
+
 struct dc_ti_trim {
 	s8 cc_offset_extra;
 	s8 cc_gain_extra;
@@ -677,7 +679,7 @@ static struct intel_fg_input fg_input = {
 
 static void dc_ti_update_boot_ocv(struct dc_ti_cc_info *info)
 {
-	int ret;
+	int ret, vocv, idx;
 
 	ret = intel_mid_pmic_setb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
 	if (ret < 0)
@@ -688,9 +690,18 @@ static void dc_ti_update_boot_ocv(struct dc_ti_cc_info *info)
 	 */
 	msleep(250);
 
-	ret = dc_ti_cc_get_vocv(&info->vbat_bocv);
-	if (ret)
-		dev_err(&info->pdev->dev, "Failed to read IBAT bootup:%d\n", ret);
+	/*
+	 * take the average of 3 OCV samples
+	 * for better accuracy.
+	 */
+	info->vbat_bocv = 0;
+	for (idx = 0; idx < OCV_AVG_SAMPLE_CNT; idx++) {
+		ret = dc_ti_cc_get_vocv(&vocv);
+		if (ret)
+			dev_err(&info->pdev->dev, "Failed to read bootup vocv:%d\n", ret);
+		info->vbat_bocv += vocv;
+	}
+	info->vbat_bocv /= OCV_AVG_SAMPLE_CNT;
 
 	ret = intel_mid_pmic_clearb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
 	if (ret < 0)
