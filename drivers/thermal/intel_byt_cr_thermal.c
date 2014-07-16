@@ -310,8 +310,8 @@ static int byt_cr_thermal_probe(struct platform_device *pdev)
 
 	/* Register with IIO to sample temperature values */
 	tdata->iio_chan = iio_channel_get_all(&pdev->dev);
-	if (tdata->iio_chan == NULL) {
-		dev_err(&pdev->dev, "tdata->iio_chan is null\n");
+	if (IS_ERR(tdata->iio_chan)) {
+		dev_err(&pdev->dev, "tdata->iio_chan is invalid\n");
 		ret = -EINVAL;
 		goto exit_tzd;
 	}
