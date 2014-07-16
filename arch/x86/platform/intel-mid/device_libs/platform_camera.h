@@ -20,6 +20,8 @@ extern const struct intel_v4l2_subdev_id v4l2_ids[] __attribute__((weak));
 #define IS_BYT (INTEL_MID_BOARD(1, PHONE, BYT) || \
 	INTEL_MID_BOARD(1, TABLET, BYT))
 
+char *camera_get_msr_filename(char *buf, int buf_size, char *sensor, int cam);
+
 /* MFLD iCDK camera sensor GPIOs */
 
 /* Obsolete pin, maybe used by old MFLD iCDK */
