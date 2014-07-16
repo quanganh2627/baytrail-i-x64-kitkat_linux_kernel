@@ -864,7 +864,6 @@ static void dc_ti_cc_init_worker(struct work_struct *work)
 	/* read bootup OCV */
 	dc_ti_update_boot_ocv(info);
 	dc_ti_cc_init_data(info);
-	info_ptr = info;
 
 	ret = intel_fg_register_input(&fg_input);
 	if (ret < 0)
@@ -885,6 +884,7 @@ static int dc_ti_cc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, info);
 	INIT_DELAYED_WORK(&info->init_work, dc_ti_cc_init_worker);
 
+	info_ptr = info;
 	/*
 	 * scheduling the init worker to reduce
 	 * delays during boot time. Also delayed
