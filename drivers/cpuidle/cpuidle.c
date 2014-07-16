@@ -20,7 +20,6 @@
 #include <linux/hrtimer.h>
 #include <linux/module.h>
 #include <trace/events/power.h>
-#include <asm/dc_xpwr_pwrsrc.h>
 
 #include "cpuidle.h"
 
@@ -136,7 +135,7 @@ int cpuidle_idle_call(void)
 
 	/* ask the governor for the next state */
 	next_state = cpuidle_curr_governor->select(drv, dev);
-	if (need_resched() || (need_s0i3_wa() && next_state == 4)) {
+	if (need_resched()) {
 		dev->last_residency = 0;
 		/* give the governor an opportunity to reflect on the outcome */
 		if (cpuidle_curr_governor->reflect)
