@@ -262,18 +262,22 @@ void usb_reattach_modem()
 {
 	trace_printk("[%s]\n",__func__);
 	pr_info("[%s]\n",__func__);
+	pr_info("[%s], xhci_root_hub pointer:0x%x\n",__func__,xhci_root_hub);
 	wake_lock_timeout(&xhci_wake_lock,msecs_to_jiffies(3 * 60 * 1000));
-	pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,3 * 60 * 1000);
-	pm_runtime_get_sync(&xhci_root_hub->dev);
-	pm_runtime_put_sync(&xhci_root_hub->dev);
+	if (xhci_root_hub != NULL) {
+		pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,3 * 60 * 1000);
+		pm_runtime_get_sync(&xhci_root_hub->dev);
+		pm_runtime_put_sync(&xhci_root_hub->dev);
+	}
 }
 
 static int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
-
-	pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,0);
+	pr_info("[%s], xhci_root_hub pointer:0x%x\n",__func__,xhci_root_hub);
+	if(xhci_root_hub != NULL)
+		pm_runtime_set_autosuspend_delay(&xhci_root_hub->dev,0);
 
 	/*
 	 * Systems with the TI redriver that loses port status change events
