@@ -515,7 +515,7 @@ struct cxsr_latency {
 #define   HDMIC_HOTPLUG_LIVE_STATUS             (1 << 28)
 #define   HDMID_HOTPLUG_LIVE_STATUS             (1 << 27)
 #define   HDMI_LIVE_STATUS_BASE			30
-#define   HDMI_LIVE_STATUS_DELAY_STEP		10
+#define   HDMI_LIVE_STATUS_DELAY_STEP		15
 #define   HDMI_EDID_RETRY_COUNT			3
 
 enum monitor_changed_status {
