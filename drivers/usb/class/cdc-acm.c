@@ -630,7 +630,7 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 	pr_info("wgq[%s][acm%d]\n",__func__,acm->minor);
 	dev_dbg(tty->dev, "%s\n", __func__);
 	
-	if (acm->dev->state == USB_STATE_NOTATTACHED)
+	if (acm->dev->state != USB_STATE_CONFIGURED && acm->dev->state != USB_STATE_SUSPENDED)
 		return -ENODEV;
 
 	return tty_port_open(&acm->port, tty, filp);
@@ -776,7 +776,10 @@ static int acm_tty_write(struct tty_struct *tty,
 	int wbn;
 	struct acm_wb *wb;
 
-	if (acm->dev->state == USB_STATE_NOTATTACHED)
+	if (acm->dev->state != USB_STATE_CONFIGURED && acm->dev->state != USB_STATE_SUSPENDED)
+		return 0;
+
+	if (!test_bit(ASYNCB_INITIALIZED, &acm->port.flags))
 		return 0;
 
 	if (!count)
