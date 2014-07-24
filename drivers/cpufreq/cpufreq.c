@@ -1919,6 +1919,10 @@ int cpufreq_update_policy(unsigned int cpu)
 	  -> ask driver for current freq and notify governors about a change */
 	if (cpufreq_driver->get) {
 		policy.cur = cpufreq_driver->get(cpu);
+                if (!policy.cur) {
+                        ret = -EIO;
+                        goto rearm;
+                }
 		if (!data->cur) {
 			pr_debug("Driver did not initialize current freq");
 			data->cur = policy.cur;
@@ -1931,6 +1935,7 @@ int cpufreq_update_policy(unsigned int cpu)
 
 	ret = __cpufreq_set_policy(data, &policy);
 
+rearm:
 	unlock_policy_rwsem_write(cpu);
 
 fail:
