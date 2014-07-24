@@ -259,6 +259,8 @@ static int usb_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
 
 static int usb_dev_prepare(struct device *dev)
 {
+	struct usb_device *udev = to_usb_device(dev);
+	usb_autoresume_device(udev);
 	return 0;		/* Implement eventually? */
 }
 
