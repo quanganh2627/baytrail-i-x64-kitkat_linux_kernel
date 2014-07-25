@@ -45,6 +45,10 @@
 #include <linux/usb.h>
 #include <linux/input/mt.h>
 #include <linux/string.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+#include <linux/early_suspend_sysfs.h>
 
 
 MODULE_AUTHOR("Stephane Chatty <chatty@enac.fr>");
@@ -70,6 +74,8 @@ MODULE_LICENSE("GPL");
 
 #define MT_INPUTMODE_TOUCHSCREEN	0x02
 #define MT_INPUTMODE_TOUCHPAD		0x03
+
+static struct hid_device *hdev_es;
 
 struct mt_slot {
 	__s32 x, y, cx, cy, p, w, h;
@@ -100,6 +106,9 @@ struct mt_device {
 	struct mt_fields *fields;	/* temporary placeholder for storing the
 					   multitouch fields */
 	struct hid_device_id id;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend es;
+#endif
 	int cc_index;	/* contact count field index in the report */
 	int cc_value_index;	/* contact count value index in the field */
 	unsigned last_slot_field;	/* the last field of a slot */
@@ -970,6 +979,39 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	return ret;
 }
 
+static void mt_early_suspend_handler()
+{
+	hid_hw_close(hdev_es);
+}
+
+static void mt_late_resume_handler()
+{
+	hid_hw_open(hdev_es);
+}
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void mt_early_suspend()
+{
+	mt_early_suspend_handler();
+}
+
+static void mt_late_resume()
+{
+	mt_late_resume_handler();
+}
+#endif
+static ssize_t early_suspend_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	if (!strncmp(buf, EARLY_SUSPEND_ON, EARLY_SUSPEND_STATUS_LEN))
+		mt_early_suspend_handler();
+	else if (!strncmp(buf, EARLY_SUSPEND_OFF, EARLY_SUSPEND_STATUS_LEN))
+		mt_late_resume_handler();
+	return count;
+}
+
+static DEVICE_EARLY_SUSPEND_ATTR(early_suspend_store);
+
 static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret, i;
@@ -1036,6 +1078,14 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	mt_set_maxcontacts(hdev);
 	mt_set_input_mode(hdev);
 
+	hdev_es = hdev;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	td->es.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+	td->es.suspend = mt_early_suspend;
+	td->es.resume = mt_late_resume;
+	register_early_suspend(&td->es);
+#endif
+	register_early_suspend_device(&hdev->dev);
 	kfree(td->fields);
 	td->fields = NULL;
 
@@ -1080,6 +1130,9 @@ static void mt_remove(struct hid_device *hdev)
 		mt_free_input_name(hi);
 
 	hid_hw_stop(hdev);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	unregister_early_suspend(&td->es);
+#endif
 
 	kfree(td);
 	hid_set_drvdata(hdev, NULL);
