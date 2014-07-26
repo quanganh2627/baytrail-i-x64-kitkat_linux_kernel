@@ -34,6 +34,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/mfd/intel_mid_pmic.h>
 #include <linux/power/intel_fuel_gauge.h>
+#include "../../power/power_supply.h"
 
 #define DC_TI_CC_CNTL_REG		0x60
 #define CC_CNTL_CC_CTR_EN		(1 << 0)
@@ -128,7 +129,7 @@ struct dc_ti_trim {
 };
 struct dc_ti_cc_info {
 	struct platform_device *pdev;
-	struct work_struct	init_work;
+	struct delayed_work	init_work;
 	struct dc_ti_trim trim;
 
 	int		vbat_socv;
@@ -677,9 +678,63 @@ static struct intel_fg_input fg_input = {
 	.calibrate_cc = &dc_ti_cc_calibrate,
 };
 
+static struct power_supply *chg_psy;
+
+static int check_chg_psy(struct device *dev, void *data)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+
+	/* check for whether power supply type is battery */
+	if ((psy->type == POWER_SUPPLY_TYPE_USB) ||
+		(psy->type == POWER_SUPPLY_TYPE_USB_DCP) ||
+		(psy->type == POWER_SUPPLY_TYPE_USB_CDP) ||
+		(psy->type == POWER_SUPPLY_TYPE_USB_ACA)) {
+		chg_psy = psy;
+		return 1;
+	}
+	return 0;
+}
+
+static struct power_supply *dc_ti_get_charger_psy(void)
+{
+	/* loop through power supply class */
+	class_for_each_device(power_supply_class, NULL, NULL,
+			check_chg_psy);
+	return chg_psy;
+}
+
 static void dc_ti_update_boot_ocv(struct dc_ti_cc_info *info)
 {
 	int ret, vocv, idx;
+	union power_supply_propval val;
+	int chg_en = 0;
+
+	chg_psy = dc_ti_get_charger_psy();
+	if (!chg_psy)
+		dev_warn(&info->pdev->dev, "charger psy not found\n");
+
+	if (power_supply_is_cable_connected() && chg_psy)
+		chg_en = 1;
+	else
+		chg_en = 0;
+
+	if (chg_en) {
+		dev_info(&info->pdev->dev, "charging will be disabled\n");
+		val.intval = 0;
+
+		ret = chg_psy->set_property(chg_psy, POWER_SUPPLY_PROP_ENABLE_CHARGING, &val);
+		if (ret < 0)
+			dev_warn(&info->pdev->dev, "charger psy set prop failed\n");
+
+		ret = chg_psy->set_property(chg_psy, POWER_SUPPLY_PROP_ENABLE_CHARGER, &val);
+		if (ret < 0)
+			dev_warn(&info->pdev->dev, "charger psy set prop failed\n");
+
+		msleep(250);
+	} else {
+		dev_info(&info->pdev->dev, "charger is not connected\n");
+	}
+
 
 	ret = intel_mid_pmic_setb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
 	if (ret < 0)
@@ -702,6 +757,14 @@ static void dc_ti_update_boot_ocv(struct dc_ti_cc_info *info)
 		info->vbat_bocv += vocv;
 	}
 	info->vbat_bocv /= OCV_AVG_SAMPLE_CNT;
+
+	if (chg_en) {
+		dev_info(&info->pdev->dev, "charger will be enabled\n");
+		val.intval = 1;
+		ret = chg_psy->set_property(chg_psy, POWER_SUPPLY_PROP_ENABLE_CHARGER, &val);
+		if (ret < 0)
+			dev_warn(&info->pdev->dev, "charger psy set prop failed\n");
+	}
 
 	ret = intel_mid_pmic_clearb(DC_TI_CC_CNTL_REG, CC_CNTL_CC_CTR_EN);
 	if (ret < 0)
@@ -793,7 +856,7 @@ exit_trim:
 static void dc_ti_cc_init_worker(struct work_struct *work)
 {
 	struct dc_ti_cc_info *info =
-	    container_of(work, struct dc_ti_cc_info, init_work);
+	    container_of(work, struct dc_ti_cc_info, init_work.work);
 	int ret;
 	u8 val_offset, val_gain;
 
@@ -820,13 +883,15 @@ static int dc_ti_cc_probe(struct platform_device *pdev)
 
 	info->pdev = pdev;
 	platform_set_drvdata(pdev, info);
-	INIT_WORK(&info->init_work, dc_ti_cc_init_worker);
+	INIT_DELAYED_WORK(&info->init_work, dc_ti_cc_init_worker);
 
 	/*
-	 * scheduling the init worker
-	 * to reduce the boot time.
+	 * scheduling the init worker to reduce
+	 * delays during boot time. Also delayed
+	 * worker is being used to time the
+	 * OCV measurment later if neccessary.
 	 */
-	schedule_work(&info->init_work);
+	schedule_delayed_work(&info->init_work, 0);
 
 	return 0;
 }
@@ -870,7 +935,7 @@ static int __init dc_ti_cc_init(void)
 {
 	return platform_driver_register(&dc_ti_cc_driver);
 }
-late_initcall(dc_ti_cc_init);
+late_initcall_sync(dc_ti_cc_init);
 
 static void __exit dc_ti_cc_exit(void)
 {
