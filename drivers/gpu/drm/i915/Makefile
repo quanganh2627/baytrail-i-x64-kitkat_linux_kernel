@@ -66,10 +66,11 @@ i915-y := i915_drv.o i915_dma.o i915_irq.o \
 	  dsi_mod_auo_b080xan020.o\
 	  dsi_mod_auo_b080ean011.o \
 	  dsi_mod_rayken_rk785x32a1ci.o \
-	  dsi_mod_boe_bp080wx7.o \
-          dsi_mod_boe_bp070wx2.o \
+	  dsi_mod_kdt_kd070d30.o \
+          dsi_mod_mjk_m080wx01b.o \
 	  dsi_mod_cpt_claa080wq05.o \
 	  dsi_mod_innolux_n080ice_gb1.o \
+	  dsi_mod_boe_bp080wx7.o \
 	  tc35876x_vid.o \
 	  dsi_mod_sdc_bp080wx7.o
 

@@ -39,6 +39,7 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include "linux/mfd/intel_mid_pmic.h"
 
 //TC358764XBG
 /*GPIO Pins */
@@ -181,8 +182,6 @@ int tc35876x_bridge_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
 	DRM_DEBUG_KMS("\n");
-	printk("i2c tc35876 probe **********************\n");
-
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		DRM_ERROR("i2c_check_functionality() failed\n");
 		return -ENODEV;
@@ -618,34 +617,38 @@ static bool tc35876x_mode_fixup(struct intel_dsi_device *dsi,
 
 void tc35876x_panel_reset(struct intel_dsi_device *dsi)
 {
-//	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
-//	struct drm_device *dev = intel_dsi->base.base.dev;
-//	struct drm_i915_private *dev_priv = dev->dev_private;
-
+	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
+	struct drm_device *dev = intel_dsi->base.base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int val, ret;
+	dev_priv = dev_priv;
 	DRM_DEBUG_KMS("\n");
-#if 0	
-	vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004); //low
-	usleep_range(1000, 2000);
-	vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005); //high
-	usleep_range(1000, 2000);
+#if 1
+	if (BYT_CR_CONFIG) {
+	/* enable DLDO3 output */
+        val = intel_mid_pmic_readb(0x12);
+	if(0 == (val & (1 << 5))){
+       	val |= (1<<5);
+	ret = intel_mid_pmic_writeb(0x12, val);
+	msleep(100);}
+	}
 #endif
 #if 0
-		/* CABC disable */
-		vlv_gpio_nc_write(dev_priv, 0x4100, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000004);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
-		/* panel disable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000004);
-		usleep_range(100000, 120000);
+        /* panel disable */
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000004);
+        usleep_range(100000, 120000);
 
-		/* panel enable */
-		vlv_gpio_nc_write(dev_priv, 0x40F0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, 0x40F8, 0x00000005);
-		usleep_range(100000, 120000);
-		vlv_gpio_nc_write(dev_priv, 0x4108, 0x00000005);
-#endif	
+        /* panel enable */
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PAD, 0x00000005);
+        usleep_range(100000, 120000);
+        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
+	usleep_range(100000, 120000);
+#endif
 }
 
 static int tc35876x_mode_valid(struct intel_dsi_device *dsi,
@@ -672,19 +675,33 @@ static void tc35876x_enable(struct intel_dsi_device *dsi)
 	old_value = intel_dsi_clone->hs;
 	intel_dsi_clone->hs = 0;
 	tc35876x_configure_lvds_bridge();
-	intel_dsi_clone->hs = old_value;	
+	intel_dsi_clone->hs = old_value;
+#if 1
+	dsi_vc_dcs_write_0(intel_dsi,0,0x11);
+	msleep(20);
+        dsi_vc_dcs_write_0(intel_dsi,0,0x29);
+        msleep(20);
+#endif
 }
 static void tc35876x_disable(struct intel_dsi_device *dsi)
 {
-
-	DRM_DEBUG_KMS(" Null \n");
-#if 0
-	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);                                                                                           
+	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
+	int val,ret;
 	DRM_DEBUG_KMS("\n");
-	dsi_vc_dcs_write_0(intel_dsi,0,0x11);
-	msleep(50);
-	dsi_vc_dcs_write_0(intel_dsi,0,0x29);
-	msleep(50);
+	intel_dsi = intel_dsi;
+#if 1 
+	dsi_vc_dcs_write_0(intel_dsi,0,0x28);
+	msleep(20);
+	dsi_vc_dcs_write_0(intel_dsi,0,0x10);
+	msleep(20);
+#endif
+#if 1
+	if (BYT_CR_CONFIG) {
+	/*Disable DLDO3 output*/
+	val = intel_mid_pmic_readb(0x12);
+	val &= ~(1<<5);
+	ret = intel_mid_pmic_writeb(0x12, val);
+	mdelay(20);}
 #endif
 }
 
@@ -735,7 +752,6 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 		DRM_DEBUG_KMS("Init: Invalid input to tc35876x_init\n");
 		return false;
 	}
-
 	if(LVDS_DSI_TC35876X_CPT_CLAA070WP03 == i915_mipi_panel_id){
 		intel_dsi->dphy_reg = 0x160d3610;
 		intel_dsi->hs_to_lp_count = 0x18;
@@ -770,17 +786,15 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 		intel_dsi->clk_hs_to_lp_count = 0x14;
 		}
 	else if(LVDS_DSI_TC35876X_CDY_BI097XN02 == i915_mipi_panel_id){
-		//333M
-		/*b044*/
-		intel_dsi->hs_to_lp_count = 0x39;
-		/*b060*/
-		intel_dsi->lp_byte_clk = 0x08;
-		/*b080*/
-		intel_dsi->dphy_reg = 0x2A18681F;
-		/* b088 high 16bits */
-		intel_dsi->clk_lp_to_hs_count = 0x39;
-		/* b088 low 16bits */
-		intel_dsi->clk_hs_to_lp_count = 0x1A;
+		intel_dsi->hs_to_lp_count = 0x14;
+                /*b060*/
+                intel_dsi->lp_byte_clk = 0x03;
+                /*b080*/
+                intel_dsi->dphy_reg = 0x120A2909;
+                /* b088 high 16bits */
+                intel_dsi->clk_lp_to_hs_count = 0x18;
+                /* b088 low 16bits */
+                intel_dsi->clk_hs_to_lp_count = 0x0B;
 		}
 	else if((LVDS_DSI_TC35876X_AUO_B101EAN01_2 == i915_mipi_panel_id) ||(LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id)) {
 		//333M
@@ -798,7 +812,6 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 	else{
 		DRM_DEBUG_KMS("tc35876x_init enter oops !!!");
 		}
-
 	intel_dsi->eotp_pkt = 1;
 	intel_dsi->operation_mode = DSI_VIDEO_MODE;
 	intel_dsi->video_mode_type = DSI_VIDEO_BURST;//DSI_VIDEO_NBURST_SEVENT;
@@ -815,7 +828,7 @@ bool tc35876x_init(struct intel_dsi_device *dsi)
 	intel_dsi->backlight_off_delay = 20;
 	intel_dsi->send_shutdown = true;
 	intel_dsi->shutdown_pkt_delay = 20;
-
+//	intel_dsi->clock_stop = 1;
 #ifdef BRIDGE_INT_CMD_WITH_I2C
 	DRM_DEBUG_KMS("i2c init: tc35876x panel, busnum:%d\n",i2c_busnum);
 

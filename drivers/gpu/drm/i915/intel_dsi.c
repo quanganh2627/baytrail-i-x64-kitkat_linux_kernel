@@ -91,17 +91,17 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
 		{
-			.panel_id = MIPI_DSI_BOE_BP080WX7_PANEL_ID,
+			.panel_id = MIPI_DSI_MJK_M080WZ01B_PANEL_ID,
 			.type = INTEL_DSI_VIDEO_MODE,
 			.name = "boe-bp080wx7-dsi-vid-mode-display",
-			.dev_ops = &boe_bp080wx7_dsi_display_ops,
+			.dev_ops = &mjk_m080wx01b_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
 		{
-			.panel_id = MIPI_DSI_BOE_BP070WX2_PANEL_ID,
+			.panel_id = MIPI_DSI_KDT_KD070D30_PANEL_ID,
 			.type = INTEL_DSI_VIDEO_MODE,
-			.name = "boe-bp070wx2-dsi-vid-mode-display",
-			.dev_ops = &boe_bp070wx2_dsi_display_ops,
+			.name = "kdt-kd070d30-dsi-vid-mode-display",
+			.dev_ops = &kdt_kd070d30_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
 		{
@@ -166,7 +166,14 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.name = "sdc-bp080wx7-dsi-vid-mode-display",
 			.dev_ops = &sdc_bp080wx7_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
-		}
+		},
+		{
+                        .panel_id = MIPI_DSI_BOE_BP080WX7_PANEL_ID,
+                        .type = INTEL_DSI_VIDEO_MODE,
+                        .name = "boe-bp080wx7-dsi-vid-mode-display",
+                        .dev_ops = &boe_bp080wx7_dsi_display_ops,
+                        .lane_count = 4, /* XXX: this really doesn't belong here */
+                }
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
@@ -264,9 +271,8 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	/* Panel Enable */
 	if (BYT_CR_CONFIG) {
 		/*  cabc disable */
-	if(((dev_priv->mipi_panel_id) < LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){		
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
-		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);}
+		vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000004);
 
 		/* panel enable */
 		vlv_gpio_nc_write(dev_priv, GPIO_NC_11_PCONF0, 0x2000CC00);
@@ -312,11 +318,12 @@ void intel_dsi_device_ready(struct intel_encoder *encoder)
 	I915_WRITE_BITS(MIPI_DEVICE_READY(pipe), DEVICE_READY,
 			DEVICE_READY | ULPS_STATE_MASK);
 	usleep_range(2000, 2500);
-if(((dev_priv->mipi_panel_id) >= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id == MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id == MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID)){	
-        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
-        vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005); //high
-        usleep_range(1000, 2000);	}
-	
+
+	if((dev_priv->mipi_panel_id) >= LVDS_DSI_TC35876X_CPT_CLAA070WP03){
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PCONF0, 0x2000CC00);
+	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005); //high
+	usleep_range(2000, 2500);
+	}
 }
 
 static void intel_dsi_pre_enable(struct intel_encoder *encoder)
@@ -339,12 +346,13 @@ static void intel_dsi_pre_enable(struct intel_encoder *encoder)
 	}
 	else {
 		intel_dsi->hs = 0;
+		if((dev_priv->mipi_panel_id) >= LVDS_DSI_TC35876X_CPT_CLAA070WP03)
+		msleep(50);
 		dpi_send_cmd(intel_dsi, TURN_ON);
 		usleep_range(1000, 1500);
 
 		if (intel_dsi->dev.dev_ops->enable)
 			intel_dsi->dev.dev_ops->enable(&intel_dsi->dev);
-
 		temp = I915_READ(MIPI_PORT_CTRL(pipe));
 		temp = temp | intel_dsi->port_bits;
 
@@ -479,8 +487,7 @@ static void intel_dsi_post_disable(struct intel_encoder *encoder)
 	tmp = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
 	tmp &= ~VID_MODE_FORMAT_MASK;
 	I915_WRITE(MIPI_DSI_FUNC_PRG(pipe), tmp);
-	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
-		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
+	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	tmp = I915_READ(MIPI_DEVICE_READY(pipe));
 	tmp &= DEVICE_READY;
@@ -714,7 +721,6 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 		I915_WRITE(MIPI_DBI_BW_CTRL(pipe), intel_dsi->bw_timer);
 	}
-	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) || (dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)|| (dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 	val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -745,7 +751,6 @@ static void intel_dsi_mode_set(struct intel_encoder *intel_encoder)
 
 	if (intel_dsi->clock_stop)
 		val |= CLOCKSTOP;
-	if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID) ||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 	I915_WRITE(MIPI_EOT_DISABLE(pipe), val);
 
 	val = intel_dsi->channel << VID_MODE_CHANNEL_NUMBER_SHIFT |
@@ -900,7 +905,6 @@ void intel_dsi_encoder_dpms(struct drm_encoder *encoder, int mode)
 		 * commands to panel */
 
 		I915_WRITE(MIPI_DEVICE_READY(pipe), 0x0);
-		if(((dev_priv->mipi_panel_id) <= LVDS_DSI_TC35876X_CPT_CLAA070WP03) ||(dev_priv->mipi_panel_id != MIPI_DSI_AUO_B080XAN020_PANEL_ID)||(dev_priv->mipi_panel_id != MIPI_DSI_RAYKEN_RK785X32A1CI_PANEL_ID))
 		I915_WRITE(MIPI_EOT_DISABLE(pipe), CLOCKSTOP);
 
 		val = I915_READ(MIPI_DSI_FUNC_PRG(pipe));
@@ -1003,7 +1007,6 @@ bool intel_dsi_init(struct drm_device *dev)
 	 * If no kernel param use panel id from VBT
 	 * If no  param and no VBT initialize with
 	 * default ASUS panel ID for now */
-
 	if (i915_mipi_panel_id <= 0) {
 		/* check if panel id available from VBT */
 		if (!dev_priv->vbt.dsi.panel_id) {

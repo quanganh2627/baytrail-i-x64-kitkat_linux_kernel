@@ -38,34 +38,39 @@
 #include "intel_drv.h"
 #include "intel_dsi.h"
 #include "intel_dsi_cmd.h"
-#include "dsi_mod_boe_bp070wx2.h"
-
+#include "dsi_mod_mjk_m080wx01b.h"
 
 static u8 boe_init_sequence_01[]      = {0xF0, 0x5A, 0x5A};
 static u8 boe_init_sequence_02[]      = {0xF1, 0x5A, 0x5A};
 static u8 boe_init_sequence_03[]      = {0xFC, 0xA5, 0xA5};
-static u8 boe_init_sequence_04[]      = {0xD0, 0x00, 0x10};
-static u8 boe_init_sequence_05[]      = {0xB1, 0x10};
-static u8 boe_init_sequence_06[]      = {0xB2, 0x14, 0x22, 0x2F, 0x04};
-static u8 boe_init_sequence_07[]      = {0xF2, 0x02, 0x08, 0x08, 0x40, 0x10};
-static u8 boe_init_sequence_08[]      = {0xB0, 0x04};
-static u8 boe_init_sequence_09[]      = {0xFD, 0x09};
-static u8 boe_init_sequence_10[]      = {0xF3, 0x01, 0xD7, 0xE2, 0x62, 0xF4, 0xF7, 0x77, 0x3C, 0x26, 0x00};
-static u8 boe_init_sequence_11[]      = {0xF4, 0x00, 0x02, 0x03, 0x26, 0x03, 0x02, 0x09, 0x00, 0x07, 0x16, 0x16, 0x03, 0x00, 0x08, 0x08, 0x03, 0x0E, 0x0F, 0x12, 0x1C, 0x1D, 0x1E, 0x0C, 0x09, 0x01, 0x04, 0x02, 0x61, 0x74, 0x75, 0x72, 0x83, 0x80, 0x80, 0xB0, 0x00, 0x01, 0x01, 0x28, 0x04, 0x03, 0x28, 0x01, 0xD1, 0x32};
-static u8 boe_init_sequence_12[]      = {0xF5, 0x91, 0x28, 0x28, 0x5F, 0xAB, 0x98, 0x52, 0x0F, 0x33, 0x43, 0x04, 0x59, 0x54, 0x52, 0x05, 0x40, 0x60, 0x4E, 0x60, 0x40, 0x27, 0x26, 0x52, 0x25, 0x6D, 0x18};
-static u8 boe_init_sequence_13[]      = {0xEE, 0x25, 0x00, 0x25, 0x00, 0x25, 0x00, 0x25, 0x00};
-static u8 boe_init_sequence_14[]      = {0xEF, 0x12, 0x12, 0x43, 0x43, 0xA0, 0x04, 0x24, 0x81};
-static u8 boe_init_sequence_15[]      = {0xF7, 0x0A, 0x0A, 0x08, 0x08, 0x0B, 0x0B, 0x09, 0x09, 0x04, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0A, 0x0A, 0x08, 0x08, 0x0B, 0x0B, 0x09, 0x09, 0x04, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
-static u8 boe_init_sequence_16[]      = {0xBC, 0x01, 0x4E, 0x08};
-static u8 boe_init_sequence_17[]      = {0xE1, 0x03, 0x10, 0x1C, 0xA0, 0x10};
-static u8 boe_init_sequence_18[]      = {0xF6, 0x60, 0x25, 0xA6, 0x00, 0x00, 0x00};
-static u8 boe_init_sequence_19[]      = {0xFA, 0x00, 0x34, 0x06, 0x0D, 0x04, 0x0A, 0x0F, 0x0F, 0x12, 0x1B, 0x1E, 0x1D, 0x1E, 0x1D, 0x1D, 0x1D, 0x25};
-static u8 boe_init_sequence_20[]      = {0xFB, 0x00, 0x34, 0x06, 0x0D, 0x04, 0x0A, 0x0F, 0x0F, 0x12, 0x1B, 0x1E, 0x1D, 0x1E, 0x1D, 0x1D, 0x1D, 0x25};
-static u8 boe_init_sequence_21[]      = {0xFE, 0x00, 0x0D, 0x03, 0x21, 0x00, 0x08};
-static u8 boe_init_sequence_22[]      = {0xC3, 0x40, 0x00, 0x28};
+static u8 boe_init_sequence_04[]      = {0xB1, 0x10};
+static u8 boe_init_sequence_05[]      = {0xB2, 0x14, 0x22, 0x2F, 0x04};
+static u8 boe_init_sequence_06[]      = {0xF2, 0x02, 0x08, 0x08, 0x40, 0x10};
+static u8 boe_init_sequence_07[]      = {0xB0, 0x03};
+static u8 boe_init_sequence_08[]      = {0xFD, 0x23, 0x09};
+static u8 boe_init_sequence_09[]      = {0xF3, 0x01, 0xd7, 0xe2, 0x62, 0xf4, 0xf7, 0x77, 0x3c, 0x26, 0x00};
+static u8 boe_init_sequence_10[]      = {0xF4, 0x00, 0x02, 0x03, 0x26, 0x03, 0x02, 0x09, 0x00, 0x07, 0x16, 0x16, 0x03, 0x00, 0x08, 0x08, 0x03, 0x0E, 0x0F, 0x12, 0x1C, 0x1D, 0x1E, 0x0C, 0x09, 0x01, 0x04, 0x02, 0x61, 0x74, 0x75, 0x72, 0x83, 0x80, 0x80, 0xB0, 0x00, 0x01, 0x01, 0x28, 0x04, 0x03, 0x28, 0x01, 0xD1, 0x32};
+static u8 boe_init_sequence_11[]      = {0xF5, 0x84, 0x2F, 0x2F, 0x5F, 0xAB, 0x98, 0x52, 0x0F, 0x33, 0x43, 0x04, 0x59, 0x54, 0x52, 0x05, 0x40, 0x60, 0x4E, 0x60, 0x40, 0x27, 0x26, 0x52, 0x25, 0x6D, 0x18};
+static u8 boe_init_sequence_12[]			= {0xEE, 0x25, 0x00, 0x25, 0x00, 0x25, 0x00, 0x25, 0x00};
+static u8 boe_init_sequence_13[]			= {0xEF, 0x34, 0x12, 0x98, 0xBA, 0x20, 0x00, 0x24, 0x80};
+static u8 boe_init_sequence_14[]			= {0xF7, 0x0E, 0x0E, 0x0A, 0x0A, 0x0F, 0x0F, 0x0B, 0x0B, 0x05, 0x07, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0C, 0x0C, 0x08, 0x08, 0x0D, 0x0D, 0x09, 0x09, 0x04, 0x06, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+static u8 boe_init_sequence_15[]      = {0xBC, 0x01, 0x4E, 0x0A}; 
+static u8 boe_init_sequence_16[]      = {0xE1, 0x03, 0x10, 0x1C, 0xA0, 0x10};
+static u8 boe_init_sequence_17[]      = {0xF6, 0x60, 0x21, 0xA6, 0x00, 0x00, 0x00};
+static u8 boe_init_sequence_18[]      = {0xFE, 0x00, 0x0D, 0x03, 0x21, 0x00, 0x48};
+static u8 boe_init_sequence_19[]      = {0xB0, 0x22};
+static u8 boe_init_sequence_20[]      = {0xFA, 0x02, 0x34, 0x09, 0x13, 0x0B, 0x0F, 0x16, 0x16, 0x17, 0x1E, 0x1D, 0x1C, 0x1E, 0x1D, 0x1D, 0x1F, 0x24};
+static u8 boe_init_sequence_21[]      = {0xB0, 0x22};
+static u8 boe_init_sequence_22[]      = {0xFB, 0x00, 0x34, 0x07, 0x11, 0x09, 0x0D, 0x14, 0x14, 0x15, 0x1C, 0x1F, 0x1C, 0x1D, 0x1D, 0x1D, 0x20, 0x26};
+static u8 boe_init_sequence_23[]      = {0xB0, 0x11};
+static u8 boe_init_sequence_24[]      = {0xFA, 0x20, 0x34, 0x24, 0x27, 0x19, 0x1B, 0x1F, 0x1E, 0x1B, 0x1F, 0x21, 0x1F, 0x1E, 0x20, 0x1E, 0x1E, 0x21};
+static u8 boe_init_sequence_25[]      = {0xB0, 0x11};
+static u8 boe_init_sequence_26[]      = {0xFB, 0x1E, 0x34, 0x22, 0x25, 0x17, 0x19, 0x1D, 0x1A, 0x19, 0x20, 0x1F, 0x1E, 0x20, 0x1E, 0x1E, 0x1F, 0x22};
+static u8 boe_init_sequence_27[]      = {0xFA, 0x1C, 0x34, 0x1C, 0x1F, 0x13, 0x17, 0x1A, 0x18, 0x18, 0x1E, 0x20, 0x21, 0x21, 0x21, 0x23, 0x22, 0x2A};
+static u8 boe_init_sequence_28[]      = {0xFB, 0x1A, 0x34, 0x1A, 0x1D, 0x11, 0x15, 0x18, 0x16, 0x16, 0x1C, 0x20, 0x20, 0x20, 0x1F, 0x23, 0x23, 0x2B};	
+static u8 boe_init_sequence_c3[]      = {0xC3, 0x40, 0x00, 0x28};
 
-
-void bp070wx2_send_otp_cmds(struct intel_dsi_device *dsi)
+void m080wx01b_send_otp_cmds(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 
@@ -91,12 +96,16 @@ void bp070wx2_send_otp_cmds(struct intel_dsi_device *dsi)
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_19, sizeof(boe_init_sequence_19));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_20, sizeof(boe_init_sequence_20));
 	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_21, sizeof(boe_init_sequence_21));
-	//dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_22, sizeof(boe_init_sequence_22));
-
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_22, sizeof(boe_init_sequence_22));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_23, sizeof(boe_init_sequence_23));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_24, sizeof(boe_init_sequence_24));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_25, sizeof(boe_init_sequence_25));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_26, sizeof(boe_init_sequence_26));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_27, sizeof(boe_init_sequence_27));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_28, sizeof(boe_init_sequence_28));
 }
 
-
-static void  bp070wx2_get_panel_info(int pipe,
+static void  m080wx01b_get_panel_info(int pipe,
 					struct drm_connector *connector)
 {
 	DRM_DEBUG_KMS("\n");
@@ -113,19 +122,19 @@ static void  bp070wx2_get_panel_info(int pipe,
 	return;
 }
 
-static void bp070wx2_destroy(struct intel_dsi_device *dsi)
+static void m080wx01b_destroy(struct intel_dsi_device *dsi)
 {
 }
 
-static void bp070wx2_dump_regs(struct intel_dsi_device *dsi)
+static void m080wx01b_dump_regs(struct intel_dsi_device *dsi)
 {
 }
 
-static void bp070wx2_create_resources(struct intel_dsi_device *dsi)
+static void m080wx01b_create_resources(struct intel_dsi_device *dsi)
 {
 }
 
-static struct drm_display_mode *bp070wx2_get_modes(
+static struct drm_display_mode *m080wx01b_get_modes(
 	struct intel_dsi_device *dsi)
 {
 	struct drm_display_mode *mode = NULL;
@@ -163,30 +172,32 @@ static struct drm_display_mode *bp070wx2_get_modes(
 }
 
 
-static bool bp070wx2_get_hw_state(struct intel_dsi_device *dev)
+static bool m080wx01b_get_hw_state(struct intel_dsi_device *dev)
 {
 	DRM_DEBUG_KMS("\n");
 	return true;
 }
 
-static enum drm_connector_status bp070wx2_detect(
+static enum drm_connector_status m080wx01b_detect(
 					struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct drm_device *dev = intel_dsi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
- 	dev_priv->is_mipi = true;
+
 	DRM_DEBUG_KMS("\n");
+	dev_priv->is_mipi = true;
+
 	return connector_status_connected;
 }
 
-static bool bp070wx2_mode_fixup(struct intel_dsi_device *dsi,
+static bool m080wx01b_mode_fixup(struct intel_dsi_device *dsi,
 		    const struct drm_display_mode *mode,
 		    struct drm_display_mode *adjusted_mode) {
 	return true;
 }
 #define DISP_RST_N 107
-void bp070wx2_panel_reset(struct intel_dsi_device *dsi)
+void m080wx01b_panel_reset(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	struct drm_device *dev = intel_dsi->base.base.dev;
@@ -209,45 +220,42 @@ void bp070wx2_panel_reset(struct intel_dsi_device *dsi)
 	vlv_gpio_nc_write(dev_priv, GPIO_NC_9_PAD, 0x00000005);
 }
 
-static int bp070wx2_mode_valid(struct intel_dsi_device *dsi,
+static int m080wx01b_mode_valid(struct intel_dsi_device *dsi,
 		   struct drm_display_mode *mode)
 {
 	DRM_DEBUG_KMS("\n");
 	return MODE_OK;
 }
 
-static void bp070wx2_dpms(struct intel_dsi_device *dsi, bool enable)
+static void m080wx01b_dpms(struct intel_dsi_device *dsi, bool enable)
 {
 //	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 
 	DRM_DEBUG_KMS("\n");
 }
-static void bp070wx2_enable(struct intel_dsi_device *dsi)
+static void m080wx01b_enable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 	DRM_DEBUG_KMS("\n");
 
-	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_22, sizeof(boe_init_sequence_22));
+	dsi_vc_dcs_write(intel_dsi, 0, boe_init_sequence_c3, sizeof(boe_init_sequence_c3));
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x35);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x11);
 	msleep(5);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x29);
-
 }
-static void bp070wx2_disable(struct intel_dsi_device *dsi)
+static void m080wx01b_disable(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 
 	DRM_DEBUG_KMS("\n");
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x28);
 	msleep(30);
-	//dsi_vc_dcs_write(intel_dsi, 0, boe_disable_ic_power, sizeof(boe_disable_ic_power));
-	msleep(15);
 	dsi_vc_dcs_write_0(intel_dsi, 0, 0x10);
 	msleep(30);
 }
 
-bool bp070wx2_init(struct intel_dsi_device *dsi)
+bool m080wx01b_init(struct intel_dsi_device *dsi)
 {
 	struct intel_dsi *intel_dsi = container_of(dsi, struct intel_dsi, dev);
 //	struct drm_device *dev = intel_dsi->base.base.dev;
@@ -266,13 +274,12 @@ bool bp070wx2_init(struct intel_dsi_device *dsi)
 	 *
 	 */
 
-	DRM_DEBUG_KMS("Init: bp070wx2 panel\n");
+	DRM_DEBUG_KMS("Init: m080wx01b panel\n");
 
 	if (!dsi) {
-		DRM_DEBUG_KMS("Init: Invalid input to bp070wx2\n");
+		DRM_DEBUG_KMS("Init: Invalid input to m080wx01b\n");
 		return false;
 	}
-
 	intel_dsi->eotp_pkt = 1;
 	intel_dsi->operation_mode = DSI_VIDEO_MODE;
 	intel_dsi->video_mode_type = DSI_VIDEO_NBURST_SEVENT;
@@ -305,20 +312,21 @@ bool bp070wx2_init(struct intel_dsi_device *dsi)
 
 
 /* Callbacks. We might not need them all. */
-struct intel_dsi_dev_ops boe_bp070wx2_dsi_display_ops = {
-	.init = bp070wx2_init,
-	.get_info = bp070wx2_get_panel_info,
-	.create_resources = bp070wx2_create_resources,
-	.dpms = bp070wx2_dpms,
-	.mode_valid = bp070wx2_mode_valid,
-	.mode_fixup = bp070wx2_mode_fixup,
-	.panel_reset = bp070wx2_panel_reset,
-	.detect = bp070wx2_detect,
-	.get_hw_state = bp070wx2_get_hw_state,
-	.get_modes = bp070wx2_get_modes,
-	.destroy = bp070wx2_destroy,
-	.dump_regs = bp070wx2_dump_regs,
-	.enable = bp070wx2_enable,
-	.disable = bp070wx2_disable,
-	.send_otp_cmds = bp070wx2_send_otp_cmds,
+struct intel_dsi_dev_ops mjk_m080wx01b_dsi_display_ops = {
+	.init = m080wx01b_init,
+	.get_info = m080wx01b_get_panel_info,
+	.create_resources = m080wx01b_create_resources,
+	.dpms = m080wx01b_dpms,
+	.mode_valid = m080wx01b_mode_valid,
+	.mode_fixup = m080wx01b_mode_fixup,
+	.panel_reset = m080wx01b_panel_reset,
+	.detect = m080wx01b_detect,
+	.get_hw_state = m080wx01b_get_hw_state,
+	.get_modes = m080wx01b_get_modes,
+	.destroy = m080wx01b_destroy,
+	.dump_regs = m080wx01b_dump_regs,
+	.enable = m080wx01b_enable,
+	.disable = m080wx01b_disable,
+	.send_otp_cmds = m080wx01b_send_otp_cmds,
+
 };
