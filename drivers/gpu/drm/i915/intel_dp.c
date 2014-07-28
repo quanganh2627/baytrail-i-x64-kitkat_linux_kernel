@@ -63,23 +63,8 @@ extern int ps8622_init(void) ;
 
 
 #ifdef CONFIG_MRD7
-static void
-intel_dp_init_edp_port(struct drm_device *dev)
-{
-   struct drm_i915_private *dev_priv = dev->dev_private;
-   u32 vdden_pad;
-   //panel1_vdden_pconf
-   vdden_pad = vlv_gpio_nc_read(dev_priv,0x4100);
-   vdden_pad &= ~(0x7);
-   vdden_pad |= 0x2; //3'b010
-   vlv_gpio_nc_write(dev_priv,0x4100,vdden_pad);
-   vdden_pad = vlv_gpio_nc_read(dev_priv,0x4100);
-   DRM_DEBUG_KMS("panel1_vdden_pconf :0x%08x\n",vdden_pad);
-   usleep_range(10000, 12000);
 
-}
 
-extern uint32_t g_widi_connect_status;
 static int
 intel_dp_ctrl_lvds_panel(struct drm_device *dev, struct intel_dp *intel_dp, u32 ctrl)
 {
@@ -88,13 +73,12 @@ intel_dp_ctrl_lvds_panel(struct drm_device *dev, struct intel_dp *intel_dp, u32 
 	int ret;
 	if (ctrl && intel_dp->bridge_setup_done)
 		return 1;
-	DRM_DEBUG_KMS("ctrl:%d, widi:%d\n", ctrl, g_widi_connect_status);
+	DRM_DEBUG_KMS("ctrl:%d\n", ctrl);
 	/*DLDO3*/
 	val = intel_mid_pmic_readb(0x12);
 	if (ctrl > 0)
 		val |= 1<<5;
 	else {
-		if (!g_widi_connect_status)
 			val &= ~(1<<5);
 	}
 	ret = intel_mid_pmic_writeb(0x12, val);
@@ -4019,7 +4003,7 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 		return true;
 #ifdef CONFIG_MRD7
 	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
-	intel_dp_init_edp_port(dev);
+
 	ps8622_send_init_cmd(intel_dp);
 #endif
 	intel_dp_init_panel_power_sequencer(dev, intel_dp, &power_seq);
@@ -4104,7 +4088,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 #ifdef CONFIG_MRD7
 	intel_dp->bridge_setup_done = false;
 	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
-	intel_dp_init_edp_port(dev);
+
 #endif
 	/* Preserve the current hw state. */
 	intel_dp->DP = I915_READ(intel_dp->output_reg);

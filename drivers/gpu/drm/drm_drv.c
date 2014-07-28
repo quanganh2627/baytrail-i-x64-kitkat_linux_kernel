@@ -51,8 +51,6 @@
 #include <linux/export.h>
 #include <drm/drmP.h>
 #include <drm/drm_core.h>
-extern int drm_mode_widi_info(struct drm_device *dev,
-		   void *data, struct drm_file *file_priv);
 
 
 static int drm_version(struct drm_device *dev, void *data,
@@ -169,7 +167,6 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_OBJ_GETPROPERTIES, drm_mode_obj_get_properties_ioctl, DRM_CONTROL_ALLOW|DRM_UNLOCKED),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_OBJ_SETPROPERTY, drm_mode_obj_set_property_ioctl, DRM_MASTER|DRM_CONTROL_ALLOW|DRM_UNLOCKED),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_CURSOR2, drm_mode_cursor2_ioctl, DRM_MASTER|DRM_CONTROL_ALLOW|DRM_UNLOCKED),
-	DRM_IOCTL_DEF(DRM_IOCTL_MODE_WIDI_INFO, drm_mode_widi_info, DRM_MASTER|DRM_CONTROL_ALLOW|DRM_UNLOCKED),
 
 };
 
