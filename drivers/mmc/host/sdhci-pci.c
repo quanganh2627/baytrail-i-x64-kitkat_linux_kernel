@@ -781,7 +781,10 @@ static const struct sdhci_pci_fixes sdhci_intel_byt_emmc = {
 static const struct sdhci_pci_fixes sdhci_intel_byt_sdio = {
 	.quirks2	= SDHCI_QUIRK2_HOST_OFF_CARD_ON |
 		SDHCI_QUIRK2_PRESET_VALUE_BROKEN | SDHCI_QUIRK2_FAKE_VDD,
+/*Marvell CWS module request continuous SDIO clock, turn off RUNTIME PM for marvell chip*/
+#ifndef CONFIG_MMC_MRVL_CWS
 	.allow_runtime_pm = true,
+#endif
 	.probe_slot	= byt_sdio_probe_slot,
 	.remove_slot	= byt_sdio_remove_slot,
 };
