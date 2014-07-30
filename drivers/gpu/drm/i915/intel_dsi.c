@@ -173,7 +173,14 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
                         .name = "boe-bp080wx7-dsi-vid-mode-display",
                         .dev_ops = &boe_bp080wx7_dsi_display_ops,
                         .lane_count = 4, /* XXX: this really doesn't belong here */
-                }
+                },
+		{
+			.panel_id = MIPI_DSI_RAYKEN_RK089WU45J1AI_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "rayken-rk089wu45j1ai-dsi-vid-mode-display",
+			.dev_ops = &rayken_rk089wu45j1ai_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
