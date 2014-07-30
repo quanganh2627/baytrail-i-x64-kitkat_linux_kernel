@@ -104,9 +104,6 @@ enum {
 	BC_USB_CHNG_IRQ,
 };
 
-bool xpower_pmic;
-EXPORT_SYMBOL(xpower_pmic);
-
 static const char *dc_extcon_cable[] = {
 	PWRSRC_EXTCON_CABLE_USB,
 	NULL,
@@ -443,7 +440,6 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 	struct dc_pwrsrc_info *info;
 	int ret, i;
 
-	xpower_pmic = true;
 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		dev_err(&pdev->dev, "mem alloc failed\n");
@@ -491,9 +487,6 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 		/* enable the charger detection logic */
 		intel_mid_pmic_setb(DC_BC_GLOBAL_REG, BC_GLOBAL_RUN);
 	}
-
-	/*Tune Buck frequency as 2 for stability*/
-	intel_mid_pmic_writeb(0x3B, 0x2);
 
 	if (info->pdata->en_chrg_det)
 		ret = handle_chrg_det_event(info);
