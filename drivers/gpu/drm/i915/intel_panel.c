@@ -933,7 +933,14 @@ int intel_panel_setup_backlight(struct drm_connector *connector)
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct backlight_properties props;
-	unsigned long flags;
+	unsigned long flags, ctl;
+
+	ctl = I915_READ(BLC_PWM_CTL);
+	if (ctl & BACKLIGHT_DUTY_CYCLE_MASK_PNV) {
+		WARN(1, "backlight already enabled\n");
+		I915_WRITE(BLC_PWM_CTL, 0);
+	}
+
 	if (IS_VALLEYVIEW(dev)
 	&& ((I915_READ(BLC_PWM_CTL2) == 0 || I915_READ(BLC_PWM_CTL) == 0))
 	&& dev_priv->vbt.backlight.is_inverter_type_pwm) {
