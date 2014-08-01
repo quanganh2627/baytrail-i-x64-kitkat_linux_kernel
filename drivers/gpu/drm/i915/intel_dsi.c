@@ -181,6 +181,13 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.dev_ops = &rayken_rk089wu45j1ai_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
+		{
+			.panel_id = MIPI_DSI_CPT_CLAA080FP01_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "cpt-claa080fp01-dsi-vid-mode-display",
+			.dev_ops = &cpt_claa080fp01_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)
