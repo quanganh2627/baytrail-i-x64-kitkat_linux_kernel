@@ -31,6 +31,7 @@
 #include <linux/seq_file.h>
 #include <linux/input.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
 #include <acpi/button.h>
@@ -58,6 +59,10 @@
 #define ACPI_BUTTON_DEVICE_NAME_LID	"Lid Switch"
 #define ACPI_BUTTON_TYPE_LID		0x05
 
+#define	EC_S3_WAKEUP_STATUS	0xB7
+#define	PWRBTN_HID_WAKE		0x01
+#define	PWRBTN_HID_CLEAR	0x0
+
 #define _COMPONENT		ACPI_BUTTON_COMPONENT
 ACPI_MODULE_NAME("button");
 
@@ -65,6 +70,7 @@ MODULE_AUTHOR("Paul Diefenbaugh");
 MODULE_DESCRIPTION("ACPI Button Driver");
 MODULE_LICENSE("GPL");
 
+static struct work_struct button_work;
 static const struct acpi_device_id button_device_ids[] = {
 	{ACPI_BUTTON_HID_LID,    0},
 	{ACPI_BUTTON_HID_SLEEP,  0},
@@ -302,6 +308,8 @@ static void acpi_button_notify(struct acpi_device *device, u32 event)
 			input_sync(input);
 
 			pm_wakeup_event(&device->dev, 0);
+			/* atomic context here, hence schedule work */
+			schedule_work(&button_work);
 		}
 
 		acpi_bus_generate_proc_event(device, event, ++button->pushed);
@@ -318,12 +326,49 @@ static int acpi_button_resume(struct device *dev)
 {
 	struct acpi_device *device = to_acpi_device(dev);
 	struct acpi_button *button = acpi_driver_data(device);
+	u8 val;
+	int ret;
 
 	if (button->type == ACPI_BUTTON_TYPE_LID)
 		return acpi_lid_send_state(device);
+	else {
+		ret = ec_read(EC_S3_WAKEUP_STATUS, &val);
+		if (ret)
+			pr_err("%s: ec read fail\n", __func__);
+		else if (val & PWRBTN_HID_WAKE) {
+			struct input_dev *input = button->input;
+			int keycode = test_bit(KEY_SLEEP, input->keybit) ?
+				KEY_SLEEP : KEY_POWER;
+
+			input_report_key(input, keycode, 1);
+			input_sync(input);
+			input_report_key(input, keycode, 0);
+			input_sync(input);
+
+			pm_wakeup_event(&device->dev, 0);
+			ret = ec_write(EC_S3_WAKEUP_STATUS, PWRBTN_HID_CLEAR);
+			if (ret)
+				pr_err("%s: ec write fail\n", __func__);
+		}
+	}
 	return 0;
 }
 #endif
+
+static void power_button_work(struct work_struct *work)
+{
+	u8 val;
+	int ret;
+
+	ret = ec_read(EC_S3_WAKEUP_STATUS, &val);
+	if (ret)
+		pr_err("%s: ec read fail\n", __func__);
+	else if (val & PWRBTN_HID_WAKE) {
+		ret = ec_write(EC_S3_WAKEUP_STATUS, PWRBTN_HID_CLEAR);
+		if (ret)
+			pr_err("%s: ec write fail\n", __func__);
+	}
+}
 
 static int acpi_button_add(struct acpi_device *device)
 {
@@ -354,6 +399,9 @@ static int acpi_button_add(struct acpi_device *device)
 		strcpy(name, ACPI_BUTTON_DEVICE_NAME_POWER);
 		sprintf(class, "%s/%s",
 			ACPI_BUTTON_CLASS, ACPI_BUTTON_SUBCLASS_POWER);
+		INIT_WORK(&button_work, power_button_work);
+		/* Intially clear the s3 wakeup status */
+		schedule_work(&button_work);
 	} else if (!strcmp(hid, ACPI_BUTTON_HID_SLEEP) ||
 		   !strcmp(hid, ACPI_BUTTON_HID_SLEEPF)) {
 		button->type = ACPI_BUTTON_TYPE_SLEEP;
