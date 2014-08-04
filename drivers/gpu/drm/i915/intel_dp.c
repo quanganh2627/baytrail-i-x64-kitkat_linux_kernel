@@ -2065,7 +2065,9 @@ void intel_edp_exit_psr(struct intel_dp *intel_dp)
 	I915_WRITE(_PIPEASTAT, val);
 
 }
-
+#ifdef CONFIG_MRD7
+static int disable_bklt_on_off_in_po  = 0;
+#endif
 static void intel_disable_dp(struct intel_encoder *encoder)
 {
 	struct intel_dp *intel_dp = enc_to_intel_dp(&encoder->base);
@@ -2075,7 +2077,10 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	/* Make sure the panel is off before trying to change the mode. But also
 	 * ensure that we have vdd while we switch off the panel. */
 	ironlake_edp_panel_vdd_on(intel_dp);
-	ironlake_edp_backlight_off(intel_dp);
+#ifdef CONFIG_MRD7
+	if(disable_bklt_on_off_in_po != 0)
+#endif
+		ironlake_edp_backlight_off(intel_dp);
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
 	ironlake_edp_panel_off(intel_dp);
 
@@ -2121,6 +2126,11 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 	ironlake_edp_panel_vdd_off(intel_dp, true);
 	intel_dp_complete_link_train(intel_dp);
 	intel_dp_stop_link_train(intel_dp);
+#ifdef CONFIG_MRD7
+	if(disable_bklt_on_off_in_po == 0) {
+		disable_bklt_on_off_in_po  = 1;
+	} else 
+#endif
 	ironlake_edp_backlight_on(intel_dp);
 }
 
