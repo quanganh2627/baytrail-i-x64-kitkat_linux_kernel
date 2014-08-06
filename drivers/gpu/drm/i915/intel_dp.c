@@ -24,7 +24,6 @@
  *    Keith Packard <keithp@keithp.com>
  *
  */
-
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/export.h>
@@ -35,7 +34,6 @@
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
-
 #define DP_LINK_CHECK_TIMEOUT	(10 * 1000)
 #define EDP_PSR_MODE 0 /* 0 = HW TIMER, 1 = SW TIMER */
 /**
@@ -1795,7 +1793,7 @@ intel_vlv_edp_psr_enable_src(struct intel_dp *intel_dp, enum PSR_MODE mode,
 		val |= idle_frames << 16;
 	} else if (mode == EDP_PSR_SW_TIMER)
 			val |= VLV_EDP_PSR_MODE_SW_TIMER | VLV_EDP_PSR_ACTIVE_ENTRY;
-	I915_WRITE(EDP_PSR_CTL, val);
+	I915_WRITE(VLV_EDP_PSR_CTL, val);
 
 	if (mode == EDP_PSR_SW_TIMER) {
 		val |= VLV_EDP_PSR_ACTIVE_ENTRY;
@@ -1815,6 +1813,20 @@ intel_vlv_edp_psr_enable_src(struct intel_dp *intel_dp, enum PSR_MODE mode,
 	}
 }
 
+static int intel_edp_get_active_crtc(struct drm_device *dev)
+{
+	struct drm_crtc *crtc;
+	struct intel_crtc *intel_crtc;
+	int count = 0;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		intel_crtc = to_intel_crtc(crtc);
+		if (intel_crtc->active)
+			count++;
+	}
+	return count;
+}
+
 void intel_edp_enable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode,
 						int idle_frames)
 {
@@ -1824,7 +1836,10 @@ void intel_edp_enable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode,
 	int ack = 0;
 	uint32_t val = 0;
 
-	if (!is_edp_psr(intel_dp) || intel_vlv_edp_is_psr_active(intel_dp))
+	/* PSR cannot be enabled if more than 1 display are active*/
+	if (!IS_VALLEYVIEW(dev) || !is_edp_psr(intel_dp) ||
+		intel_vlv_edp_is_psr_active(intel_dp) ||
+		(intel_edp_get_active_crtc(dev) > 1))
 		return;
 
 	if (intel_dig_port->psr_setup == 1)
@@ -1853,7 +1868,7 @@ void intel_edp_enable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode,
 		if (ack == 1) {
 			intel_vlv_edp_psr_enable_src(intel_dp, mode, idle_frames);
 		} else {
-			DRM_ERROR("No Ack received from Sink\n");
+			DRM_ERROR("PSR No Ack received from Sink\n");
 			intel_dig_port->psr_setup = 0;
 		}
 	}
@@ -1864,14 +1879,29 @@ void intel_edp_enable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode,
 	I915_WRITE(_PIPEASTAT, val);
 
 }
+
+static void intel_edp_psr_link_train(struct intel_dp *intel_dp)
+{
+	intel_dp_start_link_train(intel_dp);
+	ironlake_edp_panel_on(intel_dp);
+	intel_dp_complete_link_train(intel_dp);
+}
+
 void intel_edp_disable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	/* struct intel_encoder *intel_encoder;*/
+	struct drm_crtc *crtc = intel_dig_port->base.base.crtc;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	uint32_t val = 0;
 	int count = 0;
+	uint32_t DP = intel_dp->DP;
+	int pipe = intel_crtc->pipe;
+	int plane = intel_crtc->plane;
+	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
+	int port = vlv_dport_to_channel(dport);
+	int reg = DPLL(intel_crtc->pipe);
 
 	if (intel_dig_port->psr_setup == 0)
 		return;
@@ -1889,12 +1919,15 @@ void intel_edp_disable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode)
 		val &= ~VLV_EDP_PSR_MODE_MASK;
 	I915_WRITE(VLV_EDP_PSR_CTL, val);
 
-	val = I915_READ(VLV_EDP_PSR_STATUS_CTL);
-	val = val & VLV_EDP_PSR_CURR_STATE_MASK;
+	/* Link is set to send idle pattern */
+	DP &= ~DP_LINK_TRAIN_MASK;
+	I915_WRITE(intel_dp->output_reg, DP | DP_LINK_TRAIN_PAT_IDLE);
+	POSTING_READ(intel_dp->output_reg);
+	/* Need to give 2ms delay for 5 idle frame to be sent */
+	udelay(2000);
+
 	while ((count < 400) && intel_vlv_edp_is_psr_active(intel_dp)) {
 		udelay(100);
-		val = I915_READ(VLV_EDP_PSR_STATUS_CTL);
-		val = val & VLV_EDP_PSR_CURR_STATE_MASK;
 		count++;
 		/* This while loop has a maximum delay of 40ms */
 	}
@@ -1912,20 +1945,18 @@ void intel_edp_disable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode)
 		I915_WRITE(VLV_EDP_PSR_CTL, val);
 	}
 
-	 /* Set sink power state to D0 through DPCD register 600h */
-	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
+	/* enable PLL and wait for it to get locked */
+	if (wait_for(((I915_READ(reg) & DPLL_LOCK_VLV) == DPLL_LOCK_VLV), 4))
+		DRM_ERROR(" PSR DPLL %d failed to lock\n", intel_crtc->pipe);
 
-	/*
-	TODO: drm/i915: copy&paste drm_crtc_helper_set_config
-	As per the above patch the below poart of the code is not neede.
-	*/
-	/*
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		for_each_encoder_on_crtc(dev, crtc, intel_encoder) {
-			intel_encoder_commit(&intel_encoder->base);
-		}
-	}
-	*/
+	if (wait_for(((I915_READ(intel_dp->output_reg) & DP_PORT_EN)), 4))
+		DRM_ERROR("PSR port not enabled\n");
+
+	/* Set sink power state to D0 through DPCD register 600h */
+	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
+	intel_edp_psr_link_train(intel_dp);
+	vlv_wait_port_ready(dev_priv, port);
+	intel_enable_plane(dev_priv, plane, pipe);
 
 	val = I915_READ(_PIPEASTAT);
 	val &= 0xffff0000;
@@ -1941,12 +1972,17 @@ void intel_edp_exit_psr(struct intel_dp *intel_dp)
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	/*struct intel_crtc *intel_crtc =
-		to_intel_crtc(intel_dig_port->base.base.crtc);
 	struct drm_crtc *crtc = intel_dig_port->base.base.crtc;
-	struct intel_encoder *intel_encoder; */
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	uint32_t val = 0;
 	int count = 0;
+	uint32_t DP = intel_dp->DP;
+	int pipe = intel_crtc->pipe;
+	int plane = intel_crtc->plane;
+	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
+	int port = vlv_dport_to_channel(dport);
+	int reg = DPLL(intel_crtc->pipe);
+
 
 	if (!intel_vlv_edp_is_psr_active(intel_dp))
 		return;
@@ -1961,12 +1997,15 @@ void intel_edp_exit_psr(struct intel_dp *intel_dp)
 	val &= ~VLV_EDP_PSR_ACTIVE_ENTRY;
 	I915_WRITE(VLV_EDP_PSR_CTL, val);
 
-	val = I915_READ(VLV_EDP_PSR_STATUS_CTL);
-	val = val & VLV_EDP_PSR_CURR_STATE_MASK;
+	/* Link is set to send idle pattern */
+	DP &= ~DP_LINK_TRAIN_MASK;
+	I915_WRITE(intel_dp->output_reg, DP | DP_LINK_TRAIN_PAT_IDLE);
+	POSTING_READ(intel_dp->output_reg);
+	/* Need to give 2ms delay for 5 idle frames to be sent */
+	udelay(2000);
+
 	while ((count < 400) && intel_vlv_edp_is_psr_active(intel_dp)) {
 		udelay(100);
-		val = I915_READ(VLV_EDP_PSR_STATUS_CTL);
-		val = val & VLV_EDP_PSR_CURR_STATE_MASK;
 		count++;
 	/* This while loop has a maximum delay of 40ms */
 	}
@@ -1984,26 +2023,23 @@ void intel_edp_exit_psr(struct intel_dp *intel_dp)
 		I915_WRITE(VLV_EDP_PSR_CTL, val);
 	}
 
+	/* enable PLL and wait for it to get locked */
+	if (wait_for(((I915_READ(reg) & DPLL_LOCK_VLV) == DPLL_LOCK_VLV), 4))
+		DRM_ERROR(" PSR DPLL %d failed to lock\n", intel_crtc->pipe);
+
+	if (wait_for(((I915_READ(intel_dp->output_reg) & DP_PORT_EN)), 4))
+		DRM_ERROR("PSR port not enabled");
+
 	/* Set sink power state to D0 through DPCD register 600h */
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
-
-	/*
-	TODO: drm/i915: copy&paste drm_crtc_helper_set_config
-	As per the above patch the below poart of the code is not neede.
-	*/
-	/*
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		for_each_encoder_on_crtc(dev, crtc, intel_encoder) {
-			intel_encoder_commit(&intel_encoder->base);
-		}
-	}
-	*/
+	intel_edp_psr_link_train(intel_dp);
+	intel_enable_plane(dev_priv, plane, pipe);
+	vlv_wait_port_ready(dev_priv, port);
 
 	val = I915_READ(_PIPEASTAT);
 	val &= 0xffff0000;
 	val |= PIPE_FIFO_UNDERRUN;
 	I915_WRITE(_PIPEASTAT, val);
-
 }
 
 static void intel_disable_dp(struct intel_encoder *encoder)
@@ -2763,7 +2799,6 @@ intel_dp_set_link_train(struct intel_dp *intel_dp,
 
 	return true;
 }
-
 static void intel_dp_set_idle_link_train(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
@@ -2935,6 +2970,8 @@ intel_dp_complete_link_train(struct intel_dp *intel_dp)
 	}
 
 	intel_dp_set_idle_link_train(intel_dp);
+	udelay(2000);
+	intel_dp_set_link_train(intel_dp, DP, DP_TRAINING_PATTERN_DISABLE);
 
 	intel_dp->DP = DP;
 

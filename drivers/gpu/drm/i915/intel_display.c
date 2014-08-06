@@ -1526,7 +1526,7 @@ static void assert_pch_ports_disabled(struct drm_i915_private *dev_priv,
 	assert_pch_hdmi_disabled(dev_priv, pipe, PCH_HDMID);
 }
 
-static void vlv_enable_pll(struct intel_crtc *crtc)
+void vlv_enable_pll(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -1861,7 +1861,7 @@ static void lpt_disable_pch_transcoder(struct drm_i915_private *dev_priv)
  * Will wait until the pipe is actually running (i.e. first vblank) before
  * returning.
  */
-static void intel_enable_pipe(struct drm_i915_private *dev_priv, enum pipe pipe,
+void intel_enable_pipe(struct drm_i915_private *dev_priv, enum pipe pipe,
 			      bool pch_port, bool dsi)
 {
 	enum transcoder cpu_transcoder = intel_pipe_to_cpu_transcoder(dev_priv,
@@ -1975,7 +1975,7 @@ void intel_flush_display_plane(struct drm_i915_private *dev_priv,
  *
  * Enable @plane on @pipe, making sure that @pipe is running first.
  */
-static void intel_enable_plane(struct drm_i915_private *dev_priv,
+void intel_enable_plane(struct drm_i915_private *dev_priv,
 			       enum plane plane, enum pipe pipe)
 {
 	int reg;

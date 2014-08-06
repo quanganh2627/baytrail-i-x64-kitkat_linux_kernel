@@ -1014,6 +1014,12 @@ extern int intel_edp_psr_exit_ioctl(struct drm_device *device, void *data,
 					struct drm_file *file_priv);
 extern int intel_edp_get_psr_support(struct drm_device *device, void *data,
 					struct drm_file *file);
+extern void vlv_enable_pll(struct intel_crtc *crtc);
+extern void intel_enable_pipe(struct drm_i915_private *dev_priv,
+		enum pipe pipe, bool pch_port, bool dsi);
+extern void intel_enable_plane(struct drm_i915_private *dev_priv,
+	enum plane plane, enum pipe pipe);
+
 /* VLV LP clock bending */
 extern void valleyview_program_clock_bending(
 		struct drm_i915_private *dev_priv,
