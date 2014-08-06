@@ -1442,6 +1442,7 @@ typedef struct drm_i915_private {
 	u32 pm_irq_mask;
 
 	struct work_struct hotplug_work;
+	struct delayed_work psr_work;
 	bool enable_hotplug_processing;
 	struct {
 		unsigned long hpd_last_jiffies;
