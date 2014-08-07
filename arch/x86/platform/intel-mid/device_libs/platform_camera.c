@@ -232,6 +232,8 @@ int camera_sensor_csi(struct v4l2_subdev *sd, u32 port,
 		csi->input_format = format;
 		csi->raw_bayer_order = bayer_order;
 		v4l2_set_subdev_hostdata(sd, (void *)csi);
+		csi->metadata_format = ATOMISP_INPUT_FORMAT_EMBEDDED;
+		csi->metadata_effective_width = NULL;
 		dev_info(&client->dev,
 			 "camera pdata: port: %d lanes: %d order: %8.8x\n",
 			 port, lanes, bayer_order);
@@ -341,6 +343,7 @@ void intel_register_i2c_camera_device(struct sfi_device_table_entry *pentry,
 			kfree(subdev_table);
 			return;
 		}
+		i = 0;
 		atomisp_platform_data->subdevs = subdev_table;
 	}
 
@@ -498,6 +501,17 @@ const struct camera_af_platform_data *camera_get_af_platform_data(void)
 	return &platform_data;
 }
 EXPORT_SYMBOL_GPL(camera_get_af_platform_data);
+
+#define HEXPREF(x)	((x) != 0 ? "0x" : "")
+#define HEX(x)		HEXPREF(x), (x)
+
+char *camera_get_msr_filename(char *buf, int buf_size, char *sensor, int cam)
+{
+	snprintf(buf, buf_size, "%02d%s-%s%x-%s%x-%s%x.drvb",
+		 cam, sensor, HEX(spid.vendor_id),
+		 HEX(spid.platform_family_id), HEX(spid.product_line_id));
+	return buf;
+}
 
 #ifdef CONFIG_ACPI
 void __init camera_init_device(void)
