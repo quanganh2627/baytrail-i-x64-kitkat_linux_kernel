@@ -305,6 +305,8 @@ struct devs_id __initconst device_ids[] = {
 					&intel_register_i2c_camera_device},
 	{"ov7736", SFI_DEV_TYPE_I2C, 0, &ov7736_platform_data,
 					&intel_register_i2c_camera_device},
+	{"ov5670", SFI_DEV_TYPE_I2C, 0, &ov5670_platform_data,
+					&intel_register_i2c_camera_device},
 	{"bf3905", SFI_DEV_TYPE_I2C, 0, &bf3905_platform_data,
 					&intel_register_i2c_camera_device},
 	{"gc0339", SFI_DEV_TYPE_I2C, 0, &gc0339_platform_data,
