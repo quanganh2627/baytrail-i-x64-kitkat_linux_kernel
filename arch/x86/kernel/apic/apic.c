@@ -994,7 +994,9 @@ void clear_local_APIC(void)
 {
 	int maxlvt;
 	u32 v;
-
+#ifdef CONFIG_X86_INTEL_SOFIA
+	return;
+#endif
 	/* APIC hasn't been mapped yet */
 	if (!x2apic_mode && !apic_phys)
 		return;
