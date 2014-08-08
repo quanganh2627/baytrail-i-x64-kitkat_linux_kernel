@@ -38,12 +38,65 @@ static char *dc_chrg_supplied_to[] = {
 	"dollar_cove_battery"
 };
 
+static void *platform_debug_batt_charge_profile(void)
+{
+	struct ps_temp_chg_table temp_mon_range[BATT_TEMP_NR_RNG];
+
+	char batt_str[] = "INTN0001";
+
+	memcpy(batt_chg_profile.batt_id, batt_str, strlen(batt_str));
+
+	batt_chg_profile.battery_type = 0x2;
+	batt_chg_profile.capacity = 5130;
+	batt_chg_profile.voltage_max = 4350;
+	batt_chg_profile.chrg_term_ma = 250;
+	batt_chg_profile.low_batt_mV = 3400;
+	batt_chg_profile.disch_tmp_ul = 45;
+	batt_chg_profile.disch_tmp_ll = 0;
+	batt_chg_profile.temp_mon_ranges = 3;
+
+	temp_mon_range[0].temp_up_lim = 45;
+	temp_mon_range[0].full_chrg_vol = 4350;
+	temp_mon_range[0].full_chrg_cur = 1800;
+	temp_mon_range[0].maint_chrg_vol_ll = 4285;
+	temp_mon_range[0].maint_chrg_vol_ul = 4350;
+	temp_mon_range[0].maint_chrg_cur = 1800;
+
+	temp_mon_range[1].temp_up_lim = 23;
+	temp_mon_range[1].full_chrg_vol = 4350;
+	temp_mon_range[1].full_chrg_cur = 1000;
+	temp_mon_range[1].maint_chrg_vol_ll = 4285;
+	temp_mon_range[1].maint_chrg_vol_ul = 4350;
+	temp_mon_range[1].maint_chrg_cur = 1000;
+
+	temp_mon_range[2].temp_up_lim = 10;
+	temp_mon_range[2].full_chrg_vol = 4350;
+	temp_mon_range[2].full_chrg_cur = 500;
+	temp_mon_range[2].maint_chrg_vol_ll = 4285;
+	temp_mon_range[2].maint_chrg_vol_ul = 4350;
+	temp_mon_range[2].maint_chrg_cur = 500;
+
+	memcpy(batt_chg_profile.temp_mon_range,
+		temp_mon_range,
+		BATT_TEMP_NR_RNG * sizeof(struct ps_temp_chg_table));
+
+	batt_chg_profile.temp_low_lim = 0;
+	ps_batt_chrg_prof.chrg_prof_type = PSE_MOD_CHRG_PROF;
+}
+
 static void *platform_get_batt_charge_profile(void)
 {
 	if (!em_config_get_charge_profile(&batt_chg_profile))
 		ps_batt_chrg_prof.chrg_prof_type = CHRG_PROF_NONE;
 	else
 		ps_batt_chrg_prof.chrg_prof_type = PSE_MOD_CHRG_PROF;
+
+/*Reserve for debug--Set batt charge profile without em*/
+/*1: enable debug set*/
+/*0: disable debug set*/
+#if 0
+	platform_debug_batt_charge_profile();
+#endif
 
 	ps_batt_chrg_prof.batt_prof = &batt_chg_profile;
 	battery_prop_changed(POWER_SUPPLY_BATTERY_INSERTED,
