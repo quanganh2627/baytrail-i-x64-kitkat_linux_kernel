@@ -1245,6 +1245,7 @@ struct intel_vbt_data {
 	bool edp_support;
 	int edp_bpp;
 	struct edp_power_seq edp_pps;
+	bool edp_fast_link_train;
 
 	/* MIPI DSI */
 	struct {

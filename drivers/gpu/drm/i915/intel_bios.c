@@ -647,6 +647,13 @@ parse_edp(struct drm_i915_private *dev_priv, struct bdb_header *bdb)
 		dev_priv->vbt.edp_vswing = DP_TRAIN_VOLTAGE_SWING_1200;
 		break;
 	}
+
+	/* edp->edp_fast_link_train is a 16 Bit value with corresponding
+	 * bit set for panel_type indicates if the panel supports fast
+	 * link training or not
+	 */
+	dev_priv->vbt.edp_fast_link_train =
+		(edp->edp_fast_link_train & (1 << panel_type)) ? true : false;
 }
 
 u8 *goto_next_sequence(u8 *data)

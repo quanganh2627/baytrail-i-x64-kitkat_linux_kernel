@@ -591,6 +591,7 @@ struct intel_dp {
 	bool want_panel_vdd;
 	bool psr_setup_done;
 	struct intel_connector *attached_connector;
+	bool fast_link_train;
 };
 
 struct intel_digital_port {
@@ -707,6 +708,7 @@ extern void intel_dp_init_link_config(struct intel_dp *intel_dp);
 extern void intel_dp_start_link_train(struct intel_dp *intel_dp);
 extern void intel_dp_complete_link_train(struct intel_dp *intel_dp);
 extern void intel_dp_stop_link_train(struct intel_dp *intel_dp);
+extern bool intel_dp_fast_link_train(struct intel_dp *intel_dp);
 extern void intel_dp_sink_dpms(struct intel_dp *intel_dp, int mode);
 extern void intel_dp_encoder_destroy(struct drm_encoder *encoder);
 extern void intel_dp_check_link_status(struct intel_dp *intel_dp);

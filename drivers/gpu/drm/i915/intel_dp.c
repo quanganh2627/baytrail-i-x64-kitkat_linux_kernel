@@ -2047,13 +2047,34 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 	if (WARN_ON(dp_reg & DP_PORT_EN))
 		return;
 
+	if (is_edp(intel_dp) && dev_priv->vbt.edp_fast_link_train)
+		intel_dp->fast_link_train = true;
+
 	ironlake_edp_panel_vdd_on(intel_dp);
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
+
+	/* Separate check as fast lnk training can be supported by
+	 * panel (vbt info) or else fast_link_train would have set
+	 * after successful completion of first Full link training
+	 * (intel_dp_complete_link_train)
+	 */
+	if (intel_dp->fast_link_train) {
+		if (intel_dp_fast_link_train(intel_dp))
+			goto flt_out;
+	}
+
 	intel_dp_start_link_train(intel_dp);
 	ironlake_edp_panel_on(intel_dp);
 	ironlake_edp_panel_vdd_off(intel_dp, true);
 	intel_dp_complete_link_train(intel_dp);
 	intel_dp_stop_link_train(intel_dp);
+	ironlake_edp_backlight_on(intel_dp);
+
+	return;
+
+flt_out:
+	ironlake_edp_panel_on(intel_dp);
+	ironlake_edp_panel_vdd_off(intel_dp, true);
 	ironlake_edp_backlight_on(intel_dp);
 }
 
@@ -2917,8 +2938,10 @@ intel_dp_complete_link_train(struct intel_dp *intel_dp)
 
 	intel_dp->DP = DP;
 
-	if (channel_eq)
+	if (channel_eq) {
 		DRM_DEBUG_KMS("Channel EQ done. DP Training successful\n");
+		intel_dp->fast_link_train = true;
+	}
 
 }
 
@@ -2926,6 +2949,77 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp)
 {
 	intel_dp_set_link_train(intel_dp, intel_dp->DP,
 				DP_TRAINING_PATTERN_DISABLE);
+}
+
+bool intel_dp_fast_link_train(struct intel_dp *intel_dp)
+{
+	struct drm_encoder *encoder = &dp_to_dig_port(intel_dp)->base.base;
+	struct drm_device *dev = encoder->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	int lane = 0;
+	bool ret = false;
+	uint8_t     link_status[DP_LINK_STATUS_SIZE];
+
+	uint32_t DP = intel_dp->DP;
+
+	if (HAS_DDI(dev))
+		intel_ddi_prepare_link_retrain(encoder);
+
+	/* Write the link configuration data */
+	intel_dp_aux_native_write(intel_dp, DP_LINK_BW_SET,
+					intel_dp->link_configuration,
+					DP_LINK_CONFIGURATION_SIZE);
+
+	DP |= DP_PORT_EN;
+
+	if (is_edp(intel_dp) && dev_priv->vbt.edp_fast_link_train)
+		for (lane = 0; lane < 4; lane++)
+			intel_dp->train_set[lane] = dev_priv->vbt.edp_vswing
+						| dev_priv->vbt.edp_preemphasis;
+
+	intel_dp_set_signal_levels(intel_dp, &DP);
+
+	do {
+
+		/* Set link training pattern 1 */
+		if (!intel_dp_set_link_train(intel_dp, DP,
+						DP_TRAINING_PATTERN_1 |
+						DP_LINK_SCRAMBLING_DISABLE))
+			break;
+
+		drm_dp_link_train_clock_recovery_delay(intel_dp->dpcd);
+
+		/* Set link training pattern 2 */
+		if (!intel_dp_set_link_train(intel_dp, DP,
+						DP_TRAINING_PATTERN_2 |
+						DP_LINK_SCRAMBLING_DISABLE))
+			break;
+
+		drm_dp_link_train_channel_eq_delay(intel_dp->dpcd);
+
+		if (!intel_dp_get_link_status(intel_dp, link_status))
+			break;
+
+		/* Make sure clock is ok */
+		if (!drm_dp_clock_recovery_ok(link_status, intel_dp->lane_count))
+			break;
+
+		if (drm_dp_channel_eq_ok(link_status, intel_dp->lane_count))
+			ret = true;
+
+		intel_dp_set_idle_link_train(intel_dp);
+
+		intel_dp->DP = DP;
+
+		intel_dp_stop_link_train(intel_dp);
+
+	} while (0);
+
+	if (ret)
+		DRM_DEBUG_KMS("DP Fast Link Training successful\n");
+
+	return ret;
 }
 
 static void
@@ -4045,6 +4139,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	     error, port_name(port));
 
 	intel_dp->psr_setup_done = false;
+	intel_dp->fast_link_train = false;
 
 	if (!intel_edp_init_connector(intel_dp, intel_connector)) {
 		i2c_del_adapter(&intel_dp->adapter);
