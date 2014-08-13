@@ -29,6 +29,7 @@
 #include "platform_gc5004.h"
 #include "platform_gc0310.h"
 #include "platform_ov2685.h"
+#include "platform_ov2685f.h"
 #include "platform_gc0310soc.h"
 #include "platform_ov7736.h"
 #include "platform_ov5670.h"
@@ -76,6 +77,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"ov8858", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"ov2680f", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov2685", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
+	{"ov2685f", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov7736", SOC_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov5670", RAW_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
 	{"mt9d113", SOC_CAMERA, ATOMISP_CAMERA_PORT_PRIMARY},
@@ -139,6 +141,10 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x3c, 0x0, 0x0, "ov2685"},
 		{"ov2685", SFI_DEV_TYPE_I2C, 0, &ov2685_platform_data,
+			&intel_register_i2c_camera_device}
+	},  {
+		{SFI_DEV_TYPE_I2C, 2, 0x3c, 0x0, 0x0, "ov2685f"},
+		{"ov2685f", SFI_DEV_TYPE_I2C, 0, &ov2685f_platform_data,
 			&intel_register_i2c_camera_device}
 	},  {
 		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "ov7736"},
@@ -211,7 +217,11 @@ static struct camera_device_table byt_crv2_cam_table[] = {
 static struct camera_device_table byt_crv2_cam_table[] = {
 	{
 		{SFI_DEV_TYPE_I2C, 2, 0x3c, 0x0, 0x0, "ov2685"},
-		{"ov2685", SFI_DEV_TYPE_I2C, 0, &ov2685_platform_data,
+		{"ov2685", sfi_dev_type_i2c, 0, &ov2685_platform_data,
+			&intel_register_i2c_camera_device}
+	}, {
+		{SFI_DEV_TYPE_I2C, 2, 0x3c, 0x0, 0x0, "ov2685f"},
+		{"ov2685f", sfi_dev_type_i2c, 0, &ov2685f_platform_data,
 			&intel_register_i2c_camera_device}
 	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x3C, 0x0, 0x0, "ov7736"},
