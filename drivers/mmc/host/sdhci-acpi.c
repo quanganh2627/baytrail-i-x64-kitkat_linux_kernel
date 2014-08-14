@@ -345,7 +345,9 @@ static const struct sdhci_acpi_slot sdhci_acpi_slot_int_sdio = {
 	.quirks2 = SDHCI_QUIRK2_HOST_OFF_CARD_ON |
 		SDHCI_QUIRK2_PRESET_VALUE_BROKEN | SDHCI_QUIRK2_FAKE_VDD,
 	.caps    = MMC_CAP_NONREMOVABLE | MMC_CAP_POWER_OFF_CARD,
+#ifndef CONFIG_MMC_MRVL_CWS
 	.flags   = SDHCI_ACPI_RUNTIME_PM,
+#endif
 	.pm_caps = MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ |
 		MMC_PM_WAKE_SDIO_IRQ,
 	.probe_slot	= sdhci_acpi_sdio_probe_slot,
