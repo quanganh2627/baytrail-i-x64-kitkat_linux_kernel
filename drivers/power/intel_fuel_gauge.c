@@ -44,6 +44,7 @@
 #include <linux/notifier.h>
 #include <linux/power/intel_fuel_gauge.h>
 #include <asm/intel_em_config.h>
+#include <linux/power/battery_id.h>
 
 #define DRIVER_NAME	"intel_fuel_gauge"
 
@@ -368,7 +369,7 @@ static int intel_fuel_gauge_get_property(struct power_supply *psup,
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
-		val->strval = "INTN0001";
+		val->strval = fg_info->batt_params.battid;
 		break;
 	default:
 		mutex_unlock(&fg_info->lock);
@@ -609,11 +610,13 @@ static int intel_fuel_gauge_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&fg_info->fg_worker, &intel_fg_worker);
 	fg_info->batt_params.status = POWER_SUPPLY_STATUS_DISCHARGING;
 
-	if (em_config_get_oem0_data(&oem0_data))
+	if (em_config_get_oem0_data(&oem0_data)) {
 		fg_info->batt_params.is_valid_battery = true;
-	else
+		strncpy(fg_info->batt_params.battid, oem0_data.batt_id, BATTID_STR_LEN);
+	} else {
 		fg_info->batt_params.is_valid_battery = false;
-
+		strncpy(fg_info->batt_params.battid, "unknown", BATTID_STR_LEN);
+	}
 	wake_lock_init(&fg_info->wake_ui.wakelock, WAKE_LOCK_SUSPEND,
 				"intel_fg_wakelock");
 

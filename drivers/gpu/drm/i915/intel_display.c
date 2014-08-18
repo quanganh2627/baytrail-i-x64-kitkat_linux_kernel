@@ -2409,10 +2409,14 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 			I915_WRITE(DSPTILEOFF(plane),
 				   (((y + fb->height - 1) << 16) |
 				    (x + fb->width - 1)));
+			/* Linear Offset should be the difference b/w the last pixel of
+			 * the last line of the display data in its unrotated orientation
+			 * and the display surface address.
+			 */
 			I915_WRITE(DSPLINOFF(plane),
 				   linear_offset +
 				   (fb->height - 1) * fb->pitches[0] +
-				   fb->width * pixel_size);
+				   (fb->width - 1) * pixel_size);
 		} else {
 			I915_WRITE(DSPTILEOFF(plane), (y << 16) | x);
 			I915_WRITE(DSPLINOFF(plane), linear_offset);
@@ -10570,6 +10574,16 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 	save_set.y = set->crtc->y;
 	save_set.fb = set->crtc->fb;
 
+	/* Identifying the Media Playback DRRS request */
+	if (is_media_playback_drrs_request(set)) {
+		/* While requesting for Media Playback DRRS Userspace should
+		 * make sure that fb passed is same as that is in use.
+		 * Else at successful drrs request, we will hit a warn_on on
+		 * return path for fb mismatch */
+		ret = intel_media_playback_drrs_configure(dev, set->mode);
+		goto out_config;
+	}
+
 	/* Compute whether we need a full modeset, only an fb base update or no
 	 * change at all. In the future we might also check whether only the
 	 * mode changed, e.g. for LVDS where we only change the panel fitter in
@@ -10886,10 +10900,9 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 	dev_priv->is_resuming = false;
 	dev_priv->s0ixstat = false;
 
-	if (dev_priv->dpst.state) {
-		i915_dpst_set_default_luma(dev);
+	i915_dpst_set_default_luma(dev);
+	if (dev_priv->dpst.state)
 		i915_dpst_enable_hist_interrupt(dev);
-	}
 
 	DRM_DEBUG_PM("Value in iClk5val = %x\n",
 		vlv_ccu_read(dev_priv, CCU_ICLK5_REG));

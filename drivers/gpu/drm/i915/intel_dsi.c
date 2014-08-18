@@ -674,11 +674,12 @@ static int intel_dsi_get_modes(struct drm_connector *connector)
 	struct intel_dsi *intel_dsi = intel_attached_dsi(connector);
 	struct drm_display_mode *mode;
 	struct drm_display_mode *input_mode = NULL;
+	int count = 0;
 	DRM_DEBUG_KMS("\n");
 
 	if (!intel_connector->panel.fixed_mode) {
 		DRM_DEBUG_KMS("no fixed mode\n");
-		return 0;
+		return count;
 	}
 
 	input_mode = intel_connector->panel.fixed_mode;
@@ -686,13 +687,27 @@ static int intel_dsi_get_modes(struct drm_connector *connector)
 				  input_mode);
 	if (!mode) {
 		DRM_DEBUG_KMS("drm_mode_duplicate failed\n");
-		return 0;
+		return count;
 	}
 
 	drm_mode_probed_add(connector, mode);
+	count++;
+
+	if (intel_connector->panel.downclock_mode) {
+		mode = drm_mode_duplicate(connector->dev,
+				intel_connector->panel.downclock_mode);
+		if (!mode) {
+			DRM_DEBUG_KMS("drm_mode_duplicate failed\n");
+			return count;
+		}
+
+		drm_mode_probed_add(connector, mode);
+		count++;
+	}
+
 	/*Fill the panel info here*/
 	intel_dsi->dev.dev_ops->get_info(0, connector);
-	return 1;
+	return count;
 }
 
 static void intel_dsi_destroy(struct drm_connector *connector)
@@ -842,6 +857,180 @@ intel_dsi_add_properties(struct intel_dsi *intel_dsi,
 	intel_attach_scaling_src_size_property(connector);
 }
 
+static void intel_mipi_drrs_work_fn(struct work_struct *__work)
+{
+	struct intel_mipi_drrs_work *work =
+		container_of(to_delayed_work(__work),
+			struct intel_mipi_drrs_work, work);
+	struct intel_encoder *intel_encoder = work->intel_encoder;
+	struct drm_i915_private *dev_priv =
+				intel_encoder->base.dev->dev_private;
+	struct intel_dsi_mnp *intel_dsi_mnp;
+	struct intel_dsi *intel_dsi = NULL;
+	struct intel_crtc *intel_crtc = NULL;
+	struct drm_display_mode *prev_mode = NULL;
+	bool resume_idleness_detection = false, fallback_attempt = false;
+	int ret, retry_cnt = 3;
+
+	intel_dsi = enc_to_intel_dsi(&intel_encoder->base);
+	intel_crtc = intel_encoder->new_crtc;
+
+init:
+	if (work->target_rr_type == DRRS_HIGH_RR) {
+		intel_dsi_mnp = &intel_crtc->config.dsi_mnp;
+	} else if (work->target_rr_type == DRRS_LOW_RR) {
+		intel_dsi_mnp = &intel_crtc->config.dsi_mnp2;
+	} else if (work->target_rr_type == DRRS_MEDIA_RR) {
+		if (intel_calculate_dsi_pll_mnp(intel_dsi,
+				work->target_mode,
+				&intel_crtc->config.dsi_mnp3, 0) < 0)
+			return;
+		intel_dsi_mnp = &intel_crtc->config.dsi_mnp3;
+	} else {
+		DRM_ERROR("Unknown refreshrate_type\n");
+		return;
+	}
+
+	if (dev_priv->drrs_state.refresh_rate_type == DRRS_MEDIA_RR &&
+			work->target_rr_type == DRRS_HIGH_RR)
+		resume_idleness_detection = true;
+
+retry:
+	ret = intel_drrs_configure_dsi_pll(intel_dsi, intel_dsi_mnp);
+	if (ret == 0) {
+		DRM_DEBUG_KMS("cur_rr_type: %d, cur_rr: %d, target_rr_type: %d, target_rr: %d\n",
+				dev_priv->drrs_state.refresh_rate_type,
+				intel_crtc->base.mode.vrefresh,
+				work->target_rr_type, work->target_mode->vrefresh);
+
+		mutex_lock(&dev_priv->drrs_state.mutex);
+		dev_priv->drrs_state.refresh_rate_type =
+						work->target_rr_type;
+		mutex_unlock(&dev_priv->drrs_state.mutex);
+
+		DRM_INFO("Refresh Rate set to : %dHz\n",
+						work->target_mode->vrefresh);
+
+		intel_crtc->base.mode.vrefresh = work->target_mode->vrefresh;
+		intel_crtc->base.mode.clock = work->target_mode->clock;
+
+		if (resume_idleness_detection)
+			intel_update_drrs(intel_encoder->base.dev);
+	} else if (ret == -ETIMEDOUT && retry_cnt) {
+		retry_cnt--;
+		DRM_DEBUG_KMS("Retry left ... <%d>\n", retry_cnt);
+		goto retry;
+	} else if (ret == -EACCES && !fallback_attempt) {
+		DRM_ERROR("Falling back to the previous DRRS state. %d->%d\n",
+				work->target_rr_type,
+				dev_priv->drrs_state.refresh_rate_type);
+
+		dev_priv->drrs_state.target_rr_type =
+					dev_priv->drrs_state.refresh_rate_type;
+		work->target_rr_type = dev_priv->drrs_state.target_rr_type;
+		drm_mode_destroy(intel_encoder->base.dev, work->target_mode);
+
+		if (work->target_rr_type == DRRS_HIGH_RR) {
+			prev_mode =
+				dev_priv->drrs.connector->panel.fixed_mode;
+			resume_idleness_detection = true;
+		} else if (work->target_rr_type == DRRS_LOW_RR) {
+			prev_mode =
+				dev_priv->drrs.connector->panel.downclock_mode;
+		} else if (work->target_rr_type == DRRS_MEDIA_RR) {
+			prev_mode =
+				dev_priv->drrs.connector->panel.target_mode;
+		}
+
+		work->target_mode = drm_mode_duplicate(intel_encoder->base.dev,
+								prev_mode);
+		fallback_attempt = true;
+		goto init;
+	} else {
+		if (fallback_attempt)
+			DRM_ERROR("DRRS State Fallback attempt failed\n");
+		if (ret == -ETIMEDOUT)
+			DRM_ERROR("TIMEDOUT in all retry attempt\n");
+	}
+
+	drm_mode_destroy(intel_encoder->base.dev, work->target_mode);
+}
+
+void
+intel_dsi_set_drrs_state(struct intel_encoder *intel_encoder)
+{
+	struct drm_i915_private *dev_priv =
+				intel_encoder->base.dev->dev_private;
+	struct drm_display_mode *target_mode =
+				dev_priv->drrs.connector->panel.target_mode;
+	struct intel_mipi_drrs_work *work = dev_priv->drrs.mipi_drrs_work;
+	unsigned int ret;
+
+	ret = work_busy(&work->work.work);
+	if (ret) {
+		if (work->target_mode)
+			if (work->target_mode->vrefresh ==
+						target_mode->vrefresh) {
+				DRM_DEBUG_KMS("Repeated request for %dHz\n",
+							target_mode->vrefresh);
+				return;
+			}
+		DRM_DEBUG_KMS("Cancelling an queued/executing work\n");
+		atomic_set(&work->abort_wait_loop, 1);
+		cancel_delayed_work_sync(&work->work);
+		atomic_set(&work->abort_wait_loop, 0);
+		if (ret & WORK_BUSY_PENDING)
+			drm_mode_destroy(intel_encoder->base.dev,
+							work->target_mode);
+
+	}
+	work->intel_encoder = intel_encoder;
+	work->target_rr_type = dev_priv->drrs_state.target_rr_type;
+	work->target_mode = drm_mode_duplicate(intel_encoder->base.dev,
+								target_mode);
+
+	schedule_delayed_work(&dev_priv->drrs.mipi_drrs_work->work, 0);
+}
+
+int intel_dsi_drrs_deferred_work_init(struct drm_device *dev)
+{
+	struct intel_mipi_drrs_work *work;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	work = kzalloc(sizeof(struct intel_mipi_drrs_work), GFP_KERNEL);
+	if (!work) {
+		DRM_ERROR("Failed to allocate mipi DRRS work structure\n");
+		return -ENOMEM;
+	}
+
+	atomic_set(&work->abort_wait_loop, 0);
+	INIT_DELAYED_WORK(&work->work, intel_mipi_drrs_work_fn);
+	work->target_mode = NULL;
+
+	dev_priv->drrs.mipi_drrs_work = work;
+	return 0;
+}
+
+void intel_dsi_drrs_init(struct intel_connector *intel_connector,
+				struct drm_display_mode *downclock_mode)
+{
+	struct drm_connector *connector = &intel_connector->base;
+	struct drm_device *dev = connector->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (intel_dsi_drrs_deferred_work_init(dev) < 0)
+		return;
+
+	if (intel_drrs_init(dev, intel_connector, downclock_mode) < 0)
+		kfree(dev_priv->drrs.mipi_drrs_work);
+	else if (dev_priv->drrs_state.type == SEAMLESS_DRRS_SUPPORT) {
+		/* In DSI SEAMLESS DRRS is a SW driven feature */
+		dev_priv->drrs_state.type = SEAMLESS_DRRS_SUPPORT_SW;
+		intel_attach_drrs_capability_property(connector,
+						dev_priv->drrs_state.type);
+	}
+}
+
 bool intel_dsi_init(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -851,6 +1040,7 @@ bool intel_dsi_init(struct drm_device *dev)
 	struct intel_connector *intel_connector;
 	struct drm_connector *connector;
 	struct drm_display_mode *fixed_mode = NULL;
+	struct drm_display_mode *downclock_mode = NULL;
 	const struct intel_dsi_device *dsi;
 	unsigned int i;
 
@@ -884,6 +1074,7 @@ bool intel_dsi_init(struct drm_device *dev)
 	intel_encoder->post_disable = intel_dsi_post_disable;
 	intel_encoder->get_hw_state = intel_dsi_get_hw_state;
 	intel_encoder->get_config = intel_dsi_get_config;
+	intel_encoder->set_drrs_state = intel_dsi_set_drrs_state;
 
 	intel_connector->get_hw_state = intel_connector_get_hw_state;
 
@@ -943,7 +1134,16 @@ bool intel_dsi_init(struct drm_device *dev)
 
 	dev_priv->is_mipi = true;
 	fixed_mode->type |= DRM_MODE_TYPE_PREFERRED;
-	intel_panel_init(&intel_connector->panel, fixed_mode, NULL);
+	if (INTEL_INFO(dev)->gen > 6) {
+		downclock_mode = intel_dsi_calc_panel_downclock(dev,
+							fixed_mode, connector);
+		if (downclock_mode)
+			intel_dsi_drrs_init(intel_connector, downclock_mode);
+		else
+			DRM_DEBUG_KMS("Downclock_mode is not found\n");
+	}
+
+	intel_panel_init(&intel_connector->panel, fixed_mode, downclock_mode);
 	intel_panel_setup_backlight(connector);
 	intel_connector->panel.fitting_mode = 0;
 

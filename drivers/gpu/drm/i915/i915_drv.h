@@ -190,6 +190,12 @@ struct intel_link_m_n {
 	uint32_t	link_n;
 };
 
+struct intel_dsi_mnp {
+	uint32_t m;
+	uint32_t n;
+	uint32_t p;
+};
+
 void intel_link_compute_m_n(int bpp, int nlanes,
 			    int pixel_clock, int link_clock,
 			    struct intel_link_m_n *m_n);
@@ -672,6 +678,31 @@ enum no_psr_reason {
 	PSR_HSW_NOT_DDIA,
 };
 
+enum drrs_support_type {
+	DRRS_NOT_SUPPORTED = 0,
+	STATIC_DRRS_SUPPORT = 1,
+	SEAMLESS_DRRS_SUPPORT = 2,
+	SEAMLESS_DRRS_SUPPORT_SW = 3,
+};
+
+/*
+ * HIGH_RR is the highest panel refresh rate
+ * LOW_RR is the lowest panel refresh rate
+ */
+enum drrs_refresh_rate_type {
+	DRRS_HIGH_RR,
+	DRRS_LOW_RR,
+	DRRS_MEDIA_RR,
+	DRRS_MAX_RR, /* RR count */
+};
+
+struct drrs_info {
+	enum drrs_support_type type;
+	enum drrs_refresh_rate_type refresh_rate_type;
+	enum drrs_refresh_rate_type target_rr_type;
+	struct mutex mutex;
+};
+
 struct i915_drrs {
 	struct intel_connector *connector;
 	bool is_clone;
@@ -680,6 +711,13 @@ struct i915_drrs {
 		struct drm_crtc *crtc;
 		int interval;
 	} *drrs_work;
+	struct intel_mipi_drrs_work {
+		struct delayed_work work;
+		struct intel_encoder *intel_encoder;
+		enum drrs_refresh_rate_type target_rr_type;
+		struct drm_display_mode *target_mode;
+		atomic_t abort_wait_loop;
+	} *mipi_drrs_work;
 };
 
 enum intel_pch {
@@ -1170,12 +1208,6 @@ enum modeset_restore {
 	MODESET_SUSPENDED,
 };
 
-enum drrs_support_type {
-	DRRS_NOT_SUPPORTED = 0,
-	STATIC_DRRS_SUPPORT = 1,
-	SEAMLESS_DRRS_SUPPORT = 2
-};
-
 struct intel_vbt_target_res {
 	int xres;
 	int yres;
@@ -1207,6 +1239,7 @@ struct intel_vbt_data {
 	 * These values correspond to the VBT values for drrs mode.
 	 */
 	enum drrs_support_type drrs_type;
+	unsigned int drrs_min_vrefresh;
 
 	/* eDP */
 	int edp_rate;
@@ -1431,6 +1464,7 @@ typedef struct drm_i915_private {
 
 	struct i915_fbc fbc;
 	struct i915_drrs drrs;
+	struct drrs_info drrs_state;
 	struct intel_opregion opregion;
 	struct intel_vbt_data vbt;
 	/* Mismatch in required mode and panel native mode
@@ -1575,6 +1609,7 @@ typedef struct drm_i915_private {
 	struct drm_property *force_audio_property;
 	struct drm_property *force_pfit_property;
 	struct drm_property *scaling_src_size_property;
+	struct drm_property *drrs_capability_property;
 
 	bool hw_contexts_disabled;
 	uint32_t hw_context_size;
@@ -1627,8 +1662,8 @@ typedef struct drm_i915_private {
 
 	int planeid_gamma;
 	int planeid_csc;
-	bool gamma_enabled;
-	bool csc_enabled;
+	bool gamma_enabled[I915_MAX_PIPES];
+	bool csc_enabled[I915_MAX_PIPES];
 	bool is_hdmi;
 	u16 is_mipi;
 	u16 mipi_panel_id;
