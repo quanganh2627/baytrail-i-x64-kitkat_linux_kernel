@@ -891,7 +891,7 @@ static int pmic_fg_program_design_cap(struct pmic_fg_info *info)
        cap1 = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
        if (cap1 < 0) {
                dev_warn(&info->pdev->dev, "CAP1 reg read err!!\n");
-               return ret;
+               return -1;
       }
        cap0 = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
 
@@ -912,7 +912,7 @@ static int pmic_fg_program_design_cap(struct pmic_fg_info *info)
 
 	ret = pmic_fg_reg_setb(info, DC_FG_CNTL_REG, FG_CNTL_CC_EN);
 
-	return 0;
+	return ret;
 }
 
 static int pmic_fg_program_ocv_curve(struct pmic_fg_info *info)
@@ -939,9 +939,9 @@ static int pmic_fg_program_rdc_vals(struct pmic_fg_info *info)
        rdc1 = pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
        if (rdc1 < 0) {
                dev_warn(&info->pdev->dev, "RDC1 reg read err!!\n");
-              return ret;
+              return -1;
        }
-       rdc0 = pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
+       rdc0 = pmic_fg_reg_readb(info, DC_FG_RDC0_REG);
 
        if (rdc1 == info->cfg->rdc1 && rdc0 == info->cfg->rdc0) {
                dev_info(&info->pdev->dev, "RDC is already initialized\n");
