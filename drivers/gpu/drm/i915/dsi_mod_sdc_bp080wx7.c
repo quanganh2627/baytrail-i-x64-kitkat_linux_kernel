@@ -115,16 +115,16 @@ static struct drm_display_mode *sdc_bp080wx7_get_modes(
 	}
 
 	/* Hardcode 800*1280 */
-	/*HFP = 16, HSYNC = 5, HBP = 59 */
-	/*VFP = 8, VSYNC = 5, VBP = 3 */
+	/*HFP = 16, HSYNC = 140, HBP = 4 */
+	/*VFP = 8, VSYNC = 4, VBP = 4 */
 	mode->hdisplay = 800;
 	mode->hsync_start = mode->hdisplay + 16;
 	mode->hsync_end = mode->hsync_start + 140;
 	mode->htotal = mode->hsync_end  + 4;
 
 	mode->vdisplay = 1280;
-	mode->vsync_start = mode->vdisplay + 4;
-	mode->vsync_end = mode->vsync_start + 8;
+	mode->vsync_start = mode->vdisplay + 8;
+	mode->vsync_end = mode->vsync_start + 4;
 	mode->vtotal = mode->vsync_end + 4;
 
 	mode->vrefresh = 60;
