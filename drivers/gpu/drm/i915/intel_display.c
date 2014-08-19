@@ -4144,7 +4144,8 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 			dev_priv->clockspread = true;
 			valleyview_program_clock_spread(
 				dev_priv, &clockspread);
-		} else if ((encoder->type == INTEL_OUTPUT_HDMI) && (check_live_status(dev_priv) == true)) {
+		} else if (((encoder->type == INTEL_OUTPUT_HDMI) && (check_live_status(dev_priv) == true))
+				|| (encoder->type == INTEL_OUTPUT_ANALOG)) {
 			dev_priv->unplug = false;
 			DRM_DEBUG_DRIVER("INFO: Enable Bending For HDMI\n");
 			dev_priv->clockbend = true;
@@ -4287,7 +4288,8 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 				dev_priv->clockspread = false;
 				valleyview_program_clock_spread(
 					dev_priv, &clockspread);
-			} else if (encoder->type == INTEL_OUTPUT_HDMI) {
+			} else if ((encoder->type == INTEL_OUTPUT_HDMI) ||
+				   (encoder->type == INTEL_OUTPUT_ANALOG)) {
 				dev_priv->clockbend = false;
 				valleyview_program_clock_bending(
 					dev_priv, &clockbend);
