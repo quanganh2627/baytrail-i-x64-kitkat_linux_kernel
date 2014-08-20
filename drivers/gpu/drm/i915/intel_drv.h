@@ -437,7 +437,6 @@ struct intel_crtc {
 	uint32_t scaling_src_size;
 	/* panel fitter status flag */
 	bool	pfit_en_status;
-	bool	dummy_flip;
 };
 
 struct intel_plane_wm_parameters {
