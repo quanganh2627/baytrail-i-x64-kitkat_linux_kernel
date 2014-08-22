@@ -37,10 +37,6 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
-
-int hdmi_enable_flag = 0;
-
-
 static struct drm_device *intel_hdmi_to_dev(struct intel_hdmi *intel_hdmi)
 {
 	return hdmi_to_dig_port(intel_hdmi)->base.base.dev;
@@ -1580,7 +1576,7 @@ static void intel_hdmi_pre_enable(struct intel_encoder *encoder)
 	vlv_dpio_write(dev_priv, DPIO_PCS_CLOCKBUF8(port),
 			 0x00400888);
 	mutex_unlock(&dev_priv->dpio_lock);
-	hdmi_enable_flag = 1;
+
 	intel_enable_hdmi(encoder);
 
 	vlv_wait_port_ready(dev_priv, port);
@@ -1626,7 +1622,6 @@ static void intel_hdmi_post_disable(struct intel_encoder *encoder)
 	vlv_dpio_write(dev_priv, DPIO_PCS_TX(port), 0x00000000);
 	vlv_dpio_write(dev_priv, DPIO_PCS_CLK(port), 0x00e00060);
 	mutex_unlock(&dev_priv->dpio_lock);
-	hdmi_enable_flag = 0;
 }
 
 static void intel_hdmi_destroy(struct drm_connector *connector)
