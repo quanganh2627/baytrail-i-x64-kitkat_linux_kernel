@@ -533,7 +533,7 @@ static int get_charging_status(struct pmic_chrg_info *info)
 		stat = POWER_SUPPLY_STATUS_UNKNOWN;
 	else if (!(pwr_stat & PS_STAT_VBUS_PRESENT))
 		stat = POWER_SUPPLY_STATUS_DISCHARGING;
-	else if (bat_irq_stat & CHRG_STAT_CHARGING)
+	else if (chrg_stat & CHRG_STAT_CHARGING)
 		stat = POWER_SUPPLY_STATUS_CHARGING;
 	else if (bat_irq_stat & BAT_IRQ_STAT_CHRG_DONE)
 		stat = POWER_SUPPLY_STATUS_FULL;

@@ -150,14 +150,13 @@ static int iio_dc_xpwr_gpadc_sample(struct iio_dev *indio_dev,
 {
 	struct gpadc_info *info = iio_priv(indio_dev);
 	int i;
-	u8 th, tl;
-
+	u8 buf[2];
 	mutex_lock(&info->lock);
 	for (i = 0; i < GPADC_CH_NUM; i++) {
 		if (ch & (1 << i)) {
-			th = intel_mid_pmic_readb(gpadc_regmaps[i].rslth);
-			tl = intel_mid_pmic_readb(gpadc_regmaps[i].rsltl);
-			res->data[i] = (th << 4) + ((tl >> 4) & 0x0F);
+			/*change to multibyte read since the address is continious*/
+			intel_mid_pmic_read_multi(gpadc_regmaps[i].rslth, 2, buf);
+			res->data[i] = (buf[0] << 4) + ((buf[1] >> 4) & 0x0F);
 		}
 	}
 

@@ -247,6 +247,22 @@ static int pmic_fg_reg_clearb(struct pmic_fg_info *info, int reg, u8 mask)
        return ret;
 }
 
+static int pmic_fg_reg_readmul(struct pmic_fg_info *info, int reg, u8 len, u8 *buf)
+{
+	int ret, i;
+
+	for (i = 0; i < NR_RETRY_CNT; i++) {
+		ret = intel_mid_pmic_read_multi(reg, len, buf);
+		if (ret == -EAGAIN || ret == -ETIMEDOUT)
+			continue;
+		else
+			break;
+	}
+	if (ret < 0)
+		dev_err(&info->pdev->dev, "pmic multi reg read err:%d\n", ret);
+
+	return ret;
+}
 static int pmic_fg_reg_readb(struct pmic_fg_info *info, int reg)
 {
 	int ret, i;
@@ -411,21 +427,16 @@ btemp_read_fail:
 static int pmic_fg_get_vocv(struct pmic_fg_info *info, int *vocv)
 {
 	int ret, value;
-
+	u8 buf[2];
 	/*
 	 * OCV readings are 12-bit length. So Read
 	 * the MSB first left-shift by 4 bits and
 	 * read the lower nibble.
 	 */
-	ret = pmic_fg_reg_readb(info, DC_FG_OCVH_REG);
+	ret = pmic_fg_reg_readmul(info, DC_FG_OCVH_REG, 2, buf);
 	if (ret < 0)
 		goto vocv_read_fail;
-	value = ret << 4;
-
-	ret = pmic_fg_reg_readb(info, DC_FG_OCVL_REG);
-	if (ret < 0)
-		goto vocv_read_fail;
-	value |= (ret & 0xf);
+	value = (buf[0] << 4) | (buf[1] & 0xf);
 
 	*vocv = ADC_TO_VBATT(value);
 vocv_read_fail:
@@ -506,24 +517,17 @@ health_read_fail:
 static int pmic_fg_get_charge_now(struct pmic_fg_info *info, int *value)
 {
 	int ret;
-
-	ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
-	if (ret < 0)
-		goto pmic_fg_cnow_err;
-
-	*value = (ret & FG_CC_MTR1_VAL_MASK) << 8;
-
+	u8 buf[2];
 	/*
 	 * higher byte and lower byte reads should be
 	 * back to back to get successful lower byte result.
 	 */
-	pmic_fg_reg_readb(info, DC_FG_CC_MTR1_REG);
-	ret = pmic_fg_reg_readb(info, DC_FG_CC_MTR0_REG);
+
+	ret = pmic_fg_reg_readmul(info, DC_FG_CC_MTR1_REG, 2, buf);
 	if (ret < 0)
 		goto pmic_fg_cnow_err;
-	*value |= (ret & FG_CC_MTR0_VAL_MASK);
+	*value = ((buf[0] & FG_CC_MTR1_VAL_MASK) << 8) | (buf[1] & FG_CC_MTR0_VAL_MASK);
 	*value *= FG_DES_CAP_RES_LSB;
-
 	return 0;
 
 pmic_fg_cnow_err:
@@ -533,23 +537,13 @@ pmic_fg_cnow_err:
 static int pmic_fg_get_charge_full(struct pmic_fg_info *info, int *value)
 {
 	int ret;
+	u8 buf[2];
 
-	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	ret = pmic_fg_reg_readmul(info, DC_FG_DES_CAP1_REG, 2, buf);
 	if (ret < 0)
 		goto pmic_fg_cfull_err;
-	*value = (ret & FG_DES_CAP1_VAL_MASK) << 8;
-
-	/*
-	 * higher byte and lower byte reads should be
-	 * back to back to get successful lower byte result.
-	 */
-	pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
-	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
-	if (ret < 0)
-		goto pmic_fg_cfull_err;
-	*value |= (ret & FG_DES_CAP0_VAL_MASK);
+	*value = ((buf[0] & FG_DES_CAP1_VAL_MASK) << 8 ) | (buf[1] & FG_DES_CAP0_VAL_MASK);
 	*value *= FG_DES_CAP_RES_LSB;
-
 	return 0;
 
 pmic_fg_cfull_err:
@@ -678,52 +672,35 @@ static int pmic_fg_set_battery_property(struct power_supply *psy,
 static int pmic_fg_update_config_params(struct pmic_fg_info *info)
 {
 	int ret, i;
+	u8 buf[2];
 
-	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
+	ret = pmic_fg_reg_readmul(info, DC_FG_DES_CAP1_REG, 2, buf);
 	if (ret < 0)
-		goto fg_svae_cfg_fail;
-	else
-		info->cfg->cap1 = ret;
+		goto fg_save_cfg_fail;
+	else {
+		info->cfg->cap1 = buf[0];
+		info->cfg->cap0 = buf[1];
+	}
 
-	/*
-	 * higher byte and lower byte reads should be
-	 * back to back to get successful lower byte result.
-	 */
-	pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
-	ret = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
+	ret = pmic_fg_reg_readmul(info, DC_FG_RDC1_REG, 2, buf);
 	if (ret < 0)
-		goto fg_svae_cfg_fail;
-	else
-		info->cfg->cap0 = ret;
-
-	ret = pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
-	if (ret < 0)
-		goto fg_svae_cfg_fail;
-	else
-		info->cfg->rdc1 = ret;
-
-	/*
-	 * higher byte and lower byte reads should be
-	 * back to back to get successful lower byte result.
-	 */
-	pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
-	ret = pmic_fg_reg_readb(info, DC_FG_RDC0_REG);
-	if (ret < 0)
-		goto fg_svae_cfg_fail;
-	else
-		info->cfg->rdc0 = ret;
+		goto fg_save_cfg_fail;
+	else {
+		info->cfg->rdc1 = buf[0];
+		info->cfg->rdc0 = buf[1];
+	}
 
 	for (i = 0; i < BAT_CURVE_SIZE; i++) {
 		ret = pmic_fg_reg_readb(info, DC_FG_OCV_CURVE_REG + i);
 		if (ret < 0)
-			goto fg_svae_cfg_fail;
+			goto fg_save_cfg_fail;
 		else
 			info->cfg->bat_curve[i] = ret;
 	}
 
 	return 0;
 
-fg_svae_cfg_fail:
+fg_save_cfg_fail:
 	return ret;
 }
 
@@ -883,36 +860,28 @@ static int pmic_fg_program_design_cap(struct pmic_fg_info *info)
 {
 	int ret;
 	int cap1, cap0;
+	u8 buf[2];
 
-//	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP1_REG, info->pdata->cap1);
-//	if (ret < 0)
-//		goto fg_prog_descap_fail;
+	ret = pmic_fg_reg_readmul(info, DC_FG_DES_CAP1_REG, 2, buf);
+	if (ret < 0) {
+		dev_warn(&info->pdev->dev, "CAP reg read error\n");
+		return ret;
+	}
 
-       cap1 = pmic_fg_reg_readb(info, DC_FG_DES_CAP1_REG);
-       if (cap1 < 0) {
-               dev_warn(&info->pdev->dev, "CAP1 reg read err!!\n");
-               return -1;
-      }
-       cap0 = pmic_fg_reg_readb(info, DC_FG_DES_CAP0_REG);
+	if (buf[0] == info->cfg->cap1 && buf[1] == info->cfg->cap0) {
+		dev_info(&info->pdev->dev, "design cap is already initialized\n");
+		return 0;
+	} else {
+		dev_info(&info->pdev->dev, "design cap need to be initialized\n");
+	}
 
-       if (cap1 == info->cfg->cap1 && cap0 == info->cfg->cap0) {
-               dev_info(&info->pdev->dev, "FG data is already initialized\n");
-               return 0;
-       } else {
-              dev_info(&info->pdev->dev, "FG data need to be initialized\n");
-       }
-
-       //Disable coulomb meter
-       ret = pmic_fg_reg_clearb(info, DC_FG_CNTL_REG, FG_CNTL_CC_EN);
-
-       ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP1_REG, info->cfg->cap1);
-
-
-		ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP0_REG, info->cfg->cap0);
-
+	//Disable coulomb meter
+	ret = pmic_fg_reg_clearb(info, DC_FG_CNTL_REG, FG_CNTL_CC_EN);
+	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP1_REG, info->cfg->cap1);
+	ret = pmic_fg_reg_writeb(info, DC_FG_DES_CAP0_REG, info->cfg->cap0);
 	ret = pmic_fg_reg_setb(info, DC_FG_CNTL_REG, FG_CNTL_CC_EN);
 
-	return ret;
+	return 0;
 }
 
 static int pmic_fg_program_ocv_curve(struct pmic_fg_info *info)
@@ -934,27 +903,23 @@ static int pmic_fg_program_rdc_vals(struct pmic_fg_info *info)
 {
 	int ret;
 	int rdc1, rdc0;
+	u8 buf[2];
 
+	ret = pmic_fg_reg_readmul(info, DC_FG_RDC1_REG, 2, buf);
+	if (ret < 0) {
+		dev_warn(&info->pdev->dev, "RDC reg read error\n");
+		return ret;
+	}
 
-       rdc1 = pmic_fg_reg_readb(info, DC_FG_RDC1_REG);
-       if (rdc1 < 0) {
-               dev_warn(&info->pdev->dev, "RDC1 reg read err!!\n");
-              return -1;
-       }
-       rdc0 = pmic_fg_reg_readb(info, DC_FG_RDC0_REG);
+	if (buf[0] == info->cfg->rdc1 && buf[1] == info->cfg->rdc0) {
+		dev_info(&info->pdev->dev, "RDC is already initialized\n");
+		return 0;
+	} else {
+		dev_info(&info->pdev->dev, "RDC need to be initialized\n");
+	}
 
-       if (rdc1 == info->cfg->rdc1 && rdc0 == info->cfg->rdc0) {
-               dev_info(&info->pdev->dev, "RDC is already initialized\n");
-               return 0;
-       } else {
-               dev_info(&info->pdev->dev, "RDC need to be initialized\n");
-       }
-
-       ret = pmic_fg_reg_writeb(info, DC_FG_RDC1_REG, info->cfg->rdc1);
-
+	ret = pmic_fg_reg_writeb(info, DC_FG_RDC1_REG, info->cfg->rdc1);
 	ret = pmic_fg_reg_writeb(info, DC_FG_RDC0_REG, info->cfg->rdc0);
-
-
 	ret = pmic_fg_reg_clearb(info, DC_FG_TUNING_CNTL4, (1<<3));
 	ret = pmic_fg_reg_setb(info, DC_FG_TUNING_CNTL4, (1<<4));
 
@@ -1066,7 +1031,6 @@ static int pmic_fg_set_config_params(struct dc_xpwr_fg_cfg *cfg, int len)
 	info_ptr->cfg = kzalloc(sizeof(struct dc_xpwr_fg_cfg), GFP_KERNEL);
 	if (!info_ptr->cfg)
 		return -ENOMEM;
-
 	memcpy(info_ptr->cfg, cfg, sizeof(struct dc_xpwr_fg_cfg));
 	mutex_lock(&info_ptr->lock);
 	pmic_fg_init_config_regs(info_ptr);
