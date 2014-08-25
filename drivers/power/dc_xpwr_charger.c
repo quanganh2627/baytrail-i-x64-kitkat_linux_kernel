@@ -71,6 +71,7 @@
 #define VBUS_ISPOUT_VHOLD_SET_LSB_RES	100	/* 100mV */
 #define VBUS_ISPOUT_VHOLD_SET_4300MV	0x3	/* 4300mV */
 #define VBUS_ISPOUT_VBUS_PATH_DIS	(1 << 7)
+#define VBUS_IPSOUT_VBUS_SET_4400MV	(1 << 5) /*4400mV*/
 
 #define DC_CHRG_CCCV_REG		0x33
 #define CHRG_CCCV_CC_MASK		0xf		/* 4 bits */
@@ -870,6 +871,8 @@ static void pmic_chrg_init_hw_regs(struct pmic_chrg_info *info)
 	/* do not turn-off charger o/p after charge cycle ends */
 	intel_mid_pmic_setb(DC_CHRG_CNTL2_REG, CNTL2_CHG_OUT_TURNON);
 
+	/*set vhold to default value 4.4v to avoid PMIC over heat issue*/
+	intel_mid_pmic_setb(DC_VBUS_ISPOUT_REG, VBUS_IPSOUT_VBUS_SET_4400MV);
 	/* set the Charge end condition to 20% of CC */
 	intel_mid_pmic_setb(DC_CHRG_CCCV_REG, CHRG_CCCV_ITERM_20P);
 
