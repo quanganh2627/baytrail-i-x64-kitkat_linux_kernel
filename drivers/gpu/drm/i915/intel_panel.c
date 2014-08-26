@@ -612,6 +612,8 @@ void intel_panel_actually_set_mipi_backlight(struct drm_device *dev, u32 level)
 			level = level*0xfd/max + 100;
 		else
 			level = level*0xfd/max + 10;
+        if (level >= 0xFF)
+            level = 0xFF;
 	DRM_DEBUG_DRIVER("mipi_backlight level calc = %d\n", level);
 	lpio_bl_write_bits(0, LPIO_PWM_CTRL, (0xFF - level) ,0xFF);
 	lpio_bl_update(0, LPIO_PWM_CTRL);
