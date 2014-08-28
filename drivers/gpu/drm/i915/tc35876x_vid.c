@@ -630,7 +630,11 @@ void tc35876x_panel_reset(struct intel_dsi_device *dsi)
 	if(0 == (val & (1 << 5))){
        	val |= (1<<5);
 	ret = intel_mid_pmic_writeb(0x12, val);
-	msleep(100);}
+
+	if (LVDS_DSI_TC35876X_BOE_BP101WX4_300 == i915_mipi_panel_id)
+		msleep(250);
+	else
+		msleep(100); }
 	}
 #endif
 #if 0
