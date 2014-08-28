@@ -102,7 +102,7 @@ static enum pmic_ids camera_pmic_probe()
 
 	return PMIC_MAX;
 }
-
+#if 0
 static int camera_pmic_set(bool flag)
 {
 	int val;
@@ -209,6 +209,7 @@ static int camera_pmic_set(bool flag)
 	}
 	return ret;
 }
+#endif
 #endif
 
 static int ov2722_gpio_ctrl(struct v4l2_subdev *sd, int flag)
@@ -354,12 +355,15 @@ static int ov2722_power_ctrl(struct v4l2_subdev *sd, int flag)
 	if (flag) {
 		if (!camera_vprog1_on) {
 #ifdef CONFIG_CRYSTAL_COVE
-			ret = camera_pmic_set(flag);
-			if (ret) {
-				dev_err(&client->dev,
-						"Failed to enable regulator\n");
-				return ret;
-			}
+			/*
+			 * This should call VRF APIs.
+			 *
+			 * VRF not implemented for BTY, so call this
+			 * as WAs
+			 */
+			camera_set_pmic_power(CAMERA_1P8V, true);
+			usleep_range(5000,6000);
+			camera_set_pmic_power(CAMERA_2P8V, true);
 #elif defined(CONFIG_INTEL_SCU_IPC_UTIL)
 			ret = intel_scu_ipc_msic_vprog1(1);
 #else
@@ -372,12 +376,8 @@ static int ov2722_power_ctrl(struct v4l2_subdev *sd, int flag)
 	} else {
 		if (camera_vprog1_on) {
 #ifdef CONFIG_CRYSTAL_COVE
-			ret = camera_pmic_set(flag);
-			if (ret) {
-				dev_err(&client->dev,
-						"Failed to enable regulator\n");
-				return ret;
-			}
+			camera_set_pmic_power(CAMERA_1P8V, false);
+			camera_set_pmic_power(CAMERA_2P8V, false);
 #elif defined(CONFIG_INTEL_SCU_IPC_UTIL)
 			ret = intel_scu_ipc_msic_vprog1(0);
 #else
