@@ -107,8 +107,8 @@ u32 gamma_softlut[MAX_PIPES_VLV][GAMMA_CORRECT_MAX_COUNT] =  {
 
 /* GCMAX soft lookup table */
 u32 gcmax_softlut[MAX_PIPES_VLV][GC_MAX_COUNT] =  {
-	{0xFF00, 0xFF00, 0xFF00},
-	{0xFF00, 0xFF00, 0xFF00}
+	{0x10000, 0x10000, 0x10000},
+	{0x10000, 0x10000, 0x10000}
 };
 
 /* Color space conversion coff's */
