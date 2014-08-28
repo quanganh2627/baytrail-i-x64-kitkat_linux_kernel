@@ -97,6 +97,7 @@ static enum pmic_ids camera_pmic_probe()
 	return PMIC_MAX;
 }
 
+#if 0
 static int camera_pmic_set(bool flag)
 {
 	int val;
@@ -206,6 +207,7 @@ static int camera_pmic_set(bool flag)
 	return ret;
 }
 #endif
+#endif
 
 
 /*
@@ -308,8 +310,6 @@ static int gc2155_power_ctrl(struct v4l2_subdev *sd, int flag)
 
 	if (flag) {
 		if (!camera_vprog1_on) {
-			ret = camera_pmic_set(flag);
-
 #ifdef CONFIG_CRYSTAL_COVE
 			/*
 			 * This should call VRF APIs.
@@ -322,7 +322,6 @@ static int gc2155_power_ctrl(struct v4l2_subdev *sd, int flag)
 				return ret;
 			ret = camera_set_pmic_power(CAMERA_2P8V, true);
 #endif
-
 			if (!ret)
 				camera_vprog1_on = 1;
 
@@ -331,8 +330,6 @@ static int gc2155_power_ctrl(struct v4l2_subdev *sd, int flag)
 		}
 	} else {
 		if (camera_vprog1_on) {
-#if 1
-			ret = camera_pmic_set(flag);
 #ifdef CONFIG_CRYSTAL_COVE
 			ret = camera_set_pmic_power(CAMERA_2P8V, false);
 			if (ret)
@@ -340,7 +337,6 @@ static int gc2155_power_ctrl(struct v4l2_subdev *sd, int flag)
 			ret = camera_set_pmic_power(CAMERA_1P8V, false);
 #endif
 			if (!ret)
-#endif
 				camera_vprog1_on = 0;
 
 			msleep(30);
