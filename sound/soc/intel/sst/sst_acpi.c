@@ -112,7 +112,11 @@ static const struct sst_board_config_data sst_byt_crv2_bdata = {
 	.active_ssp_ports = 1,
 	.platform_id = 3,
 	.board_id = 1,
-	.ihf_num_chan = 1,
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
+	.ihf_num_chan = 2,	/* For MRD7 and MRD8, we have left and right speakers */
+#else
+	.ihf_num_chan = 1,	/* For CRV2, only one speaker */
+#endif
 	.osc_clk_freq = 25000000,
 	.ssp_platform_data = {
 		[0] = {
