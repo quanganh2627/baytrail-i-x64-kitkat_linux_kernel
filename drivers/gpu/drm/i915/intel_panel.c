@@ -676,7 +676,7 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 #ifndef ENABLE_SIO_PWM
 	unsigned long flags;
 #endif
-  DRM_DEBUG_DRIVER("\n");
+	DRM_DEBUG_DRIVER("\n");
 	if (IS_VALLEYVIEW(dev)
 #ifndef ENABLE_SIO_PWM
 	 && dev_priv->is_mipi
@@ -695,8 +695,10 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 			cancel_delayed_work_sync(&dev_priv->bkl_delay_enable_work);
 
 			/* disable the backlight enable signal */
+#ifndef CONFIG_MRD7
 			vlv_gpio_nc_write(dev_priv, 0x40E0, 0x2000CC00);
 			vlv_gpio_nc_write(dev_priv, 0x40E8, 0x00000004);
+#endif
 			udelay(500);
 			lpio_bl_write_bits(0, LPIO_PWM_CTRL, 0x00, 0x80000000);
 		} else {
@@ -800,7 +802,7 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 #endif
 	uint32_t pwm_base;
 
-  DRM_DEBUG_DRIVER("\n");
+	DRM_DEBUG_DRIVER("\n");
 	if (IS_VALLEYVIEW(dev)
 #ifndef ENABLE_SIO_PWM
 	&& dev_priv->is_mipi
@@ -824,10 +826,11 @@ void intel_panel_enable_backlight(struct drm_device *dev,
 			lpio_bl_write_bits(0, LPIO_PWM_CTRL, 0x80000000,
 							0x80000000);
 			lpio_bl_update(0, LPIO_PWM_CTRL);
-
+#ifndef CONFIG_MRD7
 			/* Backlight enable */
 			vlv_gpio_nc_write(dev_priv, 0x40E0, 0x2000CC00);
 			vlv_gpio_nc_write(dev_priv, 0x40E8, 0x00000005);
+#endif
 			udelay(500);
 
 #ifndef ENABLE_SIO_PWM
