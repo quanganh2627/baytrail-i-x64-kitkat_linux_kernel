@@ -66,24 +66,24 @@ extern int ps8622_init(void) ;
 
 
 static int
-intel_dp_ctrl_lvds_panel(struct drm_device *dev, struct intel_dp *intel_dp, u32 ctrl)
+intel_dp_ctrl_lvds_panel(struct drm_device *dev, struct intel_dp *intel_dp,
+	bool is_pmic_on, bool is_bridge_reset)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int val;
 	int ret;
-	if (ctrl && intel_dp->bridge_setup_done)
+	if (is_pmic_on && intel_dp->bridge_setup_done)
 		return 1;
-	DRM_DEBUG_KMS("ctrl:%d\n", ctrl);
+	DRM_DEBUG_KMS("is_pmic_on:%d, is_reset:%d\n", is_pmic_on, is_pmic_on);
 	/*DLDO3*/
 	val = intel_mid_pmic_readb(0x12);
-	if (ctrl > 0)
+	if (is_pmic_on)
 		val |= 1<<5;
-	else {
-			val &= ~(1<<5);
-	}
+	else
+		val &= ~(1<<5);
 	ret = intel_mid_pmic_writeb(0x12, val);
 
-	if (ctrl) {
+	if (is_bridge_reset) {
 		/*Bridge MDSI_A_TE GPIONC_12  => RST# active low*/
 		vlv_gpio_nc_write(dev_priv, 0x40c0, 0x2000cc00);
 		vlv_gpio_nc_write(dev_priv, 0x40c8, 0x00000005);
@@ -2084,7 +2084,7 @@ static void intel_disable_dp(struct intel_encoder *encoder)
 	if (!(port == PORT_A || IS_VALLEYVIEW(dev)))
 		intel_dp_link_down(intel_dp);
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, intel_dp,  0);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, false, false);
 	intel_dp->bridge_setup_done = false;
 #endif
 }
@@ -2113,7 +2113,7 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 		return;
 	ironlake_edp_panel_vdd_on(intel_dp);
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, intel_dp,  1);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, true, true);
 	ps8622_send_init_cmd(intel_dp);
 #endif
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
@@ -3383,7 +3383,7 @@ intel_dp_detect(struct drm_connector *connector, bool force)
 	if (status != connector_status_connected)
 		return status;
 #ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, true, false);
 #endif
 	intel_dp_probe_oui(intel_dp);
 
@@ -3991,14 +3991,10 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 
 	intel_dp->drrs_state.type = DRRS_NOT_SUPPORTED;
 
-  DRM_DEBUG_KMS("\n");
+	DRM_DEBUG_KMS("\n");
 	if (!is_edp(intel_dp))
 		return true;
-#ifdef CONFIG_MRD7
-	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
 
-	ps8622_send_init_cmd(intel_dp);
-#endif
 	intel_dp_init_panel_power_sequencer(dev, intel_dp, &power_seq);
 
 	/* Cache DPCD and EDID for edp. */
@@ -4080,7 +4076,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 
 #ifdef CONFIG_MRD7
 	intel_dp->bridge_setup_done = false;
-	intel_dp_ctrl_lvds_panel(dev, intel_dp, 1);
+	intel_dp_ctrl_lvds_panel(dev, intel_dp, true, false);
 
 #endif
 	/* Preserve the current hw state. */
