@@ -9168,7 +9168,10 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 		}
 		kfree(zorder);
 	}
-	for (i = 0; i < disp->num_planes; ++i) {
+	/* Need to issue the drm_mode_page_flip_ioctl last as it triggers the flip done callback.
+	 * It just happens that index 0 is for the CRTC id, but this should be fixed properly.
+	 */
+	for (i = disp->num_planes-1; i >= 0; i--) {
 		/* i915_set_plane_alpha and i915_enable_plane_reserved_reg_bit_2
 		 * require a "plane id" defined by PLANEA, SPRITEA, ..., CURSORA etc.
 		 * These are defined in uapi/drm/i915_drm.h as:
