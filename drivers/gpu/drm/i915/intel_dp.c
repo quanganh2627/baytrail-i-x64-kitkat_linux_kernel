@@ -1308,7 +1308,7 @@ void ironlake_edp_panel_off(struct intel_dp *intel_dp)
 	ironlake_wait_panel_off(intel_dp);
 }
 
-void ironlake_edp_backlight_on(struct intel_dp *intel_dp)
+void ironlake_edp_backlight_on_sync(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct drm_device *dev = intel_dig_port->base.base.dev;
@@ -1338,7 +1338,26 @@ void ironlake_edp_backlight_on(struct intel_dp *intel_dp)
 
 	intel_panel_enable_backlight(dev, pipe);
 }
-
+void ironlake_edp_backlight_on(struct intel_dp *intel_dp)
+{
+	static bool power_on_flag;
+	power_on_flag = false;
+	/* Only Power on we could see small point in lcd*/
+#ifdef CONFIG_MRD7
+	if (!power_on_flag) {
+		power_on_flag = true;
+		schedule_delayed_work(&intel_dp->panel_bl_work,
+					      msecs_to_jiffies(intel_dp->backlight_on_delay * 10));
+	} else
+#endif
+		ironlake_edp_backlight_on_sync(intel_dp);
+}
+static void ironlake_panel_bl_work(struct work_struct *__work)
+{
+	struct intel_dp *intel_dp = container_of(to_delayed_work(__work),
+						 struct intel_dp, panel_bl_work);
+	ironlake_edp_backlight_on_sync(intel_dp);
+}
 void ironlake_edp_backlight_off(struct intel_dp *intel_dp)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
@@ -3594,6 +3613,7 @@ void intel_dp_encoder_destroy(struct drm_encoder *encoder)
 	drm_encoder_cleanup(encoder);
 	if (is_edp(intel_dp)) {
 		cancel_delayed_work_sync(&intel_dp->panel_vdd_work);
+		cancel_delayed_work_sync(&intel_dp->panel_bl_work);
 		/* DRRS cleanup */
 		if (dev_priv->drrs.connector &&
 			intel_dp == enc_to_intel_dp(
@@ -3756,7 +3776,9 @@ intel_dp_init_panel_power_sequencer(struct drm_device *dev,
 	 * table multiplies it with 1000 to make it in units of 100usec,
 	 * too. */
 	spec.t11_t12 = (510 + 100) * 10;
-
+#ifdef CONFIG_MRD7
+	vbt.t8 = 300 * 10;
+#endif
 	DRM_DEBUG_KMS("vbt t1_t3 %d t8 %d t9 %d t10 %d t11_t12 %d\n",
 		      vbt.t1_t3, vbt.t8, vbt.t9, vbt.t10, vbt.t11_t12);
 
@@ -4124,7 +4146,8 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 
 	INIT_DELAYED_WORK(&intel_dp->panel_vdd_work,
 			  ironlake_panel_vdd_work);
-
+	INIT_DELAYED_WORK(&intel_dp->panel_bl_work,
+			  ironlake_panel_bl_work);
 	intel_connector_attach_encoder(intel_connector, intel_encoder);
 	drm_sysfs_connector_add(connector);
 
@@ -4187,6 +4210,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 		i2c_del_adapter(&intel_dp->adapter);
 		if (is_edp(intel_dp)) {
 			cancel_delayed_work_sync(&intel_dp->panel_vdd_work);
+			cancel_delayed_work_sync(&intel_dp->panel_bl_work);
 			mutex_lock(&dev->mode_config.mutex);
 			ironlake_panel_vdd_off_sync(intel_dp);
 			mutex_unlock(&dev->mode_config.mutex);
