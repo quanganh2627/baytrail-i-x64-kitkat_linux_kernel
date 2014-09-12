@@ -196,8 +196,8 @@ enum pmu_mrfl_nc_device_name {
 
 
 struct pmu_ss_states {
-	unsigned long pmu1_states;
-	unsigned long pmu2_states[4];
+	u32 pmu1_states;
+	u32 pmu2_states[4];
 };
 
 struct pci_dev_info {
@@ -212,9 +212,9 @@ struct pci_dev_info {
 };
 
 struct pmu_wake_ss_states {
-	unsigned long wake_enable[2];
-	unsigned long pmu1_wake_states;
-	unsigned long pmu2_wake_states[4];
+	u32 wake_enable[2];
+	u32 pmu1_wake_states;
+	u32 pmu2_wake_states[4];
 };
 
 struct pmu_suspend_config {
@@ -422,7 +422,8 @@ extern int pmu_pci_to_indexes(struct pci_dev *pdev, int *index,
 				int *pmu_num, int *ss_idx, int *ss_pos);
 extern struct mid_pmu_dev *mid_pmu_cxt;
 extern void platform_set_pmu_ops(void);
-extern void pmu_read_sss(struct pmu_ss_states *pm_ssc);
+extern void pmu_read_ssc(struct pmu_ss_states *pm_ss);
+extern void pmu_read_sss(struct pmu_ss_states *pm_ss);
 extern int pmu_issue_interactive_command(struct pmu_ss_states *pm_ssc,
 				bool ioc, bool d3_cold);
 extern int _pmu2_wait_not_busy(void);
