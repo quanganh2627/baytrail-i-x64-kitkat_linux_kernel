@@ -539,6 +539,9 @@ struct bdb_edp {
 	/* ith bit indicates enabled/disabled for (i+1)th panel */
 	u16 edp_s3d_feature;
 	u16 edp_t3_optimization;
+
+	u8 edp_vswing_preemp_table_sel[8];
+	u16 edp_fast_link_train;
 } __attribute__ ((packed));
 
 void intel_setup_bios(struct drm_device *dev);

@@ -730,6 +730,15 @@ static void i915_hotplug_work_func(struct work_struct *work)
 	if (!dev_priv->enable_hotplug_processing)
 		return;
 
+	/*PSR needs to be disabled outside mode_config mutex lock
+	can cause deadlock*/
+	list_for_each_entry(connector, &mode_config->connector_list, head) {
+		intel_connector = to_intel_connector(connector);
+		intel_encoder = intel_connector->encoder;
+		if (intel_encoder->type == INTEL_OUTPUT_EDP)
+			intel_edp_psr_ctl(enc_to_intel_dp(&intel_encoder->base), DISABLE_PSR);
+	}
+
 	mutex_lock(&mode_config->mutex);
 	DRM_DEBUG_KMS("running encoder hotplug functions\n");
 
@@ -1358,7 +1367,7 @@ static irqreturn_t valleyview_irq_handler(int irq, void *arg)
 			 */
 			if (pipe_stats[pipe] & 0x8000ffff) {
 				if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS)
-					DRM_ERROR("pipe %c underrun\n",
+					DRM_DEBUG_DRIVER("pipe %c underrun\n",
 							 pipe_name(pipe));
 				I915_WRITE(reg, pipe_stats[pipe]);
 			}

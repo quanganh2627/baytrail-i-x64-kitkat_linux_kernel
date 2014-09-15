@@ -1250,6 +1250,7 @@ struct intel_vbt_data {
 	bool edp_support;
 	int edp_bpp;
 	struct edp_power_seq edp_pps;
+	bool edp_fast_link_train;
 
 	/* MIPI DSI */
 	struct {
@@ -1446,6 +1447,7 @@ typedef struct drm_i915_private {
 	u32 pm_irq_mask;
 
 	struct work_struct hotplug_work;
+	struct delayed_work psr_work;
 	bool enable_hotplug_processing;
 	struct {
 		unsigned long hpd_last_jiffies;
