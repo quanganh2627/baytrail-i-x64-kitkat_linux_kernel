@@ -699,7 +699,17 @@ void *retrieve_acpi_modem_data(struct platform_device *pdev)
 	item = &(out_obj->package.elements[1]);
 	pmic_data->early_pwr_off = (int)item->integer.value;
 #endif
-
+#ifdef CONFIG_ENABLE_MODULE_HW736
+    cpu_data->gpio_pwr_on=125;
+    cpu_data->gpio_rst_bbn=159;
+	//cpu_data->gpio_rst_out=158;
+	//cpu_data->gpio_cdump=160;
+	pr_info("fancy %s:Setup GPIOs(PO:%d, RO:%d, RB:%d, CD:%d)",
+			__func__,
+			cpu_data->gpio_pwr_on,
+			cpu_data->gpio_rst_out,
+			cpu_data->gpio_rst_bbn, cpu_data->gpio_cdump);
+#endif
 	return mcd_reg_info;
 
  free_mdm_info:
