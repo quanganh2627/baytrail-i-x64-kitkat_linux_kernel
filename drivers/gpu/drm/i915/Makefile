@@ -74,7 +74,8 @@ i915-y := i915_drv.o i915_dma.o i915_irq.o \
 	  tc35876x_vid.o \
 	  dsi_mod_sdc_bp080wx7.o \
 	  dsi_mod_rayken_rk089wu45j1ai.o \
-	  dsi_mod_cpt_claa080fp01.o
+	  dsi_mod_cpt_claa080fp01.o \
+	  dsi_mod_boe_kd079d5_31nb_a9.o
 
 i915-$(CONFIG_COMPAT)   += i915_ioc32.o
 
