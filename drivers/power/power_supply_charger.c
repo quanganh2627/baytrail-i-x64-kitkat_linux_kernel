@@ -904,7 +904,6 @@ static int select_chrgr_cable(struct device *dev, void *data)
 			disable_charger(psy);
 		}
 		set_cc(psy, 0);
-		set_cv(psy, 0);
 		set_inlmt(psy, 0);
 
 		/* set present and online as 0 */

@@ -994,7 +994,7 @@ static void pmic_fg_init_config_regs(struct pmic_fg_info *info)
 	if (ret < 0)
 		dev_err(&info->pdev->dev, "lowbatt thr set fail:%d\n", ret);
 
-	ret = pmic_fg_reg_writeb(info, DC_FG_CNTL_REG, 0xff);
+	ret = pmic_fg_reg_writeb(info, DC_FG_CNTL_REG, 0xf7);
 	if (ret < 0)
 		dev_err(&info->pdev->dev, "gauge cntl set fail:%d\n", ret);
 
