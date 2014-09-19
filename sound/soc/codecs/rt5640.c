@@ -2143,11 +2143,17 @@ static const struct snd_soc_dapm_widget rt5640_dapm_widgets[] = {
 			 &rt5640_dac_l2_mux),
 	SND_SOC_DAPM_MUX("DAC R2 Mux", SND_SOC_NOPM, 0, 0,
 			 &rt5640_dac_r2_mux),
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
+	SND_SOC_DAPM_PGA("DAC L2 Volume", SND_SOC_NOPM,
+			 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA("DAC R2 Volume", SND_SOC_NOPM,
+			 0, 0, NULL, 0),
+#else
 	SND_SOC_DAPM_PGA("DAC L2 Volume", RT5640_PWR_DIG1,
 			 RT5640_PWR_DAC_L2_BIT, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("DAC R2 Volume", RT5640_PWR_DIG1,
 			 RT5640_PWR_DAC_R2_BIT, 0, NULL, 0),
-
+#endif
 	/* DAC Mixer */
 	SND_SOC_DAPM_MIXER("Stereo DAC MIXL", SND_SOC_NOPM, 0, 0,
 			   rt5640_sto_dac_l_mix,
@@ -2170,6 +2176,26 @@ static const struct snd_soc_dapm_widget rt5640_dapm_widgets[] = {
 			   SND_SOC_DAPM_PRE_PMU),
 
 	/* DACs */
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
+	SND_SOC_DAPM_SUPPLY("DAC L1 Power", RT5640_PWR_DIG1,
+			    RT5640_PWR_DAC_L1_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("DAC R1 Power", RT5640_PWR_DIG1,
+			    RT5640_PWR_DAC_R1_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("DAC L2 Power", RT5640_PWR_DIG1,
+			    RT5640_PWR_DAC_L2_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("DAC R2 Power", RT5640_PWR_DIG1,
+			    RT5640_PWR_DAC_R2_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_DAC_E("DAC L1", NULL, SND_SOC_NOPM,
+			   0, 0, rt5640_dac1_event,
+			   SND_SOC_DAPM_PRE_PMD),
+	SND_SOC_DAPM_DAC("DAC L2", NULL, SND_SOC_NOPM,
+			 0, 0),
+	SND_SOC_DAPM_DAC_E("DAC R1", NULL, SND_SOC_NOPM,
+			   0, 0, rt5640_dac1_event,
+			   SND_SOC_DAPM_PRE_PMD),
+	SND_SOC_DAPM_DAC("DAC R2", NULL, SND_SOC_NOPM,
+			 0, 0),
+#else
 	SND_SOC_DAPM_DAC_E("DAC L1", NULL, RT5640_PWR_DIG1,
 			   RT5640_PWR_DAC_L1_BIT, 0, rt5640_dac1_event,
 			   SND_SOC_DAPM_PRE_PMD),
@@ -2180,6 +2206,7 @@ static const struct snd_soc_dapm_widget rt5640_dapm_widgets[] = {
 			   SND_SOC_DAPM_PRE_PMD),
 	SND_SOC_DAPM_DAC("DAC R2", NULL, RT5640_PWR_DIG1,
 			 RT5640_PWR_DAC_R2_BIT, 0),
+#endif
 	/* SPK/OUT Mixer */
 	SND_SOC_DAPM_MIXER("SPK MIXL", RT5640_PWR_MIXER, RT5640_PWR_SM_L_BIT,
 			   0, rt5640_spk_l_mix, ARRAY_SIZE(rt5640_spk_l_mix)),
@@ -2488,6 +2515,21 @@ static const struct snd_soc_dapm_route rt5640_dapm_routes[] = {
 	{"DAC R1", NULL, "Stereo DAC MIXR"},
 	{"DAC L2", NULL, "Mono DAC MIXL"},
 	{"DAC R2", NULL, "Mono DAC MIXR"},
+
+#if defined(CONFIG_MRD7) || defined(CONFIG_MRD8)
+	{"DAC MIXL", NULL, "DAC L1 Power"},
+	{"DAC MIXR", NULL, "DAC R1 Power"},
+	{"DAC L2 Volume", NULL, "DAC L2 Power"},
+	{"DAC R2 Volume", NULL, "DAC R2 Power"},
+	{"Mono DAC MIXL", NULL, "DAC L2 Power"},
+	{"Mono DAC MIXR", NULL, "DAC R2 Power"},
+	{"Mono DAC MIXL", NULL, "DAC L1 Power"},
+	{"Mono DAC MIXR", NULL, "DAC R1 Power"},
+	{"DAC L1", NULL, "DAC L1 Power"},
+	{"DAC R1", NULL, "DAC R1 Power"},
+	{"DAC L2", NULL, "DAC L2 Power"},
+	{"DAC R2", NULL, "DAC R2 Power"},
+#endif
 
 	{"SPK MIXL", "REC MIXL Switch", "RECMIXL"},
 	{"SPK MIXL", "INL Switch", "INL VOL"},
