@@ -39,6 +39,7 @@
 #include "platform_ov5693.h"
 #include "platform_lm3554.h"
 #include "platform_lm3642.h"
+#include "platform_hm2056.h"
 #include "platform_ap1302.h"
 #include "platform_bf3a20.h"
 #ifdef CONFIG_CRYSTAL_COVE
@@ -61,6 +62,7 @@ const struct intel_v4l2_subdev_id v4l2_ids[] = {
 	{"imx132", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov9724", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"ov2722", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
+	{"hm2056", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"bf3905", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc0339", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
 	{"gc2235f", RAW_CAMERA, ATOMISP_CAMERA_PORT_SECONDARY},
@@ -131,6 +133,10 @@ static struct camera_device_table byt_ffrd8_cam_table[] = {
 #ifdef CONFIG_MRD7
 static struct camera_device_table byt_crv2_cam_table[] = {
 	{
+		{SFI_DEV_TYPE_I2C, 2, 0x24, 0x0, 0x0, "hm2056"},
+		{"hm2056", SFI_DEV_TYPE_I2C, 0, &hm2056_platform_data,
+			&intel_register_i2c_camera_device}
+	}, {
 		{SFI_DEV_TYPE_I2C, 2, 0x3c, 0x0, 0x0, "ov2685"},
 		{"ov2685", SFI_DEV_TYPE_I2C, 0, &ov2685_platform_data,
 			&intel_register_i2c_camera_device}
