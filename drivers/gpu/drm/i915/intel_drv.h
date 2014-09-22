@@ -27,6 +27,7 @@
 
 #include <linux/i2c.h>
 #include <linux/hdmi.h>
+#include <linux/switch.h>
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 #include <drm/drm_crtc.h>
@@ -437,6 +438,7 @@ struct intel_crtc {
 	uint32_t scaling_src_size;
 	/* panel fitter status flag */
 	bool	pfit_en_status;
+	bool	dummy_flip;
 };
 
 struct intel_plane_wm_parameters {
@@ -553,6 +555,7 @@ struct intel_hdmi {
 	struct edid *edid;
 	struct intel_connector *attached_connector;
 	uint32_t edid_mode_count;
+	struct switch_dev sdev;
 	void (*write_infoframe)(struct drm_encoder *encoder,
 				enum hdmi_infoframe_type type,
 				const uint8_t *frame, ssize_t len);

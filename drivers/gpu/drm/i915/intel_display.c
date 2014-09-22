@@ -8521,8 +8521,12 @@ static void do_intel_finish_page_flip(struct drm_device *dev,
 
 	intel_crtc->unpin_work = NULL;
 
-	if (work->event)
-		drm_send_vblank_event(dev, intel_crtc->pipe, work->event);
+	if (intel_crtc->dummy_flip)
+		intel_crtc->dummy_flip = false;
+	else {
+		if (work->event)
+			drm_send_vblank_event(dev, intel_crtc->pipe, work->event);
+	}
 
 	drm_vblank_put(dev, intel_crtc->pipe);
 
@@ -9128,10 +9132,19 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 				pfit_control |= PFIT_SCALING_PILLAR;
 			else if (disp->panel_fitter.mode == LETTERBOX)
 				pfit_control |= PFIT_SCALING_LETTER;
-			else
+			else {
 				/* None of the above mode, then pfit is disabled */
-				pfit_control &= ~(1 << 31);
-
+				/* None of the above mode, then pfit is disabled
+				 * In case of BYT_CR platform with the panasonic panel of
+				 * esolution 19x10, panel fitter needs to be enabled always
+				 * becoz we simulate the 12x8 mode due to memory limitation
+				 */
+				pfit_control |= PFIT_SCALING_AUTO;
+				if (!(BYT_CR_CONFIG &&
+						(intel_crtc->config.adjusted_mode.hdisplay > 1280 ||
+						intel_crtc->config.adjusted_mode.vdisplay > 800)))
+					pfit_control &= ~(1 << 31);
+			}
 			intel_crtc->config.gmch_pfit.control = pfit_control;
 		}
 
@@ -10813,7 +10826,7 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 
 	dev_priv->dpst.state = dev_priv->dpst.enabled;
 	if (dev_priv->dpst.state)
-		i915_dpst_disable_hist_interrupt(dev);
+		i915_dpst_disable_hist_interrupt(dev, true);
 
 	/* ignore lid events during suspend */
 	mutex_lock(&dev_priv->modeset_restore_lock);
@@ -10903,7 +10916,7 @@ ssize_t display_runtime_resume(struct drm_device *dev)
 
 	i915_dpst_set_default_luma(dev);
 	if (dev_priv->dpst.state)
-		i915_dpst_enable_hist_interrupt(dev);
+		i915_dpst_enable_hist_interrupt(dev, true);
 
 	DRM_DEBUG_PM("Value in iClk5val = %x\n",
 		vlv_ccu_read(dev_priv, CCU_ICLK5_REG));
@@ -10972,6 +10985,7 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	intel_crtc->base.panning_en = false;
 	intel_crtc->scaling_src_size = 0;
 	intel_crtc->pfit_en_status = false;
+	intel_crtc->dummy_flip = false;
 }
 
 int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
