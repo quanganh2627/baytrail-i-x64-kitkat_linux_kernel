@@ -61,6 +61,7 @@
 
 #define SYSFS_INPUT_VAL_LEN (1)
 
+int lpaudio_enabled;
 static unsigned int dma_mode;
 static unsigned int bt_init_en;
 
@@ -986,7 +987,7 @@ static int xgold_pcm_prepare(struct snd_pcm_substream *substream)
 		xgold_ptr->audio_stream[STREAM_PLAY].periods = 0;
 		xgold_ptr->audio_stream[STREAM_PLAY].stream = substream;
 
-		if (dma_mode)
+		if (!lpaudio_enabled && dma_mode)
 			xgold_pcm_play_dma_prepare(substream);
 
 		if (p_dsp_audio_dev->p_dsp_common_data->native_mode &&
@@ -1055,20 +1056,21 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 			pcm_par.setting = 1;
 			pcm_par.rate =
 				get_dsp_pcm_rate(substream->runtime->rate);
+			pcm_par.req = 1;
 
-			if (dma_mode) {
-				pcm_par.req = 1;
-				/* request DMA to start tx */
-				dma_async_issue_pending(xgold_ptr->
+			if (!lpaudio_enabled) {
+				if (dma_mode) {
+					/* request DMA to start tx */
+					dma_async_issue_pending(xgold_ptr->
 						audio_dma_stream[STREAM_PLAY].
 						dmach);
-			} else {
-				pcm_par.req = 0;
-				/* Activate the interrupt*/
-				(void)p_dsp_audio_dev->p_dsp_common_data->
-					ops->irq_activate(DSP_IRQ_1);
+				} else {
+					pcm_par.req = 0;
+					/* Activate the interrupt*/
+					p_dsp_audio_dev->p_dsp_common_data->
+						ops->irq_activate(DSP_IRQ_1);
+				}
 			}
-
 			xgold_debug("PCM play cmd mode %d rate %d req %d",
 					pcm_par.mode, pcm_par.rate,
 					pcm_par.req);
@@ -1156,7 +1158,7 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		xgold_debug("%s: Trigger stop\n", __func__);
 
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			if (dma_mode) {
+			if (!lpaudio_enabled && dma_mode) {
 				/* request DMA shutdown */
 				dmaengine_terminate_all(
 				xgold_ptr->audio_dma_stream[STREAM_PLAY].dmach);
