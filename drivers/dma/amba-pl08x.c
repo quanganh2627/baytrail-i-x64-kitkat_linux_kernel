@@ -1684,7 +1684,8 @@ static struct dma_async_tx_descriptor *pl08x_prep_dma_cyclic(
 		return NULL;
 
 	txd->cyclic = true;
-	txd->cctl |= PL080_CONTROL_TC_IRQ_EN;
+	if (flags & DMA_PREP_INTERRUPT)
+		txd->cctl |= PL080_CONTROL_TC_IRQ_EN;
 	for (tmp = 0; tmp < buf_len; tmp += period_len) {
 		ret = pl08x_tx_add_sg(txd, direction, slave_addr,
 				      buf_addr + tmp, period_len);
