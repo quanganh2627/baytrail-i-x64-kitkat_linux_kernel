@@ -62,7 +62,7 @@
 	/*  auto update config by .cfg file,
 	function together with GTP_AUTO_UPDATE */
 
-#define GTP_COMPATIBLE_MODE   1
+#define GTP_COMPATIBLE_MODE   0
 	/*  compatible with GT9XXF */
 
 #define GTP_CREATE_WR_NODE    1
