@@ -2225,6 +2225,7 @@ static int lapic_suspend(void)
 	unsigned long flags;
 	int maxlvt;
 
+#ifndef CONFIG_ENABLE_S3
 	/*
 	 * On intel_mid, the suspend flow is a bit different, and the lapic
 	 * hw implementation, and integration is not supporting standard
@@ -2243,6 +2244,7 @@ static int lapic_suspend(void)
 
 		return 0;
 	}
+#endif
 
 	if (!apic_pm_state.active)
 		return 0;
@@ -2283,6 +2285,7 @@ static void lapic_resume(void)
 	int maxlvt;
 	u64 tsc;
 
+#ifndef CONFIG_ENABLE_S3
 	/*
 	 * On intel_mid, the resume flow is a bit different.
 	 * Refer explanation on lapic_suspend.
@@ -2297,7 +2300,7 @@ static void lapic_resume(void)
 			apic_write(APIC_TMICT, 10);
 		return;
 	}
-
+#endif
 	if (!apic_pm_state.active)
 		return;
 
