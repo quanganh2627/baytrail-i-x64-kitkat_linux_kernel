@@ -564,11 +564,6 @@ struct intel_hdmi {
 #define DP_LINK_CONFIGURATION_SIZE	9
 #define EDP_PSR_RECEIVER_CAP_SIZE	2
 
-enum psr_state {
-	DISABLE_PSR = 0,
-	ENABLE_PSR
-};
-
 struct intel_dp {
 	uint32_t output_reg;
 	uint32_t aux_ch_ctl_reg;
@@ -595,7 +590,6 @@ struct intel_dp {
 	struct delayed_work panel_vdd_work;
 	bool want_panel_vdd;
 	bool psr_setup_done;
-	uint8_t psr_idle_frames;
 	struct intel_connector *attached_connector;
 	bool fast_link_train;
 };
@@ -987,10 +981,6 @@ extern bool intel_set_pch_fifo_underrun_reporting(struct drm_device *dev,
 extern void intel_edp_psr_enable(struct intel_dp *intel_dp);
 extern void intel_edp_psr_disable(struct intel_dp *intel_dp);
 extern void intel_edp_psr_update(struct drm_device *dev);
-extern void intel_edp_psr_ctl(struct intel_dp *intel_dp, enum psr_state state);
-extern void intel_edp_psr_exit(struct drm_device *device, struct drm_crtc *crtc);
-extern void intel_edp_enable_psr(struct intel_dp *intel_dp, enum PSR_MODE mode,
-					int idle_frames);
 extern int intel_drrs_init(struct drm_device *dev,
 				struct intel_connector *intel_connector,
 				struct drm_display_mode *downclock_mode);
@@ -1024,7 +1014,6 @@ extern int intel_edp_psr_exit_ioctl(struct drm_device *device, void *data,
 					struct drm_file *file_priv);
 extern int intel_edp_get_psr_support(struct drm_device *device, void *data,
 					struct drm_file *file);
-extern void intel_edp_save_psr_state(struct drm_device *drm_dev);
 extern void vlv_enable_pll(struct intel_crtc *crtc);
 extern void intel_enable_pipe(struct drm_i915_private *dev_priv,
 		enum pipe pipe, bool pch_port, bool dsi);

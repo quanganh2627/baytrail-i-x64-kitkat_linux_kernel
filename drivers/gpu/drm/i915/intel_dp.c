@@ -1,4 +1,4 @@
- /*
+/*
  * Copyright © 2008 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -36,7 +36,6 @@
 #include "i915_drv.h"
 #define DP_LINK_CHECK_TIMEOUT	(10 * 1000)
 #define EDP_PSR_MODE 0 /* 0 = HW TIMER, 1 = SW TIMER */
-#define PSR_POLL_PERIOD (20 * HZ)
 /**
  * is_edp - is the given port attached to an eDP panel (either CPU or PCH)
  * @intel_dp: DP struct
@@ -1150,20 +1149,6 @@ static void ironlake_panel_vdd_work(struct work_struct *__work)
 	mutex_unlock(&dev->mode_config.mutex);
 }
 
-void psr_work_execute(struct work_struct *work)
-{
-	drm_i915_private_t *dev_priv = container_of(work, drm_i915_private_t,
-			psr_work.work);
-	struct drm_device *dev = dev_priv->dev;
-	struct intel_dp *intel_dp = intel_dev_to_dp(dev);
-
-	if (!intel_dp)
-		DRM_DEBUG("PSR Intel Dp = NULL\n");
-	else
-		intel_edp_enable_psr(intel_dp, EDP_PSR_MODE,
-				intel_dp->psr_idle_frames);
-}
-
 void ironlake_edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
 {
 	if (!is_edp(intel_dp))
@@ -2055,23 +2040,6 @@ void intel_edp_exit_psr(struct intel_dp *intel_dp)
 	val &= 0xffff0000;
 	val |= PIPE_FIFO_UNDERRUN;
 	I915_WRITE(_PIPEASTAT, val);
-}
-
-void intel_edp_save_psr_state(struct drm_device *dev)
-{
-	struct drm_crtc *crtc = NULL;
-	struct intel_encoder *encoder = NULL;
-	struct intel_dp *intel_dp;
-
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		for_each_encoder_on_crtc(dev, crtc, encoder) {
-			if (encoder->type == INTEL_OUTPUT_EDP) {
-				intel_dp = enc_to_intel_dp(&encoder->base);
-				intel_edp_psr_ctl(intel_dp, DISABLE_PSR);
-				break;
-			}
-		}
-	}
 }
 
 static void intel_disable_dp(struct intel_encoder *encoder)
@@ -4151,9 +4119,6 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	INIT_DELAYED_WORK(&intel_dp->panel_vdd_work,
 			  ironlake_panel_vdd_work);
 
-	INIT_DELAYED_WORK(&dev_priv->psr_work,
-			psr_work_execute);
-
 	intel_connector_attach_encoder(intel_connector, intel_encoder);
 	drm_sysfs_connector_add(connector);
 
@@ -4297,48 +4262,36 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 	}
 }
 
-void intel_edp_psr_ctl(struct intel_dp *intel_dp, enum psr_state state)
-{
-	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
-	struct drm_device *dev = intel_dig_port->base.base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	if (!IS_VALLEYVIEW(dev) || (intel_dp == NULL) || !is_edp_psr(intel_dp))
-		return;
-
-	if (state == ENABLE_PSR && intel_edp_get_active_crtc(dev) == 1) {
-		cancel_delayed_work_sync(&dev_priv->psr_work);
-		intel_dp->psr_idle_frames = 15;
-		queue_delayed_work(system_nrt_wq,
-				&dev_priv->psr_work, PSR_POLL_PERIOD);
-	} else {
-		cancel_delayed_work_sync(&dev_priv->psr_work);
-		intel_edp_disable_psr(intel_dp, EDP_PSR_MODE);
-	}
-}
-
-void intel_edp_psr_exit(struct drm_device *dev, struct drm_crtc *crtc)
-{
-	struct intel_encoder *encoder;
-	for_each_encoder_on_crtc(dev, crtc, encoder) {
-		if (encoder->type == INTEL_OUTPUT_EDP) {
-			intel_edp_exit_psr(enc_to_intel_dp(&encoder->base));
-			break;
-		}
-	}
-}
-
 int intel_edp_psr_ctl_ioctl(struct drm_device *device, void *data,
 					struct drm_file *file)
 {
-	DRM_DEBUG("This ioctl call is deprecated\n");
+	struct intel_dp *intel_dp = intel_dev_to_dp(device);
+	struct drm_i915_edp_psr_ctl *edp_psr_ctl =
+				(struct drm_i915_edp_psr_ctl *)data;
+
+	if (intel_dp == NULL) {
+		DRM_ERROR("Intel Dp  = NULL");
+	} else {
+		if (edp_psr_ctl->state == 1) {
+			intel_edp_enable_psr(intel_dp, EDP_PSR_MODE,
+					edp_psr_ctl->idle_frames);
+		} else {
+			intel_edp_disable_psr(intel_dp, EDP_PSR_MODE);
+		}
+	}
 	return 0;
 }
 
 int intel_edp_psr_exit_ioctl(struct drm_device *device, void *data,
 						struct drm_file *file)
 {
-	DRM_DEBUG("This ioctl call is deprecated\n");
+	struct intel_dp *intel_dp = intel_dev_to_dp(device);
+
+	if (intel_dp == NULL) {
+		DRM_ERROR("Intel Dp  = NULL");
+	} else {
+		intel_edp_exit_psr(intel_dp);
+	}
 	return 0;
 }
 
@@ -4350,7 +4303,7 @@ int intel_edp_get_psr_support(struct drm_device *device, void *data,
 
 	*support = false;
 	if (intel_dp == NULL)
-		DRM_DEBUG("Intel Dp  = NULL\n");
+		DRM_ERROR("Intel Dp  = NULL");
 	else
 		*support = is_edp_psr(intel_dp);
 	return 0;

@@ -2664,7 +2664,7 @@ intel_pipe_set_base(struct drm_crtc *crtc, int x, int y,
 			  INTEL_INFO(dev)->num_pipes);
 		return -EINVAL;
 	}
-	intel_edp_psr_exit(dev, crtc);
+
 	mutex_lock(&dev->struct_mutex);
 	ret = intel_pin_and_fence_fb_obj(dev,
 					 to_intel_framebuffer(fb)->obj,
@@ -4173,8 +4173,6 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 			encoder->enable(encoder);
-			if (encoder->type == INTEL_OUTPUT_EDP)
-				intel_edp_psr_ctl(enc_to_intel_dp(&encoder->base), ENABLE_PSR);
 		}
 }
 
@@ -8467,7 +8465,6 @@ void intel_unpin_work_fn(struct work_struct *__work)
 	struct drm_device *dev = work->crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	intel_edp_psr_exit(dev, work->crtc);
 	mutex_lock(&dev->struct_mutex);
 	intel_unpin_fb_obj(work->old_fb_obj);
 	drm_gem_object_unreference(&work->pending_flip_obj->base);
@@ -9059,7 +9056,6 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 	if (ret)
 		goto cleanup_pending;
 
-	intel_edp_psr_exit(dev, crtc);
 	intel_disable_fbc(dev);
 	intel_disable_drrs(dev);
 	intel_mark_fb_busy(obj, NULL);
@@ -10825,7 +10821,6 @@ ssize_t display_runtime_suspend(struct drm_device *dev)
 
 	/* Save Hue/Saturation/Brightness/Contrast status */
 	intel_save_clr_mgr_status(dev);
-	intel_edp_save_psr_state(dev);
 
 	dev_priv->dpst.state = dev_priv->dpst.enabled;
 	if (dev_priv->dpst.state)

@@ -824,6 +824,7 @@ struct drm_mode_config {
 	bool poll_running;
 	struct delayed_work output_poll_work;
 	struct delayed_work dpms_work;
+
 	/* pointers to standard properties */
 	struct list_head property_blob_list;
 	struct drm_property *edid_property;

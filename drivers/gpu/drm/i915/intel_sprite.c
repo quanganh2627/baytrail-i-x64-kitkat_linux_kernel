@@ -299,7 +299,6 @@ vlv_update_plane(struct drm_plane *dplane, struct drm_crtc *crtc,
 	int pixel_size = drm_format_plane_cpp(fb->pixel_format, 0);
 	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 
-	intel_edp_psr_exit(dev, crtc);
 	if (plane && intel_crtc->sprite1_alpha)
 		alpha = true;
 	else if (!plane && intel_crtc->sprite0_alpha)
@@ -972,7 +971,6 @@ intel_enable_primary(struct drm_plane *dplane, struct drm_crtc *crtc)
 	if (!intel_crtc->primary_disabled)
 		return;
 
-	intel_edp_psr_exit(dev, crtc);
 	intel_crtc->primary_disabled = false;
 	intel_update_fbc(dev);
 	intel_update_drrs(dev);
@@ -1117,7 +1115,6 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	};
 	struct intel_unpin_work *work = NULL;
 
-	intel_edp_psr_exit(dev, crtc);
 	/* Avoid update plane operation if shutdown is in progress */
 	if (dev_priv->pm.shutdown_in_progress)
 		return -EINVAL;
