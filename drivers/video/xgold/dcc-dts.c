@@ -63,6 +63,7 @@ static struct of_device_id xgold_graphics_of_match[] = {
 #define PROP_DISPLAY_TIM_CYCLE		"intel,access-cycle"
 
 #define PROP_DISPLAY_GPIO_LCD_BIAS	"intel,lcd-bias-en"
+#define PROP_DISPLAY_GPIO_LCD_BIAS_DLY	"intel,lcd-bias-en-msdelay"
 #define PROP_DISPLAY_GPIO_RST		"intel,dcc-gpio-reset"
 #define PROP_DISPLAY_GPIO_RST_DLY	"intel,dcc-gpio-reset-delay"
 #define PROP_DISPLAY_GPIO_CD		"intel,dcc-gpio-cd"
@@ -341,6 +342,12 @@ int dcc_of_parse_graphics(struct platform_device *pdev,
 			&pdata->test.bootscreen_msdelay);
 	if (ret < 0)
 		pdata->test.bootscreen_msdelay = 500;
+
+	ret = of_property_read_u32(ngraphics,
+			"intel,lcd-bias-en-msdelay",
+			&pdata->gpio_lcd_bias_msdelay);
+	if (ret < 0)
+		pdata->gpio_lcd_bias_msdelay = 10;
 
 	ret = of_property_read_u32(ngraphics, "intel,dcc-test-mipidsi_vsync",
 			&pdata->test.mipidsi_vsync);
