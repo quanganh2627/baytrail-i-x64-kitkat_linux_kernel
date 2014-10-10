@@ -368,7 +368,7 @@
 	pinctrl-1 = <&i2c5_agold_sleep_pins>;
 	pinctrl-2 = <&i2c5_agold_inactive_pins>;
 	bat:battery {
-		compatible = "intel,fan54x_charger";
+		compatible = "intel,fan54020_charger";
 		reg = < 0x6b >;
 		interrupts = < 0 >;
 		interrupt-parent = < &bat>;
