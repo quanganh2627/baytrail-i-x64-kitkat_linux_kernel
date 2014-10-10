@@ -827,4 +827,12 @@ config INTEL_BAYTRAIL_MBI
 	  Interface. This is a requirement for systems that need to configure
 	  the PUNIT for power management features such as RAPL.
 
+config PSTORE_RAM_STAND
+	tristate "pstore ram standalone driver"
+	---help---
+	  This driver provides a RAM backend for pstore, buffer is
+	  reserved by kernel in early stage. As buffer is managed by
+	  kernel only, other components like FW are not aware of it,
+	  thus data could be corrupted between reset.
+
 endif # X86_PLATFORM_DEVICES

@@ -111,6 +111,10 @@
 #include <asm/alternative.h>
 #include <asm/prom.h>
 
+#ifdef CONFIG_PSTORE_RAM_STAND
+extern void pstore_ram_stand_reserve_memory(void);
+#endif
+
 /*
  * max_low_pfn_mapped: highest direct mapped pfn under 4GB
  * max_pfn_mapped:     highest direct mapped pfn over 4GB
@@ -1217,6 +1221,10 @@ void __init setup_arch(char **cmdline_p)
 	e820_mark_nosave_regions(max_low_pfn);
 
 	x86_init.resources.reserve_resources();
+
+#ifdef CONFIG_PSTORE_RAM_STAND
+	pstore_ram_stand_reserve_memory();
+#endif
 
 	e820_setup_gap();
 
