@@ -1,6 +1,6 @@
 /*
  * -------------------------------------------------------------------------
- *  Copyright (C) 2013 Intel Mobile Communications GmbH
+ *  Copyright (C) 2014 Intel Mobile Communications GmbH
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *
  * This program is free software; you can redistribute it and/or modify
@@ -11,15 +11,10 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
- *
  */
 
-#define FAN54020_NAME "fan54020_charger"
-#define pr_fmt(fmt) FAN54020_NAME": "fmt
+#define FAN54x_NAME "fan54x_charger"
+#define pr_fmt(fmt) FAN54x_NAME": "fmt
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -44,6 +39,7 @@
 
 #include <linux/time.h>
 #include <linux/wakelock.h>
+#include "fan54x_charger.h"
 
 /*
  * Development debugging is not enabled in release image to prevent
@@ -51,100 +47,18 @@
  */
 #include <linux/power/charger_debug.h>
 
-#define REG_IC_INFO 0x00
-#define REG_CHARGE_CTRL1 0x01
-#define REG_CHARGE_CTRL2 0x02
-#define REG_IBAT 0x03
-#define REG_VOREG 0x04
-#define REG_IBUS 0x05
-#define REG_INT 0x06
-#define REG_STATUS 0x07
-#define REG_INT_MASK 0x08
-#define REG_ST_MASK 0x09
-#define REG_TMR_RST 0x0a
-#define REG_SAFETY 0x0f
-#define REG_MONITOR 0x10
-#define REG_STATE 0x1f
-#define REG_ADP_CTRL 0x20
-#define REG_ADP_CNT 0x21
-#define REG_TMR_CTRL 0x22
-
-/* REG_IC_INFO */
-#define VENDOR 0x4
-#define VENDOR_O 5
-#define VENDOR_M 0x7
-
-#define PN 0x1
-#define PN_O 3
-#define PN_M 0x3
-
-#define REV_O 0
-#define REV_M 0x3
-
-/* REG_CHARGE_CTRL1 */
-#define HZ_MODE_O 6
-#define HZ_MODE_M 0x1
-
-/* REG_CHARGE_CTRL2 */
-#define ITERM_DIS_M 0x1
-#define ITERM_DIS_O 0
-#define LDO_OFF_O 4
-
-/* REG_IBAT */
-#define IOCHARGE_MIN_MA 350
-#define IOCHARGE_STEP_MA 100
-#define IOCHARGE_STEP_START_MA 400
-#define IOCHARGE_STEP_START_REGVAL 1
-#define IOCHARGE_MAX_MA 1500
-#define IOCHARGE_O 4
-#define IOCHARGE_M 0xf
-
-#define DEFAULT_CC 350
-
-/* REG_VOREG  */
-#define VOREG_MIN_MV 3380
 #define VOREG_STEP_MV 20
-#define VOREG_MAX_MV 4440
-#define VOREG_M 0x3f
-
-#define DEFAULT_CV 3380
-
-/* REG_IBUS */
-#define IBUS_MIN_LIMIT_MA 100
+#define IOCHARGE_STEP_MA 100
 #define IBUS_LIMIT_STEP_MA 400
-#define IBUS_MAX_LIMIT_MA 900
-#define IBUS_M 0x3
-#define IBUS_O 0
 #define IBUS_NO_LIMIT 3
 
-/* REG_INT and REG_INT_MASK */
-#define TSD_FLAG_O 7
-#define OVP_FLAG_O 6
-#define OVP_RECOV_O 1
-#define TC_TO_O 4
-#define DBP_TO_O 3
-#define TREG_FLAG_O 5
-#define OT_RECOV_O 2
-#define INT_MASK_ALL 0xff
+enum {
+	VBUS_OFF = 0,
+	VBUS_ON,
 
-/* REG_STATUS and REG_ST_MASK */
-#define POK_B_O 6
-#define ST_MASK_ALL 0xff
+	T32_TO_OCCURRED = 1,
+};
 
-/* REG_TMR_RST */
-#define TMR_RST_O 7
-
-/* REG_SAFETY  */
-#define ISAFE_O 4
-#define VSAFE_O 0
-#define FAN54020_CUR_LIMIT 0xf /* 1500mA */
-#define FAN54020_VOLT_LIMIT 0xf /* 4440mV */
-
-/* REG_STATE */
-#define ST_CODE_O 4
-#define ST_CODE_M 0xf
-#define ST_VBUS_FAULT 0x1a
-#define ST_VBUS_FAULT2 0x1d
 
 #define CHARGER_CONTROL_O 0x0
 #define CHARGER_CONTROL(_base) ((_base) + CHARGER_CONTROL_O)
@@ -173,266 +87,32 @@
 	#define CHARGER_CONTROL_WR_WS_O 0
 	#define CHARGER_CONTROL_WR_WS_M 0x1
 
-#define MAX_NR_OF_I2C_RETRIES 1
-#define CHRGR_WORK_DELAY (10*HZ)
-#define EVT_WAKELOCK_TIMEOUT (2*HZ)
-#define EVENTS_LOG_FILENAME "events_log"
-#define DBG_REGS_FILENAME "charger_regs"
-#define DBG_STATE_FILENAME "charger_state"
-#define LOG_LINE_LENGTH (64)
-#define LINES_PER_PAGE (PAGE_SIZE/LOG_LINE_LENGTH)
-#define SHADOW_REGS_NR 10
+#define CHARGER_WR_O 0xC
+#define CHARGER_WR(_base) ((_base) + CHARGER_WR_O)
+	#define CHARGER_WR_WS_O 0
+	#define CHARGER_WR_WS_M 0x1
 
-#define fit_in_range(__val, __MIN, __MAX) ((__val > __MAX) ? __MAX : \
-					(__val < __MIN) ? __MIN : __val)
+static int fan54x_configure_chip(
+			struct fan54x_charger *chrgr, bool enable_charging);
 
-#define SYSFS_FAKE_VBUS_SUPPORT 1
+static int fan54x_enable_charging(
+			struct fan54x_charger *chrgr, bool enable);
 
-#define SYSFS_INPUT_VAL_LEN (1)
-
-enum {
-	POK_B_VALID = 0,
-	POK_B_INVAL,
-
-	TSD_OCCURRED = 1,
-
-	OVP_OCCURRED = 1,
-
-	OVP_RECOV_OCCURRED = 1,
-
-	T32_TO_OCCURRED = 1,
-
-	VBUS_FAULT = 1,
-
-	TREG_IS_ON = 1,
-
-	OT_RECOV_OCCURRED = 1,
-
-	VBUS_OFF = 0,
-	VBUS_ON,
-};
-
-enum charger_status {
-	FAN54020_STATUS_UNKNOWN,
-	FAN54020_STATUS_READY,
-	FAN54020_STATUS_FAULT,
-};
-
-/**
- * struct fan54020_state - FAN54020 charger current state
- * @status		charger driver status. Please see enum definition for
- *			details.
- * @vbus		equals 'VBUS_ON' (1) if valid vbus connected
- *			otherwise is 'VBUS_OFF'. '-1' -  means uninitialized.
- * @cc			current output current [mA] set on HW.
- * @max_cc		maximum output current [mA] that can be set on HW.
- * @cv			current output voltage [mV] set on HW.
- * @iterm		HW charging termination current [mA]. Not used as
- *			termination is controlled by SW.
- * @inlmt		input current limit [mA].
- * @health		charger chip health.
- * @cable_type		type of currently attached cable.
- * @charger_enabled	informs if charger is enabled for use.
- * @charging_enabled	informs if charging is currently enabled or not.
- * @pok_b		value of POK_B signal
- * @ovp_flag		value of OVP flag bit
- * @ovp_recov		value of OVP_RECOV flag bit
- * @t32s_timer_expired	charging watchdog timer expiration flag
- * @vbus_fault		'1' if vbus is fault, '0' otherwise
- * @treg_flag		charger thermal regulation active flag
- * @ot_recov_flag	over temperature recovery flag
- */
-struct fan54020_state {
-	enum charger_status status;
-	int vbus;
-	int cc;
-	int max_cc;
-	int cv;
-	int iterm;
-	int inlmt;
-	int health;
-	int cable_type;
-	bool charger_enabled;
-	bool charging_enabled;
-	unsigned int pok_b:1;
-	unsigned int ovp_flag:1;
-	unsigned int ovp_recov:1;
-	unsigned int t32s_timer_expired:1;
-	unsigned int vbus_fault:1;
-	unsigned int treg_flag:1;
-	unsigned int ot_recov_flag:1;
-	unsigned int tsd_flag:1;
-};
-
-/**
- * struct unfreezable_bh_struct -  structure describing suspend aware bottom half
- * @wq				pointer to  i2c client's structure.
- * @work			work associated with irq.
- * @evt_wakelock		wakelock acquired when bottom half is scheduled.
- * @in_suspend			Suspend flag. 'true' if driver was suspended
- *				'false' otherwise.
- * @pending_evt			pending event for bottom half execution flag.
- * @lock			spinlock protecting in_suspend and pending_evt
- *				flags.
- */
-struct	unfreezable_bh_struct {
-	struct workqueue_struct *wq;
-	struct work_struct work;
-	struct wake_lock evt_wakelock;
-	bool in_suspend;
-	bool pending_evt;
-	spinlock_t lock;
-};
-
-
-/**
- * struct fan54020_charger - FAN54020 charger driver internal structure
- * @client			pointer to  i2c client's structure
- * @ididev			pointer to idi device
- * @chgint_bh			structure describing bottom half of
- *				CHGINT irq. See structure definition for
- *				details.
- * @charging_work		work providing charging heartbeat for PSC
- * @ctrl_io			PMU Charger regs physical address
- * @otg_handle			Pointer to USB OTG internal structure
- *				used for sending VBUS notifications.
- * @usb_psy			power supply instance struct for USB path
- * @ac_psy			power supply instance struct for AC path
- * @current_psy			pointer to psy representing current charging
- *				path.
- * @debugfs_root_dir		debugfs fan54020 charger root directory
- * @prop_lock			synchronization semaphore
- * @model_name			model name of charger chip
- * @manufacturer		manufacturer name of charger chip
- * @ack_time			last CONTINUE_CHARGING timestamp in jiffies
- * @fake_vbus			value of fake vbus event
- * @state			charger state structure
- */
-struct fan54020_charger {
-	struct i2c_client *client;
-	struct idi_peripheral_device *ididev;
-
-	struct unfreezable_bh_struct chgint_bh;
-
-	struct delayed_work charging_work;
-	void __iomem *ctrl_io;
-	struct usb_phy *otg_handle;
-
-	struct power_supply usb_psy;
-	struct power_supply ac_psy;
-
-	struct power_supply *current_psy;
-
-	struct dentry *debugfs_root_dir;
-
-	struct semaphore prop_lock;
-	struct wake_lock suspend_lock;
-	const char *model_name;
-	const char *manufacturer;
-
-	unsigned long ack_time;
-
-	int fake_vbus;
-
-	struct fan54020_state state;
-	int irq;
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *pins_default;
-	struct pinctrl_state *pins_sleep;
-	struct pinctrl_state *pins_inactive;
-	struct pinctrl_state *pins_active;
-	struct device_pm_platdata *pm_platdata;
-
-};
-
-static struct fan54020_charger chrgr_data = {
-	.model_name = "FAN54020",
-	.manufacturer = "FAIRCHILD",
-
-	.chgint_bh = {
-		.in_suspend = false,
-		.pending_evt = false,
-	},
-	.fake_vbus = -1,
-
-	.state = {
-		.status = FAN54020_STATUS_UNKNOWN,
-		.vbus = -1,
-		.cc = DEFAULT_CC,
-		.max_cc = IOCHARGE_MAX_MA,
-		.cv = DEFAULT_CV,
-		.iterm = 0,
-		.health = POWER_SUPPLY_HEALTH_UNKNOWN,
-		.cable_type = POWER_SUPPLY_CHARGER_TYPE_NONE,
-		.charger_enabled = false,
-		.charging_enabled = true, /* initially HZ mode is switched off*/
-		.pok_b = 0,
-		.ovp_flag = 0,
-		.ovp_recov = 0,
-		.t32s_timer_expired = 0,
-		.vbus_fault = 0,
-		.treg_flag = 0,
-		.ot_recov_flag = 0,
-		.tsd_flag = 0,
-	},
-};
-
-static int fan54020_configure_chip(
-			struct fan54020_charger *chrgr, bool enable_charging);
-
-static int fan54020_i2c_read_reg(
-			struct i2c_client *client, u8 reg_addr, u8 *data);
-
-static int fan54020_i2c_write_reg(
-			struct i2c_client *client, u8 reg_addr, u8 data);
-
-static int fan54020_enable_charging(
-			struct fan54020_charger *chrgr, bool enable);
-
-static struct charger_debug_data chrgr_dbg = {
+struct charger_debug_data chrgr_dbg = {
 	.printk_logs_en = 0,
 };
 
-struct shadow_reg {
-	const char *name;
-	u8 value;
-};
-
-static struct shadow_reg shadow_registers[SHADOW_REGS_NR] = {
-	{
-		.name = "ic_info",
-	}, {
-		.name = "charge_ctrl1",
-	}, {
-		.name = "charge_ctrl2",
-	}, {
-		.name = "ibat",
-	}, {
-		.name = "voreg",
-	}, {
-		.name = "ibus",
-	}, {
-		.name = "interrupt",
-	}, {
-		.name = "status",
-	}, {
-		.name = "int_mask",
-	}, {
-		.name = "st_mask",
-	},
-};
-
-static struct power_supply_throttle fan54020_dummy_throttle_states[] = {
+static struct power_supply_throttle fan54x_dummy_throttle_states[] = {
 	{
 		.throttle_action = PSY_THROTTLE_CC_LIMIT,
 	},
 };
 
-static char *fan54020_supplied_to[] = {
+static char *fan54x_supplied_to[] = {
 		"battery",
 };
 
-static enum power_supply_property fan54020_power_props[] = {
+static enum power_supply_property fan54x_power_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_TYPE,
@@ -455,7 +135,7 @@ static enum power_supply_property fan54020_power_props[] = {
 static ssize_t fake_vbus_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
-	struct fan54020_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+	struct fan54x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
 	size_t size_copied;
 	int value;
 
@@ -479,7 +159,7 @@ static ssize_t fake_vbus_store(
 			struct device *dev, struct device_attribute *attr,
 						const char *buf, size_t count)
 {
-	struct fan54020_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+	struct fan54x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
 	int sysfs_val;
 	int ret;
 	size_t size_to_cpy;
@@ -531,7 +211,7 @@ static ssize_t fake_vbus_store(
 	return count;
 }
 
-static struct device_attribute fan54020_fake_vbus_attr = {
+static struct device_attribute fan54x_fake_vbus_attr = {
 	.attr = {
 		.name = "fake_vbus_event",
 		.mode = S_IRUSR | S_IWUSR,
@@ -541,25 +221,25 @@ static struct device_attribute fan54020_fake_vbus_attr = {
 };
 
 /**
- * fan54020_setup_sysfs_attr	Sets up sysfs entries for fan54020 i2c device
+ * fan54x_setup_sysfs_attr	Sets up sysfs entries for fan54x i2c device
  * @chrgr			[in] pointer to charger driver internal
  *				structure
  */
-static void fan54020_setup_fake_vbus_sysfs_attr(struct fan54020_charger *chrgr)
+static void fan54x_setup_fake_vbus_sysfs_attr(struct fan54x_charger *chrgr)
 {
 	struct device *dev = &chrgr->client->dev;
 	int err;
 
-	err = device_create_file(dev, &fan54020_fake_vbus_attr);
+	err = device_create_file(dev, &fan54x_fake_vbus_attr);
 	if (err)
 		pr_err("Unable to create sysfs entry: '%s'\n",
-				fan54020_fake_vbus_attr.attr.name);
+				fan54x_fake_vbus_attr.attr.name);
 }
 
 #else
 
-static inline void fan54020_setup_fake_vbus_sysfs_attr(
-					struct fan54020_charger *chrgr)
+static inline void fan54x_setup_fake_vbus_sysfs_attr(
+					struct fan54x_charger *chrgr)
 {
 	(void) chrgr;
 }
@@ -677,21 +357,22 @@ out:
 	return retval;
 }
 
-static const struct file_operations fan54020_evt_dbg_fops = {
+static const struct file_operations fan54x_evt_dbg_fops = {
 	.open = dbg_evt_open,
 	.read = dbg_evt_read,
 };
 
 
 
-static int fan54020_dbg_regs_show(struct seq_file *m, void *data)
+static int fan54x_dbg_regs_show(struct seq_file *m, void *data)
 {
-	int i, ret;
-	struct fan54020_charger *chrgr = (struct fan54020_charger *) m->private;
-	u8 charge_ctrl1_reg, tmr_rst_reg, safety_reg, monitor_reg,
-						state_reg, tmr_ctrl_reg;
-
+	int i, ret = 0;
+	struct fan54x_charger *chrgr = (struct fan54x_charger *) m->private;
+	u8 val;
 	unsigned long timestamp_jiffies, timestamp_s;
+
+	if (!chrgr->attrmap)
+		return -ENODEV;
 
 	down(&chrgr->prop_lock);
 
@@ -700,65 +381,39 @@ static int fan54020_dbg_regs_show(struct seq_file *m, void *data)
 	seq_printf(m, "[%5lu.%3lu] :\n", timestamp_s,
 				(timestamp_jiffies - timestamp_s*HZ));
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_CHARGE_CTRL1,
-							&charge_ctrl1_reg);
-	if (ret != 0)
-		return ret;
-
-	shadow_registers[REG_CHARGE_CTRL1].value = charge_ctrl1_reg;
-
-	for (i = 0; i < SHADOW_REGS_NR; ++i) {
-		seq_printf(m, "%s = 0x%x\n", shadow_registers[i].name,
-						shadow_registers[i].value);
+	for (i = 0; i < ATTR_MAX; i++) {
+		if (chrgr->attrmap[i].rpt &&
+			chrgr->attrmap[i].type == FULL_REG) {
+			ret = fan54x_attr_read(chrgr->client, i, &val);
+			if (ret)
+				goto out;
+			seq_printf(m, "%s = 0x%x\n",
+					chrgr->attrmap[i].rpt,	val);
+		}
 	}
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_TMR_RST, &tmr_rst_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_SAFETY, &safety_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_MONITOR, &monitor_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_STATE, &state_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_TMR_CTRL, &tmr_ctrl_reg);
-	if (ret != 0)
-		return ret;
-
-	seq_printf(m, "tmr_rst = 0x%x\n", tmr_rst_reg);
-	seq_printf(m, "safety = 0x%x\n", safety_reg);
-	seq_printf(m, "monitor = 0x%x\n", monitor_reg);
-	seq_printf(m, "state = 0x%x\n", state_reg);
-	seq_printf(m, "tmr_ctrl = 0x%x\n\n\n", tmr_ctrl_reg);
-
+out:
 	up(&chrgr->prop_lock);
 
-	return 0;
+	return ret;
 }
 
-static int fan54020_dbg_regs_open(struct inode *inode, struct file *file)
+static int fan54x_dbg_regs_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, fan54020_dbg_regs_show, inode->i_private);
+	return single_open(file, fan54x_dbg_regs_show, inode->i_private);
 }
 
-static const struct file_operations fan54020_dbg_regs_fops = {
-	.open = fan54020_dbg_regs_open,
+static const struct file_operations fan54x_dbg_regs_fops = {
+	.open = fan54x_dbg_regs_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
 
 
-static int fan54020_dbg_state_show(struct seq_file *m, void *data)
+static int fan54x_dbg_state_show(struct seq_file *m, void *data)
 {
-	struct fan54020_charger *chrgr = (struct fan54020_charger *) m->private;
+	struct fan54x_charger *chrgr = (struct fan54x_charger *) m->private;
 	unsigned long timestamp_jiffies, timestamp_s;
 
 	(void)data;
@@ -790,16 +445,23 @@ static int fan54020_dbg_state_show(struct seq_file *m, void *data)
 	seq_printf(m, "treg_flag = %u\n", chrgr->state.treg_flag);
 	seq_printf(m, "ot_recov_flag = %u\n\n", chrgr->state.ot_recov_flag);
 
+	seq_printf(m, "vbus_ovp = %u\n", chrgr->state.vbus_ovp);
+	seq_printf(m, "sleep_mode = %u\n", chrgr->state.sleep_mode);
+	seq_printf(m, "poor_input_source = %u\n",
+					chrgr->state.poor_input_source);
+	seq_printf(m, "bat_ovp = %u\n", chrgr->state.bat_ovp);
+	seq_printf(m, "no_bat = %u\n", chrgr->state.no_bat);
+
 	return 0;
 }
 
-static int fan54020_dbg_state_open(struct inode *inode, struct file *file)
+static int fan54x_dbg_state_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, fan54020_dbg_state_show, inode->i_private);
+	return single_open(file, fan54x_dbg_state_show, inode->i_private);
 }
 
-static const struct file_operations fan54020_dbg_state_fops = {
-	.open = fan54020_dbg_state_open,
+static const struct file_operations fan54x_dbg_state_fops = {
+	.open = fan54x_dbg_state_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
@@ -807,40 +469,40 @@ static const struct file_operations fan54020_dbg_state_fops = {
 
 
 /**
- * fan54020_setup_debugfs - sets up debugfs entries for fan54020 charger driver
+ * fan54x_setup_debugfs - sets up debugfs entries for fan54x charger driver
  * @chrgr		[in] pointer to charger driver internal structure
  * @dbg_data		[in] pointer to debug array containing events logs.
  */
-static void fan54020_setup_debugfs(struct fan54020_charger *chrgr,
+static void fan54x_setup_debugfs(struct fan54x_charger *chrgr,
 				struct charger_debug_data *dbg_data)
 {
 	struct dentry *dbgfs_entry;
 
-	dbgfs_entry = debugfs_create_dir(FAN54020_NAME, NULL);
+	dbgfs_entry = debugfs_create_dir(FAN54x_NAME, NULL);
 	if (!dbgfs_entry)
 		return;
 
 	chrgr->debugfs_root_dir = dbgfs_entry;
 
 	(void)debugfs_create_file(EVENTS_LOG_FILENAME, S_IRUGO,
-			dbgfs_entry, dbg_data, &fan54020_evt_dbg_fops);
+			dbgfs_entry, dbg_data, &fan54x_evt_dbg_fops);
 
 	(void)debugfs_create_file(DBG_REGS_FILENAME, S_IRUGO,
-			dbgfs_entry, chrgr, &fan54020_dbg_regs_fops);
+			dbgfs_entry, chrgr, &fan54x_dbg_regs_fops);
 
 	(void)debugfs_create_file(DBG_STATE_FILENAME, S_IRUGO,
-			dbgfs_entry, chrgr, &fan54020_dbg_state_fops);
+			dbgfs_entry, chrgr, &fan54x_dbg_state_fops);
 
 	return;
 }
 
 /**
- * fan54020_remove_debugfs_dir	recursively removes debugfs root directory
- *				of FAN54020 charger driver
+ * fan54x_remove_debugfs_dir	recursively removes debugfs root directory
+ *				of FAN54x charger driver
  * @chrgr			[in] pointer to charger driver's
  *				internal structure
  */
-static void fan54020_remove_debugfs_dir(struct fan54020_charger *chrgr)
+static void fan54x_remove_debugfs_dir(struct fan54x_charger *chrgr)
 {
 	debugfs_remove_recursive(chrgr->debugfs_root_dir);
 	return;
@@ -848,133 +510,50 @@ static void fan54020_remove_debugfs_dir(struct fan54020_charger *chrgr)
 
 #else
 
-static inline void fan54020_setup_debugfs(struct fan54020_charger *chrgr,
+static inline void fan54x_setup_debugfs(struct fan54x_charger *chrgr,
 				struct charger_debug_data *dbg_data)
 {
 
 }
 
-static inline void fan54020_remove_debugfs_dir(struct fan54020_charger *chrgr)
+static inline void fan54x_remove_debugfs_dir(struct fan54x_charger *chrgr)
 {
 
 }
 
 #endif /* CONFIG_DEBUG_FS  */
 
-/**
- * fan54020_i2c_read_reg - function for reading fan54020 registers
- * @client		[in] pointer i2c client structure
- * @reg_addr		[in] register address
- * @data		[out] value read from register
- *
- * Returns '0' on success
- */
-static int fan54020_i2c_read_reg(struct i2c_client *client, u8 reg_addr,
-								u8 *data)
-{
-	int ret, cnt = MAX_NR_OF_I2C_RETRIES;
-	struct i2c_msg msgs[] = {
-		{
-			.addr   = client->addr,
-			.flags  = 0,
-			.len    = 1,
-			.buf    = &reg_addr,
-		},
-		{
-			.addr   = client->addr,
-			.flags  = I2C_M_RD,
-			.len    = 1,
-			.buf    = data,
-		},
-	};
-
-	do {
-		ret = i2c_transfer(client->adapter, msgs, 2);
-		if (ret == 2) {
-			if (reg_addr < SHADOW_REGS_NR)
-				shadow_registers[reg_addr].value = *data;
-			CHARGER_DEBUG_READ_REG(chrgr_dbg, reg_addr, *data);
-			return 0;
-		}
-		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_READ_ERROR, ret,
-								reg_addr);
-	} while (cnt--);
-
-	return ret;
-}
-
-/**
- * fan54020_i2c_write_reg - function for writing to fan54020 registers
- * @client		[in] pointer i2c client structure
- * @reg_addr		[in] register address
- * @data		[in] value to be written to register
- *
- * Returns '0' on success.
- */
-static int fan54020_i2c_write_reg(struct i2c_client *client, u8 reg_addr,
-								u8 data)
-{
-	int ret, cnt = MAX_NR_OF_I2C_RETRIES;
-	u8 out_buf[2];
-	struct i2c_msg msgs[] = {
-		{
-			.addr   = client->addr,
-			.flags  = 0,
-			.len    = 2,
-			.buf    = out_buf,
-		},
-	};
-	out_buf[0] = reg_addr;
-	out_buf[1] = data;
-
-	do {
-		ret = i2c_transfer(client->adapter, msgs, 1);
-		CHARGER_DEBUG_WRITE_REG(chrgr_dbg, reg_addr, data);
-		if (ret == 1) {
-			if (reg_addr < SHADOW_REGS_NR)
-				shadow_registers[reg_addr].value = data;
-			return 0;
-		}
-		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_WRITE_ERROR, ret,
-								reg_addr);
-	} while (cnt--);
-
-	return ret;
-}
-
-static int fan54020_trigger_wtd(struct fan54020_charger *chrgr)
+static int fan54x_trigger_wtd(struct fan54x_charger *chrgr)
 {
 	int ret;
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TRIGGERING_WTD, 0, 0);
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_TMR_RST,
-							(1<<TMR_RST_O));
+	ret = fan54x_attr_write(chrgr->client, TMR_RST, 1);
 	return ret;
 }
 
 
-static int fan54020_set_voreg(struct fan54020_charger *chrgr,
+static int fan54x_set_voreg(struct fan54x_charger *chrgr,
 				int volt_to_set, int *volt_set, bool propagate)
 {
 	int ret, volt_to_set_mv;
 	u8 volt_regval, readback_val;
 
-	volt_to_set_mv = fit_in_range(volt_to_set, VOREG_MIN_MV, VOREG_MAX_MV);
+	volt_to_set_mv = fit_in_range(volt_to_set,
+				chrgr->min_voreg, chrgr->max_voreg);
 
-	volt_regval = (u8)((volt_to_set_mv - VOREG_MIN_MV) / VOREG_STEP_MV);
+	volt_regval = (u8)((volt_to_set_mv - chrgr->min_voreg) / VOREG_STEP_MV);
 
 	if (propagate) {
-		ret = fan54020_i2c_write_reg(chrgr->client, REG_VOREG,
-								volt_regval);
-		if (ret != 0)
+		ret = fan54x_attr_write(chrgr->client, VOREG, volt_regval);
+		if (ret)
 			return ret;
 
 		/* Reading back the register value becuase it could ignore our
 		setting as a result of being limited by the value of
 		SAFETY register  */
-		ret = fan54020_i2c_read_reg(chrgr->client, REG_VOREG,
-								&readback_val);
-		if (ret != 0)
+		ret = fan54x_attr_read(chrgr->client, VOREG, &readback_val);
+		if (ret)
 			return ret;
 
 		if (volt_regval != readback_val) {
@@ -984,21 +563,21 @@ static int fan54020_set_voreg(struct fan54020_charger *chrgr,
 
 	}
 
-	*volt_set = ((int)volt_regval * VOREG_STEP_MV) + VOREG_MIN_MV;
+	*volt_set = ((int)volt_regval * VOREG_STEP_MV) + chrgr->min_voreg;
 
 	return 0;
 }
 
-static int fan54020_set_iocharge(
-			struct fan54020_charger *chrgr, int curr_to_set,
+static int fan54x_set_iocharge(
+			struct fan54x_charger *chrgr, int curr_to_set,
 						int *curr_set, bool propagate)
 {
 	int ret, current_to_set_ma;
-	u8 regval, cur_regval, readback_val;
+	u8 regval, readback_val;
 
-	if (curr_to_set < IOCHARGE_MIN_MA) {
+	if (curr_to_set < chrgr->min_iocharge) {
 		if (chrgr->state.charging_enabled && propagate) {
-			ret = fan54020_enable_charging(chrgr, false);
+			ret = fan54x_enable_charging(chrgr, false);
 			if (ret != 0)
 				return ret;
 			chrgr->state.charging_enabled = 0;
@@ -1007,64 +586,47 @@ static int fan54020_set_iocharge(
 		return 0;
 	}
 
-	current_to_set_ma = fit_in_range(curr_to_set, IOCHARGE_MIN_MA,
-							IOCHARGE_MAX_MA);
+	current_to_set_ma = fit_in_range(curr_to_set, chrgr->min_iocharge,
+							chrgr->max_iocharge);
 
-	if (current_to_set_ma < IOCHARGE_STEP_START_MA) {
-		regval = 0;
-	} else {
-		regval = IOCHARGE_STEP_START_REGVAL +
-		(u8)((current_to_set_ma - IOCHARGE_STEP_START_MA) /
+	regval = (u8)((current_to_set_ma - chrgr->min_iocharge) /
 							IOCHARGE_STEP_MA);
-	}
 
 	if (propagate) {
-		ret = fan54020_i2c_read_reg(chrgr->client, REG_IBAT,
-								&cur_regval);
-		if (ret != 0)
+		ret = fan54x_attr_write(chrgr->client, IOCHARGE, regval);
+		if (ret)
 			return ret;
 
-		cur_regval &= ~(IOCHARGE_M << IOCHARGE_O);
-		cur_regval |= regval << IOCHARGE_O;
-
-		ret = fan54020_i2c_write_reg(chrgr->client, REG_IBAT,
-								cur_regval);
-		if (ret != 0)
-			return ret;
-
-		/* Reading back the register value becuase it could ignore our
+		/* Reading back the register value because it could ignore our
 		setting as a result of being limited by the value of
 		SAFETY register  */
-		ret = fan54020_i2c_read_reg(chrgr->client, REG_IBAT,
-							&readback_val);
-		if (ret != 0)
+		ret = fan54x_attr_read(chrgr->client, IOCHARGE, &readback_val);
+		if (ret)
 			return ret;
 
-		if (readback_val != cur_regval) {
+		if (readback_val != regval) {
 			pr_err("I2C write() error! Register IBAT still contains the old value\n");
 			return -EIO;
 		}
 
 
-		regval = (readback_val >> IOCHARGE_O) & IOCHARGE_M;
+		regval = readback_val;
 	}
 
-	*curr_set = (regval == 0) ? IOCHARGE_MIN_MA :
-	((regval - IOCHARGE_STEP_START_REGVAL) * IOCHARGE_STEP_MA
-						+ IOCHARGE_STEP_START_MA);
+	*curr_set = (regval * IOCHARGE_STEP_MA + chrgr->min_iocharge);
 
 	return 0;
 }
 
-static int fan54020_set_ibus_limit(struct fan54020_charger *chrgr,
+static int fan54x_set_ibus_limit(struct fan54x_charger *chrgr,
 						int ilim_to_set, int *ilim_set)
 {
 	int ret, current_to_set_ma;
-	u8 regval, cur_regval, readback_val;
+	u8 regval, readback_val;
 
-	if (ilim_to_set < IBUS_MIN_LIMIT_MA) {
+	if (ilim_to_set < chrgr->min_ibus_limit) {
 		if (chrgr->state.charging_enabled) {
-			ret = fan54020_enable_charging(chrgr, false);
+			ret = fan54x_enable_charging(chrgr, false);
 			if (ret != 0)
 				return ret;
 			chrgr->state.charging_enabled = 0;
@@ -1073,44 +635,37 @@ static int fan54020_set_ibus_limit(struct fan54020_charger *chrgr,
 		return 0;
 	}
 
-	if (ilim_to_set <= IBUS_MAX_LIMIT_MA) {
+	if (ilim_to_set <= chrgr->max_ibus_limit) {
 		current_to_set_ma = fit_in_range(ilim_to_set,
-					IBUS_MIN_LIMIT_MA, IBUS_MAX_LIMIT_MA);
+				chrgr->min_ibus_limit, chrgr->max_ibus_limit);
 
-		regval = (u8)((current_to_set_ma - IBUS_MIN_LIMIT_MA) /
+		regval = (u8)((current_to_set_ma - chrgr->min_ibus_limit) /
 							IBUS_LIMIT_STEP_MA);
 	} else {
 		regval = IBUS_NO_LIMIT;
 	}
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_IBUS, &cur_regval);
-	if (ret != 0)
+	ret = fan54x_attr_write(chrgr->client, IBUS, regval);
+	if (ret)
 		return ret;
 
-	cur_regval &= ~(IBUS_M << IBUS_O);
-	cur_regval |= (regval << IBUS_O);
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_IBUS, cur_regval);
-	if (ret != 0)
+	ret = fan54x_attr_read(chrgr->client, IBUS, &readback_val);
+	if (ret)
 		return ret;
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_IBUS, &readback_val);
-	if (ret != 0)
-		return ret;
-
-	if (readback_val != cur_regval) {
+	if (readback_val != regval) {
 		pr_err("I2C write() error! Register IBUS still contains the old value\n");
 		return -EIO;
 	}
 
 
 	*ilim_set = (regval == IBUS_NO_LIMIT) ? ilim_to_set :
-			(regval * IBUS_LIMIT_STEP_MA + IBUS_MIN_LIMIT_MA);
+			(regval * IBUS_LIMIT_STEP_MA + chrgr->min_ibus_limit);
 
 	return 0;
 }
 
-static inline bool fan54020_is_online(struct fan54020_charger *chrgr,
+static inline bool fan54x_is_online(struct fan54x_charger *chrgr,
 						struct power_supply *psy)
 {
 	if (!(chrgr->state.health == POWER_SUPPLY_HEALTH_GOOD) ||
@@ -1133,16 +688,16 @@ static inline bool fan54020_is_online(struct fan54020_charger *chrgr,
 	return false;
 }
 
-static void fan54020_charging_worker(struct work_struct *work)
+static void fan54x_charging_worker(struct work_struct *work)
 {
 	int ret;
-	struct fan54020_charger *chrgr =
-		container_of(work, struct fan54020_charger, charging_work.work);
+	struct fan54x_charger *chrgr =
+		container_of(work, struct fan54x_charger, charging_work.work);
 
 
 	if (!time_after(jiffies, chrgr->ack_time + (60*HZ))) {
 		down(&chrgr->prop_lock);
-		ret = fan54020_trigger_wtd(chrgr);
+		ret = fan54x_trigger_wtd(chrgr);
 		up(&chrgr->prop_lock);
 		if (ret != 0)
 			return;
@@ -1156,21 +711,16 @@ static void fan54020_charging_worker(struct work_struct *work)
 	return;
 }
 
-static int fan54020_enable_charging(struct fan54020_charger *chrgr, bool enable)
+static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
 {
 	int ret;
-	u8 chr_reg;
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_CHARGE_CTRL1, &chr_reg);
-	if (ret != 0)
-		return ret;
-
-	chr_reg &= ~(1 << HZ_MODE_O);
-	chr_reg |= ((enable) ? (0 << HZ_MODE_O) : (1 << HZ_MODE_O));
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_CHARGE_CTRL1, chr_reg);
-	if (ret != 0)
-		return ret;
+	if (chrgr->enable_charger) {
+		ret = chrgr->enable_charger(chrgr, enable);
+		if (ret)
+			return ret;
+	} else
+		return -EINVAL;
 
 	if (enable) {
 		/*
@@ -1188,18 +738,19 @@ static int fan54020_enable_charging(struct fan54020_charger *chrgr, bool enable)
 }
 
 
-static int fan54020_charger_set_property(struct power_supply *psy,
+static int fan54x_charger_set_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					const union power_supply_propval *val)
 {
 	int value_to_set, value_set = 0, ret = 0;
-	struct fan54020_charger *chrgr = &chrgr_data;
+	struct fan54x_charger *chrgr =
+			i2c_get_clientdata(to_i2c_client(psy->dev->parent));
 
 	bool call_psy_changed = false;
 
 	down(&chrgr->prop_lock);
 
-	if (chrgr->state.status == FAN54020_STATUS_FAULT) {
+	if (chrgr->state.status == FAN54x_STATUS_FAULT) {
 		ret = -EFAULT;
 		CHARGER_DEBUG_REL(
 				chrgr_dbg, CHG_DBG_SET_PROPERTY_ERROR, ret, 0);
@@ -1221,7 +772,6 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 			break;
 		chrgr->state.cable_type = val->intval;
 
-
 		if ((chrgr->state.cable_type ==
 			POWER_SUPPLY_CHARGER_TYPE_USB_SDP) ||
 			(chrgr->state.cable_type ==
@@ -1238,17 +788,18 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_CURRENT,
 								val->intval, 0);
 
+		fan54x_attr_write(chrgr->client, IO_LEVEL, 0);
 		value_to_set = fit_in_range(val->intval, 0,
 						chrgr->state.max_cc);
 
-		fan54020_set_iocharge(chrgr, value_to_set, &value_set, false);
+		fan54x_set_iocharge(chrgr, value_to_set, &value_set, false);
 		if (value_set == chrgr->state.cc)
 			break;
-		ret = fan54020_set_iocharge(chrgr, value_to_set,
+		ret = fan54x_set_iocharge(chrgr, value_to_set,
 							&value_set, true);
 
 		if (ret) {
-			chrgr->state.status = FAN54020_STATUS_FAULT;
+			chrgr->state.status = FAN54x_STATUS_FAULT;
 			chrgr->state.health =
 					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 			break;
@@ -1261,12 +812,12 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_VOLTAGE,
 								val->intval, 0);
 
-		fan54020_set_voreg(chrgr, val->intval, &value_set, false);
+		fan54x_set_voreg(chrgr, val->intval, &value_set, false);
 		if (value_set == chrgr->state.cv)
 			break;
-		ret = fan54020_set_voreg(chrgr, val->intval, &value_set, true);
+		ret = fan54x_set_voreg(chrgr, val->intval, &value_set, true);
 		if (ret) {
-			chrgr->state.status = FAN54020_STATUS_FAULT;
+			chrgr->state.status = FAN54x_STATUS_FAULT;
 			chrgr->state.health =
 					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 			break;
@@ -1291,7 +842,7 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 			value_set = val->intval;
 			break;
 		}
-		ret = fan54020_enable_charging(chrgr, val->intval);
+		ret = fan54x_enable_charging(chrgr, val->intval);
 		if (!ret) {
 			chrgr->state.charging_enabled = val->intval;
 			value_set = val->intval;
@@ -1304,18 +855,18 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 							val->intval, 0);
 
 		value_to_set = val->intval;
-		ret = fan54020_set_ibus_limit(chrgr, value_to_set, &value_set);
+		ret = fan54x_set_ibus_limit(chrgr, value_to_set, &value_set);
 		if (ret) {
-			chrgr->state.status = FAN54020_STATUS_FAULT;
+			chrgr->state.status = FAN54x_STATUS_FAULT;
 			chrgr->state.health =
 					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 			break;
 		}
 
 		chrgr->state.inlmt = value_set;
-		if (value_set > IBUS_MAX_LIMIT_MA)
+		if (value_set > chrgr->max_ibus_limit)
 			chrgr->state.max_cc =
-				fit_in_range(value_set, 0, IOCHARGE_MAX_MA);
+				fit_in_range(value_set, 0, chrgr->max_iocharge);
 		break;
 
 	case POWER_SUPPLY_PROP_CONTINUE_CHARGING:
@@ -1363,12 +914,13 @@ static int fan54020_charger_set_property(struct power_supply *psy,
 	return ret;
 }
 
-static int fan54020_charger_get_property(struct power_supply *psy,
+static int fan54x_charger_get_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					union power_supply_propval *val)
 {
 	int ret = 0;
-	struct fan54020_charger *chrgr = &chrgr_data;
+	struct fan54x_charger *chrgr =
+			i2c_get_clientdata(to_i2c_client(psy->dev->parent));
 
 	down(&chrgr->prop_lock);
 
@@ -1383,9 +935,9 @@ static int fan54020_charger_get_property(struct power_supply *psy,
 
 		else if (psy->type == POWER_SUPPLY_TYPE_MAINS)
 			val->intval = ((chrgr->state.cable_type ==
-				POWER_SUPPLY_CHARGER_TYPE_USB_DCP) ||
+				 POWER_SUPPLY_CHARGER_TYPE_USB_DCP) ||
 				(chrgr->state.cable_type ==
-				POWER_SUPPLY_CHARGER_TYPE_USB_CDP));
+				 POWER_SUPPLY_CHARGER_TYPE_USB_CDP));
 		else
 			val->intval = 0;
 
@@ -1394,7 +946,7 @@ static int fan54020_charger_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = fan54020_is_online(chrgr, psy);
+		val->intval = fan54x_is_online(chrgr, psy);
 		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_ONLINE,
 								val->intval, 0);
 		break;
@@ -1493,23 +1045,22 @@ static int fan54020_charger_get_property(struct power_supply *psy,
 }
 
 /**
- * fan54020_chgint_cb_work_func	function executed by
- *				fan54020_charger::chgint_cb_work work
+ * fan54x_chgint_cb_work_func	function executed by
+ *				fan54x_charger::chgint_cb_work work
  * @work			[in] pointer to associated 'work' structure
  */
-static void fan54020_chgint_cb_work_func(struct work_struct *work)
+static void fan54x_chgint_cb_work_func(struct work_struct *work)
 {
-	u8 charge_ctrl1_reg, interrupt_reg, vbus_stat_reg, state_reg;
-	int ret, vbus_state_prev, health_prev, state;
-	struct fan54020_charger *chrgr =
-		container_of(work, struct fan54020_charger,
+	int ret, vbus_state_prev, health_prev;
+	struct fan54x_charger *chrgr =
+		container_of(work, struct fan54x_charger,
 					chgint_bh.work);
 
 	down(&chrgr->prop_lock);
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_CHGINT_CB, 0, 0);
 
-	if (chrgr->state.status == FAN54020_STATUS_FAULT) {
+	if (chrgr->state.status == FAN54x_STATUS_FAULT) {
 		CHARGER_DEBUG_REL(
 				chrgr_dbg, CHG_DBG_DRIVER_IN_FAULT_STATE, 0, 0);
 		up(&chrgr->prop_lock);
@@ -1519,52 +1070,9 @@ static void fan54020_chgint_cb_work_func(struct work_struct *work)
 	vbus_state_prev = chrgr->state.vbus;
 	health_prev = chrgr->state.health;
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_CHARGE_CTRL1,
-							&charge_ctrl1_reg);
+	ret = chrgr->get_charger_state(chrgr);
 	if (ret != 0)
 		goto fail;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_INT, &interrupt_reg);
-	if (ret != 0)
-		goto fail;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_STATUS, &vbus_stat_reg);
-	if (ret != 0)
-		goto fail;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_STATE, &state_reg);
-	if (ret != 0)
-		goto fail;
-
-	/* Checking for OVP_FLAG or OVP_RECOV occurrance */
-	chrgr->state.tsd_flag = (interrupt_reg & (1<<TSD_FLAG_O)) ?
-							TSD_OCCURRED : 0;
-
-	chrgr->state.ovp_flag = (interrupt_reg & (1<<OVP_FLAG_O)) ?
-							OVP_OCCURRED : 0;
-
-	chrgr->state.ovp_recov = (interrupt_reg & (1<<OVP_RECOV_O)) ?
-							OVP_RECOV_OCCURRED : 0;
-
-	chrgr->state.t32s_timer_expired = (interrupt_reg & (1<<TC_TO_O)) ?
-							T32_TO_OCCURRED : 0;
-
-	chrgr->state.treg_flag = (interrupt_reg & (1<<TREG_FLAG_O)) ?
-							TREG_IS_ON : 0;
-
-	chrgr->state.ot_recov_flag = (interrupt_reg & (1<<OT_RECOV_O)) ?
-							OT_RECOV_OCCURRED : 0;
-
-	/* Checking for POK_B status change */
-	chrgr->state.pok_b = (vbus_stat_reg & (1<<POK_B_O)) ?
-						POK_B_INVAL : POK_B_VALID;
-	chrgr->state.vbus = (chrgr->state.pok_b == POK_B_VALID) ?
-							VBUS_ON : VBUS_OFF;
-
-	state = ((state_reg >> ST_CODE_O) & ST_CODE_M);
-	chrgr->state.vbus_fault =
-			(state >= ST_VBUS_FAULT && state < ST_VBUS_FAULT2) ?
-								VBUS_FAULT : 0;
 
 	if (chrgr->state.treg_flag)
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TREG_IS_ON, 0, 0);
@@ -1574,7 +1082,6 @@ static void fan54020_chgint_cb_work_func(struct work_struct *work)
 
 	if (chrgr->state.t32s_timer_expired) {
 		chrgr->state.health = POWER_SUPPLY_HEALTH_DEAD;
-		chrgr->state.status = FAN54020_STATUS_FAULT;
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_T32_TIMER_EXPIRED, 0, 0);
 		power_supply_changed(chrgr->current_psy);
 		goto fail;
@@ -1589,7 +1096,7 @@ static void fan54020_chgint_cb_work_func(struct work_struct *work)
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_FAULT, 0, 0);
 	}
 
-	if (chrgr->state.ovp_flag) {
+	if (chrgr->state.ovp_flag || chrgr->state.vbus_ovp) {
 		chrgr->state.health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 		pr_err("VBUS Over-Voltage Shutdown!");
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_OVP, 0, 0);
@@ -1606,6 +1113,26 @@ static void fan54020_chgint_cb_work_func(struct work_struct *work)
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_OVP_RECOV, 0, 0);
 	}
 
+	if (chrgr->state.poor_input_source) {
+		pr_err("Poor Input Source!\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_POOR_INPUT_SOURCE, 0, 0);
+	}
+
+	if (chrgr->state.sleep_mode) {
+		pr_info("Sleep Mode\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SLEEP, 0, 0);
+	}
+
+	if (chrgr->state.bat_ovp) {
+		pr_err("Battery Over-Voltage!");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_BAT_OVP, 0, 0);
+	}
+
+	if (chrgr->state.no_bat) {
+		pr_err("No Battery!\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_NO_BAT, 0, 0);
+	}
+
 	if (health_prev != chrgr->state.health &&
 		chrgr->state.health != POWER_SUPPLY_HEALTH_GOOD &&
 		 chrgr->state.health != POWER_SUPPLY_HEALTH_UNKNOWN)
@@ -1615,9 +1142,9 @@ static void fan54020_chgint_cb_work_func(struct work_struct *work)
 	/* when vbus is disconnected all registers are reseted (known HW bug)
 	therefore need to reconfigure the chip */
 	if (chrgr->state.vbus == VBUS_OFF && vbus_state_prev == VBUS_ON) {
-		chrgr->state.cc = DEFAULT_CC;
-		chrgr->state.cv = DEFAULT_CV;
-		ret = fan54020_configure_chip(
+		chrgr->state.cc = chrgr->default_cc;
+		chrgr->state.cv = chrgr->default_cv;
+		ret = fan54x_configure_chip(
 					chrgr, chrgr->state.charging_enabled);
 		if (ret != 0)
 			goto fail;
@@ -1712,9 +1239,11 @@ static void unfreezable_bh_suspend(struct unfreezable_bh_struct *bh)
 	spin_unlock_irqrestore(&bh->lock, flags);
 }
 
-static irqreturn_t fan54020_charger_chgint_cb(int irq, void *dev)
+static irqreturn_t fan54x_charger_chgint_cb(int irq, void *dev)
 {
-	struct fan54020_charger *chrgr = dev;
+	struct fan54x_charger *chrgr = dev;
+
+	pr_info("%s\n", __func__);
 
 	unfreezable_bh_schedule(&chrgr->chgint_bh);
 
@@ -1722,17 +1251,17 @@ static irqreturn_t fan54020_charger_chgint_cb(int irq, void *dev)
 }
 
 /**
- * fan54020_configure_pmu_irq - function configuring PMU's Charger status IRQ
+ * fan54x_configure_pmu_irq - function configuring PMU's Charger status IRQ
  * @chrgr		[in] pointer to charger driver internal structure
  */
-static int fan54020_configure_pmu_irq(struct fan54020_charger *chrgr)
+static int fan54x_configure_pmu_irq(struct fan54x_charger *chrgr)
 {
 	int ret;
 
 	/* register callback with PMU for CHGINT irq */
 	ret = request_irq(chrgr->irq,
-		fan54020_charger_chgint_cb,
-			IRQF_NO_SUSPEND, FAN54020_NAME, chrgr);
+		fan54x_charger_chgint_cb,
+			IRQF_NO_SUSPEND, FAN54x_NAME, chrgr);
 	if (ret != 0) {
 		pr_err("Failed to register @PMU for GHGINT irq! ret=%d", ret);
 		return ret;
@@ -1742,11 +1271,11 @@ static int fan54020_configure_pmu_irq(struct fan54020_charger *chrgr)
 }
 
 /**
- * fan54020_configure_pmu_regs -function configuring PMU's Charger
+ * fan54x_configure_pmu_regs -function configuring PMU's Charger
  *				part registers
  * @chrgr			[in] pointer to charger driver's internal struct
  */
-static int fan54020_configure_pmu_regs(struct fan54020_charger *chrgr)
+static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 {
 	u32 regval;
 	struct device_state_pm_state *pm_state_en, *pm_state_dis;
@@ -1816,6 +1345,8 @@ static int fan54020_configure_pmu_regs(struct fan54020_charger *chrgr)
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
 	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+	/* charger WR */
+	iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
 
 	ret = idi_set_power_state(chrgr->ididev, pm_state_dis, false);
 
@@ -1826,115 +1357,39 @@ static int fan54020_configure_pmu_regs(struct fan54020_charger *chrgr)
 }
 
 /**
- * fan54020_get_clr_wdt_expiry_flag -	func. gets WDT expiry status and clears
+ * fan54x_get_clr_wdt_expiry_flag -	func. gets WDT expiry status and clears
  *					expired status if it had expired
  * @chrgr		[in] pointer to charger driver internal structure
  */
-static int fan54020_get_clr_wdt_expiry_flag(struct fan54020_charger *chrgr)
+static int fan54x_get_clr_wdt_expiry_flag(struct fan54x_charger *chrgr)
 {
-	u8 interrupt_reg = 0;
-	int ret, wtd_expired;
-
-	/* If the WDT interrupt was previously set,
-	it will now be cleared upon reading */
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_INT, &interrupt_reg);
-	if (ret != 0)
-		return ret;
-
-	wtd_expired = (interrupt_reg & (1<<TC_TO_O)) ? T32_TO_OCCURRED : 0;
-
-	return wtd_expired;
+	if (chrgr->get_clr_wdt_expiry_flag)
+		return chrgr->get_clr_wdt_expiry_flag(chrgr);
+	else
+		return 0;
 }
 
 
 /**
- * fan54020_configure_chip - function configuring FAN54020 chip registers
+ * fan54x_configure_chip - function configuring FAN54x chip registers
  * @chrgr		[in] pointer to charger driver internal structure
  * @enable_charging	[in] controls if charging should be anebled or disabled
  */
-static int fan54020_configure_chip(struct fan54020_charger *chrgr,
+static int fan54x_configure_chip(struct fan54x_charger *chrgr,
 							bool enable_charging)
 {
-	int ret;
-	u8 chr_reg, readback_val;
-
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_CONFIGURE_CHIP, 0, 0);
 
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_CHARGE_CTRL2, &chr_reg);
-	if (ret != 0)
-		return ret;
-
-	/*
-	 * Set LDO_OFF bit to '0'
-	 * 3.3V LDO is ON and biased from VBAT when:
-	 * VBUS < VBAT && DBP pin is HIGH
-	 * Setting valid for CHIP id 0x88
-	 */
-	chr_reg &= ~(1 << LDO_OFF_O);
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_CHARGE_CTRL2, chr_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_CHARGE_CTRL1, &chr_reg);
-	if (ret != 0)
-		return ret;
-
-
-	if (enable_charging == true)
-		chr_reg &= ~(1 << HZ_MODE_O);
+	if (chrgr->configure_chip)
+		return chrgr->configure_chip(chrgr, enable_charging);
 	else
-		chr_reg |= (1 << HZ_MODE_O);
-
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_CHARGE_CTRL1, chr_reg);
-	if (ret != 0)
-		return ret;
-
-
-
-	chr_reg = INT_MASK_ALL;
-	chr_reg &= ~((1 << TSD_FLAG_O) | (1 << OVP_FLAG_O) |
-			(1 << OVP_RECOV_O) | (1 << TC_TO_O) |
-			(1 << DBP_TO_O) | (1 << TREG_FLAG_O) |
-			(1 << OT_RECOV_O));
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_INT_MASK, chr_reg);
-	if (ret != 0)
-		return ret;
-
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_INT_MASK, &readback_val);
-	if (ret != 0)
-		return ret;
-
-
-
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_ST_MASK, &chr_reg);
-	if (ret != 0)
-		return ret;
-
-	chr_reg = ST_MASK_ALL;
-	chr_reg &= ~(1 << POK_B_O);
-
-	ret = fan54020_i2c_write_reg(chrgr->client, REG_ST_MASK, chr_reg);
-	if (ret != 0)
-		return ret;
-
-	ret = fan54020_i2c_read_reg(chrgr->client, REG_ST_MASK, &readback_val);
-	if (ret != 0)
-		return ret;
-
-
-
-	return 0;
+		return -EINVAL;
 }
 
-static int fan54020_set_pinctrl_state(struct i2c_client *client,
+static int fan54x_set_pinctrl_state(struct i2c_client *client,
 		struct pinctrl_state *state)
 {
-	struct fan54020_charger *chrgr = i2c_get_clientdata(client);
+	struct fan54x_charger *chrgr = i2c_get_clientdata(client);
 	int ret;
 
 	ret = pinctrl_select_state(chrgr->pinctrl, state);
@@ -1994,13 +1449,13 @@ static struct device_attribute dbg_logs_on_off_attr = {
 };
 
 /**
- * fan54020_setup_dbglogs_sysfs_attr	Sets up dbg_logs_on_off sysfs entry
- *					for debug logs control for fan54020
+ * fan54x_setup_dbglogs_sysfs_attr	Sets up dbg_logs_on_off sysfs entry
+ *					for debug logs control for fan54x
  *					i2c device
  * @dev					[in] pointer to device structure
  *
  */
-static void fan54020_setup_dbglogs_sysfs_attr(struct device *dev)
+static void fan54x_setup_dbglogs_sysfs_attr(struct device *dev)
 {
 	int err;
 
@@ -2011,20 +1466,24 @@ static void fan54020_setup_dbglogs_sysfs_attr(struct device *dev)
 }
 
 
-static int fan54020_i2c_probe(struct i2c_client *client,
+static int fan54x_i2c_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct usb_phy *otg_handle;
-	struct fan54020_charger *chrgr = &chrgr_data;
+	struct fan54x_charger *chrgr;
 	struct device *dev = &client->dev;
 	struct device_node *np = dev->of_node;
 	bool wtd_expired;
-	u8 ic_info;
+	u8 ic_info, vendor_info, pn_info, rev_info;
 	int ret;
 
 	INIT_CHARGER_DEBUG_ARRAY(chrgr_dbg);
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_PROBE, 0, 0);
+
+	chrgr = (struct fan54x_charger *)id->driver_data;
+	if (!chrgr)
+		return -ENODEV;
 
 	/* Get pinctrl configurations */
 	chrgr->pinctrl = devm_pinctrl_get(&client->dev);
@@ -2057,14 +1516,22 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 	pr_info("%s\n", __func__);
 
 	/* Read HW id */
-	ret = fan54020_i2c_read_reg(client, REG_IC_INFO, &ic_info);
-	if (ret != 0)
+	ret = fan54x_attr_read(client, IC_INFO_REG, &ic_info);
+	if (ret != 0) {
+		pr_info("fan54x read error, ret = %d\n", ret);
 		return -ENODEV;
+	}
 
 	/* Check if the HW is supported */
-	if (((ic_info >> VENDOR_O) & VENDOR_M) != VENDOR ||
-				((ic_info >> PN_O) & PN_M) != PN)
+	fan54x_attr_read(client, VENDOR_INFO, &vendor_info);
+	fan54x_attr_read(client, PN_INFO, &pn_info);
+	fan54x_attr_read(client, REV_INFO, &rev_info);
+
+	if (vendor_info != chrgr->vendor || pn_info != chrgr->pn
+		|| rev_info != chrgr->rev) {
+		pr_err("info not correct\n");
 		return -ENODEV;
+	}
 
 	chrgr->client = client;
 
@@ -2094,7 +1561,7 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 	is deasserted at this point. From this point onwards
 	the charger IC will act upon the values stored in its
 	registers instead of displaying default behaviour  */
-	ret = fan54020_configure_pmu_regs(chrgr);
+	ret = fan54x_configure_pmu_regs(chrgr);
 	if (ret != 0)
 		goto pre_fail;
 
@@ -2103,11 +1570,11 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 	the default voltage and current safety limits from being assumed.
 	The values written are the maximum values possible to allow freedom
 	of setting all required settings during runtime. */
-	if (((ic_info >> REV_O) & REV_M) != 0) {
-		ret = fan54020_i2c_write_reg(client, REG_SAFETY,
-				(FAN54020_CUR_LIMIT << ISAFE_O) |
-				(FAN54020_VOLT_LIMIT << VSAFE_O));
-		if (ret != 0) {
+	if ((pn_info == 1 && rev_info != 0) || pn_info == 5) {
+		ret = fan54x_attr_write(client, SAFETY_REG, 0xFF);
+		if (ret) {
+			pr_err("fan54x write SAFETY_REG error, ret = %d\n",
+								ret);
 			ret = -ENODEV;
 			goto pre_fail;
 		}
@@ -2118,30 +1585,28 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 	Triggering the watchdog if it has already expired has no effect,
 	i.e. charging will not start again and the watchdog expiration flag in
 	the interrupt register will not be cleared. */
-	ret = fan54020_trigger_wtd(chrgr);
+	ret = fan54x_trigger_wtd(chrgr);
 	if (ret != 0)
 		goto pre_fail;
 
 
-	INIT_DELAYED_WORK(&chrgr->charging_work, fan54020_charging_worker);
+	INIT_DELAYED_WORK(&chrgr->charging_work, fan54x_charging_worker);
 
 	sema_init(&chrgr->prop_lock, 1);
 
 	/* Set up the wake lock to prevent suspend when charging. */
 	wake_lock_init(&chrgr->suspend_lock,
 			WAKE_LOCK_SUSPEND,
-			"fan54020_wake_lock");
+			"fan54x_wake_lock");
 
-	/* It is OK to setup the wake lock here, because it is
-	before the interrupt is later enabled with the call:
-	fan54020_configure_pmu_irq(). */
 	if (unfreezable_bh_create(&chrgr->chgint_bh, "chrgr_wq",
-			"fan54020_evt_lock", fan54020_chgint_cb_work_func)) {
+			"fan54x_evt_lock", fan54x_chgint_cb_work_func)) {
 		ret = -ENOMEM;
 		goto wq_creation_fail;
 	}
 
-	ret = fan54020_get_clr_wdt_expiry_flag(chrgr);
+
+	ret = fan54x_get_clr_wdt_expiry_flag(chrgr);
 	if (ret < 0)
 		goto fail;
 
@@ -2158,29 +1623,29 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 		chrgr->state.charging_enabled = false;
 	}
 
-	ret = fan54020_configure_chip(chrgr, chrgr->state.charging_enabled);
+	ret = fan54x_configure_chip(chrgr, chrgr->state.charging_enabled);
 	if (ret != 0)
 		goto fail;
 
-	ret = fan54020_set_pinctrl_state(client, chrgr->pins_active);
+	ret = fan54x_set_pinctrl_state(client, chrgr->pins_active);
 	if (ret != 0)
 		return ret;
 
 	chrgr->usb_psy.name           = "usb_charger";
 	chrgr->usb_psy.type           = POWER_SUPPLY_TYPE_USB;
-	chrgr->usb_psy.properties     = fan54020_power_props;
-	chrgr->usb_psy.num_properties = ARRAY_SIZE(fan54020_power_props);
-	chrgr->usb_psy.get_property   = fan54020_charger_get_property;
-	chrgr->usb_psy.set_property   = fan54020_charger_set_property;
+	chrgr->usb_psy.properties     = fan54x_power_props;
+	chrgr->usb_psy.num_properties = ARRAY_SIZE(fan54x_power_props);
+	chrgr->usb_psy.get_property   = fan54x_charger_get_property;
+	chrgr->usb_psy.set_property   = fan54x_charger_set_property;
 	chrgr->usb_psy.supported_cables = POWER_SUPPLY_CHARGER_TYPE_USB_SDP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_DCP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_CDP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING;
-	chrgr->usb_psy.supplied_to = fan54020_supplied_to;
-	chrgr->usb_psy.num_supplicants = ARRAY_SIZE(fan54020_supplied_to);
-	chrgr->usb_psy.throttle_states = fan54020_dummy_throttle_states;
+	chrgr->usb_psy.supplied_to = fan54x_supplied_to;
+	chrgr->usb_psy.num_supplicants = ARRAY_SIZE(fan54x_supplied_to);
+	chrgr->usb_psy.throttle_states = fan54x_dummy_throttle_states;
 	chrgr->usb_psy.num_throttle_states =
-				ARRAY_SIZE(fan54020_dummy_throttle_states);
+				ARRAY_SIZE(fan54x_dummy_throttle_states);
 
 	chrgr->current_psy = &chrgr->usb_psy;
 
@@ -2190,19 +1655,19 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 
 	chrgr->ac_psy.name           = "ac_charger";
 	chrgr->ac_psy.type           = POWER_SUPPLY_TYPE_MAINS;
-	chrgr->ac_psy.properties     = fan54020_power_props;
-	chrgr->ac_psy.num_properties = ARRAY_SIZE(fan54020_power_props);
-	chrgr->ac_psy.get_property   = fan54020_charger_get_property;
-	chrgr->ac_psy.set_property   = fan54020_charger_set_property;
+	chrgr->ac_psy.properties     = fan54x_power_props;
+	chrgr->ac_psy.num_properties = ARRAY_SIZE(fan54x_power_props);
+	chrgr->ac_psy.get_property   = fan54x_charger_get_property;
+	chrgr->ac_psy.set_property   = fan54x_charger_set_property;
 	chrgr->ac_psy.supported_cables = POWER_SUPPLY_CHARGER_TYPE_USB_SDP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_DCP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_CDP |
 					POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING;
-	chrgr->ac_psy.supplied_to = fan54020_supplied_to;
-	chrgr->ac_psy.num_supplicants = ARRAY_SIZE(fan54020_supplied_to);
-	chrgr->ac_psy.throttle_states = fan54020_dummy_throttle_states;
+	chrgr->ac_psy.supplied_to = fan54x_supplied_to;
+	chrgr->ac_psy.num_supplicants = ARRAY_SIZE(fan54x_supplied_to);
+	chrgr->ac_psy.throttle_states = fan54x_dummy_throttle_states;
 	chrgr->ac_psy.num_throttle_states =
-				ARRAY_SIZE(fan54020_dummy_throttle_states);
+				ARRAY_SIZE(fan54x_dummy_throttle_states);
 
 	ret = power_supply_register(&client->dev, &chrgr->ac_psy);
 	if (ret)
@@ -2214,22 +1679,22 @@ static int fan54020_i2c_probe(struct i2c_client *client,
 	if (chrgr->state.charging_enabled)
 		schedule_delayed_work(&chrgr->charging_work, 0);
 
-	ret = fan54020_configure_pmu_irq(chrgr);
+	ret = fan54x_configure_pmu_irq(chrgr);
 	if (ret != 0)
 		goto pmu_irq_fail;
 
 	i2c_set_clientdata(client, chrgr);
 
-	fan54020_setup_debugfs(chrgr, &chrgr_dbg);
-	fan54020_setup_fake_vbus_sysfs_attr(chrgr);
+	fan54x_setup_debugfs(chrgr, &chrgr_dbg);
+	fan54x_setup_fake_vbus_sysfs_attr(chrgr);
 
-	chrgr->state.status = FAN54020_STATUS_READY;
+	chrgr->state.status = FAN54x_STATUS_READY;
 
 	/* Read the VBUS presence status for initial update by
 	making a dummy interrupt bottom half invocation */
 	queue_work(chrgr->chgint_bh.wq, &chrgr->chgint_bh.work);
 
-	fan54020_setup_dbglogs_sysfs_attr(&client->dev);
+	fan54x_setup_dbglogs_sysfs_attr(&client->dev);
 
 	device_init_wakeup(&client->dev, true);
 
@@ -2248,38 +1713,50 @@ remap_fail:
 	return ret;
 }
 
-static int __exit fan54020_i2c_remove(struct i2c_client *client)
+static int __exit fan54x_i2c_remove(struct i2c_client *client)
 {
 	int ret = 0;
-	struct fan54020_charger *chrgr = i2c_get_clientdata(client);
+	struct fan54x_charger *chrgr = i2c_get_clientdata(client);
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_REMOVE, 0, 0);
 
 	free_irq(client->irq, chrgr);
-	power_supply_unregister(&chrgr_data.usb_psy);
-	power_supply_unregister(&chrgr_data.ac_psy);
-	wake_lock_destroy(&chrgr_data.suspend_lock);
+	power_supply_unregister(&chrgr->usb_psy);
+	power_supply_unregister(&chrgr->ac_psy);
+	wake_lock_destroy(&chrgr->suspend_lock);
 
-	unfreezable_bh_destroy(&chrgr_data.chgint_bh);
+	unfreezable_bh_destroy(&chrgr->chgint_bh);
 
-	cancel_delayed_work_sync(&chrgr_data.charging_work);
-	if (chrgr_data.otg_handle)
-		usb_put_phy(chrgr_data.otg_handle);
+	cancel_delayed_work_sync(&chrgr->charging_work);
+	if (chrgr->otg_handle)
+		usb_put_phy(chrgr->otg_handle);
 
-	ret = fan54020_set_pinctrl_state(client, chrgr->pins_inactive);
+	ret = fan54x_set_pinctrl_state(client, chrgr->pins_inactive);
 	if (ret != 0)
 		return ret;
-	fan54020_remove_debugfs_dir(&chrgr_data);
+	fan54x_remove_debugfs_dir(chrgr);
 
 	return 0;
 }
 
-static int fan54020_idi_probe(struct idi_peripheral_device *ididev,
+static void idi_init(struct fan54x_charger *chrgr,
+			void *__iomem ctrl_io,
+			struct idi_peripheral_device *ididev)
+{
+	chrgr->ctrl_io = ctrl_io;
+	chrgr->ididev = ididev;
+}
+
+static void idi_remove(struct fan54x_charger *chrgr)
+{
+	iounmap(chrgr->ctrl_io);
+}
+
+static int fan54x_idi_probe(struct idi_peripheral_device *ididev,
 					const struct idi_device_id *id)
 {
 	struct resource *res;
 	void __iomem *ctrl_io;
-	struct fan54020_charger *chrgr = &chrgr_data;
 	int ret = 0;
 
 	spin_lock_init(&chrgr_dbg.lock);
@@ -2301,9 +1778,10 @@ static int fan54020_idi_probe(struct idi_peripheral_device *ididev,
 		pr_err("mapping PMU's Charger registers failed!\n");
 		return -EINVAL;
 	}
-	chrgr->ctrl_io = ctrl_io;
 
-	chrgr->ididev = ididev;
+	/* HACK: chargers sharing same IDI device ID */
+	idi_init(&fan54020_chrgr_data, ctrl_io, ididev);
+	idi_init(&fan54015_chrgr_data, ctrl_io, ididev);
 
 	ret = idi_device_pm_set_class(ididev);
 	if (ret) {
@@ -2315,29 +1793,29 @@ static int fan54020_idi_probe(struct idi_peripheral_device *ididev,
 	return 0;
 }
 
-static int __exit fan54020_idi_remove(struct idi_peripheral_device *ididev)
+static int __exit fan54x_idi_remove(struct idi_peripheral_device *ididev)
 {
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_IDI_REMOVE, 0, 0);
 	pr_info("%s\n", __func__);
 
-	iounmap(chrgr_data.ctrl_io);
+	idi_remove(&fan54020_chrgr_data);
+	idi_remove(&fan54015_chrgr_data);
+
 	return 0;
 }
 
 /**
- * fan54020_suspend() - Called when the system is attempting to suspend.
+ * fan54x_suspend() - Called when the system is attempting to suspend.
  * If charging is in progress EBUSY is returned to abort the suspend and
  * an error is logged, as the wake lock should prevent the situation.
  * @dev		[in] Pointer to the device.(not used)
  * returns	EBUSY if charging is ongoing, else 0
  */
-static int fan54020_suspend(struct device *dev)
+static int fan54x_suspend(struct device *dev)
 {
-	/* Unused parameter */
-	struct fan54020_charger *chrgr = &chrgr_data;
-	(void)dev;
+	struct fan54x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
 
-	if (chrgr_data.state.charging_enabled) {
+	if (chrgr->state.charging_enabled) {
 		/* If charging is in progess, prevent suspend. */
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SUSPEND_ERROR, 0, 0);
 		return -EBUSY;
@@ -2348,52 +1826,53 @@ static int fan54020_suspend(struct device *dev)
 			pr_info("fan: enable wakeirq\n");
 			enable_irq_wake(chrgr->irq);
 		}
-		unfreezable_bh_suspend(&chrgr_data.chgint_bh);
+		unfreezable_bh_suspend(&chrgr->chgint_bh);
 		return 0;
 	}
 }
 
 /**
- * fan54020_resume() - Called when the system is resuming from suspend.
+ * fan54x_resume() - Called when the system is resuming from suspend.
  * @dev		[in] Pointer to the device.(not used)
  * returns	0
  */
-static int fan54020_resume(struct device *dev)
+static int fan54x_resume(struct device *dev)
 {
-	/* Unused parameter */
-	struct fan54020_charger *chrgr = &chrgr_data;
-	(void)dev;
+	struct fan54x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_RESUME, 0, 0);
 
-	unfreezable_bh_resume(&chrgr_data.chgint_bh);
+	unfreezable_bh_resume(&chrgr->chgint_bh);
 	if (device_may_wakeup(dev)) {
 		pr_info("fan: disable wakeirq\n");
 		disable_irq_wake(chrgr->irq);
 	}
+
 	return 0;
 }
 
-const struct dev_pm_ops fan54020_pm = {
-	.suspend = fan54020_suspend,
-	.resume = fan54020_resume,
+const struct dev_pm_ops fan54x_pm = {
+	.suspend = fan54x_suspend,
+	.resume = fan54x_resume,
 };
 
 
-static const struct i2c_device_id fan54020_id[] = {
-	{"fan54x_charger", 0}, { }
+static const struct i2c_device_id fan54x_id[] = {
+	{"fan54020_charger", (kernel_ulong_t)&fan54020_chrgr_data},
+	{"fan54015_charger", (kernel_ulong_t)&fan54015_chrgr_data},
+	{ }
 };
 
-MODULE_DEVICE_TABLE(i2c, fan54020_id);
+MODULE_DEVICE_TABLE(i2c, fan54x_id);
 
-static struct i2c_driver fan54020_i2c_driver = {
-	.probe          = fan54020_i2c_probe,
-	.remove         = fan54020_i2c_remove,
-	.id_table       = fan54020_id,
+static struct i2c_driver fan54x_i2c_driver = {
+	.probe          = fan54x_i2c_probe,
+	.remove         = fan54x_i2c_remove,
+	.id_table       = fan54x_id,
 	.driver = {
-		.name   = FAN54020_NAME,
+		.name   = FAN54x_NAME,
 		.owner  = THIS_MODULE,
-		.pm = &fan54020_pm,
+		.pm = &fan54x_pm,
 	},
 };
 
@@ -2407,7 +1886,7 @@ static const struct idi_device_id idi_ids[] = {
 	{ /* end: all zeroes */},
 };
 
-static struct idi_peripheral_driver fan54020_idi_driver = {
+static struct idi_peripheral_driver fan54x_idi_driver = {
 	.driver = {
 		.owner  = THIS_MODULE,
 		.name   = "fan54x_idi",
@@ -2415,35 +1894,35 @@ static struct idi_peripheral_driver fan54020_idi_driver = {
 	},
 	.p_type = IDI_CHG,
 	.id_table = idi_ids,
-	.probe  = fan54020_idi_probe,
-	.remove = fan54020_idi_remove,
+	.probe  = fan54x_idi_probe,
+	.remove = fan54x_idi_remove,
 };
 
 
-static int __init fan54020_init(void)
+static int __init fan54x_init(void)
 {
 	int ret;
 
-	ret = idi_register_peripheral_driver(&fan54020_idi_driver);
+	ret = idi_register_peripheral_driver(&fan54x_idi_driver);
 	if (ret)
 		return ret;
 
 
-	ret = i2c_add_driver(&fan54020_i2c_driver);
+	ret = i2c_add_driver(&fan54x_i2c_driver);
 	if (ret)
 		return ret;
 
 	return 0;
 }
 
-late_initcall(fan54020_init);
+late_initcall(fan54x_init);
 
-static void __exit fan54020_exit(void)
+static void __exit fan54x_exit(void)
 {
-	i2c_del_driver(&fan54020_i2c_driver);
+	i2c_del_driver(&fan54x_i2c_driver);
 }
-module_exit(fan54020_exit);
+module_exit(fan54x_exit);
 
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("Charger Driver for FAN54020 charger IC");
+MODULE_DESCRIPTION("Charger Driver for FAN54x charger IC");
