@@ -318,7 +318,11 @@
 						/* QUIRK_CAP_CLOCK_BASE_BROKEN: bit 25 + QUIRKS2_HOST_PRESET_VALUE_BROKEN: bit 3 + LED_BROKEN: bit 14*/
 						intel,quirks = < 0x2000000 0x4008 >;
 						intel,is_8_bits = < 1 >;
+#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+						intel,is_non_removable = < 0 >;
+#else
 						intel,is_non_removable = < 1 >;
+#endif
 						pm_ctrl{
 							pm,class-name = "sdhci_class";
 							pm,user-name = "emmc_card";
