@@ -600,6 +600,22 @@ int ion_phys(struct ion_client *client, struct ion_handle *handle,
 }
 EXPORT_SYMBOL(ion_phys);
 
+int ion_phys_get_by_id(struct ion_client *client, int id,
+	     ion_phys_addr_t *addr, size_t *len)
+{
+	struct ion_handle *handle;
+	int ret;
+
+	handle = ion_handle_get_by_id(client, id);
+	if (!handle)
+		return -EINVAL;
+
+	ret = ion_phys(client, handle, addr, len);
+	ion_handle_put(handle);
+	return ret;
+}
+EXPORT_SYMBOL(ion_phys_get_by_id);
+
 static void *ion_buffer_kmap_get(struct ion_buffer *buffer)
 {
 	void *vaddr;

@@ -147,6 +147,9 @@ void ion_free(struct ion_client *client, struct ion_handle *handle);
 int ion_phys(struct ion_client *client, struct ion_handle *handle,
 	     ion_phys_addr_t *addr, size_t *len);
 
+int ion_phys_get_by_id(struct ion_client *client, int id,
+	     ion_phys_addr_t *addr, size_t *len);
+
 /**
  * ion_map_dma - return an sg_table describing a handle
  * @client:	the client

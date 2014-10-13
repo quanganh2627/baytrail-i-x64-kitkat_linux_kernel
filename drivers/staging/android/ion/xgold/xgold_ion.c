@@ -39,27 +39,21 @@ enum {
 struct ion_mapper *xgold_user_mapper;
 struct ion_heap **heaps;
 
-extern struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
-						int id);
-
 static int xgold_ion_get_param(struct ion_client *client,
 					unsigned int cmd,
 					unsigned long arg)
 {
 	struct xgold_ion_get_params_data data;
-	struct ion_handle *handle;
 	ion_phys_addr_t paddr;
 	size_t size;
 	struct xgold_ion_get_params_data *user_data =
 				(struct xgold_ion_get_params_data *)arg;
-	struct ion_buffer *buffer;
 
 	if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
 		return -EFAULT;
-	handle = ion_handle_get_by_id(client, data.handle);
-	buffer = ion_handle_buffer(handle);
-	ion_phys(client, handle, &paddr, &size);
-	ion_free(client, handle);
+
+	if (ion_phys_get_by_id(client, data.handle, &paddr, &size))
+		return -EFAULT;
 	data.addr = (unsigned int) paddr;
 	data.size = (unsigned int) size;
 
