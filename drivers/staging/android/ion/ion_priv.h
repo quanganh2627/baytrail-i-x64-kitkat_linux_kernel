@@ -82,6 +82,9 @@ struct ion_buffer {
 	int handle_count;
 	char task_comm[TASK_COMM_LEN];
 	pid_t pid;
+	unsigned long paddr;
+	int bid;
+	int from_sf;
 };
 void ion_buffer_destroy(struct ion_buffer *buffer);
 

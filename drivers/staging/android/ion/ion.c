@@ -113,6 +113,8 @@ struct ion_handle {
 	int id;
 };
 
+static int bid_base;
+
 bool ion_buffer_fault_user_mappings(struct ion_buffer *buffer)
 {
 	return (buffer->flags & ION_FLAG_CACHED) &&
@@ -532,6 +534,12 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 	if (IS_ERR(buffer))
 		return ERR_PTR(PTR_ERR(buffer));
 
+	buffer->bid = bid_base++;
+	if (!strncmp(client->task->comm, "surfaceflinger", 14))
+		buffer->from_sf = 1;
+	else
+		buffer->from_sf = 0;
+
 	handle = ion_handle_create(client, buffer);
 
 	/*
@@ -570,6 +578,13 @@ void ion_free(struct ion_client *client, struct ion_handle *handle)
 		return;
 	}
 	mutex_unlock(&client->lock);
+
+	if (!strncmp(client->task->comm, "surfaceflinger", 14)) {
+		struct ion_buffer *buffer = handle->buffer;
+		if (buffer)
+			buffer->from_sf = 0;
+	}
+
 	ion_handle_put(handle);
 }
 EXPORT_SYMBOL(ion_free);
@@ -720,24 +735,36 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 	const char *names[ION_NUM_HEAP_IDS] = {NULL};
 	int i;
 
+	seq_printf(s, "    Client [%s]: \n", client->task->comm);
+	seq_printf(s, "    ================\n");
+
 	mutex_lock(&client->lock);
 	for (n = rb_first(&client->handles); n; n = rb_next(n)) {
 		struct ion_handle *handle = rb_entry(n, struct ion_handle,
 						     node);
 		unsigned int id = handle->buffer->heap->id;
+		struct ion_buffer *buffer;
 
 		if (!names[id])
 			names[id] = handle->buffer->heap->name;
 		sizes[id] += handle->buffer->size;
+
+		if (!handle->buffer->handle_count)
+			continue;
+
+		buffer = handle->buffer;
+
+		seq_printf(s, "    bid=%3d, size=%8d, share_cnt=%d\n", buffer->bid, buffer->size, buffer->handle_count);
 	}
 	mutex_unlock(&client->lock);
 
-	seq_printf(s, "%16.16s: %16.16s\n", "heap_name", "size_in_bytes");
+	seq_printf(s, "    %16.16s: %16.16s:\n", "heap_name", "size_in_bytes");
 	for (i = 0; i < ION_NUM_HEAP_IDS; i++) {
 		if (!names[i])
 			continue;
-		seq_printf(s, "%16.16s: %16zu\n", names[i], sizes[i]);
+		seq_printf(s, "    %16.16s: %16zu:\n", names[i], sizes[i]);
 	}
+	seq_printf(s, "    ================\n\n");
 	return 0;
 }
 
@@ -1357,18 +1384,46 @@ static const struct file_operations ion_fops = {
 };
 
 static size_t ion_debug_heap_total(struct ion_client *client,
-				   unsigned int id)
+				   unsigned int id, int *psize, int *usize)
 {
 	size_t size = 0;
 	struct rb_node *n;
+	int is_sf = 0;
+
+	*psize = 0;
+	*usize = 0;
+
+	if (!strncmp(client->task->comm, "surfaceflinger", 14))
+		is_sf = 1;
 
 	mutex_lock(&client->lock);
 	for (n = rb_first(&client->handles); n; n = rb_next(n)) {
 		struct ion_handle *handle = rb_entry(n,
 						     struct ion_handle,
 						     node);
-		if (handle->buffer->heap->id == id)
-			size += handle->buffer->size;
+		int share_cnt = handle->buffer->handle_count;
+		int buf_size = handle->buffer->size;
+
+		if (handle->buffer->heap->id == id) {
+			size += buf_size;
+
+			if (!is_sf) {
+				if (handle->buffer->from_sf) {
+					WARN_ON(share_cnt == 1);
+					*psize += buf_size / (share_cnt - 1);
+					if (share_cnt == 2)
+						*usize += buf_size;
+				}
+				else
+					*psize += buf_size / share_cnt;
+			} else {
+				if (share_cnt != 2)
+					*psize += buf_size / share_cnt;
+			}
+
+			if (share_cnt == 1)
+				*usize += buf_size;
+		}
 	}
 	mutex_unlock(&client->lock);
 	return size;
@@ -1382,24 +1437,25 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	size_t total_size = 0;
 	size_t total_orphaned_size = 0;
 
-	seq_printf(s, "%16.s %16.s %16.s\n", "client", "pid", "size");
+	seq_printf(s, "%16.s %9.s %9.s %9.s %9.s\n", "client", "pid", "size", "psize", "usize");
 	seq_printf(s, "----------------------------------------------------\n");
 
 	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
 		struct ion_client *client = rb_entry(n, struct ion_client,
 						     node);
-		size_t size = ion_debug_heap_total(client, heap->id);
+		size_t psize, usize;
+		size_t size = ion_debug_heap_total(client, heap->id, &psize, &usize);
 		if (!size)
 			continue;
 		if (client->task) {
 			char task_comm[TASK_COMM_LEN];
 
 			get_task_comm(task_comm, client->task);
-			seq_printf(s, "%16.s %16u %16zu\n", task_comm,
-				   client->pid, size);
+			seq_printf(s, "%16.s %9u %9zu %9zu %9zu\n", task_comm,
+				   client->pid, size, psize, usize);
 		} else {
-			seq_printf(s, "%16.s %16u %16zu\n", client->name,
-				   client->pid, size);
+			seq_printf(s, "%16.s %9u %9zu %9zu %9zu\n", client->name,
+				   client->pid, size, psize, usize);
 		}
 	}
 	seq_printf(s, "----------------------------------------------------\n");
