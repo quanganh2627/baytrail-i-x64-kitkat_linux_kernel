@@ -728,11 +728,12 @@ static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
 		 * because the charger watchdog needs to be cont. retriggered.
 		 */
 		wake_lock(&chrgr->suspend_lock);
+		schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
 	} else {
 		/* Release Wake Lock to allow suspend during discharging */
 		wake_unlock(&chrgr->suspend_lock);
+		cancel_delayed_work(&chrgr->charging_work);
 	}
-	schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
 	return 0;
 }
 
