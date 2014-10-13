@@ -562,15 +562,10 @@ static int imx135_pre_streamon(struct smiapp_sensor *sensor)
 		{ 0x4203, 0xff },
 		{ 0x7006, 0x04 },
 		{ 0x301D, 0x30 },
-		{ 0x331C, 0x00 },
-		{ 0x331D, 0x10 },
-		{ 0x4084, 0x00 }, /* If scaling, Fill this */
-		{ 0x4085, 0x00 },
-		{ 0x4086, 0x00 },
-		{ 0x4087, 0x00 },
 		{ 0x4400, 0x00 },
 	};
 	struct imx135_timing_reg_set *tregs;
+	u8 watermark_high, watermark_low;
 	int rval;
 
 	for (tregs = imx135_timing_reg_sets; tregs->op_sys_clk_freq_hz_min;
@@ -630,7 +625,8 @@ static int imx135_pre_streamon(struct smiapp_sensor *sensor)
 
 	rval = smiapp_write(sensor, SMIAPP_IMX135_REG_U16_SCL_BYPASS,
 			    (sensor->binning_horizontal == 1 &&
-			     sensor->binning_vertical == 1) ?
+			     sensor->binning_vertical == 1 &&
+			     sensor->scaling_mode == 0) ?
 			    SMIAPP_IMX135_U16_SCL_BYPASS_ENABLE : 0);
 	if (rval)
 		return rval;
@@ -638,6 +634,54 @@ static int imx135_pre_streamon(struct smiapp_sensor *sensor)
 	rval = smiapp_write(
 		sensor, SMIAPP_IMX135_REG_U8_PLL_SOLO_DRIVE,
 		SMIAPP_IMX135_U8_PLL_SOLO_DRIVE_SINGLE_PLL);
+	if (rval)
+		return rval;
+
+	/*
+	 * These mipi watermark registers are specific to the mode and x
+	 * output size. If direct cropping is used without any binning or
+	 * scaling, the value 0x0010 works. Otherwise this is specific to
+	 * a particular output width configured.
+	 *
+	 * TODO: revisit this setting logic. Probably this should come from
+	 * the user space component based on width it configures.
+	 */
+	if (sensor->binning_horizontal == 1 &&
+	    sensor->binning_vertical == 1 &&
+	    sensor->scaling_mode == 0) {
+		watermark_high = 0x00;
+		watermark_low = 0x10;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width >= 4000) {
+		watermark_high = 0x00;
+		watermark_low = 0x10;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width >= 3000) {
+		watermark_high = 0x02;
+		watermark_low = 0xa0;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width == 2576) {
+		watermark_high = 0x03;
+		watermark_low = 0xae;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width == 2336 ||
+		   sensor->src->crop[SMIAPP_PAD_SRC].width == 2064) {
+		watermark_high = 0x04;
+		watermark_low = 0xe2;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width >= 2000) {
+		watermark_high = 0x03;
+		watermark_low = 0xae;
+	} else if (sensor->src->crop[SMIAPP_PAD_SRC].width == 1936 ||
+		   sensor->src->crop[SMIAPP_PAD_SRC].width == 1296) {
+		watermark_high = 0x04;
+		watermark_low = 0xe2;
+	} else {
+		watermark_high = 0x04;
+		watermark_low = 0xe2;
+	}
+	rval = smiapp_write(
+		     sensor, SMIAPP_IMX135_REG_U8_MIPI_WMARK_H, watermark_high);
+	if (rval)
+		return rval;
+
+	rval = smiapp_write(
+		     sensor, SMIAPP_IMX135_REG_U8_MIPI_WMARK_L, watermark_low);
 	if (rval)
 		return rval;
 
@@ -650,6 +694,18 @@ static int imx135_pre_streamon(struct smiapp_sensor *sensor)
 	rval = smiapp_write(
 		sensor, SMIAPP_IMX135_REG_U16_WRITE_VSIZE,
 		sensor->src->crop[SMIAPP_PAD_SRC].height);
+	if (rval)
+		return rval;
+
+	rval = smiapp_write(
+		sensor, SMIAPP_IMX135_REG_U16_WRITE_SCALE_RSZ_H,
+		sensor->scaling_mode == 0 ? 0 : sensor->scaler->compose.width);
+	if (rval)
+		return rval;
+
+	rval = smiapp_write(
+		sensor, SMIAPP_IMX135_REG_U16_WRITE_SCALE_RSZ_V,
+		sensor->scaling_mode == 0 ? 0 : sensor->scaler->compose.height);
 	if (rval)
 		return rval;
 
@@ -691,19 +747,15 @@ static int imx135_reg_access(struct smiapp_sensor *sensor, bool write, u32 *reg,
 	 * before.
 	 */
 	case SMIAPP_REG_U16_DIGITAL_CROP_X_OFFSET:
-		*val /= sensor->binning_horizontal;
 		*reg = SMIAPP_IMX135_REG_U16_DIG_CROP_X_START;
 		break;
 	case SMIAPP_REG_U16_DIGITAL_CROP_Y_OFFSET:
-		*val /= sensor->binning_vertical;
 		*reg = SMIAPP_IMX135_REG_U16_DIG_CROP_Y_START;
 		break;
 	case SMIAPP_REG_U16_DIGITAL_CROP_IMAGE_WIDTH:
-		*val /= sensor->binning_horizontal;
 		*reg = SMIAPP_IMX135_REG_U16_DIG_CROP_X_SIZE;
 		break;
 	case SMIAPP_REG_U16_DIGITAL_CROP_IMAGE_HEIGHT:
-		*val /= sensor->binning_vertical;
 		*reg = SMIAPP_IMX135_REG_U16_DIG_CROP_Y_SIZE;
 		break;
 	case SMIAPP_REG_U8_BINNING_MODE:
