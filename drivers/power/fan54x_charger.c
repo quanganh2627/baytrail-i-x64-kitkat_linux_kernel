@@ -728,12 +728,11 @@ static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
 		 * because the charger watchdog needs to be cont. retriggered.
 		 */
 		wake_lock(&chrgr->suspend_lock);
-		schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
 	} else {
 		/* Release Wake Lock to allow suspend during discharging */
 		wake_unlock(&chrgr->suspend_lock);
-		cancel_delayed_work(&chrgr->charging_work);
 	}
+	schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
 	return 0;
 }
 
@@ -1124,7 +1123,7 @@ static void fan54x_chgint_cb_work_func(struct work_struct *work)
 	}
 
 	if (chrgr->state.bat_ovp) {
-		pr_err("Battery Over-Voltage!");
+		pr_debug("Battery Over-Voltage!");
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_BAT_OVP, 0, 0);
 	}
 
