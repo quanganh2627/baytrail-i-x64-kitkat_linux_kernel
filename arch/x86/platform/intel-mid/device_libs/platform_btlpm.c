@@ -46,6 +46,7 @@ static int __init bluetooth_init(void)
 	int error_reg;
 
 	/* Get the GPIO numbers from the SFI table */
+#ifndef CONFIG_ACPI
 
 #ifdef CONFIG_PF450CL
 	bcm_bt_lpm_pdata.gpio_reg_on = get_gpio_by_name("BT_REG_ON");
@@ -100,6 +101,7 @@ static int __init bluetooth_init(void)
 
 	pr_debug("%s: gpio_wake %d, gpio_host_wake %d\n", __func__,
 		bcm_bt_lpm_pdata.gpio_wake, bcm_bt_lpm_pdata.gpio_host_wake);
+#endif
 #endif
 
 	error_reg = platform_device_register(&bcm_bt_lpm_device);
