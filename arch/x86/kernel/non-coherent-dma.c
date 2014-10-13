@@ -177,11 +177,14 @@ static int noncoherent_mmap(struct device *dev,
 
 	if (dma_get_attr(DMA_ATTR_WRITE_COMBINE, attrs))
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-	else {
+	else if (!dma_get_attr(DMA_ATTR_WRITE_BACK, attrs))
+	{
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		if (dma_mmap_from_coherent(dev, vma, cpu_addr, size, &ret))
 			return ret;
 	}
+
+	/* we'll give the cacheble flag to WRITE_BACK type */
 
 	if (off < count && user_count <= (count - off)) {
 		ret = remap_pfn_range(vma, vma->vm_start,
