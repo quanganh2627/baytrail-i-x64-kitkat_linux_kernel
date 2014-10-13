@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 #include <linux/cdev.h>     /* character device definitions */
+#include <linux/sched.h>
 #include "mali_kernel_license.h"
 #include "mali_osk_types.h"
 

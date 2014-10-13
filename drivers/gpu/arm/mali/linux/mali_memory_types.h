@@ -92,6 +92,8 @@ typedef struct mali_mem_allocation {
 
 	mali_mem_virt_cpu_mapping cpu_mapping; /**< CPU mapping */
 	mali_mem_virt_mali_mapping mali_mapping; /**< Mali mapping */
+	/* for mali memory statistics */
+	pid_t pid;
 } mali_mem_allocation;
 
 #define MALI_MEM_FLAG_MALI_GUARD_PAGE (1 << 0)

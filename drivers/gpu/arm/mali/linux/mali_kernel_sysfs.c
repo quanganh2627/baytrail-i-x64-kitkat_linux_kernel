@@ -61,6 +61,7 @@
 
 #define POWER_BUFFER_SIZE 3
 
+size_t mem_cal_dbg_s(char *buf);
 static struct dentry *mali_debugfs_dir = NULL;
 
 typedef enum {
@@ -848,9 +849,26 @@ static ssize_t memory_used_read(struct file *filp, char __user *ubuf, size_t cnt
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
 }
 
+static ssize_t pid_memory_used_read(struct file *filp, char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	static char *buf;
+	size_t r, ret;
+	buf = kzalloc(8192, GFP_KERNEL);
+	r = mem_cal_dbg_s(buf);
+
+	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
+	kfree(buf);
+	return ret;
+}
+
 static const struct file_operations memory_usage_fops = {
 	.owner = THIS_MODULE,
 	.read = memory_used_read,
+};
+
+static const struct file_operations pid_memory_usage_fops = {
+	.owner = THIS_MODULE,
+	.read = pid_memory_used_read,
 };
 
 static ssize_t utilization_gp_pp_read(struct file *filp, char __user *ubuf, size_t cnt, loff_t *ppos)
@@ -1326,6 +1344,7 @@ int mali_sysfs_register(const char *mali_dev_name)
 			}
 
 			debugfs_create_file("memory_usage", 0400, mali_debugfs_dir, NULL, &memory_usage_fops);
+			debugfs_create_file("pid_memory_usage", 0400, mali_debugfs_dir, NULL, &pid_memory_usage_fops);
 
 			debugfs_create_file("utilization_gp_pp", 0400, mali_debugfs_dir, NULL, &utilization_gp_pp_fops);
 			debugfs_create_file("utilization_gp", 0400, mali_debugfs_dir, NULL, &utilization_gp_fops);

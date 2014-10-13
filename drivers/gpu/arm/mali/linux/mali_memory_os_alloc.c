@@ -93,6 +93,76 @@ static struct mali_mem_os_allocator {
 #endif
 };
 
+
+typedef struct {
+	pid_t pid;
+	char comm[TASK_COMM_LEN];
+	size_t alloc;
+} mem_cal;
+
+typedef enum {
+	alloc = 1,
+	free  = 2,
+} mem_opt;
+
+static mem_cal mem_cal_dbg[1024] = {[0 ... 1023] = {.pid = -1}};
+
+static void mem_cal_dbg_f(mem_opt opt, mali_mem_allocation *descriptor, size_t size)
+{
+	int i;
+	pid_t pid = current->pid;
+
+	if (opt == alloc) {
+		descriptor->pid = pid;
+		for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+			if (mem_cal_dbg[i].pid == pid) {
+				mem_cal_dbg[i].alloc += size;
+				break;
+			} else if (mem_cal_dbg[i].pid == -1) {
+				mem_cal_dbg[i].pid = pid;
+				memcpy(mem_cal_dbg[i].comm, current->comm, TASK_COMM_LEN);
+				mem_cal_dbg[i].alloc += size;
+				break;
+			}
+			if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
+				pr_err("%s line:%d\n", __func__, __LINE__);
+		}
+	} else if (opt == free) {
+		for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+			if (mem_cal_dbg[i].pid == descriptor->pid) {
+				mem_cal_dbg[i].alloc -= size;
+				break;
+			}
+			if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
+				pr_err("%s line:%d\n", __func__, __LINE__);
+		}
+	}
+}
+
+size_t mem_cal_dbg_s(char *buf)
+{
+	int i;
+	size_t len = 0;
+
+	len += snprintf(buf + len, 65536 - len,
+			"\t======================================\n");
+	for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+//		if (mem_cal_dbg[i].pid != -1 && mem_cal_dbg[i].alloc)
+		if (mem_cal_dbg[i].pid != -1)
+			len += snprintf(buf + len, 65536 -len,
+				"\tpid:[%6u] [%16s] memory:%8u KB\n",
+				mem_cal_dbg[i].pid,
+				mem_cal_dbg[i].comm,
+				mem_cal_dbg[i].alloc / 1024
+			);
+		else
+			break;
+	}
+	len += snprintf(buf + len, 65536 - len,
+			"\t======================================\n");
+	return len;
+}
+
 static void mali_mem_os_free(mali_mem_allocation *descriptor)
 {
 	LIST_HEAD(pages);
@@ -108,6 +178,8 @@ static void mali_mem_os_free(mali_mem_allocation *descriptor)
 
 	list_splice(&pages, &mali_mem_os_allocator.pool_pages);
 	mali_mem_os_allocator.pool_count += descriptor->os_mem.count;
+
+	mem_cal_dbg_f(free, descriptor, descriptor->os_mem.count * _MALI_OSK_MALI_PAGE_SIZE);
 
 	spin_unlock(&mali_mem_os_allocator.pool_lock);
 
@@ -201,6 +273,7 @@ static int mali_mem_os_alloc_pages(mali_mem_allocation *descriptor, u32 size)
 		list_add_tail(&new_page->lru, &descriptor->os_mem.pages);
 	}
 
+	mem_cal_dbg_f(alloc, descriptor, page_count * _MALI_OSK_MALI_PAGE_SIZE);
 	atomic_add(page_count, &mali_mem_os_allocator.allocated_pages);
 
 	if (MALI_OS_MEMORY_KERNEL_BUFFER_SIZE_IN_PAGES > mali_mem_os_allocator.pool_count) {
@@ -313,6 +386,7 @@ mali_mem_allocation *mali_mem_os_alloc(u32 mali_addr, u32 size, struct vm_area_s
 	err = mali_mem_os_cpu_map(descriptor, vma); /* Map on CPU */
 	if (0 != err) goto cpu_map_failed;
 
+	pr_debug("success allocate OS %dK\n", size/1024);
 	return descriptor;
 
 cpu_map_failed:
@@ -329,6 +403,8 @@ alloc_failed:
 void mali_mem_os_release(mali_mem_allocation *descriptor)
 {
 	struct mali_session_data *session = descriptor->session;
+
+	//pr_debug("releasing OS %d K\n", descriptor->size / 1024);
 
 	/* Unmap the memory from the mali virtual address space. */
 	mali_mem_os_mali_unmap(session, descriptor);
