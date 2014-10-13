@@ -480,6 +480,8 @@ static bool is_supported(int physical)
 		return true;
 	if (physical == 0x200083)
 		return true;
+	if (physical == 0x200031)
+		return true;
 
 	return false;
 }
