@@ -410,13 +410,6 @@ config CHARGER_FAN54020
 	help
 	  Say Y here to enable support for fan54020 Charger.
 
-config CHARGER_FAN54X
-	tristate "FAN54X battery charger driver"
-	depends on I2C
-	depends on IDI
-	help
-	  Say Y here to enable support for fan54X Charger.
-
 config CHARGER_TPS65090
 	tristate "TPS65090 battery charger driver"
 	depends on MFD_TPS65090
