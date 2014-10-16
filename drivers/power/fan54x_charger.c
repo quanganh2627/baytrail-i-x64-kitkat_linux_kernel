@@ -1345,8 +1345,11 @@ static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
 	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+
+	/* Set CHGRST ball to low for MRD P1 (FAN54015) */
 	/* charger WR */
-	iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
+	if (chrgr->pn == 5)
+		iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
 
 	ret = idi_set_power_state(chrgr->ididev, pm_state_dis, false);
 
