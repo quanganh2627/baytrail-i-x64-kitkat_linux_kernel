@@ -195,6 +195,13 @@ static const struct intel_dsi_device intel_dsi_devices[] = {
 			.dev_ops = &boe_kd079d5_31nb_a9_dsi_display_ops,
 			.lane_count = 4, /* XXX: this really doesn't belong here */
 		},
+		{
+			.panel_id = MIPI_DSI_KDT_KD080D10_31NA_A11_PANEL_ID,
+			.type = INTEL_DSI_VIDEO_MODE,
+			.name = "kdt-kd080d10-31na-a11-dsi-vid-mode-display",
+			.dev_ops = &kdt_kd080d10_31na_a11_dsi_display_ops,
+			.lane_count = 4, /* XXX: this really doesn't belong here */
+		},
 };
 
 static struct intel_dsi *intel_attached_dsi(struct drm_connector *connector)

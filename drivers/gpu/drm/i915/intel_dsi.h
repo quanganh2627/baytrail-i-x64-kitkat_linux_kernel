@@ -222,6 +222,7 @@ extern struct intel_dsi_dev_ops boe_bp080wx7_dsi_display_ops;
 extern struct intel_dsi_dev_ops rayken_rk089wu45j1ai_dsi_display_ops;
 extern struct intel_dsi_dev_ops cpt_claa080fp01_dsi_display_ops;
 extern struct intel_dsi_dev_ops boe_kd079d5_31nb_a9_dsi_display_ops;
+extern struct intel_dsi_dev_ops kdt_kd080d10_31na_a11_dsi_display_ops;
 
 void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 
@@ -244,6 +245,7 @@ void intel_dsi_clear_device_ready(struct intel_encoder *encoder);
 #define MIPI_DSI_RAYKEN_RK089WU45J1AI_PANEL_ID		0x0F
 #define MIPI_DSI_CPT_CLAA080FP01_PANEL_ID		0x10
 #define MIPI_DSI_BOE_KD079D5_31NB_A9_PANEL_ID		0x11
+#define MIPI_DSI_KDT_KD080D10_31NA_A11_PANEL_ID	0x12
 /*LVDS supported list based on Toshiba Video Bridge*/
 #define LVDS_DSI_TC35876X_CPT_CLAA070WP03		0x20
 #define LVDS_DSI_TC35876X_CDY_BI097XN02			0x21
