@@ -29,11 +29,11 @@
 #include <linux/kmsg_dump.h>
 #include <asm/page.h>
 
-#include <sofia/vmm_al.h>
+#include <sofia/mv_gal.h>
 #include <sofia/pal_shared_data.h>
-#include <sofia/vmm_platform_service.h>
-#include <sofia/pal_sys_exception.h>
-#include <sofia/pal_coredump.h>
+#include <sofia/mv_svc_hypercalls.h>
+#include <sofia/pal_sys_exception_types.h>
+#include <sofia/pal_coredump_types.h>
 
 #define VDUMP_MODULE_NAME "vdump"
 
@@ -166,32 +166,32 @@ static void vdump_panic(struct kmsg_dumper *dumper,
 		return;
 
 	/* Get share data */
-	vmm_shared_data = get_vmm_shared_data();
+	vmm_shared_data = mv_gal_get_shared_data();
 
+	/* Kernel code and data region */
 	cd_area = (struct cd_ram *)vmm_shared_data->vm_log_str;
-	cd_area->logical_start = (void *)__start_rodata;
-	cd_area->physical_start = (void *)__pa(__start_rodata);
-	cd_area->length = (unsigned int)_end - (unsigned int)__start_rodata;
-
-	vmm_cd_service(CD_ADD_REGION, (void *)__pa(cd_area));
+	cd_area->logical_start = (uint32_t)_text;
+	cd_area->physical_start = (uint32_t)__pa(_text);
+	cd_area->length = (uint32_t)_end - (uint32_t)_text;
+	mv_svc_cd_service(CD_ADD_REGION, (void *)__pa(cd_area));
 
 	/* Entire low memory range */
-	cd_area->logical_start = (void *)_end;
-	cd_area->physical_start = (void *)__pa(_end);
-	cd_area->length = (unsigned int)high_memory - (unsigned int)_end;
-	vmm_cd_service(CD_ADD_REGION, (void *)__pa(cd_area));
+	cd_area->logical_start = (uint32_t)_end;
+	cd_area->physical_start = (uint32_t)__pa(_end);
+	cd_area->length = (uint32_t)high_memory - (uint32_t)_end;
+	mv_svc_cd_service(CD_ADD_REGION, (void *)__pa(cd_area));
 
 	/* Format trap data */
 	trap_data = (struct sys_trap *)vmm_shared_data->vm_log_str;
 
 	memset(trap_data, 0, sizeof(*trap_data));
-	trap_data->exception_type = SYS_EXCEPTION_LINUX;
+	trap_data->exception_type = (uint32_t)SYS_EXCEPTION_LINUX;
 
 	kmsg_dump_get_buffer(dumper, true,
 			vdump_data.buffer, VDUMP_BUF_LEN, &len);
 	trap_data->os.linux_log.kmsg = (char *)__pa(vdump_data.buffer);
 	trap_data->os.linux_log.kmsg_len = len;
-	vmm_sys_exception(SYS_EXCEPTION_DUMP, (void *)__pa(trap_data));
+	mv_svc_sys_exception(SYS_EXCEPTION_DUMP, (void *)__pa(trap_data));
 
 	/* Program should never return back here */
 	unreachable();
