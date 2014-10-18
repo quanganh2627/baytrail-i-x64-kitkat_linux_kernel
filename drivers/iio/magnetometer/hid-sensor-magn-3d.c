@@ -306,6 +306,15 @@ static int hid_magn_3d_probe(struct platform_device *pdev)
 		goto error_free_dev;
 	}
 
+	if (magn_state->common_attributes.sensitivity.report_id == -1) {
+		sensor_hub_input_get_attribute_info(hsdev,
+		HID_FEATURE_REPORT,
+		HID_USAGE_SENSOR_COMPASS_3D,
+		HID_USAGE_SENSOR_ORIENT_MAGN_HEADING |
+		HID_USAGE_SENSOR_MODIFIER_CHG_SENSITIVITY_ABS,
+		&magn_state->common_attributes.sensitivity);
+	}
+
 	channels = kmemdup(magn_3d_channels, sizeof(magn_3d_channels),
 			   GFP_KERNEL);
 	if (!channels) {

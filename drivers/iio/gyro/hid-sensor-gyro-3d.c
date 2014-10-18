@@ -305,6 +305,15 @@ static int hid_gyro_3d_probe(struct platform_device *pdev)
 		goto error_free_dev;
 	}
 
+	if (gyro_state->common_attributes.sensitivity.report_id == -1) {
+		sensor_hub_input_get_attribute_info(hsdev,
+		HID_FEATURE_REPORT,
+		HID_USAGE_SENSOR_GYRO_3D,
+		HID_USAGE_SENSOR_DATA_ANGL_VELOCITY |
+		HID_USAGE_SENSOR_MODIFIER_CHG_SENSITIVITY_ABS,
+		&gyro_state->common_attributes.sensitivity);
+	}
+
 	channels = kmemdup(gyro_3d_channels, sizeof(gyro_3d_channels),
 			   GFP_KERNEL);
 	if (!channels) {
