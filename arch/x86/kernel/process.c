@@ -29,6 +29,9 @@
 #include <asm/debugreg.h>
 #include <asm/nmi.h>
 
+#include <sofia/nk_sofia_bridge.h>
+#include <sofia/mv_gal.h>
+
 /*
  * per-CPU TSS segments. Threads are completely 'soft' on Linux,
  * no more per-task TSS's. The TSS size is kept cacheline-aligned
@@ -321,6 +324,7 @@ void stop_this_cpu(void *dummy)
 	 * Remove this CPU:
 	 */
 	set_cpu_online(smp_processor_id(), false);
+	mv_stop_vcpu(mv_vcpu_id());
 	disable_local_APIC();
 
 	for (;;)
