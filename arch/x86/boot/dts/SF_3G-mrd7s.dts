@@ -358,7 +358,7 @@
 		pinctrl-1 = <&gyroscope_sleep_pins>;
 		pinctrl-2 = <&gyroscope_inactive_pins>;
 		intel,axis-map = < 1 0 2 >; /* spec is wrong, x and y are interchanged */
-		intel,negate = < 1 0 0 >;
+		intel,negate = < 1 0 1 >;
 		intel,poll-interval = < 100 >;
 		intel,full-scale = < 2000 >;
 		pm,class-name = "l3gd20_class";
