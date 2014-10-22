@@ -64,3 +64,4 @@ obj-$(CONFIG_CHARGER_SMB347)	+= smb347-charger.o
 obj-$(CONFIG_CHARGER_TPS65090)	+= tps65090-charger.o
 obj-$(CONFIG_POWER_RESET)	+= reset/
 obj-$(CONFIG_BATTERY_RK818) += rk818_battery.o
+obj-$(CONFIG_INTEL_FG_HELPER)       += intel_fg_helper.o

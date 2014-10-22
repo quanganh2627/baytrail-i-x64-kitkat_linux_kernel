@@ -46,6 +46,8 @@
 
 #include <linux/wakelock.h>
 
+#include <linux/intel_fg_helper.h>
+
 /* Conversion factor for mAh to mC */
 #define SCALE_MAH_TO_MC				(3600)
 /* Number of elements for Capacity (%)  to Cell voltage (mV) table */
@@ -527,6 +529,11 @@ static struct sw_fuel_gauge_debug sw_fuel_gauge_debug = {
 		.io_error_cnt = 0,
 		.kfifo_high_watermark = 0,
 	},
+};
+
+/* store ocv-to-cap table from user space*/
+static u16 sw_fuel_gauge_bat_capacity_table[BAT_CAP_TO_VBAT_TABLE_SIZE] = {
+0
 };
 
 /**
@@ -3040,6 +3047,52 @@ static void swfg_setup_sysfs_attr(struct device *dev)
 
 
 /**
+ * fg_save_fg_params - not support now
+ *
+ *
+ */
+static int fg_save_fg_params(void *data, int len)
+{
+	return 0;
+}
+
+
+/**
+ * fg_set_config_params - re-assign ocv-to-capacity table from user space to
+ * the sw_fuel_gauge_instance.bat.p_cap_to_v_bat_table
+ *
+ */
+static int fg_set_config_params(char *data, int len)
+{
+	memset(&sw_fuel_gauge_bat_capacity_table[0], 0,
+			sizeof(sw_fuel_gauge_bat_capacity_table));
+	char *ptr_src = data;
+	u16 *ptr_dst = sw_fuel_gauge_bat_capacity_table;
+	char buf_temp[5];
+	ssize_t ret;
+	long long_val;
+	/* int j=0; */
+	buf_temp[4] = '\0';
+
+	while (*ptr_src != '\0') {
+		strncpy(buf_temp, ptr_src, 4);
+		ptr_src += 4;
+
+		ret = kstrtol(buf_temp, 16, &long_val);
+		if (ret < 0)
+			return ret;
+
+		*ptr_dst++ = (u16)long_val;
+		/* printk(KERN_ERR"%s new ocv-to-cap table is :%d\n",__func__,
+				sw_fuel_gauge_bat_capacity_table[j++]); */
+	}
+	sw_fuel_gauge_instance.bat.p_cap_to_v_bat_table =
+		&sw_fuel_gauge_bat_capacity_table[0];
+
+	return 0;
+}
+
+/**
  * sw_fuel_gauge_probe - Initialises the driver OS resources when the device
  * has been found, then starts the state machine in a single threaded work.
  */
@@ -3085,6 +3138,12 @@ static int __init sw_fuel_gauge_probe(struct platform_device *p_platform_dev)
 	/* Register the battery with the power supply class. */
 	BUG_ON(power_supply_register(
 			p_dev, &sw_fuel_gauge_instance.power_supply_bat));
+
+	/* register misc driver callback */
+	#ifdef CONFIG_INTEL_FG_HELPER	
+	intel_fg_set_store_fn(fg_save_fg_params);
+	intel_fg_set_restore_fn(fg_set_config_params);
+	#endif
 
 	/* Register for events from the battery ID notifier. */
 	BUG_ON(batt_id_reg_notifier(&sw_fuel_gauge_instance.notifier));

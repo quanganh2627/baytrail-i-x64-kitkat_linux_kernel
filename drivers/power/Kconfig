@@ -44,6 +44,16 @@ config SW_FUEL_GAUGE
 	help
 	 Say Y here to enable the software fuel gauge.
 
+config INTEL_FG_HELPER
+    tristate "Intel Fuel gauge helper"
+    ---help---
+      This driver exposes a device file interface to store and restore
+      Fuel gauge configuration data.
+      Any fuel gauge driver can use the interfaces exposed by this
+      driver to store and retrieve their configuration data.
+
+      If unsure, say N.
+
 config POWER_SUPPLY_DEBUG
 	bool "Power supply debug"
 	help
