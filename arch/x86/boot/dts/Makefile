@@ -12,6 +12,8 @@ dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-mrd7s.dtb
 dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-mrd7s-recovery.dtb
 dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-mrd5s.dtb
 dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-mrd5s-recovery.dtb
+dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-catalog-mrd0-p0.dtb
+dtb-$(CONFIG_X86_INTEL_XGOLD) += SF_3G-catalog-mrd0-p0-recovery.dtb
 
 targets += dtbs
 targets += $(dtb-y)
