@@ -1,7 +1,3 @@
-lpaudio:lpaudio {
-	compatible = "intel,xgold-lpaudio";
-};
-
 pcm_music:pcm_music {
 	compatible = "intel,xgold-snd-pcm";
 	intel,pcm,dma_en = < 0x1 >;
