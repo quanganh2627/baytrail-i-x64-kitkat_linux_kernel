@@ -549,7 +549,7 @@ static void watchdog_nmi_disable(unsigned int cpu)
 	return;
 }
 #else
-ifdef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU
 static int watchdog_nmi_enable(unsigned int cpu)
 {
 	/*

@@ -132,6 +132,11 @@ void panic(const char *fmt, ...)
 	 */
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
+	mdelay(100);
+
+	/* Shawn add here start to reboot kernel */
+	kernel_restart(NULL);
+
 	kmsg_dump(KMSG_DUMP_PANIC);
 
 	bust_spinlocks(0);

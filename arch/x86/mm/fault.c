@@ -20,9 +20,6 @@
 #include <asm/kmemcheck.h>		/* kmemcheck_*(), ...		*/
 #include <asm/fixmap.h>			/* VSYSCALL_START		*/
 
-#include <linux/reboot.h>
-#include <linux/delay.h>
-
 #define CREATE_TRACE_POINTS
 #include <asm/trace/exceptions.h>
 
@@ -717,10 +714,6 @@ no_context(struct pt_regs *regs, unsigned long error_code,
 
 	/* Executive summary in case the body of the oops scrolled away */
 	printk(KERN_DEFAULT "CR2: %016lx\n", address);
-
-	/* Shawn add here start to reboot kernel */
-	mdelay(100);
-	kernel_restart(NULL);
 
 	oops_end(flags, regs, sig);
 }
