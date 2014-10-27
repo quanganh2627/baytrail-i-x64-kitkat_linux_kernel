@@ -299,7 +299,11 @@
 						clock-names = "clk_kernel", "clk_ahb";
 						interrupts = < I2C2_INT IRQ_TYPE_DEFAULT >;
 					/*	intel,i2c,dma = "i2c2_txrx";*/
+#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+						intel,i2c,b400 = < 1 28 13 0 >;
+#else
 						intel,i2c,b400 = < 1 62 13 0 >;
+#endif
 						intel,i2c,b100 = < 1 256 0 0 >;
 						resets = <&dbb_rst1 8>;
 						reset-names = "i2c";
