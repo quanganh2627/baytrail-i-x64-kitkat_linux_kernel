@@ -40,12 +40,15 @@
 #ifdef CONFIG_TOUCHSCREEN_GT915
 #define GTP_CHANGE_X2Y        0
 #define GTP_HAVE_TOUCH_KEY    1
+#define GTP_ESD_PROTECT       0
 #elif defined (CONFIG_TOUCHSCREEN_GT911)
 #define GTP_CHANGE_X2Y	      0
 #define GTP_HAVE_TOUCH_KEY    0
+#define GTP_ESD_PROTECT       1
 #else
 #define GTP_CHANGE_X2Y        1
 #define GTP_HAVE_TOUCH_KEY    0
+#define GTP_ESD_PROTECT       0
 #endif
 
 #define GTP_CUSTOM_CFG        1
@@ -66,7 +69,6 @@
 	/*  compatible with GT9XXF */
 
 #define GTP_CREATE_WR_NODE    1
-#define GTP_ESD_PROTECT       0
 	/*  esd protection with a cycle of 2 seconds */
 
 #define GTP_WITH_PEN          0
