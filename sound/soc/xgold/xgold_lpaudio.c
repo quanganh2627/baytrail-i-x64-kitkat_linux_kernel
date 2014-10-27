@@ -286,7 +286,6 @@ static struct miscdevice lpaudio_misc_dev = {
 
 static int lpaudio_probe(struct platform_device *pdev)
 {
-	lpaudio_enabled = 1;
 	lpaudio_dev = &pdev->dev;
 	lpaudio_buf_prepare();
 	misc_register(&lpaudio_misc_dev);
