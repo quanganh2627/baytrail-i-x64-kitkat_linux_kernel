@@ -948,15 +948,15 @@ int intel_media_playback_drrs_configure(struct drm_device *dev,
 			intel_cancel_drrs_work(dev_priv);
 			panel->target_mode = drm_mode_duplicate(dev, mode);
 		}
-
-		panel->target_mode->clock = mode->vrefresh * mode->vtotal *
+		if (panel->target_mode) {
+			panel->target_mode->clock = mode->vrefresh * mode->vtotal *
 							mode->htotal / 1000;
+			DRM_DEBUG_KMS("target_rr: %d\n", panel->target_mode->vrefresh);
+		}
 	}
-
-	DRM_DEBUG_KMS("cur_rr_type: %d, target_rr_type: %d, target_rr: %d\n",
+		DRM_DEBUG_KMS("cur_rr_type: %d, target_rr_type: %d\n",
 				drrs_state->refresh_rate_type,
-				drrs_state->target_rr_type,
-				panel->target_mode->vrefresh);
+				drrs_state->target_rr_type);
 set_state:
 	intel_set_drrs_state(dev);
 	mutex_unlock(&dev_priv->drrs_state.mutex);
@@ -1744,6 +1744,28 @@ static bool g4x_compute_srwm(struct drm_device *dev,
 			      display, cursor);
 }
 
+bool vlv_calculate_ddl(struct drm_crtc *crtc, int pixel_size, int *prec_multi, int *ddl)
+{
+	int clock;
+	int entries;
+	bool latencyprogrammed = false;
+
+	clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;	/* VESA DOT Clock */
+	/* WAR (FIXME):
+	 * Needs to be fixed in resume path adjusted_mode clock cannot be 0
+	 */
+	if (clock == 0)
+		clock = crtc->mode.clock;
+
+	entries = DIV_ROUND_UP(clock, 1000) * pixel_size;
+	*prec_multi = (entries > 256) ?
+		DRAIN_LATENCY_PRECISION_64 : DRAIN_LATENCY_PRECISION_32;
+	*ddl = (64 * (*prec_multi) * 4) / entries;
+	latencyprogrammed = true;
+
+	return latencyprogrammed;
+}
+
 static bool vlv_compute_drain_latency(struct drm_device *dev,
 				int pipe,
 				int *plane_prec_mult,
@@ -1828,12 +1850,7 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 				DRAIN_LATENCY_PRECISION_32) ?
 				DDL_PLANEA_PRECISION_32 :
 				DDL_PLANEA_PRECISION_64;
-
-		if (dev_priv->pf_change_status[PIPE_A] & BPP_CHANGED_PRIMARY) {
-			dev_priv->pf_change_status[PIPE_A] |=
-						(planea_prec | planea_dl);
-		} else
-			I915_WRITE_BITS(VLV_DDL1, planea_prec | planea_dl,
+		I915_WRITE_BITS(VLV_DDL1, planea_prec | planea_dl,
 				0x000000ff);
 	} else
 		I915_WRITE_BITS(VLV_DDL1, 0x0000, 0x000000ff);
@@ -1864,10 +1881,7 @@ static void vlv_update_drain_latency(struct drm_device *dev)
 				DRAIN_LATENCY_PRECISION_32) ?
 				DDL_PLANEB_PRECISION_32 :
 				DDL_PLANEB_PRECISION_64;
-		if (dev_priv->pf_change_status[PIPE_B] & BPP_CHANGED_PRIMARY)
-			dev_priv->pf_change_status[PIPE_B] |= (planeb_prec | planeb_dl);
-		else
-			I915_WRITE_BITS(VLV_DDL2, planeb_prec | planeb_dl, 0x000000ff);
+		I915_WRITE_BITS(VLV_DDL2, planeb_prec | planeb_dl, 0x000000ff);
 	} else
 		I915_WRITE_BITS(VLV_DDL2, 0x0000, 0x000000ff);
 
@@ -1899,7 +1913,12 @@ static void valleyview_update_wm(struct drm_device *dev)
 	static const int sr_latency_ns = 12000;
 	int ignore_plane_sr, ignore_cursor_sr;
 #endif
-	vlv_update_drain_latency(dev);
+	/*
+	 * TODO: DDL values are calculated and updated in the respective flips
+	 * hence this is not required. This part of the code is to be removed.
+	 */
+	if (!IS_VALLEYVIEW(dev))
+		vlv_update_drain_latency(dev);
 
 	if (g4x_compute_wm0(dev, PIPE_A,
 			    &valleyview_wm_info, latency_ns,
@@ -1936,18 +1955,6 @@ static void valleyview_update_wm(struct drm_device *dev)
 		      planeb_wm, cursorb_wm,
 		      plane_sr, cursor_sr);
 #endif
-	/*
-	 * TODO: when in linear memory dont enable maxfifo. Need to check with
-	 * the hardware team on this. This solves the FADiag app flicker
-	 */
-	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled &
-			dev_priv->is_tiled) {
-		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
-		dev_priv->maxfifo_enabled = true;
-	} else if (dev_priv->maxfifo_enabled && !is_maxfifo_needed(dev_priv)) {
-		I915_WRITE(FW_BLC_SELF_VLV, ~FW_CSPWRDWNEN);
-		dev_priv->maxfifo_enabled = false;
-	}
 
 	I915_WRITE(DSPFW1,
 		   (DSPFW_SR_VAL << DSPFW_SR_SHIFT) |
@@ -1966,6 +1973,22 @@ static void valleyview_update_wm(struct drm_device *dev)
 			(DSPFW5_CURSORB_VAL << DSPFW5_CURSORB_SHIFT) |
 			DSPFW5_CURSORSR_VAL);
 	I915_WRITE(DSPFW6, DSPFW6_DISPLAYSR_VAL);
+	I915_WRITE(DSPARB, DSPARB_VLV_DEFAULT);
+	/* Maxfifo in vallvyview is supported only in set_display atomic path */
+	if (IS_VALLEYVIEW(dev))
+		return;
+	/*
+	 * TODO: when in linear memory dont enable maxfifo. Need to check with
+	 * the hardware team on this. This solves the FADiag app flicker
+	 */
+	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled &
+			dev_priv->is_tiled) {
+		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
+		dev_priv->maxfifo_enabled = true;
+	} else if (dev_priv->maxfifo_enabled && !is_maxfifo_needed(dev_priv)) {
+		I915_WRITE(FW_BLC_SELF_VLV, ~FW_CSPWRDWNEN);
+		dev_priv->maxfifo_enabled = false;
+	}
 }
 
 static void g4x_update_wm(struct drm_device *dev)
@@ -3605,10 +3628,17 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 	enable.cursor_enabled = false;
 	enable.sprite_enabled = enabled;
 
-	/*
-	 * TODO: when in linear memory dont enable maxfifo. Need to check with
-	 * the hardware team on this. This solves the FADiag app flicker
-	 */
+	I915_WRITE(DSPFW4, (DSPFW4_SPRITEB_VAL << DSPFW4_SPRITEB_SHIFT) |
+			(DSPFW4_CURSORA_VAL << DSPFW4_CURSORA_SHIFT) |
+			DSPFW4_SPRITEA_VAL);
+	I915_WRITE(DSPFW7, (DSPFW7_SPRITED1_VAL << DSPFW7_SPRITED1_SHIFT) |
+			(DSPFW7_SPRITED_VAL << DSPFW7_SPRITED_SHIFT) |
+			(DSPFW7_SPRITEC1_VAL << DSPFW7_SPRITEC1_SHIFT) |
+			DSPFW7_SPRITEC_VAL);
+	POSTING_READ(DSPFW4);
+	/* Maxfifo in vallvyview is supported only in set_display atomic path */
+	if (IS_VALLEYVIEW(dev))
+		return;
 	if (is_maxfifo_needed(dev_priv) & !dev_priv->maxfifo_enabled &
 			dev_priv->is_tiled) {
 		I915_WRITE(FW_BLC_SELF_VLV, FW_CSPWRDWNEN);
@@ -3618,6 +3648,10 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 		dev_priv->maxfifo_enabled = false;
 	}
 
+	/*
+	 * TODO: DDL values are calculated and updated in the respective flips
+	 * hence this is not required. This part of the code is to be removed.
+	 */
 	if (intel_plane->plane == 0) {
 		mask = 0x0000ff00;
 		shift = DDL_SPRITEA_SHIFT;
@@ -3638,47 +3672,19 @@ static void valleyview_update_sprite_wm(struct drm_plane *plane,
 					DRAIN_LATENCY_PRECISION_32) ?
 					DDL_SPRITEA_PRECISION_32 :
 					DDL_SPRITEA_PRECISION_64;
-			/*
-			 * DL programming during pixel format change for Sprite A plane
-			 * from 4->2 a vblank is required which is done in irq_handler after
-			 * vblank interrupt received.
-			 */
-			if (dev_priv->pf_change_status[intel_plane->pipe] &
-					BPP_CHANGED_SPRITEA) {
-				dev_priv->pf_change_status[intel_plane->pipe] |=
-						(sprite_prec | (sprite_dl << shift));
-			} else
-				I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
+			I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
 					sprite_prec | (sprite_dl << shift), mask);
 		} else {
 			sprite_prec = (sprite_prec_mult ==
 					DRAIN_LATENCY_PRECISION_32) ?
 					DDL_SPRITEB_PRECISION_32 :
 					DDL_SPRITEB_PRECISION_64;
-			/*
-			 * DL programming during pixel format change for Sprite A plane
-			 * from 4->2 a vblank is required which is done in irq_handler after
-			 * vblank interrupt received.
-			 */
-			if (dev_priv->pf_change_status[intel_plane->pipe] &
-					BPP_CHANGED_SPRITEB) {
-				dev_priv->pf_change_status[intel_plane->pipe] |=
-						(sprite_prec | (sprite_dl << shift));
-			} else
-				I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
+			I915_WRITE_BITS(VLV_DDL(intel_plane->pipe),
 					sprite_prec | (sprite_dl << shift), mask);
 		}
 	} else
 		I915_WRITE_BITS(VLV_DDL(intel_plane->pipe), 0x00, mask);
 
-	I915_WRITE(DSPFW4, (DSPFW4_SPRITEB_VAL << DSPFW4_SPRITEB_SHIFT) |
-			(DSPFW4_CURSORA_VAL << DSPFW4_CURSORA_SHIFT) |
-			DSPFW4_SPRITEA_VAL);
-	I915_WRITE(DSPFW7, (DSPFW7_SPRITED1_VAL << DSPFW7_SPRITED1_SHIFT) |
-			(DSPFW7_SPRITED_VAL << DSPFW7_SPRITED_SHIFT) |
-			(DSPFW7_SPRITEC1_VAL << DSPFW7_SPRITEC1_SHIFT) |
-			DSPFW7_SPRITEC_VAL);
-	POSTING_READ(DSPFW4);
 }
 
 /**
@@ -6377,8 +6383,8 @@ static void display_early_suspend_handler(void)
 	int ret;
 	DRM_DEBUG_PM("Early suspend called\n");
 	ret = display_runtime_suspend(drm_dev);
-	if (ret)
-		DRM_ERROR("Display suspend failure\n");
+	if (ret < 0)
+		DRM_DEBUG_PM("Display not suspended\n");
 	else {
 		ret = set_vhdmi_state(VHDMI_OFF);
 		if (ret) {

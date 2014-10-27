@@ -955,7 +955,7 @@ i915_gem_execbuffer_move_to_gpu(struct intel_ring_buffer *ring,
 	int ret;
 
 	list_for_each_entry(obj, objects, exec_list) {
-		ret = i915_gem_object_sync(obj, ring, false);
+		ret = i915_gem_object_sync(obj, ring, false, false);
 		if (ret)
 			return ret;
 
@@ -1248,9 +1248,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 				return -EINVAL;
 			}
 
-			cliprects = kmalloc(
-				     args->num_cliprects * sizeof(*cliprects),
-				     GFP_KERNEL);
+			cliprects = kcalloc(args->num_cliprects,
+									sizeof(*cliprects),
+									GFP_KERNEL);
 			if (cliprects == NULL) {
 				ret = -ENOMEM;
 				goto pre_mutex_err;

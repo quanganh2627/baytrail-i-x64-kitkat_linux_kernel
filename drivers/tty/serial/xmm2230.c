@@ -650,9 +650,6 @@ static int ifx_port_activate(struct tty_port *port, struct tty_struct *tty)
 	/* put port data into this tty */
 	tty->driver_data = ifx_dev;
 
-	/* allows flip string push from int context */
-	tty->port->low_latency = 1;
-
 	/* set mrdy low for modem 2230 srdy error issue */
 	srdy = gpio_get_value(ifx_dev->gpio.srdy);
 	if (srdy)
@@ -736,8 +733,8 @@ static void ifx_spi_complete(void *ctx)
 	struct ifx_spi_device *ifx_dev = ctx;
 	int length;
 	int actual_length;
-	unsigned char more;
-	unsigned char cts;
+	unsigned char more = 0;
+	unsigned char cts = 0;
 	int local_write_pending = 0;
 	int queue_length;
 	int srdy;

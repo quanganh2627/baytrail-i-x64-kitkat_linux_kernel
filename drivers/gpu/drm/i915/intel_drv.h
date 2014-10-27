@@ -388,12 +388,38 @@ struct intel_crtc_config {
 	bool ips_enabled;
 };
 
+struct intel_disp_reg {
+	u32 pfit_control;
+	u32 pipesrc;
+	u32 stride;
+	u32 pos;
+	u32 tileoff;
+	u32 linoff;
+	u32 size;
+	u32 cntr;
+	u32 surf;
+	u32 dspcntr;
+	u32 spacntr;
+	u32 spbcntr;
+};
+
+struct intel_ddl_reg {
+	u32 plane_ddl;
+	u32 plane_ddl_mask;
+	u32 spritea_ddl;
+	u32 spritea_ddl_mask;
+	u32 spriteb_ddl;
+	u32 spriteb_ddl_mask;
+};
+
 struct intel_crtc {
 	struct drm_crtc base;
 	enum pipe pipe;
 	enum plane plane;
 	bool rotate180;
 	u8 lut_r[256], lut_g[256], lut_b[256];
+	u32 flags;
+	__u32 z_order;
 	/*
 	 * Whether the crtc and the connected output pipeline is active. Implies
 	 * that crtc->enabled is set, i.e. the current mode configuration has
@@ -404,6 +430,7 @@ struct intel_crtc {
 	bool s0ix_suspend_state;
 	bool primary_disabled; /* is the crtc obscured by a plane? */
 	bool lowfreq_avail;
+	bool pri_update;
 	struct intel_overlay *overlay;
 	struct intel_unpin_work *unpin_work;
 	struct intel_unpin_work *sprite_unpin_work;
@@ -439,6 +466,8 @@ struct intel_crtc {
 	/* panel fitter status flag */
 	bool	pfit_en_status;
 	bool	dummy_flip;
+	struct intel_disp_reg reg;
+	struct intel_ddl_reg reg_ddl;
 };
 
 struct intel_plane_wm_parameters {
@@ -457,11 +486,13 @@ struct intel_plane {
 	int max_downscale;
 	bool rotate180;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
+	u32 flags;
+	__u32 z_order;
+	__u32 rrb2_enable;
 	int crtc_x, crtc_y;
 	unsigned int crtc_w, crtc_h;
 	uint32_t src_x, src_y;
 	uint32_t src_w, src_h;
-	int last_pixel_size;
 	bool last_plane_state;
 
 	/* Since we need to change the watermarks before/after
@@ -472,6 +503,8 @@ struct intel_plane {
 	struct intel_plane_wm_parameters wm;
 	/* Added for deffered plane disable*/
 	struct work_struct work;
+	struct intel_disp_reg reg;
+	bool pri_update;
 
 	void (*update_plane)(struct drm_plane *plane,
 			     struct drm_crtc *crtc,
@@ -1042,4 +1075,6 @@ void i915_update_plane_stat(struct drm_i915_private *dev_priv, int pipe,
 
 extern void intel_unpin_work_fn(struct work_struct *__work);
 extern void intel_unpin_sprite_work_fn(struct work_struct *__work);
+bool vlv_calculate_ddl(struct drm_crtc *crtc, int pixel_size,
+		int *prec_multi, int *ddl);
 #endif /* __INTEL_DRV_H__ */
