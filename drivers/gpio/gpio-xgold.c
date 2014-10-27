@@ -13,10 +13,13 @@
 #include <linux/gpio.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/irqdomain.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/irqchip/irq_xgold.h>
+
 
 #define gpio_err(fmt, arg...)	pr_err("gpio: "  fmt, ##arg)
 #define gpio_info(fmt, arg...)	pr_info("gpio: "  fmt, ##arg)
@@ -142,12 +145,29 @@ static int xgold_gpio_direction_output(struct gpio_chip *chip, unsigned offset,
 
 static int xgold_gpio_to_irq(struct gpio_chip *chip, unsigned offset)
 {
-	u32 i;
+	u32 i, eint = -1, irq;
 	struct xgold_pcl_gpio *xgold_gpio = to_xgold_pcl_gpio(chip);
+	struct irq_domain *domain = xgold_irq_eint_get_domain();
+
 	for (i = 0; i < xgold_gpio->nirqs; i++) {
-		if (xgold_gpio->gpio_irq[i].gpio == offset)
-			return xgold_gpio->gpio_irq[i].irq;
+		if (xgold_gpio->gpio_irq[i].gpio == offset) {
+			eint = xgold_gpio->gpio_irq[i].irq;
+			break;
+		}
 	}
+	if (eint < 0) {
+		pr_err("%s: Can't bind gpio to interrupt\n", __func__);
+		return -EINVAL;
+	}
+
+	if (domain) {
+		irq = irq_find_mapping(domain, eint);
+		pr_debug("%s:irq found is:%d for eint:%d\n",
+				__func__, irq, eint);
+		return irq;
+	} else
+		pr_err("%s: No eint domain found\n", __func__);
+
 	return -EINVAL;
 }
 
@@ -155,28 +175,6 @@ static struct of_device_id xgold_gpio_of_match[] = {
 	{.compatible = "intel,gpio",},
 	{},
 };
-static int xgold_gpio_xlate(struct gpio_chip *gc,
-			    const struct of_phandle_args *gpiospec, u32 *flags)
-{
-	unsigned int pin;
-
-	if (WARN_ON(gc->of_gpio_n_cells < 1))
-		return -EINVAL;
-
-	if (WARN_ON(gpiospec->args_count < gc->of_gpio_n_cells))
-		return -EINVAL;
-
-	if (gpiospec->args[0] > gc->ngpio)
-		return -EINVAL;
-
-	pin = gc->base + gpiospec->args[0];
-
-	/*FIXME: Configure pin if needed */
-	if (flags)
-		*flags = gpiospec->args[2] >> 16;
-
-	return gpiospec->args[0];
-}
 
 #define GPIO_DT_DHIP		"intel,gpiochip"
 #define GPIO_DT_PIN_BASE	"intel,gpiochip-base"
@@ -287,8 +285,8 @@ static int xgold_gpio_probe(struct platform_device *pdev)
 		  pchip->base, pchip->ngpio, np->name);
 
 	pchip->of_node = np;
-	pchip->of_gpio_n_cells = 1;
-	pchip->of_xlate = xgold_gpio_xlate;
+	pchip->of_gpio_n_cells = 2;
+	pchip->of_xlate = of_gpio_simple_xlate;
 	gpiochip_add(pchip);
 	platform_set_drvdata(pdev, xgold_gpio);
 	pcl_write(pchip, 4, 0x100);

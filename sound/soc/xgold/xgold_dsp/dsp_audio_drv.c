@@ -255,6 +255,7 @@ static int dsp_audio_dev_close(void)
 static void dsp_audio_mark_scheduler_status(struct dsp_aud_cmd_data *p_cmd_data)
 {
 	#define PARM_ON 1
+	#define PARM_UPDATE 2
 	#define PARM_ON_UPDATE 3
 
 	unsigned short *data_trace_ptr;
@@ -265,6 +266,7 @@ static void dsp_audio_mark_scheduler_status(struct dsp_aud_cmd_data *p_cmd_data)
 		/* Check if the command is to start dsp scheduler */
 		if (DSP_AUDIO_CMD_VB_HW_AFE == p_cmd_data->command_id) {
 			if ((PARM_ON == data_trace_ptr[0]) ||
+				(PARM_UPDATE == data_trace_ptr[0]) ||
 				(PARM_ON_UPDATE == data_trace_ptr[0])) {
 				g_dsp_audio_dev->dsp_sched_start = 1;
 				xgold_debug("dsp scheduler marked as started\n");
@@ -2180,14 +2182,19 @@ static int dsp_audio_drv_remove(struct platform_device *pdev)
 
 static void dsp_audio_drv_shutdown(struct platform_device *pdev)
 {
+	struct dsp_audio_device *dsp = platform_get_drvdata(pdev);
 	struct T_AUD_DSP_CMD_VB_HW_AFE_PAR afe_hw_cmd = { 0 };
 	xgold_debug("dsp_audio_drv_shutdown\n");
 
-	if (g_dsp_audio_dev->dsp_sched_start) {
+	if (dsp->p_dsp_common_data->native_mode && dsp->dsp_sched_start) {
 		xgold_err("%s: Scheduler is on. Turning it off\n", __func__);
 		dsp_audio_cmd(DSP_AUDIO_CMD_VB_HW_AFE,
 				sizeof(struct T_AUD_DSP_CMD_VB_HW_AFE_PAR),
 				(u16 *)&afe_hw_cmd);
+
+		if (dsp->pm_platdata)
+			device_state_pm_set_state_by_name(&pdev->dev,
+					dsp->pm_platdata->pm_state_D3_name);
 	}
 }
 
