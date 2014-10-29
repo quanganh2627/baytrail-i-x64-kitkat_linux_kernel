@@ -1,5 +1,6 @@
 lpaudio:lpaudio {
 	compatible = "intel,xgold-lpaudio";
+	reg = <0xE0100000 0x1000>;
 };
 
 pcm_music:pcm_music {

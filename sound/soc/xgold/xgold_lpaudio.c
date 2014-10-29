@@ -44,11 +44,17 @@
 
 #include "lpaudio.h"
 
+extern struct dma_async_tx_descriptor *
+	       (*lpaudio_dma_setup)(struct dma_chan *dmach);
+
 struct device *lpaudio_dev;
 static struct T_AUD_DSP_CMD_PCM_PLAY_PAR pcm_par = {
 	.mode = 0,
 	.rate = 8,
 };
+static phys_addr_t lpaudio_dmac_addr;
+static __iomem void *lpaudio_dmac_base;
+static int lpaudio_dmac_size;
 static struct dma_chan *lpaudio_dmach;
 static dma_addr_t lpaudio_dma_addr;
 static dma_addr_t lpaudio_workbuf_addr;
@@ -67,37 +73,13 @@ static void lpaudio_buf_prepare(void)
 			WORK_BUF_SIZE, DMA_TO_DEVICE);
 }
 
-static void lpaudio_dma_prepare(struct device *dev)
+static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
 {
 	struct dma_async_tx_descriptor *desc;
-	dma_cookie_t dma_cookie_tx;
-	struct dma_slave_config pcm_dma_config;
-	int ret = 0;
-	unsigned short *shm_base =
-		(unsigned short *)dsp_get_audio_shmem_base_addr() +
-		OFFSET_SM_AUDIO_BUFFER_1_DL;
 
-	if (lpaudio_dmach == NULL) {
-		lpaudio_dmach =
-			xgold_of_dsp_get_dmach(p_dsp_audio_dev, STREAM_PLAY);
-		if (!lpaudio_dmach) {
-			dev_err(dev, "%s: dma channel req fail\n", __func__);
-			return;
-		}
-	}
-
-	/* Config DMA slave parameters */
-	pcm_dma_config.direction = DMA_TO_DEVICE;
-	pcm_dma_config.dst_addr = (dma_addr_t)shm_base;
-	pcm_dma_config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
-	pcm_dma_config.dst_maxburst = DMA_BURST_SIZE;
-	pcm_dma_config.device_fc = false;
-
-	ret = dmaengine_slave_config(lpaudio_dmach,
-					&pcm_dma_config);
-	if (ret)
-		dev_err(dev, "pcm: error in dma slave configuration\n");
-
+	memset(phys_to_virt(lpaudio_dma_addr), 0,
+				DMA_BLOCK_SIZE * DMA_BLOCK_NUM);
+	lpaudio_dmach = dmach;
 	desc = lpaudio_dmach->device->device_prep_dma_cyclic(
 				lpaudio_dmach,
 				lpaudio_dma_addr,
@@ -106,9 +88,27 @@ static void lpaudio_dma_prepare(struct device *dev)
 				DMA_SL_MEM_TO_MEM,
 				0,
 				NULL);
-	desc->callback = NULL;
-	desc->callback_param = NULL;
-	dma_cookie_tx = dmaengine_submit(desc);
+	return desc;
+}
+
+static u32 lpaudio_find_dma(void)
+{
+	int i;
+	u32 ret = 0;
+	u32 *cfg, *src;
+
+	for (i = 0; i < 16; i++) {
+		src = (u32 *)((char *)lpaudio_dmac_base + 0x100 + i*0x10);
+		cfg = (u32 *)((char *)src + 0x10);
+		if (((*cfg & 0x3df) == 0x141)
+				&& (*src >= lpaudio_dma_addr
+					&& *src <= lpaudio_dma_addr
+					+ DMA_BLOCK_SIZE * DMA_BLOCK_NUM)) {
+			ret = lpaudio_dmac_addr + 0x100 + i*0x10;
+			break;
+		}
+	}
+	return ret;
 }
 
 static int lpaudio_stop(void)
@@ -118,7 +118,7 @@ static int lpaudio_stop(void)
 	else {
 		pcm_par.setting = 0;
 		dsp_audio_cmd(
-				DSP_AUD_PCM1_PLAY,
+				DSP_AUD_PCM2_PLAY,
 				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
 				(u16 *)&pcm_par);
 		dsp_audio_irq_deactivate(p_dsp_audio_dev, DSP_IRQ_1);
@@ -131,13 +131,12 @@ static int lpaudio_start(void)
 {
 	pcm_par.setting = 1;
 	if (lpaudio_enable_dma) {
-		lpaudio_dma_prepare(lpaudio_dev);
 		dma_async_issue_pending(lpaudio_dmach);
 		pcm_par.req = 1; /*dma*/
 	} else {
 		pcm_par.req = 0; /*pio*/
 		dsp_audio_cmd(
-				DSP_AUD_PCM1_PLAY,
+				DSP_AUD_PCM2_PLAY,
 				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
 				(u16 *) &pcm_par);
 		dsp_audio_irq_activate(p_dsp_audio_dev,
@@ -187,6 +186,7 @@ static long lpaudio_fs_ioctl(struct file *file,
 {
 	unsigned short *shm;
 	u32 ret;
+	int i;
 
 	switch (cmd) {
 	case LPAUDIO_IOCTRL_DSP_DL:
@@ -207,7 +207,10 @@ static long lpaudio_fs_ioctl(struct file *file,
 			(u16 *) &pcm_par);
 		break;
 	case LPAUDIO_IOCTRL_DMAC:
-		ret = DMA_CTRL_ADDR;
+		ret = lpaudio_find_dma();
+		if (ret == 0)
+			dev_err(lpaudio_dev,
+				"%s: cannot find lpaudio dmach\n", __func__);
 		break;
 	case LPAUDIO_IOCTRL_DMAMEM:
 		ret = lpaudio_dma_addr;
@@ -253,10 +256,10 @@ static ssize_t lpaudio_fs_write(struct file *file, const char __user *user_buf,
 	if (i != 1 && i != 2)
 		return -EINVAL;
 	if (!strcmp(cmd, "disable")) {
-		lpaudio_enabled = 0;
+		lpaudio_dma_setup = NULL;
 		dev_info(lpaudio_dev, "%s: disable lpaudio\n", __func__);
 	} else if (!strcmp(cmd, "enable")) {
-		lpaudio_enabled = 1;
+		lpaudio_dma_setup = dma_setup;
 		dev_info(lpaudio_dev, "%s: ensable lpaudio\n", __func__);
 	} else if (!strcmp(cmd, "pio")) {
 		dev_info(lpaudio_dev, "%s: enable pio mode\n", __func__);
@@ -286,8 +289,20 @@ static struct miscdevice lpaudio_misc_dev = {
 
 static int lpaudio_probe(struct platform_device *pdev)
 {
+	struct resource *res;
+
 	lpaudio_dev = &pdev->dev;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (unlikely(!res)) {
+		dev_err(lpaudio_dev, "%s: Invalid mem resource\n", __func__);
+		return -ENODEV;
+	}
+	lpaudio_dmac_size = resource_size(res);
+	lpaudio_dmac_addr = res->start;
+	lpaudio_dmac_base = devm_ioremap(&pdev->dev,
+			lpaudio_dmac_addr, lpaudio_dmac_size);
 	lpaudio_buf_prepare();
+	lpaudio_dma_setup = dma_setup;
 	misc_register(&lpaudio_misc_dev);
 	return 0;
 }

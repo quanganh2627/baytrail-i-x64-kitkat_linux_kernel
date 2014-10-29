@@ -19,7 +19,6 @@ typedef unsigned short	u16;
 typedef unsigned char	u8;
 
 #define LPAUDIO_PROMPT		"lpaudio_lib"
-#define lpvm_print		printf
 
 #elif defined(__KERNEL__)
 #define LPAUDIO_PROMPT		"lpaudio_drv"
@@ -74,9 +73,10 @@ extern void setup_pcm_play_path(void);
 #define LPAUDIO_CMD_INIT		0x01
 #define LPAUDIO_CMD_START		0x02
 #define LPAUDIO_CMD_SETUP		0x03
-#define LPAUDIO_CMD_STOP		0x04
-#define LPAUDIO_CMD_DATA		0x05
-#define LPAUDIO_CMD_PLAY		0x06
+#define LPAUDIO_CMD_PAUSE		0x04
+#define LPAUDIO_CMD_STOP		0x05
+#define LPAUDIO_CMD_DATA		0x06
+#define LPAUDIO_CMD_PLAY		0x07
 
 #define LPAUDIO_CMD_ACK			0x81
 
@@ -126,7 +126,11 @@ struct lpaudio_play_param {
 
 struct lpaudio_ack_param {
 	u8	id;
-	int	ret;
+	u8	is_log;
+	union {
+		int	ret;
+		u8	log[80];
+	};
 };
 
 struct lpaudio_ipc_t {
