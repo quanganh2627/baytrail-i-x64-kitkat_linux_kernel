@@ -754,7 +754,7 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 
 		buffer = handle->buffer;
 
-		seq_printf(s, "    bid=%3d, size=%8d, share_cnt=%d\n", buffer->bid, buffer->size, buffer->handle_count);
+		seq_printf(s, "    bid=%3d, size=%8d, share_cnt=%d, flag=0x%02x\n", buffer->bid, buffer->size, buffer->handle_count, buffer->flags);
 	}
 	mutex_unlock(&client->lock);
 
@@ -794,14 +794,7 @@ struct ion_client *ion_client_create(struct ion_device *dev,
 	get_task_struct(current->group_leader);
 	task_lock(current->group_leader);
 	pid = task_pid_nr(current->group_leader);
-	/* don't bother to store task struct for kernel threads,
-	   they can't be killed anyway */
-	if (current->group_leader->flags & PF_KTHREAD) {
-		put_task_struct(current->group_leader);
-		task = NULL;
-	} else {
-		task = current->group_leader;
-	}
+	task = current->group_leader;
 	task_unlock(current->group_leader);
 
 	client = kzalloc(sizeof(struct ion_client), GFP_KERNEL);
