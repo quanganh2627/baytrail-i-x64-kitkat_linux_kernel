@@ -6518,6 +6518,8 @@ void intel_pm_init(struct drm_device *dev)
 
 	INIT_DELAYED_WORK(&dev_priv->rps.delayed_resume_work,
 			  intel_gen6_powersave_work);
+	INIT_DELAYED_WORK(&dev_priv->pfit_work,
+			vlv_set_default_pfit);
 }
 
 void vlv_rs_control(struct drm_device *dev,

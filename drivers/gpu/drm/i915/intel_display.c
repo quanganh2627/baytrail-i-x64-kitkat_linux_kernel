@@ -4170,8 +4170,10 @@ static void i9xx_pfit_enable(struct intel_crtc *crtc)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc_config *pipe_config = &crtc->config;
 
-	if (!crtc->config.gmch_pfit.control)
+	if (!crtc->config.gmch_pfit.control) {
+		I915_WRITE(PFIT_CONTROL, pipe_config->gmch_pfit.control);
 		return;
+	}
 
 	/*
 	 * The panel fitter should only be adjusted whilst the pipe is disabled,
@@ -9201,12 +9203,20 @@ static void i915_commit(struct drm_i915_private *dev_priv,
 	 * Allow only the pipe/crtc which previously enabled panel fitter to
 	 * make changes to the pfit_control and pipesrc register.
 	 */
-	if (pipe == dev_priv->pfit_pipe) {
+	if (reg->pfit_control && reg->pipesrc) {
 		if (I915_READ(PFIT_CONTROL) != reg->pfit_control)
 			I915_WRITE(PFIT_CONTROL, reg->pfit_control);
 		if (I915_READ(PIPESRC(pipe)) != reg->pipesrc)
 			I915_WRITE(PIPESRC(pipe), reg->pipesrc);
+		intel_crtc->pfit_en_status = true;
+	} else if (intel_crtc->pfit_en_status) {
+		if (I915_READ(PIPESRC(pipe)) != reg->pipesrc)
+			I915_WRITE(PIPESRC(pipe), reg->pipesrc);
+		if (I915_READ(PFIT_CONTROL) != reg->pfit_control)
+			I915_WRITE(PFIT_CONTROL, reg->pfit_control);
+		intel_crtc->pfit_en_status = false;
 	}
+
 	if (type == SPRITE_PLANE) {
 		I915_WRITE(SPSTRIDE(pipe, plane), reg->stride);
 		I915_WRITE(SPPOS(pipe, plane), reg->pos);
@@ -9275,6 +9285,17 @@ static void intel_pipe_vblank_evade(struct drm_crtc *crtc)
 			 val, crtc->hwmode.crtc_vdisplay);
 }
 
+void vlv_set_default_pfit(struct work_struct *work)
+{
+	struct drm_i915_private *dev_priv = container_of(work,
+				struct drm_i915_private, pfit_work.work);
+	struct intel_crtc *intel_crtc =
+			to_intel_crtc(dev_priv->plane_to_crtc_mapping[0]);
+
+	I915_WRITE(PFIT_CONTROL, 0x00);
+	intel_crtc->config.gmch_pfit.control = 0;
+}
+
 static int intel_crtc_set_display(struct drm_crtc *crtc,
 				struct drm_mode_set_display *disp,
 				struct drm_file *file_priv)
@@ -9327,6 +9348,8 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 			u32 pfit_control = intel_crtc->config.gmch_pfit.control
 				& MASK_PFIT_SCALING_MODE;
 
+			cancel_delayed_work_sync(&dev_priv->pfit_work);
+
 			/* If any of the mode is set then panel fitter should be enabled*/
 			pfit_control = (1 << 31) | pfit_control;
 			if (disp->panel_fitter.mode == AUTOSCALE)
@@ -9336,17 +9359,12 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 			else if (disp->panel_fitter.mode == LETTERBOX)
 				pfit_control |= PFIT_SCALING_LETTER;
 			else {
-				/* None of the above mode, then pfit is disabled */
-				/* None of the above mode, then pfit is disabled
-				 * In case of BYT_CR platform with the panasonic panel of
-				 * esolution 19x10, panel fitter needs to be enabled always
-				 * becoz we simulate the 12x8 mode due to memory limitation
-				 */
-				pfit_control |= PFIT_SCALING_AUTO;
-				if (!(BYT_CR_CONFIG &&
-						(intel_crtc->config.adjusted_mode.hdisplay > 1280 ||
-						intel_crtc->config.adjusted_mode.vdisplay > 800)))
-					pfit_control &= ~(1 << 31);
+				if (!dev_priv->scaling_reqd) {
+					/* None of the above mode, then pfit is disabled */
+					pfit_control = 0x80000000;
+					schedule_delayed_work(&dev_priv->pfit_work,
+							round_jiffies(HZ));
+				}
 			}
 			intel_crtc->config.gmch_pfit.control = pfit_control;
 		}

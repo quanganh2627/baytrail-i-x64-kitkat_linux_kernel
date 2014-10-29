@@ -1411,6 +1411,7 @@ typedef struct drm_i915_private {
         u32 vblcount;
 
 	struct work_struct hotplug_work;
+        struct delayed_work pfit_work;
 	bool enable_hotplug_processing;
 	struct {
 		unsigned long hpd_last_jiffies;
@@ -2147,6 +2148,7 @@ extern void i915_driver_preclose(struct drm_device *dev,
 extern void i915_driver_postclose(struct drm_device *dev,
 				  struct drm_file *file_priv);
 extern int i915_driver_device_is_agp(struct drm_device * dev);
+extern void vlv_set_default_pfit(struct work_struct *work);
 #ifdef CONFIG_COMPAT
 extern long i915_compat_ioctl(struct file *filp, unsigned int cmd,
 			      unsigned long arg);
