@@ -30,8 +30,6 @@
 #include <linux/of_platform.h>
 #include <linux/of_gpio.h>
 #include <linux/spinlock.h>
-#define XGOLD_GPIO_KEYS
-static int key_num = 0;
 
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
@@ -443,9 +441,6 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 
 	if (gpio_is_valid(button->gpio)) {
 
-	#ifdef XGOLD_GPIO_KEYS
-		key_num++;
-	#endif
 		error = gpio_request_one(button->gpio, GPIOF_IN, desc);
 		if (error < 0) {
 			dev_err(dev, "Failed to request GPIO %d, error %d\n",
@@ -462,11 +457,7 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 						button->debounce_interval;
 		}
 
-	#ifdef XGOLD_GPIO_KEYS
-		irq = platform_get_irq(pdev, key_num - 1);
-	#else
 		irq = gpio_to_irq(button->gpio);
-	#endif
 		if (irq < 0) {
 			error = irq;
 			dev_err(dev,
@@ -633,9 +624,6 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 
 		button = &pdata->buttons[i++];
 
-	#ifdef XGOLD_GPIO_KEYS
-		flags = 1;
-	#endif
 		button->gpio = gpio;
 		button->active_low = flags & OF_GPIO_ACTIVE_LOW;
 
