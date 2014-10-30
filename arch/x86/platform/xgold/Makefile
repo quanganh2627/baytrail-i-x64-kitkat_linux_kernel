@@ -22,3 +22,4 @@ endif
 obj-$(CONFIG_XGOLD_CPUFREQ) += load-balance.o
 
 obj-y += pm/
+obj-$(CONFIG_X86_INTEL_XGOLD) += xgold_pm_debug.o
