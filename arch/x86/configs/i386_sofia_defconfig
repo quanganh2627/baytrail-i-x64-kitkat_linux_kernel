@@ -316,7 +316,7 @@ CONFIG_FREEZER=y
 #
 # Processor type and features
 #
-CONFIG_ZONE_DMA=y
+# CONFIG_ZONE_DMA is not set
 CONFIG_SMP=y
 # CONFIG_X86_MPPARSE is not set
 # CONFIG_X86_BIGSMP is not set
