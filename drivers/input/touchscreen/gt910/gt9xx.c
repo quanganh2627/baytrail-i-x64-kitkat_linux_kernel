@@ -196,7 +196,7 @@ static int gtp_ts_power_off(struct i2c_client *client)
 	/*   delay 48 + 10ms to ensure reliability */
 #else
 	if (gt9xx_pdata->pm_platdata) {
-		ret = device_state_pm_set_state_by_name(&client->dev,
+		device_state_pm_set_state_by_name(&client->dev,
 			gt9xx_pdata->pm_platdata->pm_state_D3_name);
 	}
 	if (gt9xx_pdata->pins_sleep) {
@@ -205,8 +205,7 @@ static int gtp_ts_power_off(struct i2c_client *client)
 	}
 #endif
 	msleep(58);
-	if (!ret)
-		ts->enable = 0;
+	ts->enable = 0;
 out:
 	mutex_unlock(&ts->en_mutex);
 	return ret;
@@ -249,7 +248,7 @@ static int gtp_ts_power_on(struct i2c_client *client)
 			gt9xx_pdata->pins_default);
 	}
 	if (gt9xx_pdata->pm_platdata) {
-		ret = device_state_pm_set_state_by_name(&client->dev,
+		device_state_pm_set_state_by_name(&client->dev,
 			gt9xx_pdata->pm_platdata->pm_state_D0_name);
 	}
 #endif
