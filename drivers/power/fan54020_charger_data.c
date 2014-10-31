@@ -54,6 +54,12 @@
 #define ITERM_DIS_O 0
 #define LDO_OFF_O 4
 
+#define BOOST_UP_O 5
+#define BOOST_UP_M 0x1
+
+#define BOOST_EN_O 6
+#define BOOST_EN_M 0x1
+
 /* REG_IBAT */
 #define IOCHARGE_MIN_MA 350
 #define IOCHARGE_STEP_MA 100
@@ -86,7 +92,9 @@
 #define TSD_FLAG_O 7
 #define OVP_FLAG_O 6
 #define OVP_RECOV_O 1
+#define BOOSTOV_O 5
 #define TC_TO_O 4
+#define BAT_UV_O 3
 #define DBP_TO_O 3
 #define TREG_FLAG_O 5
 #define OT_RECOV_O 2
@@ -114,6 +122,10 @@
 enum {
 	POK_B_VALID = 0,
 	POK_B_INVAL,
+
+	BOOSTOV_OCCURED = 1,
+
+	BATUV_OCCURED = 1,
 
 	TSD_OCCURRED = 1,
 
@@ -157,6 +169,10 @@ struct charger_attrmap fan54020_charger_attr_map[ATTR_MAX] = {
 	[PN_INFO] = {"PN", BITS, REG_IC_INFO, PN_O, PN_M},
 	[REV_INFO] = {"Rev", BITS, REG_IC_INFO, REV_O, REV_M},
 	[HZ_MODE] = {"hz_mode", BITS, REG_CHARGE_CTRL1, HZ_MODE_O, HZ_MODE_M},
+	[BOOST_EN] = {
+		"boost_mode", BITS, REG_CHARGE_CTRL2, BOOST_EN_O, BOOST_EN_M},
+	[BOOST_UP] = {
+		"boost_up", BITS, REG_CHARGE_CTRL2, BOOST_UP_O, BOOST_UP_M},
 	[LDO] = {"ldo", BITS, REG_CHARGE_CTRL2, LDO_OFF_O, 0x1},
 	[IOCHARGE] = {"Iocharge", BITS, REG_IBAT, IOCHARGE_O, IOCHARGE_M},
 	[ITERM] = {"Iterm", BITS, REG_IBAT, 0, 0xF},
@@ -185,17 +201,27 @@ static int fan54020_get_charger_state(struct fan54x_charger *chrgr)
 		goto fail;
 
 	/* Checking for OVP_FLAG or OVP_RECOV occurrance */
+
+	/* Common flags between charger mode and boost mode */
 	chrgr->state.tsd_flag = (interrupt_reg & (1<<TSD_FLAG_O)) ?
 							TSD_OCCURRED : 0;
 
 	chrgr->state.ovp_flag = (interrupt_reg & (1<<OVP_FLAG_O)) ?
 							OVP_OCCURRED : 0;
 
-	chrgr->state.ovp_recov = (interrupt_reg & (1<<OVP_RECOV_O)) ?
-							OVP_RECOV_OCCURRED : 0;
-
 	chrgr->state.t32s_timer_expired = (interrupt_reg & (1<<TC_TO_O)) ?
 							T32_TO_OCCURRED : 0;
+
+	/* Handle interrupts specific to boost mode*/
+	if (chrgr->state.boost_enabled) {
+		chrgr->state.boost_ov = (interrupt_reg & (1<<BOOSTOV_O)) ?
+							BOOSTOV_OCCURED : 0;
+		chrgr->state.bat_uv = (interrupt_reg & (1<<BAT_UV_O)) ?
+							BATUV_OCCURED : 0;
+	}
+
+	chrgr->state.ovp_recov = (interrupt_reg & (1<<OVP_RECOV_O)) ?
+							OVP_RECOV_OCCURRED : 0;
 
 	chrgr->state.treg_flag = (interrupt_reg & (1<<TREG_FLAG_O)) ?
 							TREG_IS_ON : 0;
@@ -285,11 +311,18 @@ struct fan54x_charger fan54020_chrgr_data = {
 	.model_name = "FAN54020",
 	.manufacturer = "FAIRCHILD",
 
+	.otg_nb = {
+		.notifier_call = fan54x_otg_notification_handler,
+	},
+
 	.chgint_bh = {
 		.in_suspend = false,
 		.pending_evt = false,
 	},
-
+	.boost_op_bh = {
+		.in_suspend = false,
+		.pending_evt = false,
+	},
 	.fake_vbus = -1,
 
 	.state = {

@@ -78,6 +78,8 @@ enum FAN54x_ATTRS {
 	PN_INFO,
 	REV_INFO,
 	HZ_MODE,
+	BOOST_EN,
+	BOOST_UP,
 	LDO,
 	IOCHARGE,
 	ITERM,
@@ -110,10 +112,15 @@ enum charger_status {
  * struct fan54x_state - FAN54x charger current state
  * @vbus		equals 'VBUS_ON' (1) if valid vbus connected
  *			otherwise is 'VBUS_OFF'. '-1' -  means uninitialized
+ * @to_enable_boost	informs whether boost is to be enabled
+ * @boost_enabled	informs if boost mode is enabled
  * @pok_b		value of POK_B
  * @ovp_flag		value of OVP flag bit
  * @ovp_recov		value of OVP_RECOV flag bit
  * @vbus_fault		'1' if vbus is fault, '0' otherwise
+ * @tsd_flag		thermal shutdown fault
+ * @bat_uv		Battery voltage below 2.7v
+ * @boost_ov		Boost out of regulation due to sustained current limit.
  */
 struct fan54x_state {
 	enum charger_status status;
@@ -127,6 +134,8 @@ struct fan54x_state {
 	int cable_type;
 	bool charger_enabled;
 	bool charging_enabled;
+	bool to_enable_boost;
+	bool boost_enabled;
 	unsigned int pok_b:1;
 	unsigned int ovp_flag:1;
 	unsigned int ovp_recov:1;
@@ -142,6 +151,9 @@ struct fan54x_state {
 	unsigned int bat_ovp:1;
 	unsigned int no_bat:1;
 
+	/* Boost mode specific states */
+	unsigned int bat_uv:1;
+	unsigned int boost_ov:1;
 };
 
 
@@ -172,7 +184,10 @@ struct	unfreezable_bh_struct {
  * @chgint_bh			structure describing bottom half of
  *				CHGINT irq. See structure definition for
  *				details.
+ * @boost_op_bh			structure describing bottom half of boost
+ *				enable/disable operation.
  * @charging_work		work providing charging heartbeat for PSC
+ * @boost_work			work feeding watchdog during boost mode
  * @ctrl_io			PMU Charger regs physical address
  * @otg_handle			Pointer to USB OTG internal structure
  *				used for sending VBUS notifications.
@@ -185,6 +200,7 @@ struct	unfreezable_bh_struct {
  * @model_name			model name of charger chip
  * @manufacturer		manufacturer name of charger chip
  * @ack_time			last CONTINUE_CHARGING timestamp in jiffies
+ * @otg_nb			OTG notifier block
  * @fake_vbus			value of fake vbus event
  * @state			charger state structure
  */
@@ -205,8 +221,10 @@ struct fan54x_charger {
 	struct idi_peripheral_device *ididev;
 
 	struct unfreezable_bh_struct chgint_bh;
+	struct unfreezable_bh_struct boost_op_bh;
 
 	struct delayed_work charging_work;
+	struct delayed_work boost_work;
 	void __iomem *ctrl_io;
 	struct usb_phy *otg_handle;
 
@@ -223,9 +241,9 @@ struct fan54x_charger {
 	const char *manufacturer;
 
 	unsigned long ack_time;
+	struct notifier_block otg_nb;
 
 	int fake_vbus;
-
 	struct fan54x_state state;
 	int irq;
 	struct pinctrl *pinctrl;
@@ -245,6 +263,7 @@ struct fan54x_charger {
 
 #define MAX_NR_OF_I2C_RETRIES 1
 #define CHRGR_WORK_DELAY (10*HZ)
+#define BOOST_WORK_DELAY (10*HZ)
 #define EVT_WAKELOCK_TIMEOUT (2*HZ)
 #define EVENTS_LOG_FILENAME "events_log"
 #define DBG_REGS_FILENAME "charger_regs"
@@ -267,4 +286,6 @@ extern struct fan54x_charger fan54015_chrgr_data;
 
 int fan54x_i2c_update_reg(struct i2c_client *client, u8 reg_addr,
 					u8 mask, int shift, u8 data);
+int fan54x_otg_notification_handler(struct notifier_block *nb,
+				unsigned long event, void *data);
 
