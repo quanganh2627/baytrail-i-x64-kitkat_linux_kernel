@@ -629,7 +629,6 @@ struct intel_dp {
 	int backlight_on_delay;
 	int backlight_off_delay;
 	struct delayed_work panel_vdd_work;
-	struct delayed_work panel_bl_work;
 	bool want_panel_vdd;
 	bool psr_setup_done;
 	struct intel_connector *attached_connector;
