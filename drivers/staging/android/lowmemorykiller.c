@@ -55,6 +55,7 @@ static int lowmem_minfree[6] = {
 	4 * 1024,	/* 16MB */
 	16 * 1024,	/* 64MB */
 };
+static int lowmem_minfree_force[6] = {0,};
 static int lowmem_minfree_size = 4;
 
 static unsigned long lowmem_deathpending_timeout;
@@ -95,7 +96,12 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
-		minfree = lowmem_minfree[i];
+		/* If user set the minfree_force, use it with priority */
+		if (lowmem_minfree_force[0])
+			minfree = lowmem_minfree_force[i];
+		else
+			minfree = lowmem_minfree[i];
+
 		if (other_free < minfree && other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
 			break;
@@ -285,6 +291,8 @@ module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size,
 			 S_IRUGO | S_IWUSR);
 #endif
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
+			 S_IRUGO | S_IWUSR);
+module_param_array_named(minfree_force, lowmem_minfree_force, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
 
