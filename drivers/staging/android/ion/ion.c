@@ -1024,6 +1024,13 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_X86
+	/*
+	 * Since we already start supporting x86 cacheable ion buffer
+	 * we can do the mmap earlier for cacheable buffer just like
+	 * other one, otherwise these unmmaped vma may fail in
+	 * sanity check of app like Camera's
+	 */
 	if (ion_buffer_fault_user_mappings(buffer)) {
 		vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND |
 							VM_DONTDUMP;
@@ -1032,6 +1039,7 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		ion_vm_open(vma);
 		return 0;
 	}
+#endif
 
 	if (!(buffer->flags & ION_FLAG_CACHED))
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
