@@ -267,6 +267,8 @@ static int usb_dev_prepare(struct device *dev)
 static void usb_dev_complete(struct device *dev)
 {
 	/* Currently used only for rebinding interfaces */
+	struct usb_device *udev = to_usb_device(dev);
+	usb_autosuspend_device(udev);
 	usb_resume_complete(dev);
 }
 
