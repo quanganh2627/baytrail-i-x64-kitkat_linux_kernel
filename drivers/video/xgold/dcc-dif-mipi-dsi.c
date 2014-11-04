@@ -584,12 +584,16 @@ static int dcc_dsi_configure_video_mode(struct dcc_display *lcd,
 	}
 	dsicfg = DSI_CFG_TX_HS_PIXEL(dif->nblanes, dif->mode);
 
+	/* Temporarily disable DSI_PULSES mode for MRD5S enable */
+#if 0
 	if (dif->video_mode == DSI_PULSES) {
 		dcc_dsi_get_line(lcd,
 				nlines + dif->vfp + dif->vbp + dif->vsa,
 				pdata->clk_rate,
 				lcd->fps, &dif->bllp_time, &dif->line_time);
-	} else {
+	} else
+#endif
+	{
 		dcc_dsi_get_bllp(lcd,
 				nlines + dif->vfp + dif->vbp + dif->vsa,
 				stride + dif->hfp + dif->hbp,
