@@ -40,6 +40,7 @@
 #include "aud_lib_dsp_internal.h"
 #include "dsp_audio_hal_internal.h"
 #include "xgold_pcm.h"
+#include "xgold_machine.h"
 #include "agold_bt_sco_streaming.h"
 
 /* Fix me move this to DTS */
@@ -190,6 +191,7 @@ static enum xgold_pcm_stream_type  get_xgold_pcm_stream_type(
 	return stream_type;
 }
 
+
 static inline int i2s_set_pinctrl_state(struct device *dev,
 		struct pinctrl_state *state)
 {
@@ -211,6 +213,61 @@ static inline int i2s_set_pinctrl_state(struct device *dev,
 		}
 	}
 	return ret;
+}
+
+/* Enable I2S power state */
+static void i2s_set_power_state(struct snd_soc_platform *p_snd,
+			bool state)
+{
+
+	int ret = 0;
+	struct xgold_audio *xgold_ptr =
+		dev_get_drvdata(p_snd->dev);
+
+	xgold_debug(" %s : state %d", __func__, state);
+
+	if (state == ON) {
+
+#ifdef CONFIG_PLATFORM_DEVICE_PM
+		/* Enable I2S2 Power and clock domains */
+		if (xgold_ptr->pm_platdata) {
+			ret = platform_device_pm_set_state_by_name(
+				xgold_ptr->plat_dev,
+				xgold_ptr->pm_platdata->pm_state_D0_name);
+			if (ret < 0)
+				xgold_err("%s: failed to set PM state error %d\n",
+					__func__, ret);
+			udelay(5);
+		}
+#endif
+		/* Enable XGOLD I2S2 pins */
+		ret = i2s_set_pinctrl_state(&xgold_ptr->plat_dev->dev,
+			xgold_ptr->pins_default);
+		if (ret < 0)
+			xgold_err("%s: failed to set pinctrl state %d\n",
+				__func__, ret);
+	} else {
+
+		/* Disable i2s2 pins */
+		ret = i2s_set_pinctrl_state(&xgold_ptr->plat_dev->dev,
+				xgold_ptr->pins_inactive);
+
+		if (ret < 0)
+			xgold_err("%s: failed to set pinctrl state %d\n",
+			__func__, ret);
+#ifdef CONFIG_PLATFORM_DEVICE_PM
+		/* Disable I2S2 Power and clock domains */
+		if (xgold_ptr->pm_platdata) {
+			ret = platform_device_pm_set_state_by_name(
+				xgold_ptr->plat_dev,
+				xgold_ptr->pm_platdata->pm_state_D3_name);
+			if (ret < 0)
+				xgold_err("%s: failed to set PM state error %d",
+				__func__, ret);
+		}
+#endif
+	}
+
 }
 
 int get_dsp_pcm_rate(unsigned int rate)
@@ -489,7 +546,7 @@ void xgold_dsp_pcm_play_handler(void *dev)
 		length = xgold_stream->stream->runtime->period_size *
 			xgold_stream->stream->runtime->channels;
 		rw_shm_data.word_offset =
-			p_dsp_audio_dev->p_dsp_common_data->buf_size_dl_offset;
+			p_dsp_audio_dev->p_dsp_common_data->buf_sm_dl_offset;
 		rw_shm_data.len_in_bytes = length * 2;
 		rw_shm_data.p_data = xgold_stream->hwptr;
 		(void)p_dsp_audio_dev->p_dsp_common_data->
@@ -572,7 +629,7 @@ void xgold_dsp_pcm2_play_handler(void *dev)
 		length = xgold_stream->stream->runtime->period_size *
 			xgold_stream->stream->runtime->channels;
 		rw_shm_data.word_offset =
-			p_dsp_audio_dev->p_dsp_common_data->buf_size_dl2_offset;
+			p_dsp_audio_dev->p_dsp_common_data->buf_sm_dl2_offset;
 		rw_shm_data.len_in_bytes = length * 2;
 		rw_shm_data.p_data = xgold_stream->hwptr;
 		(void)p_dsp_audio_dev->p_dsp_common_data->
@@ -611,6 +668,7 @@ void xgold_dsp_pcm2_play_handler(void *dev)
 	 */
 	snd_pcm_period_elapsed(xgold_stream->stream);
 }
+
 
 void xgold_dsp_pcm_dma_play_handler(void *param)
 {
@@ -745,6 +803,8 @@ int register_audio_dsp(struct dsp_audio_device *dsp)
 	}
 	xgold_debug("registering device %s\n", dsp->name);
 	p_dsp_audio_dev = dsp;
+	p_dsp_audio_dev->p_dsp_common_data->i2s_set_power_state =
+		i2s_set_power_state;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(register_audio_dsp);
@@ -912,9 +972,6 @@ static int xgold_pcm_open(struct snd_pcm_substream *substream)
 static int xgold_pcm_close(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct xgold_audio *xgold_ptr =
-		snd_soc_platform_get_drvdata(rtd->platform);
 #if 0 /* BU_HACK DSP is always on at boot */
 	bool power_state = OFF;
 #endif
@@ -958,24 +1015,6 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 		&power_state);
 #endif
 
-	/* Disable i2s2 pins */
-	ret = i2s_set_pinctrl_state(&xgold_ptr->plat_dev->dev,
-			xgold_ptr->pins_inactive);
-
-	if (ret < 0)
-		xgold_err("%s: failed to set pinctrl state %d\n",
-			__func__, ret);
-#ifdef CONFIG_PLATFORM_DEVICE_PM
-	/* Disable I2S2 Power and clock domains */
-	if (xgold_ptr->pm_platdata) {
-		ret = platform_device_pm_set_state_by_name(
-			xgold_ptr->plat_dev,
-			xgold_ptr->pm_platdata->pm_state_D3_name);
-		if (ret < 0)
-			xgold_err("%s: failed to set PM state error %d",
-				__func__, ret);
-	}
-#endif
 	return ret;
 }
 
@@ -1049,7 +1088,7 @@ static int xgold_pcm_play_dma_prepare(struct snd_pcm_substream *substream)
 	dma_addr_t dma_addr;
 	int ret = 0;
 	dma_cap_mask_t tx_mask;
-	unsigned short *shm_base;
+	dma_addr_t shm_base;
 	unsigned short shm_samples = SM_AUDIO_BUFFER_1_DL_SAMPLES;
 	unsigned int dma_sgl_count;
 
@@ -1062,12 +1101,12 @@ static int xgold_pcm_play_dma_prepare(struct snd_pcm_substream *substream)
 	}
 
 	if (stream_type == STREAM_PLAY) {
-		shm_base = (unsigned short *)dsp_get_audio_shmem_base_addr() +
-			p_dsp_audio_dev->p_dsp_common_data->buf_size_dl_offset;
+		shm_base = dsp_get_audio_shmem_base_addr() +
+			p_dsp_audio_dev->p_dsp_common_data->buf_sm_dl_offset * 2;
 		xgold_debug("%s: STREAM_PLAY\n", __func__);
 	} else if (stream_type == STREAM_PLAY2) {
-		shm_base = (unsigned short *)dsp_get_audio_shmem_base_addr() +
-			p_dsp_audio_dev->p_dsp_common_data->buf_size_dl2_offset;
+		shm_base = dsp_get_audio_shmem_base_addr() +
+			p_dsp_audio_dev->p_dsp_common_data->buf_sm_dl2_offset * 2;
 		xgold_debug("%s: STREAM_PLAY2\n", __func__);
 	} else {
 		xgold_err("%s: invalid stream %d\n", __func__, stream_type);
@@ -1095,7 +1134,7 @@ static int xgold_pcm_play_dma_prepare(struct snd_pcm_substream *substream)
 
 	/* Config DMA slave parameters */
 	pcm_dma_config.direction = DMA_TO_DEVICE;
-	pcm_dma_config.dst_addr = (dma_addr_t)shm_base;
+	pcm_dma_config.dst_addr = shm_base;
 	pcm_dma_config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	pcm_dma_config.dst_maxburst = DMA_BURST_SIZE;
 	pcm_dma_config.device_fc = false;
@@ -1128,31 +1167,13 @@ static int xgold_pcm_play_dma_prepare(struct snd_pcm_substream *substream)
 static int xgold_pcm_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct xgold_audio *xgold_ptr =
-		snd_soc_platform_get_drvdata(rtd->platform);
-	int ret = 0;
+	struct xgold_audio *xgold_ptr;
 	enum xgold_pcm_stream_type stream_type =
 		get_xgold_pcm_stream_type(substream);
 
+	xgold_ptr = snd_soc_platform_get_drvdata(rtd->platform);
+
 	xgold_debug("%s\n", __func__);
-#ifdef CONFIG_PLATFORM_DEVICE_PM
-	/* Enable I2S2 Power and clock domains */
-	if (xgold_ptr->pm_platdata) {
-		ret = platform_device_pm_set_state_by_name(
-			xgold_ptr->plat_dev,
-			xgold_ptr->pm_platdata->pm_state_D0_name);
-		if (ret < 0)
-			xgold_err("%s: failed to set PM state error %d\n",
-				__func__, ret);
-		udelay(5);
-	}
-#endif
-	/* Enable XGOLD I2S2 pins */
-	ret = i2s_set_pinctrl_state(&xgold_ptr->plat_dev->dev,
-		xgold_ptr->pins_default);
-	if (ret < 0)
-		xgold_err("%s: failed to set pinctrl state %d\n",
-			__func__, ret);
 
 	xgold_ptr->audio_stream[stream_type].hwptr_done = 0;
 	xgold_ptr->audio_stream[stream_type].periods = 0;
@@ -1317,7 +1338,7 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 			}
 		}
 		/* HW_AFE should be sent after audio codec is powered up */
-		if (p_dsp_audio_dev->p_dsp_common_data->native_mode &&
+		if (audio_native_mode &&
 			stream_type != HW_PROBE_A &&
 			stream_type != HW_PROBE_B)
 				dsp_start_audio_hwafe();
@@ -1399,7 +1420,7 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		}
 		xgold_debug("DSP stopped\n");
 		/* HW_AFE should be switched off before audio codec power down*/
-		if (p_dsp_audio_dev->p_dsp_common_data->native_mode &&
+		if (audio_native_mode &&
 			stream_type != HW_PROBE_A &&
 			stream_type != HW_PROBE_B)
 				dsp_stop_audio_hwafe();

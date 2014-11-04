@@ -194,7 +194,7 @@ static int xgold_mc_probe(struct platform_device *pdev)
 	xgold_debug("%s:\n", __func__);
 
 	xgold_snd_card.dev = &pdev->dev;
-	snd_soc_card_set_drvdata(&xgold_snd_card, (void *)audio_native_mode);
+	snd_soc_card_set_drvdata(&xgold_snd_card, &audio_native_mode);
 
 #ifdef CONFIG_OF
 	codec_of_node = of_parse_phandle(np,
@@ -213,10 +213,6 @@ static int xgold_mc_probe(struct platform_device *pdev)
 		xgold_err("Cannot get codec dai name ret %d\n", ret);
 		return ret;
 	}
-
-	/* for LTE we use native mode by default */
-	if (!strcmp(codec_dai_name, "pmic_afe_i2s"))
-		audio_native_mode = 1;
 
 	if (!audio_native_mode) {
 		for (i = 0; i < xgold_snd_card.num_links; i++) {

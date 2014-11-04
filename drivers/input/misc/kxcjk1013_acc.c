@@ -501,6 +501,7 @@ skip_pinctrl:
 			OF_ACC_DIRECTION, np->name);
 		goto out;
 	}
+	dev_dbg(dev, "accel direction:%d\n", acc_pdata->accel_direction);
 
 	/* Poll interval property */
 	if (of_property_read_u32(np, OF_POLL_INTERVAL,

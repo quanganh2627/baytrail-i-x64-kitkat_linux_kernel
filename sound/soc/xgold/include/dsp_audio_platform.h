@@ -72,7 +72,7 @@ struct dsp_audio_device {
 	struct list_head free;
 	enum dsp_id id;
 	void __iomem *shm_mem;
-	unsigned shm_mem_phys;
+	dma_addr_t shm_mem_phys;
 	void __iomem *shm_regs;
 	unsigned short *patch;
 	unsigned patch_length;
@@ -106,8 +106,8 @@ struct dsp_common_data {
 	struct device *fba_dev;
 	unsigned pcm_offset[2];
 	unsigned buf_size_ul_offset;
-	unsigned buf_size_dl_offset;
-	unsigned buf_size_dl2_offset;
+	unsigned buf_sm_dl_offset;
+	unsigned buf_sm_dl2_offset;
 	unsigned buf_sm_ul_offset;
 	unsigned buf_sm_hw_probe_a_offset;
 	unsigned buf_sm_hw_probe_b_offset;
@@ -118,6 +118,10 @@ struct dsp_common_data {
 	unsigned buf_sm_speech_probe_e_offset;
 	unsigned buf_sm_speech_probe_f_offset;
 	unsigned num_dsp;
+	struct snd_soc_platform *p_snd_soc_platform;
+	void (*i2s_set_power_state)(
+			struct snd_soc_platform *p_snd_soc_platform,
+			bool state);
 };
 
 int register_dsp_audio_lisr_cb(enum dsp_lisr_cb lisr_type,
