@@ -264,6 +264,8 @@ static void xgold_sdhci_of_init(struct sdhci_host *host)
 	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
 	struct device_node *np = pdev->dev.of_node;
 	unsigned int bits;
+
+	sdhci_alloc_panic_host(host);
 	if ((of_property_read_u32(np, "intel,is_8_bits", &bits) == 0) &&
 		bits == 1)
 		host->mmc->caps |= MMC_CAP_8_BIT_DATA;
