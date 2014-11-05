@@ -1060,6 +1060,8 @@ static int usb_serial_probe(struct usb_interface *interface,
 	serial->disconnected = 0;
 
 	usb_serial_console_init(minor);
+	usb_enable_autosuspend(dev);
+	device_set_wakeup_enable(&dev->dev, 1);
 exit:
 	module_put(type->driver.owner);
 	return 0;
