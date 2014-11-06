@@ -258,7 +258,6 @@ static int apds990x_set_command(struct i2c_client *client, int command)
 	mutex_lock(&data->update_lock);
 	ret = i2c_smbus_write_byte(client, clear_int);
 	mutex_unlock(&data->update_lock);
-
 	return ret;
 }
 
@@ -496,7 +495,7 @@ static void apds990x_change_ps_threshold(struct i2c_client *client)
 		data->ps_detection = 1;
 
 		/* FAR-to-NEAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 0);
+		input_report_abs(data->input_dev_ps, ABS_X, 0);
 		input_sync(data->input_dev_ps);
 
 		apds990x_write_word(client, CMD_WORD | APDS990x_PILTL_REG,
@@ -514,7 +513,7 @@ static void apds990x_change_ps_threshold(struct i2c_client *client)
 		data->ps_detection = 0;
 
 		/* NEAR-to-FAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 5);
+		input_report_abs(data->input_dev_ps, ABS_X, 5);
 		input_sync(data->input_dev_ps);
 
 		apds990x_write_word(client, CMD_WORD | APDS990x_PILTL_REG, 0);
@@ -549,7 +548,7 @@ static void apds990x_change_als_threshold(struct i2c_client *client)
 		/* need to inform input event as there will be no
 		 * interrupt from the PS
 		 * NEAR-to-FAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 0);
+		input_report_abs(data->input_dev_ps, ABS_X, 0);
 		input_sync(data->input_dev_ps);
 
 		apds990x_write_word(client, CMD_WORD|APDS990x_PILTL_REG, 0);
@@ -566,7 +565,7 @@ static void apds990x_change_als_threshold(struct i2c_client *client)
 	dev_dbg(&client->dev, "%s LuxValue = %d\n",
 			APDS_990X_DEV_NAME, lux_value);
 	/* report the lux level */
-	input_report_abs(data->input_dev_als, ABS_MISC, lux_value);
+	input_report_abs(data->input_dev_als, ABS_X, lux_value);
 	input_sync(data->input_dev_als);
 
 	data->als_data = cdata;
@@ -778,27 +777,30 @@ static ssize_t apds990x_store_enable_ps_sensor(struct device *dev,
 		/* turn off p sensor - kk 25 Apr 2011 .
 		 * we can't turn off the entire sensor,
 		 * the light sensor may be needed by HAL */
-		data->enable_ps_sensor = 0;
-		if (data->enable_als_sensor) {
-			/* reconfigute light sensor setting */
-			/* Power Off */
-			apds990x_set_enable(client, 0);
+		if (data->enable_ps_sensor == 1) {
+			data->enable_ps_sensor = 0;
+			if (data->enable_als_sensor) {
+				/* reconfigute light sensor setting */
+				/* Power Off */
+				apds990x_set_enable(client, 0);
 
-			/* previous als poll delay */
-			apds990x_set_atime(client, data->als_atime);
+				/* previous als poll delay */
+				apds990x_set_atime(client, data->als_atime);
 
-			apds990x_set_ailt(client, 0xffff);
-			apds990x_set_aiht(client, 0);
+				apds990x_set_ailt(client, 0xffff);
+				apds990x_set_aiht(client, 0);
 
-			apds990x_set_control(client, data->control_default);
-			/* 3 persistence */
-			apds990x_set_pers(client, 0x33);
+				apds990x_set_control(client,
+						data->control_default);
+				/* 3 persistence */
+				apds990x_set_pers(client, 0x33);
 
-			/* only enable light sensor */
-			apds990x_set_enable(client, 0x13);
-		} else {
-			apds990x_set_enable(client, 0);
-			apds990x_power_off(data);
+				/* only enable light sensor */
+				apds990x_set_enable(client, 0x13);
+			} else {
+				apds990x_set_enable(client, 0);
+				apds990x_power_off(data);
+			}
 		}
 	}
 
@@ -837,7 +839,6 @@ static ssize_t apds990x_store_enable_als_sensor(struct device *dev,
 
 	dev_dbg(&client->dev,
 		"%s als sensor\n", (val == 1) ? "enable" : "disable");
-
 	if (val == 1) {
 		/* turn on light  sensor */
 		if (data->enable_als_sensor == 0) {
@@ -847,6 +848,8 @@ static ssize_t apds990x_store_enable_als_sensor(struct device *dev,
 				err = apds990x_power_on(data);
 				if (err)
 					return err;
+				dev_info(&client->dev,
+					"%s sensor power on\n");
 			}
 			apds990x_set_enable(client, 0); /* Power Off */
 
@@ -880,29 +883,33 @@ static ssize_t apds990x_store_enable_als_sensor(struct device *dev,
 	} else {
 		/* turn off light sensor
 		 * what if the p sensor is active?*/
-		data->enable_als_sensor = 0;
+		if (data->enable_als_sensor == 1) {
+			data->enable_als_sensor = 0;
 
-		if (data->enable_ps_sensor) {
-			apds990x_set_enable(client, 0); /* Power Off */
-			apds990x_set_atime(client, 0xf6);  /* 27.2ms */
-			apds990x_set_ptime(client, 0xff); /* 2.72ms */
-			apds990x_set_ppcount(client, 8); /* 8-pulse */
+			if (data->enable_ps_sensor) {
+				apds990x_set_enable(client, 0); /* Power Off */
+				apds990x_set_atime(client, 0xf6);  /* 27.2ms */
+				apds990x_set_ptime(client, 0xff); /* 2.72ms */
+				apds990x_set_ppcount(client, 8); /* 8-pulse */
 
-			apds990x_set_control(client, data->control_default);
+				apds990x_set_control(client,
+						data->control_default);
 
-			apds990x_set_pilt(client,
-					data->ps_hysteresis_threshold);
-			apds990x_set_piht(client, 1023);
+				apds990x_set_pilt(client,
+						data->ps_hysteresis_threshold);
+				apds990x_set_piht(client, 1023);
 
-			apds990x_set_ailt(client, 0);
-			apds990x_set_aiht(client, 0xffff);
+				apds990x_set_ailt(client, 0);
+				apds990x_set_aiht(client, 0xffff);
 
-			apds990x_set_pers(client, 0x33); /* 3 persistence */
-			/* only enable prox sensor with interrupt */
-			apds990x_set_enable(client, 0x27);
-		} else {
-			apds990x_set_enable(client, 0);
-			apds990x_power_off(data);
+				/* 3 persistence */
+				apds990x_set_pers(client, 0x33);
+				/* only enable prox sensor with interrupt */
+				apds990x_set_enable(client, 0x27);
+			} else {
+				apds990x_set_enable(client, 0);
+				apds990x_power_off(data);
+			}
 		}
 	}
 
@@ -1504,7 +1511,9 @@ static int __init apds990x_probe(struct i2c_client *client,
 	set_bit(EV_ABS, data->input_dev_ps->evbit);
 
 	input_set_abs_params(data->input_dev_als, ABS_MISC, 0, 10000, 0, 0);
-	input_set_abs_params(data->input_dev_ps, ABS_DISTANCE, 0, 1, 0, 0);
+	input_set_abs_params(data->input_dev_ps, ABS_DISTANCE, 0, 5, 0, 0);
+	input_set_abs_params(data->input_dev_als, ABS_X, 0, 10000, 0, 0);
+	input_set_abs_params(data->input_dev_ps, ABS_X, 0, 5, 0, 0);
 
 	data->input_dev_als->name = "Avago light sensor";
 	data->input_dev_ps->name = "Avago proximity sensor";
