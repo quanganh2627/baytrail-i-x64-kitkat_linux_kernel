@@ -37,7 +37,7 @@
 #ifdef CONFIG_X86_INTEL_SOFIA
 #include <sofia/nk_sofia_bridge.h>
 #include <sofia/pal_shared_data.h>
-#include <sofia/vmm_platform_service.h>
+#include <sofia/mv_svc_hypercalls.h>
 #endif
 
 #define XGOLD_ENTER pr_info("--> %s\n", __func__)
@@ -290,12 +290,12 @@ static int xgold_i8042_init(void)
 {
 	return 0;
 }
-#ifdef CONFIG_X86_INTEL_XGOLD_EXPERIMENTAL
+
 static void xgold_rtc_get_time(struct timespec *ts)
 {
 	unsigned long long time_us = 0;
 
-	vmm_rtc_get_time_us(&time_us);
+	mv_svc_rtc_get_time_us(&time_us);
 	do_div(time_us, 1000000);
 
 	ts->tv_sec = time_us;
@@ -318,28 +318,34 @@ static int xgold_rtc_set_time(const struct timespec *ts)
 		rtc_data.m_second = tm.tm_sec;
 		rtc_data.m_msecond = 0;
 
-		vmm_rtc_set_datetime(&rtc_data);
+		mv_svc_rtc_set_datetime(&rtc_data);
 	} else {
 		pr_err("%s: Invalid RTC value !\n", __func__);
 	}
 	return 0;
 }
-#else
 
-static void xgold_rtc_get_time(struct timespec *ts)
+static void xgold_rtc_get_time_stub(struct timespec *ts)
 {
 }
 
-static int xgold_rtc_set_time(const struct timespec *ts)
+static int xgold_rtc_set_time_stub(const struct timespec *ts)
 {
 	return 0;
 }
-#endif
 
 static void __init xgold_rtc_init(void)
 {
-	x86_platform.get_wallclock = xgold_rtc_get_time;
-	x86_platform.set_wallclock = xgold_rtc_set_time;
+	struct device_node *np = of_find_node_by_path("/xgold");
+	struct device_node *np_rtc = of_find_node_by_name(np, "rtc");
+	if (np_rtc) {
+		x86_platform.get_wallclock = xgold_rtc_get_time;
+		x86_platform.set_wallclock = xgold_rtc_set_time;
+		of_node_put(np_rtc);
+	} else {
+		x86_platform.get_wallclock = xgold_rtc_get_time_stub;
+		x86_platform.set_wallclock = xgold_rtc_set_time_stub;
+	}
 }
 
 #ifdef CONFIG_X86_INTEL_SOFIA
@@ -347,27 +353,29 @@ static void __init xgold_rtc_init(void)
 void sofia_init_irq(void)
 {
 	native_init_IRQ();
-/*
- * the cpu bitmap does not matter here as it's local interrupt
- */
-	vmm_guest_request_virq(LOCAL_TIMER_VECTOR, 1);
-	vmm_virq_unmask(LOCAL_TIMER_VECTOR);
+	/*
+	 * the cpu bitmap does not matter here as it's local interrupt
+	 */
+	mv_virq_request(LOCAL_TIMER_VECTOR, 1);
+	mv_virq_unmask(LOCAL_TIMER_VECTOR);
 #ifdef CONFIG_SMP
-	vmm_guest_request_virq(RESCHEDULE_VECTOR, 1);
-	vmm_virq_unmask(RESCHEDULE_VECTOR);
-	vmm_guest_request_virq(CALL_FUNCTION_VECTOR, 1);
-	vmm_virq_unmask(CALL_FUNCTION_VECTOR);
-	vmm_guest_request_virq(CALL_FUNCTION_SINGLE_VECTOR, 1);
-	vmm_virq_unmask(CALL_FUNCTION_SINGLE_VECTOR);
+	mv_virq_request(RESCHEDULE_VECTOR, 1);
+	mv_virq_unmask(RESCHEDULE_VECTOR);
+	mv_virq_request(CALL_FUNCTION_VECTOR, 1);
+	mv_virq_unmask(CALL_FUNCTION_VECTOR);
+	mv_virq_request(CALL_FUNCTION_SINGLE_VECTOR, 1);
+	mv_virq_unmask(CALL_FUNCTION_SINGLE_VECTOR);
+	mv_virq_request(REBOOT_VECTOR, 1);
+	mv_virq_unmask(REBOOT_VECTOR);
 #endif
 }
 #endif
 #endif
 
 /*
-* XGOLD specific x86_init function overrides and early setup
-* calls.
-*/
+ * XGOLD specific x86_init function overrides and early setup
+ * calls.
+ */
 void __init x86_xgold_early_setup(void)
 {
 	x86_init.resources.probe_roms = x86_init_noop,

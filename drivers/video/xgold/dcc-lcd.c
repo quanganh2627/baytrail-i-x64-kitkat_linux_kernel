@@ -57,6 +57,7 @@ int dcc_display_setup(struct dcc_drvdata *pdata)
 			dcc_err("failed to request gpio bias set %d\n",
 					pdata->gpio_lcd_bias);
 		}
+		gpio_set_value(pdata->gpio_lcd_bias, 1);
 		mdelay(pdata->gpio_lcd_bias_msdelay);
 	}
 
@@ -113,7 +114,9 @@ int dcc_display_suspend(struct dcc_drvdata *pdata)
 	pdata->display.power_off(&pdata->display);
 	pdata->display.dif_stop(&pdata->display);
 	gpio_set_value(pdata->gpio_reset, 0);
+	gpio_set_value(pdata->gpio_lcd_bias, 0);
 	gpio_free(pdata->gpio_reset);
+	gpio_free(pdata->gpio_lcd_bias);
 	return 0;
 }
 

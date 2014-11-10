@@ -1,26 +1,26 @@
 &xgold_pmx_gpio {
 		intel,gpio-to-irq-num = < 16 >;
 		intel,gpio-to-irq = <
-			12 EXI0
-			67 EXI1
-			71 EXI2
-			14 EXI3
-			11 EXI4
-			27 EXI5
-			47 EXI6
-			45 EXI7
+			12 EINT_EXI0
+			67 EINT_EXI1
+			71 EINT_EXI2
+			14 EINT_EXI3
+			11 EINT_EXI4
+			27 EINT_EXI5
+			47 EINT_EXI6
+			45 EINT_EXI7
 #if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
-			53 EXI8
+			53 EINT_EXI8
 #else
-			49 EXI8
+			49 EINT_EXI8
 #endif
-			70 EXI9
-			16 EXI10
-			17 EXI11
-			18 EXI12
-			19 EXI13
-			52 EXI14
-			56 EXI15 >;
+			70 EINT_EXI9
+			16 EINT_EXI10
+			17 EINT_EXI11
+			18 EINT_EXI12
+			19 EINT_EXI13
+			52 EINT_EXI14
+			56 EINT_EXI15 >;
 };
 &xgold_pmx_core {
 	/* sparse GPIO range could be supported */
@@ -42,6 +42,12 @@
 		<&range 33 2 0x100>,
 		<&range 35 1 0x1500>,   /* cam1_reset */
 		<&range 36 3 0x100>,
+#elif defined SOFIA3G_MRD5S
+		<&range 33 4 0x100>,
+		<&range 35 1 0x1500>,   /* cam1_reset */
+		<&range 36 1 0x01500>,	/* cam2_reset */
+		<&range 37 1 0x01500>,	/* flash */
+		<&range 38 1 0x01500>,	/* torch */
 #else
 		<&range 33 4 0x100>,
 		<&range 37 1 0x01500>,	/* flash */
@@ -554,6 +560,34 @@
 			0x28c 0x4100	/* cam1_reset */
 		>;
 	};
+#elif defined SOFIA3G_MRD5S
+	cam1_default_pins:cam1_default_pins {
+		pinctrl-single,pins = <
+			0x294 0x1500	/* cam_flash */
+			0x298 0x1500	/* cam_torch */
+			0x29c 0x1500	/* cam1_pd */
+			0x28c 0x1500	/* cam1_rst */
+			0x310 0x1500	/* cam_1v2_en */
+		>;
+	};
+	cam1_inactive_pins:cam1_inactive_pins {
+		pinctrl-single,pins = <
+			0x294 0x4100	/* cam_flash */
+			0x298 0x4100	/* cam_torch */
+			0x29c 0x4100	/* cam1_pd */
+			0x28c 0x4100	/* cam1_rst */
+			0x310 0x4100	/* cam_1v2_en */
+		>;
+	};
+	cam1_sleep_pins:cam1_sleep_pins {
+		pinctrl-single,pins = <
+			0x294 0x4100	/* cam_flash */
+			0x298 0x4100	/* cam_torch */
+			0x29c 0x4100	/* cam1_pd */
+			0x28c 0x4100	/* cam1_rst */
+			0x310 0x4100	/* cam_1v2_en */
+		>;
+	};
 #else
 	cam1_default_pins:cam1_default_pins {
 		pinctrl-single,pins = <
@@ -580,6 +614,29 @@
 		>;
 	};
 #endif
+#if defined SOFIA3G_MRD5S
+    cam2_default_pins:cam2_default_pins {
+		pinctrl-single,pins = <
+			0x2a0 0x1500    /* cam2_pd */
+			0x290 0x1500    /* cam2_rst */
+			0x370 0x1010    /* clkout2 */
+		>;
+	};
+	cam2_inactive_pins:cam2_inactive_pins {
+		pinctrl-single,pins = <
+			0x2a0 0x4100	/* cam2_pd */
+			0x290 0x4100    /* cam2_rst */
+			0x370 0x4100	/* clkout2 */
+		>;
+	};
+	cam2_sleep_pins:cam2_sleep_pins {
+		pinctrl-single,pins = <
+			0x2a0 0x4100	/* cam2_pd */
+			0x290 0x4100    /* cam2_rst */
+			0x370 0x1010	/* clkout2 */
+		>;
+	};
+#else
 	cam2_default_pins:cam2_default_pins {
 		pinctrl-single,pins = <
 			0x2a0 0x1500	/* cam2_pd */
@@ -598,6 +655,7 @@
 			0x370 0x1010	/* clkout2 */
 		>;
 	};
+#endif
 	jtag_default_pins:jtag_default_pins {
 		pinctrl-single,pins = <
 			0x2a4 0x11060	/* jtag_rtck */
@@ -655,7 +713,7 @@
 			0x2b8 0x4100	/* sdmmc_dat2 */
 			0x2bc 0x4100	/* sdmmc_dat3 */
 			0x2c0 0x4100	/* sdmmc_clk */
-			0x2c4 0x1	/* sdmmc_card_detect */
+			0x2c4 0x4100	/* sdmmc_card_detect */
 		>;
 	};
 	sdmmc_sleep_pins:sdmmc_sleep_pins {

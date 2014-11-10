@@ -50,7 +50,7 @@
 #define OV9760_TIMING_FRAME_LENGTH_LINES_LOW_REG 0x341
 #define OV9760_TIMING_LINE_LENGTH_PCKL_HIGH_REG 0x342
 #define OV9760_TIMING_LINE_LENGTH_PCKL_LOW_REG 0x343
-#define OV9760_INTEGRATION_TIME_MARGIN 0
+#define OV9760_INTEGRATION_TIME_MARGIN 4
 #define OV9760_TIMING_X_INC		0x3820
 #define OV9760_TIMING_Y_INC		0x3821
 
@@ -136,7 +136,7 @@ static const struct ov_camera_module_reg ov9760_init_tab_1_6MP_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x30b3, 0x32},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x30b4, 0x02},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x30b5, 0x00},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503, 0x27},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503, 0x07},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3509, 0x10},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3600, 0x7c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3621, 0xb8},
@@ -212,13 +212,13 @@ static const struct ov_camera_module_reg ov9760_init_tab_1_6MP_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x0c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3812, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x08},
-	/* {OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503, 0x00}, */ /* AEC+AEG */
 	/* default exposure and gain: */
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3500, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3501, 0x20},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3502, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x350a, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x350b, 0x40},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x320b, 0x00}
 };
 
 #if 0
@@ -361,9 +361,71 @@ static struct ov_camera_module_config ov9760_configs[] = {
 		.reg_table_num_entries =
 			sizeof(ov9760_init_tab_1_6MP_30fps)
 			/
-			sizeof(ov9760_init_tab_1_6MP_30fps[0])
+			sizeof(ov9760_init_tab_1_6MP_30fps[0]),
+		.v_blanking_time_us = 2000 /*empirically measured time*/
 	},
 };
+
+/*--------------------------------------------------------------------------*/
+
+static int ov9760_g_VTS(struct ov_camera_module *cam_mod, u32 *vts)
+{
+	u32 msb, lsb;
+	int ret;
+
+	ret = ov_camera_module_read_reg_table(
+		cam_mod,
+		OV9760_TIMING_FRAME_LENGTH_LINES_HIGH_REG,
+		&msb);
+	if (IS_ERR_VALUE(ret))
+		goto err;
+
+	ret = ov_camera_module_read_reg_table(
+		cam_mod,
+		OV9760_TIMING_FRAME_LENGTH_LINES_LOW_REG,
+		&lsb);
+	if (IS_ERR_VALUE(ret))
+		goto err;
+
+	*vts = (msb << 8) | lsb;
+
+	return 0;
+err:
+	ov_camera_module_pr_err(cam_mod,
+			"failed with error (%d)\n", ret);
+	return ret;
+}
+
+/*--------------------------------------------------------------------------*/
+
+static int ov9760_auto_adjust_fps(struct ov_camera_module *cam_mod,
+	u32 exp_time)
+{
+	int ret;
+	u32 vts;
+
+	if ((cam_mod->exp_config.exp_time + OV9760_INTEGRATION_TIME_MARGIN) >
+		cam_mod->vts_min)
+		vts = cam_mod->exp_config.exp_time +
+			OV9760_INTEGRATION_TIME_MARGIN;
+	else
+		vts = cam_mod->vts_min;
+	ret = ov_camera_module_write_reg(cam_mod,
+		OV9760_TIMING_FRAME_LENGTH_LINES_LOW_REG,
+		vts & 0xFF);
+	ret |= ov_camera_module_write_reg(cam_mod,
+		OV9760_TIMING_FRAME_LENGTH_LINES_HIGH_REG,
+		(vts >> 8) & 0xFF);
+
+	if (IS_ERR_VALUE(ret))
+		ov_camera_module_pr_err(cam_mod,
+				"failed with error (%d)\n", ret);
+	else
+		ov_camera_module_pr_debug(cam_mod,
+				"vts = %d\n", vts);
+
+	return ret;
+}
 
 /*--------------------------------------------------------------------------*/
 
@@ -403,6 +465,9 @@ static int ov9760_write_aec(struct ov_camera_module *cam_mod)
 		ret |= ov_camera_module_write_reg(cam_mod,
 			OV9760_AEC_PK_LONG_EXPO_1ST_REG,
 			OV9760_FETCH_1ST_BYTE_EXP(exp_time));
+		if (!IS_ERR_VALUE(ret) && cam_mod->auto_adjust_fps)
+			ret = ov9760_auto_adjust_fps(cam_mod,
+				cam_mod->exp_config.exp_time);
 		if (cam_mod->state == OV_CAMERA_MODULE_STREAMING) {
 			ret = ov_camera_module_write_reg(cam_mod,
 				OV9760_AEC_GROUP_UPDATE_ADDRESS,
@@ -512,21 +577,9 @@ static int ov9760_g_timings(struct ov_camera_module *cam_mod,
 		((OV9760_EXT_CLK / pll2_prediv) * pll2_multiplier)
 		/ (pll2_divs * pll_seld5x2);
 
-	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
-		cam_mod,
-		OV9760_TIMING_FRAME_LENGTH_LINES_HIGH_REG,
-		&reg_val)))
+	ret = ov9760_g_VTS(cam_mod, &timings->frame_length_lines);
+	if (IS_ERR_VALUE(ret))
 		goto err;
-
-	timings->frame_length_lines = reg_val <<  8;
-
-	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
-		cam_mod,
-		OV9760_TIMING_FRAME_LENGTH_LINES_LOW_REG,
-		&reg_val)))
-		goto err;
-
-	timings->frame_length_lines |= reg_val;
 
 	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
 		cam_mod,
@@ -544,7 +597,7 @@ static int ov9760_g_timings(struct ov_camera_module *cam_mod,
 
 	timings->line_length_pck |= reg_val;
 
-	timings->coarse_integration_time_min = 0;
+	timings->coarse_integration_time_min = 1;
 	timings->coarse_integration_time_max_margin =
 		OV9760_INTEGRATION_TIME_MARGIN;
 
@@ -736,6 +789,9 @@ static int ov9760_start_streaming(struct ov_camera_module *cam_mod)
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
 
+	ret = ov9760_g_VTS(cam_mod, &cam_mod->vts_min);
+	if (IS_ERR_VALUE(ret))
+		goto err;
 	ret = ov9760_write_aec(cam_mod);
 	if (IS_ERR_VALUE(ret))
 		goto err;

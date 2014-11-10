@@ -1,4 +1,19 @@
 #include "prh_cfg.h"
+core_pm:core_pm {
+	compatible = "intel,vpower";
+	intel,prh_mode = "async";
+
+	#address-cells = < 0 >;
+	interrupts = < 0 >;
+	interrupt-parent = <&core_pm>;
+	#interrupt-cells = < 1 >;
+#ifdef SOFIA3G_ES2_TAB_SVB
+	interrupt-map = < 0 &hirq HIRQ_PMIC_PRH_SIGNALING IRQ_TYPE_DEFAULT>;
+#else
+       interrupt-map = < 0 &hirq HIRQ_PRH_SIGNALING IRQ_TYPE_DEFAULT>;
+#endif
+	interrupt-names = "notification";
+};
 
 generic_pm_class:generic_pm_class {
 	compatible = "intel,xgold_pm_class";

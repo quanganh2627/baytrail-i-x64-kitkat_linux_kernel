@@ -52,7 +52,7 @@
 #define OV13850_TIMING_VTS_LOW_REG 0x380f
 #define OV13850_TIMING_HTS_HIGH_REG 0x380c
 #define OV13850_TIMING_HTS_LOW_REG 0x380d
-#define OV13850_INTEGRATION_TIME_MARGIN 0
+#define OV13850_INTEGRATION_TIME_MARGIN 4
 #define OV13850_TIMING_X_INC		0x3814
 #define OV13850_TIMING_Y_INC		0x3815
 #define OV13850_HORIZONTAL_START_HIGH_REG 0x3800
@@ -286,6 +286,8 @@ ov13850_init_tab_2112_1568_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5e00, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5e10, 0x1c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3509, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x320B, 0x00},
 	/* Convert_to 2112x1568 26MHz 572Mbps/lane 2lane*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3614, 0x25},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0302, 0x33},
@@ -567,7 +569,9 @@ static const struct ov_camera_module_reg
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4824, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4825, 0x32},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4830, 0x00},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3509, 0x10}
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3509, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x320B, 0x00}
 };
 
 #if 0
@@ -1084,7 +1088,8 @@ static struct ov_camera_module_config ov13850_configs[] = {
 		.reg_table_num_entries =
 			sizeof(ov13850_init_tab_2112_1568_30fps)
 			/
-			sizeof(ov13850_init_tab_2112_1568_30fps[0])
+			sizeof(ov13850_init_tab_2112_1568_30fps[0]),
+		.v_blanking_time_us = 2000 /*empirically measured time*/
 	},
 	{
 		.name = "13M_15fps",
@@ -1106,9 +1111,72 @@ static struct ov_camera_module_config ov13850_configs[] = {
 		.reg_table_num_entries =
 			sizeof(ov13850_init_tab_4048_3040_15fps_vfifo)
 			/
-			sizeof(ov13850_init_tab_4048_3040_15fps_vfifo[0])
+			sizeof(ov13850_init_tab_4048_3040_15fps_vfifo[0]),
+		.v_blanking_time_us = 2000 /*empirically measured time*/
 	},
 };
+
+/*--------------------------------------------------------------------------*/
+
+static int ov13850_g_VTS(struct ov_camera_module *cam_mod, u32 *vts)
+{
+	u32 msb, lsb;
+	int ret;
+
+	ret = ov_camera_module_read_reg_table(
+		cam_mod,
+		OV13850_TIMING_VTS_HIGH_REG,
+		&msb);
+	if (IS_ERR_VALUE(ret))
+		goto err;
+
+	ret = ov_camera_module_read_reg_table(
+		cam_mod,
+		OV13850_TIMING_VTS_LOW_REG,
+		&lsb);
+	if (IS_ERR_VALUE(ret))
+		goto err;
+
+	*vts = (msb << 8) | lsb;
+
+	return 0;
+err:
+	ov_camera_module_pr_err(cam_mod,
+			"failed with error (%d)\n", ret);
+	return ret;
+}
+
+/*--------------------------------------------------------------------------*/
+
+static int ov13850_auto_adjust_fps(struct ov_camera_module *cam_mod,
+	u32 exp_time)
+{
+	int ret;
+	u32 vts;
+
+	if ((cam_mod->exp_config.exp_time + OV13850_INTEGRATION_TIME_MARGIN) >
+		cam_mod->vts_min)
+		vts = cam_mod->exp_config.exp_time +
+			OV13850_INTEGRATION_TIME_MARGIN;
+	else
+		vts = cam_mod->vts_min;
+
+	ret = ov_camera_module_write_reg(cam_mod,
+		OV13850_TIMING_VTS_LOW_REG,
+		vts & 0xFF);
+	ret |= ov_camera_module_write_reg(cam_mod,
+		OV13850_TIMING_VTS_HIGH_REG,
+		(vts >> 8) & 0xFF);
+
+	if (IS_ERR_VALUE(ret))
+		ov_camera_module_pr_err(cam_mod,
+				"failed with error (%d)\n", ret);
+	else
+		ov_camera_module_pr_debug(cam_mod,
+				"vts = %d\n", vts);
+
+	return ret;
+}
 
 /*--------------------------------------------------------------------------*/
 static int ov13850_write_aec(struct ov_camera_module *cam_mod)
@@ -1147,6 +1215,9 @@ static int ov13850_write_aec(struct ov_camera_module *cam_mod)
 		ret |= ov_camera_module_write_reg(cam_mod,
 			OV13850_AEC_PK_LONG_EXPO_1ST_REG,
 			OV13850_FETCH_1ST_BYTE_EXP(exp_time));
+		if (!IS_ERR_VALUE(ret) && cam_mod->auto_adjust_fps)
+			ret = ov13850_auto_adjust_fps(cam_mod,
+				cam_mod->exp_config.exp_time);
 		if (cam_mod->state == OV_CAMERA_MODULE_STREAMING) {
 			ret = ov_camera_module_write_reg(cam_mod,
 				OV13850_AEC_GROUP_UPDATE_ADDRESS,
@@ -1305,22 +1376,12 @@ static int ov13850_g_timings(struct ov_camera_module *cam_mod,
 		pll2_sys_prediv * pll2_sys_div_x2)) *
 		pll2_multiplier;
 
+	timings->vt_pix_clk_freq_hz *= 4;
+
 	/*VTS*/
-	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
-		cam_mod,
-		OV13850_TIMING_VTS_HIGH_REG,
-		&reg_val)))
+	ret = ov13850_g_VTS(cam_mod, &timings->frame_length_lines);
+	if (IS_ERR_VALUE(ret))
 		goto err;
-
-	timings->frame_length_lines = reg_val <<  8;
-
-	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
-		cam_mod,
-		OV13850_TIMING_VTS_LOW_REG,
-		&reg_val)))
-		goto err;
-
-	timings->frame_length_lines |= reg_val;
 
 	/*HTS*/
 	if (IS_ERR_VALUE(ov_camera_module_read_reg_table(
@@ -1339,10 +1400,7 @@ static int ov13850_g_timings(struct ov_camera_module *cam_mod,
 
 	timings->line_length_pck |= reg_val;
 
-	/* line_time = HTS / (sclk * 4) */
-	timings->line_length_pck /= 4;
-
-	timings->coarse_integration_time_min = 0;
+	timings->coarse_integration_time_min = 1;
 	timings->coarse_integration_time_max_margin =
 		OV13850_INTEGRATION_TIME_MARGIN;
 
@@ -1570,6 +1628,9 @@ static int ov13850_start_streaming(struct ov_camera_module *cam_mod)
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
 
+	ret = ov13850_g_VTS(cam_mod, &cam_mod->vts_min);
+	if (IS_ERR_VALUE(ret))
+		goto err;
 	ret = ov13850_write_aec(cam_mod);
 	if (IS_ERR_VALUE(ret))
 		goto err;

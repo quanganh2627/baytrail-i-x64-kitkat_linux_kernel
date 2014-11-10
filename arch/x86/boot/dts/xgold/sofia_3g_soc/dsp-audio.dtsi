@@ -1,3 +1,8 @@
+lpaudio:lpaudio {
+	compatible = "intel,xgold-lpaudio";
+	reg = <0xE0100000 0x1000>;
+};
+
 pcm_music:pcm_music {
 	compatible = "intel,xgold-snd-pcm";
 	intel,pcm,dma_en = < 0x1 >;
@@ -49,8 +54,9 @@ dsp_audio:dsp_audio {
 	reset-names = "dsp";
 	intel,dsp-pcm-offset = < 2051 3816 >;
 	intel,dsp-clc = < 4 >;
+	intel,dsp-sm-aud-buf-dl-offset = < 594 >;
+	intel,dsp-sm-aud-buf-dl2-offset = < 1556 >;
 	intel,dsp-buf-size-ul-offset = < 1074 >;
-	intel,dsp-buf-size-dl-offset = < 594 >;
 	intel,dsp-sm-aud-buf-ul-offset = < 114 >;
 	intel,dsp-rstmods = < 0x204 >;
 	/* Fix me use DAPM for firmware path setup */

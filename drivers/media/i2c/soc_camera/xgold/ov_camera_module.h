@@ -53,6 +53,7 @@ struct ov_camera_module_config {
 	bool auto_wb_enabled;
 	struct ov_camera_module_reg *reg_table;
 	u32 reg_table_num_entries;
+	u32 v_blanking_time_us;
 };
 
 struct ov_camera_module_exp_config {
@@ -153,6 +154,8 @@ struct ov_camera_module {
 	enum ov_camera_module_state state_before_suspend;
 	struct ov_camera_module_config *active_config;
 	u32 ctrl_updt;
+	u32 vts_min;
+	bool auto_adjust_fps;
 	bool update_config;
 	bool frm_fmt_valid;
 	bool frm_intrvl_valid;

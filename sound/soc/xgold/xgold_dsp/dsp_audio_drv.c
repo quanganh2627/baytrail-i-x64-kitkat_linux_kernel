@@ -17,6 +17,7 @@
  * Contributor(s):
  */
 
+
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/delay.h>
@@ -45,16 +46,17 @@
 #define PROP_DSP_CF						"intel,dsp-cf"
 #define PROP_DSP_REMAIN_PCM				"intel,dsp-pcm-offset"
 #define PROP_DSP_BUF_SIZE_UL_OFFSET		"intel,dsp-buf-size-ul-offset"
-#define PROP_DSP_BUF_SIZE_DL_OFFSET		"intel,dsp-buf-size-dl-offset"
+#define PROP_DSP_SM_AUD_BUF_DL_OFFSET	"intel,dsp-sm-aud-buf-dl-offset"
+#define PROP_DSP_SM_AUD_BUF_DL2_OFFSET	"intel,dsp-sm-aud-buf-dl2-offset"
 #define PROP_DSP_SM_AUD_BUF_UL_OFFSET	"intel,dsp-sm-aud-buf-ul-offset"
-#define PROP_DSP_CMD_GAIN_CONST			"intel,dsp-cmd-gain_const"
-#define PROP_DSP_CMD_SWM_PCM_OUT		"intel,dsp-cmd-swm_pcmout"
-#define PROP_DSP_CMD_SWM_AFE_OUT		"intel,dsp-cmd-swm_afeout"
+#define PROP_DSP_CMD_GAIN_CONST		"intel,dsp-cmd-gain_const"
+#define PROP_DSP_CMD_SWM_PCM_OUT	"intel,dsp-cmd-swm_pcmout"
+#define PROP_DSP_CMD_SWM_AFE_OUT	"intel,dsp-cmd-swm_afeout"
 #define PROP_DSP_CMD_SET_IIR_PCM_LEFT	"intel,dsp-cmd-pcm_iir_left"
 #define PROP_DSP_CMD_SET_IIR_PCM_RIGHT	"intel,dsp-cmd-pcm_iir_right"
-#define PROP_DSP_CMD_SET_IIR_AFE_TX		"intel,dsp-cmd-afe_tx_iir"
-#define PROP_DSP_CMD_SET_GAIN			"intel,dsp-cmd-pcm_gain"
-#define PROP_DSP_CMD_SET_MIX_MATRIX		"intel,dsp-cmd-mix_matrix"
+#define PROP_DSP_CMD_SET_IIR_AFE_TX	"intel,dsp-cmd-afe_tx_iir"
+#define PROP_DSP_CMD_SET_GAIN		"intel,dsp-cmd-pcm_gain"
+#define PROP_DSP_CMD_SET_MIX_MATRIX	"intel,dsp-cmd-mix_matrix"
 #define PROP_DSP_SM_HW_PROBE_A_OFFSET	"intel,dsp-sm-buf_sm_hw_probe_a_offset"
 #define PROP_DSP_SM_HW_PROBE_B_OFFSET	"intel,dsp-sm-buf_sm_hw_probe_b_offset"
 #define PROP_DSP_SM_SPEECH_BUFFER_1	"intel,dsp-sm-buf-speech-buffer_1"
@@ -254,6 +256,7 @@ static int dsp_audio_dev_close(void)
 static void dsp_audio_mark_scheduler_status(struct dsp_aud_cmd_data *p_cmd_data)
 {
 	#define PARM_ON 1
+	#define PARM_UPDATE 2
 	#define PARM_ON_UPDATE 3
 
 	unsigned short *data_trace_ptr;
@@ -264,6 +267,7 @@ static void dsp_audio_mark_scheduler_status(struct dsp_aud_cmd_data *p_cmd_data)
 		/* Check if the command is to start dsp scheduler */
 		if (DSP_AUDIO_CMD_VB_HW_AFE == p_cmd_data->command_id) {
 			if ((PARM_ON == data_trace_ptr[0]) ||
+				(PARM_UPDATE == data_trace_ptr[0]) ||
 				(PARM_ON_UPDATE == data_trace_ptr[0])) {
 				g_dsp_audio_dev->dsp_sched_start = 1;
 				xgold_debug("dsp scheduler marked as started\n");
@@ -531,6 +535,7 @@ static int dsp_audio_dev_set_controls(enum dsp_audio_controls cmd, void *arg)
 					data_trace_ptr[i + 1]);
 
 		xgold_dsp_log("\n");
+
 		ret_val = (int)dsp_audio_cmd(
 			p_cmd_data->command_id,
 			p_cmd_data->command_len,
@@ -873,7 +878,7 @@ static int xgold_dsp_init_reg_array(struct device_node *np,
 	}
 
 	for (i = 0; i < nr; i++) {
-		dsp_reg->reg = (void *)out_values[0];
+		dsp_reg->reg = ioremap(out_values[0], 0x4);
 		dsp_reg->shift = (unsigned char)out_values[1];
 		dsp_reg->width = (unsigned char)out_values[2];
 	}
@@ -892,7 +897,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			PROP_DSP_REMAIN_PCM,
 			dsp->p_dsp_common_data->pcm_offset, 2);
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_REMAIN_PCM);
 
 	/* Buffer size UL offset */
@@ -901,17 +906,26 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_size_ul_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_BUF_SIZE_UL_OFFSET);
 
-	/* Buffer size UL offset */
+	/* Aud SM buffer DL offset */
 	ret = of_property_read_u32(np,
-			PROP_DSP_BUF_SIZE_DL_OFFSET,
-			&dsp->p_dsp_common_data->buf_size_dl_offset);
+			PROP_DSP_SM_AUD_BUF_DL_OFFSET,
+			&dsp->p_dsp_common_data->buf_sm_dl_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
-			PROP_DSP_BUF_SIZE_DL_OFFSET);
+		xgold_debug("Could not find property %s\n",
+			PROP_DSP_SM_AUD_BUF_DL_OFFSET);
+
+	/* Aud SM buffer DL2 offset */
+	ret = of_property_read_u32(np,
+			PROP_DSP_SM_AUD_BUF_DL2_OFFSET,
+			&dsp->p_dsp_common_data->buf_sm_dl2_offset);
+
+	if (ret)
+		xgold_debug("Could not find property %s\n",
+			PROP_DSP_SM_AUD_BUF_DL2_OFFSET);
 
 	/* Aud SM buffer UL offset */
 	ret = of_property_read_u32(np,
@@ -919,7 +933,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_ul_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_AUD_BUF_UL_OFFSET);
 
 	/* Aud SM HW probe A offset */
@@ -928,7 +942,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_hw_probe_a_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_HW_PROBE_A_OFFSET);
 
 	/* Aud SM HW probe B offset */
@@ -937,7 +951,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_hw_probe_b_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_HW_PROBE_B_OFFSET);
 
 	/* Aud SM SPEECH PROBE 1 offset */
@@ -946,7 +960,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_a_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_1);
 
 	/* Aud SM SPEECH PROBE 2 offset */
@@ -955,7 +969,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_b_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_2);
 
 	/* Aud SM SPEECH PROBE 3 offset */
@@ -964,7 +978,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_c_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_3);
 
 	/* Aud SM SPEECH PROBE 4 offset */
@@ -973,7 +987,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_d_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_4);
 
 	/* Aud SM SPEECH PROBE 5 offset */
@@ -982,7 +996,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_e_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_5);
 
 	/* Aud SM SPEECH PROBE 6 offset */
@@ -991,7 +1005,7 @@ static void xgold_dsp_fill_shm_offset(struct device_node *np,
 			&dsp->p_dsp_common_data->buf_sm_speech_probe_f_offset);
 
 	if (ret)
-		xgold_err("Could not find property %s\n",
+		xgold_debug("Could not find property %s\n",
 			PROP_DSP_SM_SPEECH_BUFFER_6);
 
 }
@@ -1032,18 +1046,21 @@ static int dsp_audio_of_parse(struct device *dev, struct dsp_audio_device *dsp)
 	} else if (!strcmp(name, "XG742_FBA")) {
 		dsp->id = XGOLD_DSP_XG742_FBA;
 		dsp->p_dsp_common_data->fba_dev = dev;
-		audio_native_mode = 1;
+		dsp->p_dsp_common_data->native_mode = 1;
 	} else if (!strcmp(name, "XG742_SBA")) {
 		dsp->id = XGOLD_DSP_XG742_SBA;
 		g_dsp_audio_dev = dsp;
-		audio_native_mode = 1;
+		dsp->p_dsp_common_data->native_mode = 1;
 	} else {
 		xgold_err("name id '%s' doesn't match\n", name);
 		ret = -EINVAL;
 	}
 
 	dsp->p_dsp_common_data->num_dsp++;
-	dsp->p_dsp_common_data->native_mode = audio_native_mode;
+	/* audio_native_mode is flag for full native mode.
+	DSP bootup has to be performed for all chip types */
+	if (audio_native_mode)
+		dsp->p_dsp_common_data->native_mode = 1;
 
 #ifndef CONFIG_PLATFORM_DEVICE_PM_VIRT
 	if (XGOLD_DSP_XG742_FBA != dsp->id && XGOLD_DSP_XG742_SBA != dsp->id) {
@@ -1996,8 +2013,8 @@ static int dsp_audio_drv_probe(struct platform_device *pdev)
 		ret = -EBUSY;
 		goto out;
 	}
-	pr_info("%s: ioremap for %X size %X returned %p\n", __func__,
-			res->start, resource_size(res), dsp_dev->shm_regs);
+	pr_info("%s: ioremap for %pR returned %p\n", __func__, res,
+			dsp_dev->shm_regs);
 
 	/* SHM Memory */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "shm-mem");
@@ -2026,8 +2043,8 @@ static int dsp_audio_drv_probe(struct platform_device *pdev)
 
 	dsp_dev->shm_mem_phys = res->start;
 
-	pr_info("%s: ioremap for %X size %X returned %p\n", __func__,
-			res->start, resource_size(res), dsp_dev->shm_mem);
+	pr_info("%s: ioremap for %pR returned %p\n", __func__, res,
+			dsp_dev->shm_mem);
 
 	ret = dsp_audio_of_parse(&pdev->dev, dsp_dev);
 	if (ret) {
@@ -2170,14 +2187,19 @@ static int dsp_audio_drv_remove(struct platform_device *pdev)
 
 static void dsp_audio_drv_shutdown(struct platform_device *pdev)
 {
+	struct dsp_audio_device *dsp = platform_get_drvdata(pdev);
 	struct T_AUD_DSP_CMD_VB_HW_AFE_PAR afe_hw_cmd = { 0 };
 	xgold_debug("dsp_audio_drv_shutdown\n");
 
-	if (g_dsp_audio_dev->dsp_sched_start) {
+	if (dsp->p_dsp_common_data->native_mode && dsp->dsp_sched_start) {
 		xgold_err("%s: Scheduler is on. Turning it off\n", __func__);
 		dsp_audio_cmd(DSP_AUDIO_CMD_VB_HW_AFE,
 				sizeof(struct T_AUD_DSP_CMD_VB_HW_AFE_PAR),
 				(u16 *)&afe_hw_cmd);
+
+		if (dsp->pm_platdata)
+			device_state_pm_set_state_by_name(&pdev->dev,
+					dsp->pm_platdata->pm_state_D3_name);
 	}
 }
 

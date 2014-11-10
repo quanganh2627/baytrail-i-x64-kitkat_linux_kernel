@@ -43,6 +43,9 @@
 #define STAT_O	4
 #define STAT_M	0x3
 
+#define BOOST_UP_O 3
+#define BOOST_UP_M 0x1
+
 #define FAULT_O	0
 #define FAULT_M	0x7
 
@@ -55,6 +58,9 @@
 
 #define IBUS_O 6
 #define IBUS_M 0x3
+
+#define BOOST_EN_O 0
+#define BOOST_EN_M 0x1
 
 /* REG_IBAT */
 #define IOCHARGE_O 4
@@ -80,6 +86,10 @@ enum {
 
 	OVP_OCCURRED = 1,
 
+	BOOSTOV_OCCURRED = 1,
+
+	BATUV_OCCURRED = 1,
+
 	BAT_OVP_OCCURRED = 1,
 
 	T32_TO_OCCURRED = 1,
@@ -101,7 +111,9 @@ enum FAN54015_FAULT_STAT {
 	NO_FAULT,
 	VBUS_OVP,
 	SLEEP_MODE,
+	BOOST_OV = 2,
 	POOR_INPUT_SOURCE,
+	BAT_UV = 3,
 	BATTERY_OVP,
 	THERMAL_SHUTDOWN,
 	TIMER_FAULT,
@@ -121,6 +133,10 @@ struct charger_attrmap fan54015_charger_attr_map[ATTR_MAX] = {
 	[PN_INFO] = {"PN", BITS, REG_IC_INFO, PN_O, PN_M},
 	[REV_INFO] = {"Rev", BITS, REG_IC_INFO, REV_O, REV_M},
 	[HZ_MODE] = {"hz_mode", BITS, REG_CHARGE_CTRL1, HZ_MODE_O, HZ_MODE_M},
+	[BOOST_EN] = {
+		"boost_mode", BITS, REG_CHARGE_CTRL1, BOOST_EN_O, BOOST_EN_M},
+	[BOOST_UP] = {
+		"boost_up", BITS, REG_CHARGE_CTRL0, BOOST_UP_O, BOOST_UP_M},
 	[IOCHARGE] = {"Iocharge", BITS, REG_IBAT, IOCHARGE_O, IOCHARGE_M},
 	[ITERM] = {"Iterm", BITS, REG_IBAT, ITERM_O, ITERM_M},
 	[VOREG] = {"Voreg", BITS, REG_VOREG, VOREG_O, VOREG_M},
@@ -176,10 +192,17 @@ static int fan54015_get_charger_state(struct fan54x_charger *chrgr)
 		chrgr->state.vbus_ovp = OVP_OCCURRED;
 		break;
 	case SLEEP_MODE:
-		chrgr->state.sleep_mode = SLEEP_MODE_OCCURRED;
+		if (chrgr->state.boost_enabled)
+			chrgr->state.boost_ov = BOOSTOV_OCCURRED;
+		else
+			chrgr->state.sleep_mode = SLEEP_MODE_OCCURRED;
 		break;
 	case POOR_INPUT_SOURCE:
-		chrgr->state.poor_input_source = POOR_INPUT_SOURCE_OCCURRED;
+		if (chrgr->state.boost_enabled)
+			chrgr->state.bat_uv = BATUV_OCCURRED;
+		else
+			chrgr->state.poor_input_source =
+				POOR_INPUT_SOURCE_OCCURRED;
 		break;
 	case BATTERY_OVP:
 		chrgr->state.bat_ovp = BAT_OVP_OCCURRED;
@@ -216,7 +239,15 @@ struct fan54x_charger fan54015_chrgr_data = {
 	.model_name = "FAN54015",
 	.manufacturer = "FAIRCHILD",
 
+	.otg_nb = {
+		.notifier_call = fan54x_otg_notification_handler,
+	},
+
 	.chgint_bh = {
+		.in_suspend = false,
+		.pending_evt = false,
+	},
+	.boost_op_bh = {
 		.in_suspend = false,
 		.pending_evt = false,
 	},

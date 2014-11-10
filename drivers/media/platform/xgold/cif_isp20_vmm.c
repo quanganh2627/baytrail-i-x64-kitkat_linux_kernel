@@ -30,7 +30,11 @@
 #include <linux/platform_device.h>
 #include <linux/platform_device_pm.h>
 #include <linux/interrupt.h>
-#include <sofia/vmm_platform_service.h>
+#include <sofia/mv_svc_hypercalls.h>
+#include <linux/kernel.h>
+#include <linux/i2c.h>
+#include <linux/io.h>
+#include <linux/jiffies.h>
 #include "cif_isp20.h"
 #include <linux/list.h>
 #ifdef CONFIG_DEBUG_FS
@@ -650,8 +654,6 @@ int cif_isp20_pltfrm_reg_trace_printf(
 static void cif_isp20_dbgfs_reg_trace_clear(
 	struct device *dev)
 {
-	unsigned long flags = 0;
-
 	cif_isp20_reg_trace.reg_trace_write_pos = 0;
 	cif_isp20_reg_trace.reg_trace_read_pos = 0;
 }
@@ -1114,7 +1116,7 @@ int cif_isp20_pltfrm_write_cif_ana_bandgap_bias(
 	for (shift = mask; !(shift & 0x1); val <<= 1, shift >>= 1)
 		;
 
-	ret = vmm_reg_write(scu_base_addr + offset, val, mask);
+	ret = mv_svc_reg_write(scu_base_addr + offset, val, mask);
 	if (IS_ERR_VALUE(ret)) {
 		cif_isp20_pltfrm_pr_err(dev,
 			"register write @0x%08x := 0x%08x (mask 0x%08x) failed\n",
@@ -1417,6 +1419,36 @@ const char *cif_isp20_pltfrm_dev_string(
 	return dev_driver_string(dev);
 }
 
+void cif_isp20_pltfrm_event_init(
+	struct device *dev,
+	wait_queue_head_t *event)
+{
+	init_waitqueue_head(event);
+}
+
+void cif_isp20_pltfrm_event_clear(
+	struct device *dev,
+	wait_queue_head_t *event)
+{
+}
+
+void cif_isp20_pltfrm_event_signal(
+	struct device *dev,
+	wait_queue_head_t *event)
+{
+	wake_up_interruptible(event);
+}
+
+int cif_isp20_pltfrm_event_wait_timeout(
+	struct device *dev,
+	wait_queue_head_t *event,
+	bool condition,
+	unsigned long timeout_us)
+{
+	return wait_event_interruptible_timeout(
+		*event, condition, (timeout_us * HZ) / 1000000);
+}
+
 struct device *cif_isp20_pltfrm_get_img_src_device(
 	struct device *dev,
 	enum cif_isp20_inp inp)
@@ -1489,20 +1521,22 @@ err:
 	return ERR_PTR(ret);
 }
 
-
 void cif_isp20_pltfrm_dev_release(
 	struct device *dev)
 {
+	int ret;
 	struct cif_isp20_pltfrm_data *pdata = dev->platform_data;
 
 	cif_isp20_reset_csi_configs(dev, CIF_ISP20_INP_CSI_0);
 	cif_isp20_reset_csi_configs(dev, CIF_ISP20_INP_CSI_1);
 #ifdef CONFIG_DEBUG_FS
-	{
-		debugfs_remove(pdata->dbgfs.dir);
-		debugfs_remove(pdata->dbgfs.csi0_file);
-		debugfs_remove(pdata->dbgfs.csi1_file);
-	}
+	debugfs_remove(pdata->dbgfs.csi0_file);
+	debugfs_remove(pdata->dbgfs.csi1_file);
+	debugfs_remove_recursive(pdata->dbgfs.dir);
 #endif
+	ret = device_state_pm_remove_device(dev);
+	if (IS_ERR_VALUE(ret))
+		cif_isp20_pltfrm_pr_err(NULL,
+			"pm remove device failed with error %d\n", ret);
 }
 

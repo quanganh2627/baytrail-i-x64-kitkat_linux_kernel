@@ -36,6 +36,7 @@
 #include <linux/idi/idi_ids.h>
 #include <linux/idi/idi_bus.h>
 #include <linux/idi/idi_device_pm.h>
+#include <linux/usb/phy-intel.h>
 
 #include <linux/time.h>
 #include <linux/wakelock.h>
@@ -432,8 +433,12 @@ static int fan54x_dbg_state_show(struct seq_file *m, void *data)
 	seq_printf(m, "health = %d\n", chrgr->state.health);
 	seq_printf(m, "cable_type = %d\n", chrgr->state.cable_type);
 	seq_printf(m, "charger_enabled = %d\n", chrgr->state.charger_enabled);
-	seq_printf(m, "charging_enabled = %d\n\n",
+	seq_printf(m, "charging_enabled = %d\n",
 				chrgr->state.charging_enabled);
+	seq_printf(m, "to_enable_boost = %d\n\n",
+				chrgr->state.to_enable_boost);
+	seq_printf(m, "boost_enabled = %d\n\n",
+				chrgr->state.boost_enabled);
 
 	seq_printf(m, "pok_b = %u\n", chrgr->state.pok_b);
 	seq_printf(m, "ovp_flag = %u\n", chrgr->state.ovp_flag);
@@ -451,6 +456,8 @@ static int fan54x_dbg_state_show(struct seq_file *m, void *data)
 					chrgr->state.poor_input_source);
 	seq_printf(m, "bat_ovp = %u\n", chrgr->state.bat_ovp);
 	seq_printf(m, "no_bat = %u\n", chrgr->state.no_bat);
+	seq_printf(m, "bat_uv = %u\n", chrgr->state.bat_uv);
+	seq_printf(m, "boost_ov = %u\n\n", chrgr->state.boost_ov);
 
 	return 0;
 }
@@ -1044,6 +1051,94 @@ static int fan54x_charger_get_property(struct power_supply *psy,
 	return ret;
 }
 
+static void fan54x_boost_worker(struct work_struct *work)
+{
+	int ret;
+	u8 val;
+	struct fan54x_charger *chrgr =
+		container_of(work, struct fan54x_charger, boost_work.work);
+
+	down(&chrgr->prop_lock);
+
+	ret = fan54x_attr_read(chrgr->client, BOOST_EN, &val);
+
+	if ((!ret) && val && chrgr->state.boost_enabled) {
+		fan54x_trigger_wtd(chrgr);
+		schedule_delayed_work(&chrgr->boost_work, BOOST_WORK_DELAY);
+	}
+
+	up(&chrgr->prop_lock);
+	return;
+}
+
+static void fan54x_set_boost(struct work_struct *work)
+{
+	struct fan54x_charger *chrgr =
+		container_of(work, struct fan54x_charger,
+					boost_op_bh.work);
+	int on = chrgr->state.to_enable_boost;
+	int ret = 0;
+	u8 chr_reg;
+
+	down(&chrgr->prop_lock);
+
+	/* Clear state flags */
+	chrgr->state.boost_ov = 0;
+	chrgr->state.bat_uv = 0;
+
+	if (on) {
+		/* Enable boost regulator */
+		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 1);
+		if (ret)
+			goto exit_boost;
+
+		/* Boost startup time is 2 ms max */
+		mdelay(2);
+
+		/* Ensure Boost is in regulation */
+		ret = fan54x_attr_read(chrgr->client, BOOST_UP, &chr_reg);
+		if (ret)
+			goto exit_boost;
+
+		if (!chr_reg) {
+			/*
+			 * In case of BOOST fault, BOOST_EN bit is automatically
+			 * cleared
+			 */
+			pr_err("%s: boost mode didn't go in regulation\n",
+					__func__);
+			ret = -EINVAL;
+			goto exit_boost;
+		}
+
+		/* Enable boost mode flag */
+		chrgr->state.boost_enabled = 1;
+
+		wake_lock(&chrgr->suspend_lock);
+		schedule_delayed_work(&chrgr->boost_work, BOOST_WORK_DELAY);
+	} else {
+		cancel_delayed_work(&chrgr->boost_work);
+
+		/* Release Wake Lock */
+		wake_unlock(&chrgr->suspend_lock);
+
+		/* Disable boost mode flag */
+		chrgr->state.boost_enabled = 0;
+
+		/* Disable boost regulator */
+		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 0);
+		if (ret)
+			pr_err("%s: fail to disable boost mode\n", __func__);
+	}
+
+exit_boost:
+	if (on && ret)
+		atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+					INTEL_USB_DRV_VBUS_ERR, NULL);
+	up(&chrgr->prop_lock);
+	return;
+}
+
 /**
  * fan54x_chgint_cb_work_func	function executed by
  *				fan54x_charger::chgint_cb_work work
@@ -1073,6 +1168,30 @@ static void fan54x_chgint_cb_work_func(struct work_struct *work)
 	ret = chrgr->get_charger_state(chrgr);
 	if (ret != 0)
 		goto fail;
+
+	if (chrgr->state.boost_enabled) {
+		if (chrgr->state.boost_ov || chrgr->state.bat_uv
+			|| chrgr->state.tsd_flag || chrgr->state.ovp_flag ||
+			 chrgr->state.t32s_timer_expired) {
+			/*
+			 * In case of BOOST fault, BOOST_EN bit is automatically
+			 * cleared. Only need to clear boost enabled sw flag and
+			 * stop the booster workqueue
+			 */
+			atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+					INTEL_USB_DRV_VBUS_ERR, NULL);
+
+			wake_unlock(&chrgr->suspend_lock);
+			if (chrgr->state.boost_ov)
+				pr_err("%s: boost mode overcurrent detected\n",
+						__func__);
+			if (chrgr->state.bat_uv)
+				pr_err("%s: boost mode under voltage detected\n",
+						__func__);
+
+			goto fail;
+		}
+	}
 
 	if (chrgr->state.treg_flag)
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TREG_IS_ON, 0, 0);
@@ -1345,8 +1464,11 @@ static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
 	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
 					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+
+	/* Set CHGRST ball to low for MRD P1 (FAN54015) */
 	/* charger WR */
-	iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
+	if (chrgr->pn == 5)
+		iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
 
 	ret = idi_set_power_state(chrgr->ididev, pm_state_dis, false);
 
@@ -1399,6 +1521,27 @@ static int fan54x_set_pinctrl_state(struct i2c_client *client,
 	}
 
 	return 0;
+}
+
+int fan54x_otg_notification_handler(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct fan54x_charger *chrgr =
+		container_of(nb, struct fan54x_charger, otg_nb);
+
+	switch (event) {
+	case INTEL_USB_DRV_VBUS:
+		if (!data)
+			return NOTIFY_BAD;
+		chrgr->state.to_enable_boost = *((bool *)data);
+		unfreezable_bh_schedule(&chrgr->boost_op_bh);
+		break;
+
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
 }
 
 static ssize_t dbg_logs_show(struct device *dev, struct device_attribute *attr,
@@ -1591,6 +1734,7 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 
 
 	INIT_DELAYED_WORK(&chrgr->charging_work, fan54x_charging_worker);
+	INIT_DELAYED_WORK(&chrgr->boost_work, fan54x_boost_worker);
 
 	sema_init(&chrgr->prop_lock, 1);
 
@@ -1694,12 +1838,26 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	making a dummy interrupt bottom half invocation */
 	queue_work(chrgr->chgint_bh.wq, &chrgr->chgint_bh.work);
 
+	if (unfreezable_bh_create(&chrgr->boost_op_bh, "boost_op_wq",
+			"fan54x_boost_lock", fan54x_set_boost)) {
+		ret = -ENOMEM;
+		goto pmu_irq_fail;
+	}
+
+	ret = usb_register_notifier(otg_handle, &chrgr->otg_nb);
+	if (ret) {
+		pr_err("ERROR!: registration for OTG notifications failed\n");
+		goto boost_fail;
+	}
+
 	fan54x_setup_dbglogs_sysfs_attr(&client->dev);
 
 	device_init_wakeup(&client->dev, true);
 
 	return 0;
 
+boost_fail:
+	unfreezable_bh_destroy(&chrgr->boost_op_bh);
 pmu_irq_fail:
 	power_supply_unregister(&chrgr->ac_psy);
 fail_ac_registr:
@@ -1726,6 +1884,7 @@ static int __exit fan54x_i2c_remove(struct i2c_client *client)
 	wake_lock_destroy(&chrgr->suspend_lock);
 
 	unfreezable_bh_destroy(&chrgr->chgint_bh);
+	unfreezable_bh_destroy(&chrgr->boost_op_bh);
 
 	cancel_delayed_work_sync(&chrgr->charging_work);
 	if (chrgr->otg_handle)
@@ -1827,6 +1986,7 @@ static int fan54x_suspend(struct device *dev)
 			enable_irq_wake(chrgr->irq);
 		}
 		unfreezable_bh_suspend(&chrgr->chgint_bh);
+		unfreezable_bh_suspend(&chrgr->boost_op_bh);
 		return 0;
 	}
 }
@@ -1843,6 +2003,7 @@ static int fan54x_resume(struct device *dev)
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_RESUME, 0, 0);
 
 	unfreezable_bh_resume(&chrgr->chgint_bh);
+	unfreezable_bh_resume(&chrgr->boost_op_bh);
 	if (device_may_wakeup(dev)) {
 		pr_info("fan: disable wakeirq\n");
 		disable_irq_wake(chrgr->irq);

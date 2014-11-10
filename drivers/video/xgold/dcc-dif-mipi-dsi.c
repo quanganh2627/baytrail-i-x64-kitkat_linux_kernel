@@ -202,10 +202,14 @@ static void dcc_mipidsi_send_short_packet(struct dcc_display *lcd,
 		dsihead |= data_msg[0]<<16;
 	}
 
-	DCC_DBG2("dsi short pkt: (head:0x%08x cfg:0x%08x)\n",
+	DCC_DBG3("dsi short pkt: (head:0x%08x cfg:0x%08x)\n",
 			dsihead, dsicfg);
 
 	gra_write_field(pdata, EXR_DIF_CSREG, difcsreg);
+
+	gra_write_field(pdata, INR_DIF_DSIVID6,
+		BITFLDS(INR_DIF_DSIVID6_LASTPIXEL, msg->length));
+
 	gra_write_field(pdata, INR_DIF_DSIHEAD, dsihead);
 	gra_write_field(pdata, INR_DIF_DSICFG, dsicfg);
 }
@@ -253,6 +257,8 @@ static void dcc_mipidsi_send_long_packet_dma(struct dcc_display *lcd,
 				pdata->mem.vbase+(i*4), reg);
 		i++;
 	}
+	/* Drain the write buffer */
+	wmb();
 	gra_write_field(pdata, EXR_DIF_CSREG,
 		BITFLDS(EXR_DIF_CSREG_GRACMD, 1));
 #endif
@@ -260,7 +266,7 @@ static void dcc_mipidsi_send_long_packet_dma(struct dcc_display *lcd,
 	gra_write_field(pdata, INR_DIF_VIDEOBASE, pdata->mem.pbase);
 	gra_write_field(pdata, INR_DIF_VIDEOSIZE, i);
 
-	DCC_DBG2(
+	DCC_DBG3(
 		"dsi long dma pkt: wcnt:0x%04x (head:0x%08x cfg:0x%08x)\n",
 		msg->length+1, dsihead, dsicfg);
 	gra_write_field(pdata, INR_DIF_DSIVID1,
@@ -580,12 +586,16 @@ static int dcc_dsi_configure_video_mode(struct dcc_display *lcd,
 	}
 	dsicfg = DSI_CFG_TX_HS_PIXEL(dif->nblanes, dif->mode);
 
+	/* Temporarily disable DSI_PULSES mode for MRD5S enable */
+#if 0
 	if (dif->video_mode == DSI_PULSES) {
 		dcc_dsi_get_line(lcd,
 				nlines + dif->vfp + dif->vbp + dif->vsa,
 				pdata->clk_rate,
 				lcd->fps, &dif->bllp_time, &dif->line_time);
-	} else {
+	} else
+#endif
+	{
 		dcc_dsi_get_bllp(lcd,
 				nlines + dif->vfp + dif->vbp + dif->vsa,
 				stride + dif->hfp + dif->hbp,
@@ -867,7 +877,7 @@ static void dcc_dsi_send_msglist(struct dcc_display *lcd,
 
 	list_for_each_entry(msg, &msgs->list, list) {
 		mdelay(1);
-		DCC_DBG2("Sending command 0x%02x 0x%02x of length %d\n",
+		DCC_DBG3("Sending command 0x%02x 0x%02x of length %d\n",
 		 msg->header, msg->type, msg->length);
 		dcc_dsi_send_cmd(lcd, msg);
 	}

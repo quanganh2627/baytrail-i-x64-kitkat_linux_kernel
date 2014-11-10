@@ -163,9 +163,15 @@ static struct snd_soc_dai_link xgold_dai[] = {
 		.name = "XGOLD_SPEECH_PROBE_F",
 		.stream_name = "Speech Probe_F",
 		.ignore_suspend = 1,
+	},
+#endif
+#endif
+	/* PCM2 front end device */
+	{
+		.name = "XGOLD_PCM_2",
+		.stream_name = "PCM Audio 2",
+		.ignore_suspend = 1,
 	}
-#endif
-#endif
 };
 
 /* Audio machine driver */
@@ -188,7 +194,7 @@ static int xgold_mc_probe(struct platform_device *pdev)
 	xgold_debug("%s:\n", __func__);
 
 	xgold_snd_card.dev = &pdev->dev;
-	snd_soc_card_set_drvdata(&xgold_snd_card, (void *)audio_native_mode);
+	snd_soc_card_set_drvdata(&xgold_snd_card, &audio_native_mode);
 
 #ifdef CONFIG_OF
 	codec_of_node = of_parse_phandle(np,
@@ -208,15 +214,12 @@ static int xgold_mc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	/* for LTE we use native mode by default */
-	if (!strcmp(codec_dai_name, "pmic_afe_i2s"))
-		audio_native_mode = 1;
-
 	if (!audio_native_mode) {
 		for (i = 0; i < xgold_snd_card.num_links; i++) {
 			dai_link = &xgold_snd_card.dai_link[i];
 
-			if (!strcmp(dai_link->stream_name, "PCM Audio")) {
+			if (!strncmp(dai_link->stream_name, "PCM Audio",
+						strlen("PCM Audio"))) {
 				dai_link->cpu_of_node =
 					dai_link->platform_of_node =
 					of_parse_phandle(np, "intel,pcm-audio",
@@ -270,7 +273,8 @@ static int xgold_mc_probe(struct platform_device *pdev)
 			dai_link->codec_of_node = codec_of_node;
 			dai_link->codec_dai_name = codec_dai_name;
 
-			if (!strcmp(dai_link->stream_name, "PCM Audio"))
+			if (!strncmp(dai_link->stream_name, "PCM Audio",
+						strlen("PCM Audio")))
 				dai_link->cpu_of_node =
 					dai_link->platform_of_node =
 					of_parse_phandle(np, "intel,pcm-audio",

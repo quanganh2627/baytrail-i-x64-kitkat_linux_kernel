@@ -20,6 +20,7 @@
 #define GC0310_F_NUMBER_DEFAULT_NUM	24
 #define GC0310_F_NUMBER_DEM	10
 #define GC0310_REG_EXPO_COARSE	0x03
+#define GC0310_REG_EXPO_DIV     0x25
 #define GC0310_REG_MAX_AEC	0x3c
 #define GC0310_REG_COLOR_EFFECT	0x83
 #define GC0310_REG_BLOCK_ENABLE	0x42
@@ -166,6 +167,11 @@ static struct gc_table_map gc0310_exposure_tables[] = {
 
 /* 640x480 settings */
 static struct gc_register const gc0310_640x480[] = {
+	{GC_TOK_TERM, 0, 0},
+};
+
+/* init settings */
+static struct gc_register const gc0310_init_settings[] = {
 
 	{ GC_8BIT, 0xfe, 0xf0 },
 	{ GC_8BIT, 0xfe, 0xf0 },
@@ -490,13 +496,13 @@ static struct gc_register const gc0310_640x480[] = {
 
 	{ GC_8BIT, 0x27, 0x01 },/* 30fps */
 	{ GC_8BIT, 0x28, 0xdd },
-	{ GC_8BIT, 0x29, 0x03 },/* 20fps */
-	{ GC_8BIT, 0x2a, 0x1b },
-	{ GC_8BIT, 0x2b, 0x06 },/* 10fps */
-	{ GC_8BIT, 0x2c, 0x36 },
+	{ GC_8BIT, 0x29, 0x02 },/* 20fps */
+	{ GC_8BIT, 0x2a, 0x7c },
+	{ GC_8BIT, 0x2b, 0x03 },/* 10fps */
+	{ GC_8BIT, 0x2c, 0x1b },
 	{ GC_8BIT, 0x2d, 0x09 },/* 6.25fps */
 	{ GC_8BIT, 0x2e, 0xf0 },
-	{ GC_8BIT, 0x3c, 0x20 },
+	{ GC_8BIT, 0x3c, 0x00 },
 	{ GC_8BIT, 0xfe, 0x00 },
 
 	{ GC_TOK_TERM, 0, 0}
@@ -526,7 +532,7 @@ struct gc_resolution gc0310_res_video[] = {
 
 struct gc_mode_info gc0310_mode_info[] = {
 	[0] = {
-		.init_settings = NULL,
+		.init_settings = gc0310_init_settings,
 		.res_preview = gc0310_res_preview,
 		.res_still = gc0310_res_still,
 		.res_video = gc0310_res_video,
@@ -855,6 +861,7 @@ struct gc_product_info gc0310_product_info = {
 	.f_number_range = GC0310_FNUMBER_RANGE_VALUE,
 
 	.reg_expo_coarse = GC0310_REG_EXPO_COARSE,
+	.reg_expo_div = GC0310_REG_EXPO_DIV,
 
 	.power_up_delays_ms = {5, 10, 0},
 

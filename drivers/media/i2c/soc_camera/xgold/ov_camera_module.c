@@ -16,9 +16,11 @@
 #include <linux/delay.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-controls_intel.h>
 #include <media/videobuf-core.h>
 #include <linux/slab.h>
 #include <linux/gcd.h>
+#include <media/v4l2-controls_intel.h>
 
 #include "ov_camera_module.h"
 
@@ -43,6 +45,7 @@ static void ov_camera_module_reset(
 	cam_mod->wb_config.auto_wb = false;
 	cam_mod->hflip = false;
 	cam_mod->vflip = false;
+	cam_mod->auto_adjust_fps = false;
 	cam_mod->rotation = 0;
 	cam_mod->ctrl_updt = 0;
 	cam_mod->state = OV_CAMERA_MODULE_POWER_OFF;
@@ -399,6 +402,10 @@ int ov_camera_module_s_power(struct v4l2_subdev *sd, int on)
 				PLTFRM_CAMERA_MODULE_PIN_DVDD,
 				PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 			ret = pltfrm_camera_module_set_pin_state(&cam_mod->sd,
+				PLTFRM_CAMERA_MODULE_PIN_RESET,
+				PLTFRM_CAMERA_MODULE_PIN_STATE_INACTIVE);
+			usleep_range(1000, 1500);
+			ret = pltfrm_camera_module_set_pin_state(&cam_mod->sd,
 				PLTFRM_CAMERA_MODULE_PIN_PD,
 				PLTFRM_CAMERA_MODULE_PIN_STATE_INACTIVE);
 			if (!IS_ERR_VALUE(ret)) {
@@ -429,6 +436,10 @@ int ov_camera_module_s_power(struct v4l2_subdev *sd, int on)
 			ret = pltfrm_camera_module_set_pin_state(
 				&cam_mod->sd,
 				PLTFRM_CAMERA_MODULE_PIN_PD,
+				PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
+			ret = pltfrm_camera_module_set_pin_state(
+				&cam_mod->sd,
+				PLTFRM_CAMERA_MODULE_PIN_RESET,
 				PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 			ret = pltfrm_camera_module_set_pin_state(&cam_mod->sd,
 				PLTFRM_CAMERA_MODULE_PIN_DVDD,
@@ -485,6 +496,14 @@ int ov_camera_module_g_ctrl(struct v4l2_subdev *sd,
 		pltfrm_camera_module_pr_err(&cam_mod->sd,
 			"no active configuration\n");
 		return -EFAULT;
+	}
+
+	if (ctrl->id == INTEL_V4L2_CID_VBLANKING) {
+		ctrl->value = cam_mod->active_config->v_blanking_time_us;
+		pltfrm_camera_module_pr_debug(&cam_mod->sd,
+			"INTEL_V4L2_CID_VBLANKING %d\n",
+			ctrl->value);
+		return 0;
 	}
 
 	if ((cam_mod->state != OV_CAMERA_MODULE_SW_STANDBY) &&
@@ -664,6 +683,12 @@ int ov_camera_module_s_ext_ctrls(
 			"V4L2_CID_AUTO_WHITE_BALANCE %d\n",
 			ctrl->value);
 			break;
+		case INTEL_V4L2_CID_AUTO_FPS:
+			cam_mod->auto_adjust_fps = ctrl->value;
+			pltfrm_camera_module_pr_debug(&cam_mod->sd,
+			"INTEL_V4L2_CID_AUTO_FPS %d\n",
+			ctrl->value);
+			break;
 		case V4L2_CID_FOCUS_ABSOLUTE:
 			{
 				struct v4l2_subdev *af_ctrl;
@@ -769,11 +794,11 @@ long ov_camera_module_ioctl(struct v4l2_subdev *sd,
 
 	pltfrm_camera_module_pr_debug(&cam_mod->sd, "\n");
 
-	if (cmd == INTEL_VIDIOC_PLTFRM_SENSOR_MODULE_TIMINGS) {
+	if (cmd == INTEL_VIDIOC_SENSOR_MODE_DATA) {
 		int ret;
 		struct ov_camera_module_timings ov_timings;
-		struct pltfrm_camera_module_timings *timings =
-		(struct pltfrm_camera_module_timings *) arg;
+		struct isp_supplemental_sensor_mode_data *timings =
+		(struct isp_supplemental_sensor_mode_data *) arg;
 
 		ret = cam_mod->custom.g_timings(cam_mod, &ov_timings);
 
@@ -905,7 +930,6 @@ int ov_camera_module_init(struct ov_camera_module *cam_mod,
 
 	pltfrm_camera_module_pr_debug(&cam_mod->sd, "\n");
 
-
 	cam_mod->custom = *custom;
 	ov_camera_module_reset(cam_mod);
 
@@ -925,6 +949,9 @@ int ov_camera_module_init(struct ov_camera_module *cam_mod,
 
 	ret = pltfrm_camera_module_set_pin_state(&cam_mod->sd,
 					PLTFRM_CAMERA_MODULE_PIN_PD,
+					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
+	ret = pltfrm_camera_module_set_pin_state(&cam_mod->sd,
+					PLTFRM_CAMERA_MODULE_PIN_RESET,
 					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 	if (IS_ERR_VALUE(ret)) {
 		ov_camera_module_release(cam_mod);

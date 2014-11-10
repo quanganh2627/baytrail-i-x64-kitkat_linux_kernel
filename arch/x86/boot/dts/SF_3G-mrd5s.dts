@@ -42,6 +42,9 @@
 
 	ion {
 		compatible = "intel,ion";
+#ifndef RECOVERY_KERNEL
+		secvm-handler;
+#endif
 		cma-heap {
 			intel,heapmem = <   0x00000000 0x08000000 >;
 		};
@@ -99,8 +102,13 @@
 		intel,display-ramless = <1>;
 		intel,display-preinit = <0>;
 		intel,display-if = <&mipi_dsi>;
+#ifdef SOFIA3G_MRD5S
+		intel,display-if-rate = <408000000>;
+		/include/ "xgold/display/OTM1284.dtsi"
+#else
 		intel,display-if-rate = <390000000>;
 		/include/ "xgold/display/OTM1283.dtsi"
+#endif
 		mipi_dsi:mipi-dsi {
 				intel,display-if-min = <104000000>;
 				intel,display-if-max = <550000000>;
@@ -189,12 +197,12 @@
 
 #ifndef RECOVERY_KERNEL
 	afc0: af-controller@0 {
-		compatible = "analog devices,ad5823-v4l2-i2c-subdev";
+		compatible = "whitus vision,wv511-v4l2-i2c-subdev";
 		reg = < 0x0C >;
 	};
 
 	camera0: camera-module@0 {
-		compatible = "omnivision,ov13850-v4l2-i2c-subdev";
+		compatible = "omnivision,OV8858-v4l2-i2c-subdev";
 		reg = < 0x36 >;
 		device_type = "v4l2-i2c-subdev";
 
@@ -203,11 +211,13 @@
 		pinctrl-1 = <&cam1_sleep_pins>;
 		pinctrl-2 = <&cam1_inactive_pins>;
 
-		intel,pd-gpio = <&xgold_pmx_gpio 39>;
-		intel,pd-gpio_1v2 = <&xgold_pmx_gpio 68>;
+		intel,pd-gpio = <&xgold_pmx_gpio 39 0>;
+		intel,pd-gpio_1v2 = <&xgold_pmx_gpio 68 0>;
 		intel,pd-gpio-is_active_low;
-		intel,flash-gpio = <&xgold_pmx_gpio 37>;
-		intel,torch-gpio = <&xgold_pmx_gpio 38>;
+		intel,rst-gpio = <&xgold_pmx_gpio 35 0>;
+		intel,rst-gpio-is_active_low;
+		intel,flash-gpio = <&xgold_pmx_gpio 37 0>;
+		intel,torch-gpio = <&xgold_pmx_gpio 38 0>;
 
 		pm,class-name = "generic_class";
 		pm,user-name = "primcam";
@@ -226,14 +236,6 @@
 		intel,camera-module-csi-config-0 {
 			intel,csi-pixels-per-second = <0>;
 			intel,csi-vc = <0>;
-			intel,csi-lanes = <2>;
-			intel,csi-dphy1 = <0x2014183>;
-			intel,csi-dphy2 = <0x00>;
-			intel,csi-ana-bandgap-bias = <3>;
-		};
-		intel,camera-module-csi-config-1 {
-			intel,csi-pixels-per-second = <100000000>;
-			intel,csi-vc = <0>;
 			intel,csi-lanes = <4>;
 			intel,csi-dphy1 = <0x600E1C1>;
 			intel,csi-dphy2 = <0x00>;
@@ -243,7 +245,7 @@
 #endif
 #ifndef RECOVERY_KERNEL
 	camera1: camera-module@1 {
-		compatible = "omnivision,ov9760-v4l2-i2c-subdev";
+		compatible = "omnivision,ov2685-v4l2-i2c-subdev";
 		reg = < 0x10 >;
 		device_type = "v4l2-i2c-subdev";
 
@@ -252,7 +254,9 @@
 		pinctrl-1 = <&cam2_sleep_pins>;
 		pinctrl-2 = <&cam2_inactive_pins>;
 
-		intel,pd-gpio = <&xgold_pmx_gpio 40>;
+		intel,rst-gpio = <&xgold_pmx_gpio 36 0>;
+		intel,rst-gpio-is_active_low;
+		intel,pd-gpio = <&xgold_pmx_gpio 40 0>;
 		intel,pd-gpio-is_active_low;
 
 		pm,class-name = "generic_class";
@@ -277,25 +281,6 @@
 
 	};
 #endif
-#ifndef RECOVERY_KERNEL
-	touchscreen {
-		compatible = "goodix,Goodix-TS";
-		reg = < 0x14 >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI0 XGOLD_IRQ_TYPE_EDGE_FALLING >;
-		pinctrl-names = "default", "sleep", "inactive", "gpio";
-		pinctrl-0 = <&touch_default_pins>;
-		pinctrl-1 = <&touch_sleep_pins>;
-		pinctrl-2 = <&touch_inactive_pins>;
-		pinctrl-3 = <&touch_gpio_pins>;
-		intel,ts-gpio-reset = <&xgold_pmx_gpio 32>;
-		intel,ts-gpio-irq = <&xgold_pmx_gpio 66>;
-		pm,class-name = "gt9xx_class";
-		pm,user-name = "tp";
-		pm,state-D0 = "enable";
-		pm,state-D3 = "disable";
-	};
-#endif
 };
 
 &i2c_2 {
@@ -305,13 +290,38 @@
 	pinctrl-2 = <&i2c2_inactive_pins>;
 
 #ifndef RECOVERY_KERNEL
-	accelerometer {
-		compatible = "stm,lsm303dlhc_acc";
-		reg = < 0x19 >;
+	touchscreen {
+		compatible = "focaltech,ft5x06";
+		reg = < 0x38 >;
 		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
-		intel,axis-map = < 0 1 2 >;
-		intel,negate = < 0 0 0 >;
+		interrupts = < EINT_EXI0 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&touch_default_pins>;
+		pinctrl-1 = <&touch_sleep_pins>;
+		pinctrl-2 = <&touch_inactive_pins>;
+		intel,ts-gpio-reset = <&xgold_pmx_gpio 32 0>;
+		intel,x_pos_max = < 720 >;
+		intel,x_pos_min = < 0 >;
+		intel,y_pos_max = < 1280 >;
+		intel,y_pos_min = < 0 >;
+		intel,screen_max_y = < 1280 >;
+		intel,screen_max_x = < 720 >;
+		intel,key_y = < 1320 >;
+		intel,key_back = < 400 >;
+		intel,key_menu = < 80 >;
+		intel,key_home = < 240 >;
+		pm,class-name = "ft5x0x_class";
+		pm,user-name = "tp";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+
+#ifndef RECOVERY_KERNEL
+	acc_kxcjk1013 {
+		compatible = "kionix,kxcjk1013_acc";
+		reg = < 0xE >;
+		intel,acc-direction = < 1 >;
 		intel,poll-interval = < 100 >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&accel_default_pins>;
@@ -325,13 +335,13 @@
 #endif
 #ifndef RECOVERY_KERNEL
 	magnetometer {
-		compatible = "stm,lsm303dlhc_mag";
-		reg = < 0x1e >;
+		compatible = "memsic,mmc3416x";
+		reg = < 0x30 >;
 		intel,axis-map = < 0 1 2 >;
 		intel,negate = < 0 0 0 >;
 		intel,offset = < 0 0 0 >;
 		intel,poll-interval = < 100 >;
-		pm,class-name = "lsm303dlhc_mag_class";
+		pm,class-name = "mmc3416x_class";
 		pm,user-name = "compass";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
@@ -363,7 +373,7 @@
 #endif
 #ifndef RECOVERY_KERNEL
 	gyroscope {
-		compatible = "stm,l3gd20_gyr";
+		compatible = "st,l3gd20_gyr";
 		reg = < 0x6a >;
 		interrupt-parent = <&eint>;
 		interrupts = < EINT_EXI1 XGOLD_IRQ_TYPE_EDGE_RISING >;
@@ -371,8 +381,8 @@
 		pinctrl-0 = <&gyroscope_default_pins>;
 		pinctrl-1 = <&gyroscope_sleep_pins>;
 		pinctrl-2 = <&gyroscope_inactive_pins>;
-		intel,axis-map = < 1 0 2 >; /* spec is wrong, x and y are interchanged */
-		intel,negate = < 1 0 0 >;
+		intel,axis-map = < 0 1 2 >;
+		intel,negate = < 0 0 0 >;
 		intel,poll-interval = < 100 >;
 		intel,full-scale = < 2000 >;
 		pm,class-name = "l3gd20_class";
@@ -389,8 +399,8 @@
 	pinctrl-1 = <&i2c5_agold_sleep_pins>;
 	pinctrl-2 = <&i2c5_agold_inactive_pins>;
 	bat:battery {
-		compatible = "intel,fan54x_charger";
-		reg = < 0x6b >;
+		compatible = "intel,fan54015_charger";
+		reg = < 0x6a >;
 		interrupts = < 0 >;
 		interrupt-parent = < &bat>;
 		#interrupt-cells = < 1 >;

@@ -490,7 +490,6 @@ int dwc_otg_hcd_urb_enqueue(dwc_otg_hcd_t * hcd,
 			    dwc_otg_hcd_urb_t * dwc_otg_urb, void **ep_handle,
 			    int atomic_alloc)
 {
-	dwc_irqflags_t flags;
 	int retval = 0;
 	dwc_otg_qtd_t *qtd;
 	gintmsk_data_t intr_mask = {.d32 = 0 };
@@ -524,12 +523,10 @@ int dwc_otg_hcd_urb_enqueue(dwc_otg_hcd_t * hcd,
 			/* Do not schedule SG transactions until qtd has URB_GIVEBACK_ASAP set */
 			return 0;
 		}
-		DWC_SPINLOCK_IRQSAVE(hcd->lock, &flags);
 		tr_type = dwc_otg_hcd_select_transactions(hcd);
 		if (tr_type != DWC_OTG_TRANSACTION_NONE) {
 			dwc_otg_hcd_queue_transactions(hcd, tr_type);
 		}
-		DWC_SPINUNLOCK_IRQRESTORE(hcd->lock, flags);
 	}
 
 	return retval;
@@ -540,9 +537,26 @@ int dwc_otg_hcd_urb_dequeue(dwc_otg_hcd_t * hcd,
 {
 	dwc_otg_qh_t *qh;
 	dwc_otg_qtd_t *urb_qtd;
+	if (!hcd) {
+		DWC_ERROR("HCD NULL");
+		return -EINVAL;
+	}
+	if (!dwc_otg_urb) {
+		DWC_ERROR("DWC_OTG_URB NULL");
+		return -EINVAL;
+	}
 
 	urb_qtd = dwc_otg_urb->qtd;
+	if (!urb_qtd) {
+		DWC_ERROR("URQ QTD NULL");
+		return -EINVAL;
+	}
+
 	qh = urb_qtd->qh;
+	if (!qh) {
+		DWC_ERROR("QH NULL");
+		return -EINVAL;
+	}
 #ifdef DEBUG
 	if (CHK_DEBUG_LEVEL(DBG_HCDV | DBG_HCD_URB)) {
 		if (urb_qtd->in_process) {
@@ -3015,19 +3029,32 @@ int dwc_otg_hcd_get_frame_number(dwc_otg_hcd_t * dwc_otg_hcd)
 	return hfnum.b.frnum;
 }
 
-int dwc_otg_hcd_start(dwc_otg_hcd_t * hcd,
+int dwc_otg_hcd_start(dwc_otg_hcd_t *hcd,
 		      struct dwc_otg_hcd_function_ops *fops)
 {
+	dwc_otg_core_if_t *core_if = hcd->core_if;
 	int retval = 0;
 	hprt0_data_t hprt0;
 
 	hcd->fops = fops;
-	if (!dwc_otg_is_device_mode(hcd->core_if) && 
+
+	if (!dwc_otg_is_device_mode(hcd->core_if) &&
 		(!hcd->core_if->adp_enable || hcd->core_if->adp.adp_started)) {
-		dwc_otg_hcd_reinit(hcd);
+		if (core_if->lx_state == DWC_OTG_L3) {
+			dwc_otg_core_init(core_if);
+			/* Wait for the controller to detect host mode */
+			dwc_mdelay(100);
+			core_if->op_state = A_HOST;
+			core_if->lx_state = DWC_OTG_L0;
+			dwc_otg_enable_global_interrupts(core_if);
+			dwc_otg_hcd_reinit(hcd);
+
+		} else {
+			dwc_otg_hcd_reinit(hcd);
+		}
 	} else {
 		if (hcd->core_if->adp_enable) {
-			/* Clear any interrupt pending in the HPRT, sometimes 
+			/* Clear any interrupt pending in the HPRT, sometimes
 			 * Port Connect Detected is not being cleared*/
 			hprt0.d32 = DWC_READ_REG32(hcd->core_if->host_if->hprt0);
 			DWC_WRITE_REG32(hcd->core_if->host_if->hprt0, hprt0.d32);

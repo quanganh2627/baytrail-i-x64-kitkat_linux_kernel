@@ -40,7 +40,9 @@ eint:eint-interrupt-controller {
 	intel,virq,3 = <1>; /* EXT_INT3 */
 	intel,virq,4 = <1>; /* EXT_INT4 */
 	intel,virq,5 = <1>; /* EXT_INT5 */
+#ifndef SOFIA3G_ES2_TAB_SVB
 	intel,virq,6 = <1>; /* EXT_INT6 */
+#endif
 	intel,virq,7 = <1>; /* EXT_INT7 */
 #if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 	intel,virq,8 = <0>; /* EXT_INT8 */
@@ -49,6 +51,9 @@ eint:eint-interrupt-controller {
 #endif
 	intel,virq,9 = <1>; /* EXT_INT9 */
 	intel,virq,10 = <1>; /* EXT_INT10 */
+#ifdef SOFIA3G_ES2_TAB_SVB
+	intel,virq,11 = <1>; /* EXT_INT11 */
+#endif
 	intel,virq,13 = <1>; /* EXT_INT13 */
 #if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 	intel,virq,14 = <0>; /* EXT_INT14 */
@@ -179,6 +184,7 @@ eint:eint-interrupt-controller {
 	intel,edge,20 = < 0x1070 4 2 >; /* USIF1_WK */
 	intel,edge,21 = < 0x1074 4 2 >; /* USIF2_WK */
 	intel,edge,22 = < 0x1078 4 2 >; /* WUP_DBB */
+	intel,edge,29 = < 0x108C 4 2 >; /* USB_ID */
 	intel,level,0 = < 0x1020 2 2 >; /* EXT_INT0 */
 	intel,level,1 = < 0x1024 2 2 >; /* EXT_INT1 */
 	intel,level,2 = < 0x1028 2 2 >; /* EXT_INT2 */
@@ -202,4 +208,5 @@ eint:eint-interrupt-controller {
 	intel,level,20 = < 0x1070 2 2 >; /* USIF1_WK */
 	intel,level,21 = < 0x1074 2 2 >; /* USIF2_WK */
 	intel,level,22 = < 0x1078 2 2 >; /* WUP_DBB */
+	intel,level,29 = < 0x108C 2 2 >; /* USB_ID */
 };

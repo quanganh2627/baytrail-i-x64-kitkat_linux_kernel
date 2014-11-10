@@ -42,6 +42,9 @@
 
 	ion {
 		compatible = "intel,ion";
+#ifndef RECOVERY_KERNEL
+		secvm-handler;
+#endif
 		cma-heap {
 			intel,heapmem = <   0x00000000 0x08000000 >;
 		};
@@ -208,8 +211,8 @@
 		pinctrl-1 = <&cam1_sleep_pins>;
 		pinctrl-2 = <&cam1_inactive_pins>;
 
-		intel,pd-gpio = <&xgold_pmx_gpio 39>;
-		intel,rst-gpio = <&xgold_pmx_gpio 35>;
+		intel,pd-gpio = <&xgold_pmx_gpio 39 0>;
+		intel,rst-gpio = <&xgold_pmx_gpio 35 0>;
 		intel,rst-gpio-is_active_low;
 
 		pm,class-name = "generic_class";
@@ -243,7 +246,7 @@
 		pinctrl-1 = <&cam2_sleep_pins>;
 		pinctrl-2 = <&cam2_inactive_pins>;
 
-		intel,pd-gpio = <&xgold_pmx_gpio 40>;
+		intel,pd-gpio = <&xgold_pmx_gpio 40 0>;
 
 		pm,class-name = "generic_class";
 		pm,user-name = "seccam";
@@ -284,8 +287,8 @@
 		pinctrl-1 = <&touch_sleep_pins>;
 		pinctrl-2 = <&touch_inactive_pins>;
 		pinctrl-3 = <&touch_gpio_pins>;
-		intel,ts-gpio-reset = <&xgold_pmx_gpio 32>;
-		intel,ts-gpio-irq = <&xgold_pmx_gpio 66>;
+		intel,ts-gpio-reset = <&xgold_pmx_gpio 32 0>;
+		intel,ts-gpio-irq = <&xgold_pmx_gpio 66 0>;
 		pm,class-name = "gt9xx_class";
 		pm,user-name = "tp";
 		pm,state-D0 = "enable";
@@ -297,7 +300,7 @@
 	acc_kxcjk1013 {
 		compatible = "kionix,kxcjk1013_acc";
 		reg = < 0xE >;
-		intel,acc-direction = < 1 >;
+		intel,acc-direction = < 6 >;
 		intel,poll-interval = < 100 >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&accel_default_pins>;
@@ -349,7 +352,7 @@
 #endif
 #ifndef RECOVERY_KERNEL
 	gyroscope {
-		compatible = "stm,l3gd20_gyr";
+		compatible = "st,l3gd20_gyr";
 		reg = < 0x6a >;
 		interrupt-parent = <&eint>;
 		interrupts = < EINT_EXI1 XGOLD_IRQ_TYPE_EDGE_RISING >;
@@ -357,8 +360,8 @@
 		pinctrl-0 = <&gyroscope_default_pins>;
 		pinctrl-1 = <&gyroscope_sleep_pins>;
 		pinctrl-2 = <&gyroscope_inactive_pins>;
-		intel,axis-map = < 1 0 2 >; /* spec is wrong, x and y are interchanged */
-		intel,negate = < 1 0 0 >;
+		intel,axis-map = < 0 1 2 >;
+		intel,negate = < 1 0 1 >;
 		intel,poll-interval = < 100 >;
 		intel,full-scale = < 2000 >;
 		pm,class-name = "l3gd20_class";

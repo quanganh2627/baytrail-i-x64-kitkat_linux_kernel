@@ -44,6 +44,16 @@ config SW_FUEL_GAUGE
 	help
 	 Say Y here to enable the software fuel gauge.
 
+config INTEL_FG_HELPER
+    tristate "Intel Fuel gauge helper"
+    ---help---
+      This driver exposes a device file interface to store and restore
+      Fuel gauge configuration data.
+      Any fuel gauge driver can use the interfaces exposed by this
+      driver to store and retrieve their configuration data.
+
+      If unsure, say N.
+
 config POWER_SUPPLY_DEBUG
 	bool "Power supply debug"
 	help
@@ -409,13 +419,6 @@ config CHARGER_FAN54020
 	depends on IDI
 	help
 	  Say Y here to enable support for fan54020 Charger.
-
-config CHARGER_FAN54X
-	tristate "FAN54X battery charger driver"
-	depends on I2C
-	depends on IDI
-	help
-	  Say Y here to enable support for fan54X Charger.
 
 config CHARGER_TPS65090
 	tristate "TPS65090 battery charger driver"
