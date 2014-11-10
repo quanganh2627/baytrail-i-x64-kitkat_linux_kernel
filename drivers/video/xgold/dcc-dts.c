@@ -63,7 +63,6 @@ static struct of_device_id xgold_graphics_of_match[] = {
 #define PROP_DISPLAY_TIM_CYCLE		"intel,access-cycle"
 
 #define PROP_DISPLAY_GPIO_LCD_BIAS	"intel,lcd-bias-en"
-#define PROP_DISPLAY_GPIO_LCD_BIAS_DLY	"intel,lcd-bias-en-msdelay"
 #define PROP_DISPLAY_GPIO_RST		"intel,dcc-gpio-reset"
 #define PROP_DISPLAY_GPIO_RST_DLY	"intel,dcc-gpio-reset-delay"
 #define PROP_DISPLAY_GPIO_CD		"intel,dcc-gpio-cd"
