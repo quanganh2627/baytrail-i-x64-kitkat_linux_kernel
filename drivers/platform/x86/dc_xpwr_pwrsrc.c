@@ -119,6 +119,7 @@ struct dc_pwrsrc_info {
 	struct usb_phy		*otg;
 	struct notifier_block	id_nb;
 	struct wake_lock	wakelock;
+	struct wake_lock	wakelock_timeout;
 	bool is_sdp;
 	bool id_short;
 };
@@ -286,6 +287,7 @@ notify_otg_em:
 		}
 		if (wake_lock_active(&info->wakelock))
 			wake_unlock(&info->wakelock);
+		wake_lock_timeout(&info->wakelock_timeout, 5*HZ);
 	} else {
 		if (notify_otg) {
 			/*
@@ -480,6 +482,8 @@ static int dc_xpwr_pwrsrc_probe(struct platform_device *pdev)
 	if (info->pdata->en_chrg_det) {
 		wake_lock_init(&info->wakelock, WAKE_LOCK_SUSPEND,
 						"pwrsrc_wakelock");
+		wake_lock_init(&info->wakelock_timeout, WAKE_LOCK_SUSPEND,
+						"pwrsrc_wakelock_timeout");
 		ret = pwrsrc_otg_registration(info);
 	} else {
 		ret = pwrsrc_extcon_registration(info);
