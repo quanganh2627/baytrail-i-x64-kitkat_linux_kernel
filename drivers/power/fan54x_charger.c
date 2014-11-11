@@ -593,10 +593,13 @@ static int fan54x_set_iocharge(
 		return 0;
 	}
 
-	current_to_set_ma = fit_in_range(curr_to_set, chrgr->min_iocharge,
-							chrgr->max_iocharge);
+	current_to_set_ma = fit_in_range(curr_to_set,
+				chrgr->min_iocharge, chrgr->max_iocharge);
 
-	regval = (u8)((current_to_set_ma - chrgr->min_iocharge) /
+	if (chrgr->calc_iocharge_regval)
+		regval = chrgr->calc_iocharge_regval(chrgr, current_to_set_ma);
+	else
+		regval = (u8)((current_to_set_ma - chrgr->min_iocharge) /
 							IOCHARGE_STEP_MA);
 
 	if (propagate) {
@@ -620,7 +623,10 @@ static int fan54x_set_iocharge(
 		regval = readback_val;
 	}
 
-	*curr_set = (regval * IOCHARGE_STEP_MA + chrgr->min_iocharge);
+	if (chrgr->get_iocharge_val)
+		*curr_set = chrgr->get_iocharge_val(regval);
+	else
+		*curr_set = (regval * IOCHARGE_STEP_MA + chrgr->min_iocharge);
 
 	return 0;
 }

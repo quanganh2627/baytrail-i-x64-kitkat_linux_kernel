@@ -224,6 +224,28 @@ fail:
 	return ret;
 }
 
+static int fan54015_iocharge_list[8] = {
+	550, 650, 750, 850, 1050, 1150, 1350, 1450};
+
+static int fan54015_calc_iocharge_regval(struct fan54x_charger *chrgr,
+					int current_to_set_ma)
+{
+	int i;
+
+	for (i = 0; i < 7; i++) {
+		if (current_to_set_ma >= fan54015_iocharge_list[i] &&
+			current_to_set_ma < fan54015_iocharge_list[i+1])
+			break;
+	}
+
+	return i;
+}
+
+static int fan54015_get_iocharge_val(int regval)
+{
+	return fan54015_iocharge_list[regval];
+}
+
 struct fan54x_charger fan54015_chrgr_data = {
 	.vendor = 4,
 	.pn = 5,
@@ -278,5 +300,7 @@ struct fan54x_charger fan54015_chrgr_data = {
 	.configure_chip = fan54015_configure_chip,
 	.enable_charger = fan54015_enable_charger,
 	.get_charger_state = fan54015_get_charger_state,
+	.calc_iocharge_regval = fan54015_calc_iocharge_regval,
+	.get_iocharge_val = fan54015_get_iocharge_val,
 };
 

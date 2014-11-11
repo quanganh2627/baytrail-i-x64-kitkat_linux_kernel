@@ -259,6 +259,9 @@ struct fan54x_charger {
 	int (*enable_charger)(struct fan54x_charger *chrgr, bool enable);
 	int (*get_charger_state)(struct fan54x_charger *chrgr);
 	int (*get_clr_wdt_expiry_flag)(struct fan54x_charger *chrgr);
+	int (*calc_iocharge_regval)(struct fan54x_charger *chrgr,
+					int current_to_set_ma);
+	int (*get_iocharge_val)(int regval);
 };
 
 #define MAX_NR_OF_I2C_RETRIES 1
