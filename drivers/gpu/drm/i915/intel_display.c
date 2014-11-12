@@ -10186,6 +10186,21 @@ intel_modeset_check_state(struct drm_device *dev)
 	check_shared_dpll_state(dev);
 }
 
+/* Fix for Valleyview eDP + VGA issue.
+ * It is discovered that on Valleyview, in order for eDP link
+ * traning to be successfull both DPLLA and DPLLB need to be
+ * disabled and reprogram again.
+ */
+static void valleyview_modeset_global_pipes(struct drm_device *dev,
+	unsigned *prepare_pipes){
+	struct intel_crtc *intel_crtc;
+	/* disable/enable all currently active pipes */
+	for_each_intel_crtc(dev, intel_crtc){
+		if (intel_crtc->base.enabled)
+			*prepare_pipes |= (1 << intel_crtc->pipe);
+	}
+}
+
 static int __intel_set_mode(struct drm_crtc *crtc,
 			    struct drm_display_mode *mode,
 			    int x, int y, struct drm_framebuffer *fb)
@@ -10224,6 +10239,20 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 		}
 		intel_dump_pipe_config(to_intel_crtc(crtc), pipe_config,
 				       "[modeset]");
+	}
+
+	/* Fix for Valleyview eDP + VGA issue. */
+	/*
+	 * See if the config requires any additional preparation, e.g.
+	 * to adjust global state with pipes off.  We need to do this
+	 * here so we can get the modeset_pipe updated config for the new
+	 * mode set on this crtc.  For other crtcs we need to use the
+	 * adjusted_mode bits in the crtc directly.
+	 * */
+	if (IS_VALLEYVIEW(dev)) {
+		valleyview_modeset_global_pipes(dev, &prepare_pipes);
+		/* may have added more to prepare_pipes than we should */
+		prepare_pipes &= ~disable_pipes;
 	}
 
 	for_each_intel_crtc_masked(dev, disable_pipes, intel_crtc)
