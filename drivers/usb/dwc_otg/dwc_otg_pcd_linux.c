@@ -1015,6 +1015,9 @@ static int dwc_pullup(struct usb_gadget *gadget, int is_on)
 		dctl.b.sftdiscon = 0;
 		DWC_WRITE_REG32(&core_if->dev_if->dev_global_regs->dctl,
 								dctl.d32);
+		DWC_SPINUNLOCK(pcd->lock);
+		cil_pcd_start(d->pcd->core_if);
+		DWC_SPINLOCK(pcd->lock);
 		pcd->soft_disconnected = 1;
 	}
 	DWC_SPINUNLOCK_IRQRESTORE(pcd->lock, flags);
