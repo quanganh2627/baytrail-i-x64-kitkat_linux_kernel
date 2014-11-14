@@ -232,7 +232,6 @@ static inline int dma_mmap_writeback(struct device *dev, struct vm_area_struct *
 }
 */
 
-
 int
 dma_common_get_sgtable(struct device *dev, struct sg_table *sgt,
 		       void *cpu_addr, dma_addr_t dma_addr, size_t size);
