@@ -1374,9 +1374,6 @@ struct i915_plane_stat {
 #define DL_PRIMARY_MASK 0x000000ff
 #define DL_SPRITEA_MASK 0x0000ff00
 #define DL_SPRITEB_MASK 0x00ff0000
-#define BPP_CHANGED_PRIMARY (1 << 24)
-#define BPP_CHANGED_SPRITEA (1 << 25)
-#define BPP_CHANGED_SPRITEB (1 << 26)
 
 typedef struct drm_i915_private {
 	struct drm_device *dev;
@@ -1431,6 +1428,7 @@ typedef struct drm_i915_private {
 	/** Cached value of IMR to avoid reads in updating the bitfield */
 	u32 irq_mask;
 	u32 hotplugstat;
+	u32 pfit_pipe;
 	struct regulator *v3p3s_reg;
 	bool s0ixstat;
 	bool audio_suspended;
@@ -1443,8 +1441,13 @@ typedef struct drm_i915_private {
 	bool unplug;
 	bool maxfifo_enabled;
 	bool is_tiled;
+	bool atomic_update;
+	bool pri_update;
+	bool wait_vbl;
 	u32 gt_irq_mask;
 	u32 pm_irq_mask;
+	u32 dspcntr;
+	u32 vblcount;
 
 	struct work_struct hotplug_work;
 	bool enable_hotplug_processing;
@@ -1690,8 +1693,6 @@ typedef struct drm_i915_private {
 
 	struct i915_perfmon perfmon;
 	struct i915_plane_stat plane_stat;
-
-	uint32_t pf_change_status[2];
 } drm_i915_private_t;
 
 static inline struct drm_i915_private *to_i915(const struct drm_device *dev)
@@ -2171,6 +2172,7 @@ extern int i915_suspend(struct drm_device *dev, pm_message_t state);
 extern int i915_resume(struct drm_device *dev);
 extern int i915_master_create(struct drm_device *dev, struct drm_master *master);
 extern void i915_master_destroy(struct drm_device *dev, struct drm_master *master);
+extern void i9xx_get_pfit_mode(struct drm_crtc *crtc, uint32_t src_w, uint32_t src_h);
 
 				/* i915_dma.c */
 void i915_update_dri1_breadcrumb(struct drm_device *dev);
@@ -2325,7 +2327,7 @@ static inline void i915_gem_object_unpin_pages(struct drm_i915_gem_object *obj)
 
 int __must_check i915_mutex_lock_interruptible(struct drm_device *dev);
 int i915_gem_object_sync(struct drm_i915_gem_object *obj,
-			 struct intel_ring_buffer *to, bool add_request);
+			 struct intel_ring_buffer *to, bool add_request, bool readonly);
 void i915_gem_object_move_to_active(struct drm_i915_gem_object *obj,
 				    struct intel_ring_buffer *ring);
 
