@@ -108,7 +108,7 @@ struct lpaudio_ctrl_t {
 	int			frame;
 	u32			cur_seq;
 	u32			play_seq;
-	u32			*dma_ptr;
+	u32 			*dma_ptr;
 };
 
 struct lpaudio_ipc_head {
@@ -164,7 +164,7 @@ struct lpaudio_ipc_t {
 
 extern int lpaudio_debug_enable;
 extern u32 lpaudio_rate;
-extern struct lpaudio_ctrl_t *lpaudio_ctrl;
+extern volatile struct lpaudio_ctrl_t *lpaudio_ctrl;
 int lpaudio_need_pause(void);
 
 #endif /*__LPAUDIO_H__*/
