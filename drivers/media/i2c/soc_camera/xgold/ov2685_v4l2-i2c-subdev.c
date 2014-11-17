@@ -1156,6 +1156,128 @@ err:
 	return ret;
 }
 
+static int ov2685_g_wb(struct v4l2_subdev *sd, s32 *value)
+{
+	return 0;
+}
+
+static int ov2685_s_wb(struct ov_camera_module *cam_mod)
+{
+	u32 value = cam_mod->wb_config.preset_id;
+	switch (value) {
+	case V4L2_WHITE_BALANCE_AUTO:
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf4);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		break;
+
+	case V4L2_WHITE_BALANCE_MANUAL:
+	case V4L2_WHITE_BALANCE_INCANDESCENT:
+		/* Sunny */
+		/* start group 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+		/* R Gain */
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0x9c);
+		/* G Gain */
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		/* B Gain */
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x05);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xf3);
+		/* end group 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
+		/* launch group 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		break;
+	case V4L2_WHITE_BALANCE_FLUORESCENT:
+		/* Home */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0x90);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x09);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x20);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		break;
+	case V4L2_WHITE_BALANCE_FLUORESCENT_H:
+	case V4L2_WHITE_BALANCE_HORIZON:
+	case V4L2_WHITE_BALANCE_DAYLIGHT:
+		/* Office */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xb8);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x5f);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		break;
+	case V4L2_WHITE_BALANCE_FLASH:
+	case V4L2_WHITE_BALANCE_CLOUDY:
+		/* Cloudy */
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xdc);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x05);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xd3);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		break;
+	case V4L2_WHITE_BALANCE_SHADE:
+	default:
+		ov_camera_module_pr_debug(cam_mod,
+				"unsupported v4l2 preset wb:%d\n", value);
+	break;
+	}
+	return 0;
+}
+
+static int ov2685_g_exposure(struct ov_camera_module *cam_mod, s32 *value)
+{
+	return 0;
+}
+
+static int ov2685_s_exposure(struct ov_camera_module *cam_mod)
+{
+	s32 value = cam_mod->exp_config.exp_time;
+	switch (value) {
+	case -2:
+		ov_camera_module_write_reg(cam_mod, 0x3a03, 0x3a);
+		ov_camera_module_write_reg(cam_mod, 0x3a04, 0x30);
+		break;
+	case -1:
+		ov_camera_module_write_reg(cam_mod, 0x3a03, 0x42);
+		ov_camera_module_write_reg(cam_mod, 0x3a04, 0x38);
+		break;
+	case 0:
+		ov_camera_module_write_reg(cam_mod, 0x3a03, 0x4e);
+		ov_camera_module_write_reg(cam_mod, 0x3a04, 0x40);
+		break;
+	case 1:
+		ov_camera_module_write_reg(cam_mod, 0x3a03, 0x52);
+		ov_camera_module_write_reg(cam_mod, 0x3a04, 0x48);
+		break;
+
+	case 2:
+		ov_camera_module_write_reg(cam_mod, 0x3a03, 0x5a);
+		ov_camera_module_write_reg(cam_mod, 0x3a04, 0x50);
+		break;
+	}
+	return 0;
+}
+
+
 /*--------------------------------------------------------------------------*/
 /*{{{*/
 static int ov2685_s_ctrl(struct ov_camera_module *cam_mod, u32 ctrl_id)
@@ -1166,8 +1288,14 @@ static int ov2685_s_ctrl(struct ov_camera_module *cam_mod, u32 ctrl_id)
 
 	switch (ctrl_id) {
 	case V4L2_CID_GAIN:
-	case V4L2_CID_EXPOSURE:
 		ret = ov2685_write_aec(cam_mod);
+		break;
+	case V4L2_CID_EXPOSURE:
+		ret = ov2685_s_exposure(cam_mod);
+		break;
+
+	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE:
+		ret = ov2685_s_wb(cam_mod);
 		break;
 	default:
 		ret = -EINVAL;
@@ -1194,9 +1322,10 @@ static int ov2685_s_ext_ctrls(struct ov_camera_module *cam_mod,
 		((ctrls->ctrls[0].id == V4L2_CID_GAIN &&
 		ctrls->ctrls[1].id == V4L2_CID_EXPOSURE) ||
 		(ctrls->ctrls[1].id == V4L2_CID_GAIN &&
-		ctrls->ctrls[0].id == V4L2_CID_EXPOSURE)))
+		ctrls->ctrls[0].id == V4L2_CID_EXPOSURE))) {
 		ret = ov2685_write_aec(cam_mod);
-	else
+		ov2685_s_exposure(cam_mod);
+	} else
 		ret = -EINVAL;
 
 	if (IS_ERR_VALUE(ret))
