@@ -68,7 +68,6 @@ static struct sst_shim_reg_table shim_reg_table[] = {
 	{.offset = SST_IPCLPESC,	.name = "IPCLPESC"},
 	{.offset = SST_CLKCTL,		.name = "CLKCTL"},
 	{.offset = SST_CSR2,		.name = "CSR2"},
-	{.offset = SST_TMRCTL,		.name = "SST_TMRCTL"},
 	{.offset = SST_TMRSTAT,		.name = "SST_TMRSTAT"},
 };
 
@@ -195,6 +194,7 @@ void reset_sst_shim(struct intel_sst_drv *sst)
 	sst_shim_write64(sst_drv_ctx->shim, SST_CSR, csr.full);
 }
 
+#define SST_DUMP_LPE_STACK_SIZE 600
 static void dump_lpe_stack(struct intel_sst_drv *sst)
 {
 	u32 dump_word;
@@ -203,7 +203,7 @@ static void dump_lpe_stack(struct intel_sst_drv *sst)
 
 	addr = sst->dram + SST_LPE_STACK_OFFSET;
 	pr_err("Dump LPE stack area begin@ %p\n:", (u32 *)addr);
-	for (i = 0; i < (SST_LPE_STACK_SIZE/(sizeof(u32))); i++) {
+	for (i = 0; i < (SST_DUMP_LPE_STACK_SIZE/(sizeof(u32))); i++) {
 		dump_word = readl(addr + i * (sizeof(u32)));
 		pr_err("Data[%d]=%#x\n", i, dump_word);
 	}
@@ -389,13 +389,15 @@ static void sst_send_scu_reset_ipc(struct intel_sst_drv *sst)
 }
 #endif
 
-#define SRAM_OFFSET_MRFLD	0xc00
 #define NUM_DWORDS		256
+#define DUMP_SRAM_CHECKPOINT_DWORDS		640
 void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 {
 	char iram_event[30], dram_event[30], ddr_imr_event[65], event_type[30];
 	char *envp[5];
 	int env_offset = 0;
+	bool reset_dapm;
+	struct sst_platform_cb_params cb_params;
 
 	/*
 	 * setting firmware state as RESET so that the firmware will get
@@ -406,23 +408,28 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 	pr_err("Audio: trying to reset the dsp now\n");
 
 	mutex_lock(&sst->sst_lock);
-	sst->sst_state = SST_RESET;
-	sst_stream_recovery(sst);
+	sst->sst_state = SST_RECOVERY;
 	mutex_unlock(&sst->sst_lock);
 
 	dump_stack();
 	dump_sst_shim(sst);
 	dump_lpe_stack(sst);
+	cb_params.params = &reset_dapm;
+	cb_params.event = SST_PLATFORM_TRIGGER_RECOVERY;
+	reset_dapm = true;
+	sst_platform_cb(&cb_params);
 
 	mutex_lock(&sst->sst_lock);
 	sst_stall_lpe_n_wait(sst);
 	mutex_unlock(&sst->sst_lock);
 
 	/* dump mailbox and sram */
-	pr_err("Dumping Mailbox...\n");
-	dump_buffer_fromio(sst->mailbox, NUM_DWORDS);
-	pr_err("Dumping SRAM...\n");
-	dump_buffer_fromio(sst->mailbox + SRAM_OFFSET_MRFLD, NUM_DWORDS);
+	pr_err("Dumping Mailbox IA to LPE...\n");
+	dump_buffer_fromio(sst->ipc_mailbox, NUM_DWORDS);
+	pr_err("Dumping Mailbox LPE to IA...Lw\n");
+	dump_buffer_fromio(sst->ipc_mailbox + sst->mailbox_recv_offset, NUM_DWORDS);
+	pr_err("Dumping SRAM CHECKPOINT...\n");
+	dump_buffer_fromio(sst->mailbox +  sst->pdata->debugfs_data->checkpoint_offset, DUMP_SRAM_CHECKPOINT_DWORDS);
 
 	if (sst_drv_ctx->ops->set_bypass) {
 
@@ -469,6 +476,18 @@ void sst_do_recovery_mrfld(struct intel_sst_drv *sst)
 		kfree(sst_drv_ctx->fw_in_mem);
 		sst_drv_ctx->fw_in_mem = NULL;
 	}
+
+	mutex_lock(&sst->sst_lock);
+	sst->sst_state = SST_RESET;
+	sst_stream_recovery(sst);
+	mutex_unlock(&sst->sst_lock);
+
+	/* Delay is to ensure that the stream is closed before
+	 * powering on DAPM widget
+	 */
+	usleep_range(10000, 12000);
+	reset_dapm = false;
+	sst_platform_cb(&cb_params);
 }
 
 void sst_debug_dump(struct intel_sst_drv *sst)
@@ -477,6 +496,14 @@ void sst_debug_dump(struct intel_sst_drv *sst)
 
 	dump_stack();
 	dump_sst_shim(sst);
+
+	/* dump mailbox and sram */
+	pr_err("Dumping Mailbox IA to LPE...\n");
+	dump_buffer_fromio(sst->ipc_mailbox, NUM_DWORDS);
+	pr_err("Dumping Mailbox LPE to IA...Lw\n");
+	dump_buffer_fromio(sst->ipc_mailbox + sst->mailbox_recv_offset, NUM_DWORDS);
+	pr_err("Dumping SRAM CHECKPOINT...\n");
+	dump_buffer_fromio(sst->mailbox +  sst->pdata->debugfs_data->checkpoint_offset, DUMP_SRAM_CHECKPOINT_DWORDS);
 
 	if (sst->sst_state == SST_FW_RUNNING &&
 		sst_drv_ctx->pci_id == SST_CLV_PCI_ID)
@@ -627,3 +654,67 @@ void sst_clean_stream(struct stream_info *stream)
 	mutex_unlock(&stream->lock);
 }
 
+void sst_update_timer(struct intel_sst_drv *sst_drv_ctx)
+{
+	struct intel_sst_drv *sst = sst_drv_ctx;
+
+	if (sst_drv_ctx->pdata->start_recovery_timer) {
+		if (&sst->monitor_lpe.sst_timer != NULL) {
+			mod_timer(&sst->monitor_lpe.sst_timer, jiffies +
+				msecs_to_jiffies(sst->monitor_lpe.interval));
+			sst->monitor_lpe.prev_match_val = read_shim_data(sst, SST_TMRCTL);
+		}
+	}
+}
+
+void sst_trigger_recovery(struct work_struct *work)
+{
+	struct sst_monitor_lpe *monitor_lpe = container_of(work,
+							struct sst_monitor_lpe, mwork);
+	struct intel_sst_drv *sst  = container_of(monitor_lpe,
+						struct intel_sst_drv, monitor_lpe);
+	if (sst->ops->do_recovery)
+		sst->ops->do_recovery(sst);
+	return;
+}
+
+void sst_timer_cb(unsigned long data)
+{
+	struct intel_sst_drv *sst = (struct intel_sst_drv *)data;
+	u64 curr_match_val = read_shim_data(sst, SST_TMRCTL);
+
+	if (curr_match_val != sst->monitor_lpe.prev_match_val) {
+
+		mod_timer(&sst->monitor_lpe.sst_timer, jiffies +
+					msecs_to_jiffies(sst->monitor_lpe.interval));
+		sst->monitor_lpe.prev_match_val = curr_match_val;
+
+	} else {
+		pr_err(" triggering recovery !!!\n");
+		queue_work(sst->recovery_wq, &sst->monitor_lpe.mwork);
+		del_timer(&sst->monitor_lpe.sst_timer);
+	}
+
+	return;
+
+}
+
+int sst_set_timer(struct sst_monitor_lpe *monitor_lpe, bool enable)
+{
+	int ret = 0;
+	if (enable) {
+		ret = mod_timer(&monitor_lpe->sst_timer, jiffies +
+					msecs_to_jiffies(monitor_lpe->interval));
+		pr_debug("sst: recovery timer started, timer interval=%d sec\n",
+								monitor_lpe->interval/1000);
+	} else  {
+
+		if (&monitor_lpe->sst_timer != NULL)
+			ret = del_timer_sync(&monitor_lpe->sst_timer);
+		monitor_lpe->prev_match_val = 0;
+		pr_debug("sst: recovery timer stopped\n");
+
+	}
+
+	return ret;
+}

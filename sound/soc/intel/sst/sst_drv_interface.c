@@ -387,6 +387,13 @@ int intel_sst_check_device(void)
 
 	mutex_lock(&sst_drv_ctx->sst_lock);
 
+	if (sst_drv_ctx->sst_state == SST_RECOVERY) {
+		pr_debug("LPE is in recovery state\n");
+		mutex_unlock(&sst_drv_ctx->sst_lock);
+		sst_pm_runtime_put(sst_drv_ctx);
+		return -EAGAIN;
+	}
+
 	if (sst_drv_ctx->sst_state == SST_RESET) {
 
 		/* FW is not downloaded */
@@ -1062,6 +1069,11 @@ static int sst_set_generic_params(enum sst_controls cmd, void *arg)
 		struct snd_sst_vtsv_path *vtsv_path = (struct snd_sst_vtsv_path *)arg;
 		memcpy(sst_drv_ctx->vtsv_path.bytes, vtsv_path->bytes, vtsv_path->len);
 		ret_val = sst_cache_vtsv_libs(sst_drv_ctx);
+		break;
+	}
+	case SST_SET_MONITOR_LPE: {
+		if (sst_drv_ctx->pdata->start_recovery_timer)
+			ret_val = sst_set_timer(&sst_drv_ctx->monitor_lpe, *(bool *)arg);
 		break;
 	}
 	default:
