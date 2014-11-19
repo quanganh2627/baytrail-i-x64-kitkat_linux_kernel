@@ -188,6 +188,7 @@ static long lpaudio_fs_ioctl(struct file *file,
 	u32 ret;
 	int i;
 
+	dev_dbg(lpaudio_dev, "%s: cmd: %d\n", __func__, cmd);
 	switch (cmd) {
 	case LPAUDIO_IOCTRL_DSP_DL:
 		shm = (void *)dsp_get_audio_shmem_base_addr() +
@@ -233,6 +234,14 @@ static long lpaudio_fs_ioctl(struct file *file,
 	case LPAUDIO_IOCTRL_STOP:
 		ret = 0;
 		lpaudio_stop();
+		break;
+	case LPAUDIO_IOCTRL_ENABLE:
+		dev_info(lpaudio_dev, "%s: enable lpaudio\n", __func__);
+		lpaudio_dma_setup = dma_setup;
+		break;
+	case LPAUDIO_IOCTRL_DISABLE:
+		dev_info(lpaudio_dev, "%s: disable lpaudio\n", __func__);
+		lpaudio_dma_setup = NULL;
 		break;
 	default:
 		return -EINVAL;
@@ -302,7 +311,6 @@ static int lpaudio_probe(struct platform_device *pdev)
 	lpaudio_dmac_base = devm_ioremap(&pdev->dev,
 			lpaudio_dmac_addr, lpaudio_dmac_size);
 	lpaudio_buf_prepare();
-	lpaudio_dma_setup = dma_setup;
 	misc_register(&lpaudio_misc_dev);
 	return 0;
 }
