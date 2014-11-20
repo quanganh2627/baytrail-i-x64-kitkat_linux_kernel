@@ -572,7 +572,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 static int acpi_battery_get_state(struct acpi_battery *battery)
 {
 	int result = 0;
-	int old_capacity_now;
+	int old_capacity_now = 0;
 	acpi_status status = 0;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 
