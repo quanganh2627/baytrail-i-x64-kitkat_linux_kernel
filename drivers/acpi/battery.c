@@ -499,7 +499,7 @@ static int acpi_battery_get_status(struct acpi_battery *battery)
 static int acpi_battery_get_info(struct acpi_battery *battery)
 {
 	int result = -EFAULT;
-	int old_full_charge_capacity;
+	int old_full_charge_capacity = 0;
 	acpi_status status = 0;
 	char *name = test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags)?
 			"_BIX" : "_BIF";
