@@ -119,7 +119,7 @@
 	adc_debug_data.index &= (ADC_DEBUG_DATA_SIZE-1); \
 	spin_unlock(&adc_debug_data.lock); \
 	if (adc_debug_data.printk_logs_en)\
-		pr_debug("%s->(%d):0x%x,%u,%u,%u,%u,%u\n", #_event, \
+		pr_info("%s->(%d):0x%x,%u,%u,%u,%u,%u\n", #_event, \
 			(unsigned int)_state, (unsigned int)_hmeas, \
 			(unsigned int)_context, (unsigned int)_context2, \
 			(unsigned int)_context3, (unsigned int)_context4, \
@@ -129,7 +129,7 @@
 #define intel_adc_dbg_printk(fmt, ...) \
 { \
 	if (adc_debug_data.printk_logs_en) \
-		pr_debug(fmt, ##__VA_ARGS__); \
+		pr_info(fmt, ##__VA_ARGS__); \
 }
 
 /**
@@ -364,7 +364,7 @@ static struct adc_manager_data adc_manager = {
 
 /* Array to collect debug data */
 static struct adc_debug_data adc_debug_data = {
-	.printk_logs_en = 0,
+	.printk_logs_en = 1,
 };
 
 /*---------------------------- Function prototypes: -------------------------*/

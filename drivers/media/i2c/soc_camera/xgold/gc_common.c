@@ -42,6 +42,8 @@
 #define GC_VCM_SLEW_TIME_MAX	0x1f
 #define GC_EXPOSURE_MIN		-4
 #define GC_EXPOSURE_MAX		4
+#define GC_ISO_MIN		100
+#define GC_ISO_MAX		1400
 
 #ifdef CONFIG_VIDEO_GC0310
 /*
@@ -304,63 +306,7 @@ int __gc_set_hflip(struct v4l2_subdev *sd, s32 value)
 
 int __gc_s_exposure(struct v4l2_subdev *sd, s32 value)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	struct gc_device *dev = to_gc_sensor(sd);
-	int ret = 0;
-	u16 coarse, div;
-	u8 reg_val_h, reg_val_l;
-
-	/* Set exposure */
-	ret =  __gc_program_ctrl_table(sd, GC_SETTING_EXPOSURE, value);
-	if (ret)
-		return ret;
-
-	/* Get exposure coarse */
-	ret = gc_read_reg(client, GC_8BIT,
-			dev->product_info->reg_expo_coarse, &reg_val_h);
-	if (ret)
-		return ret;
-	coarse = ((u16)(reg_val_h & 0x1f)) << 8;
-
-	ret = gc_read_reg(client, GC_8BIT,
-			dev->product_info->reg_expo_coarse + 1, &reg_val_l);
-	if (ret)
-		return ret;
-	coarse |= reg_val_l;
-
-	/* Switch to Page 1 */
-	ret = gc_write_reg(client, GC_8BIT,
-			0xFE, (u16)0x01);
-	if (ret)
-		return ret;
-
-	/* Get exposure coarse */
-	ret = gc_read_reg(client, GC_8BIT,
-			dev->product_info->reg_expo_div, &reg_val_h);
-	if (ret)
-		return ret;
-	div = reg_val_h << 8;
-
-	ret = gc_read_reg(client, GC_8BIT,
-			dev->product_info->reg_expo_div + 1, &reg_val_l);
-	if (ret)
-		return ret;
-	div |= reg_val_l;
-
-	/* Switch back to Page 0 */
-	ret = gc_write_reg(client, GC_8BIT,
-			0xFE, (u16)0x00);
-	if (ret)
-		return ret;
-
-	/* Compute exposure time */
-	dev->product_info->exposure_time = (coarse*10) / div;
-
-	pltfrm_camera_module_pr_info(sd,
-		"cur exposure time: %dms (coarse:%d div:%d)\n",
-		dev->product_info->exposure_time, coarse, div);
-
-	return ret;
+	return __gc_program_ctrl_table(sd, GC_SETTING_EXPOSURE, value);
 }
 
 int __gc_set_scene_mode(struct v4l2_subdev *sd, s32 value)
@@ -432,9 +378,85 @@ int __gc_g_fnumber_range(struct v4l2_subdev *sd, s32 *val)
    for filling in EXIF data, not for actual image processing. */
 int __gc_g_exposure(struct v4l2_subdev *sd, s32 *value)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct gc_device *dev = to_gc_sensor(sd);
+	int ret = 0;
+	u16 coarse, div;
+	u8 reg_val_h, reg_val_l;
 
-	*value = dev->product_info->exposure_time;
+	/* Get exposure coarse */
+	ret = gc_read_reg(client, GC_8BIT,
+			dev->product_info->reg_expo_coarse, &reg_val_h);
+	if (ret)
+		return ret;
+	coarse = ((u16)(reg_val_h & 0x1f)) << 8;
+
+	ret = gc_read_reg(client, GC_8BIT,
+			dev->product_info->reg_expo_coarse + 1, &reg_val_l);
+	if (ret)
+		return ret;
+	coarse |= reg_val_l;
+
+	/* Switch to Page 1 */
+	ret = gc_write_reg(client, GC_8BIT,
+			0xFE, (u16)0x01);
+	if (ret)
+		return ret;
+
+	/* Get exposure coarse */
+	ret = gc_read_reg(client, GC_8BIT,
+			dev->product_info->reg_expo_div, &reg_val_h);
+	if (ret)
+		return ret;
+	div = reg_val_h << 8;
+
+	ret = gc_read_reg(client, GC_8BIT,
+			dev->product_info->reg_expo_div + 1, &reg_val_l);
+	if (ret)
+		return ret;
+	div |= reg_val_l;
+
+	/* Switch back to Page 0 */
+	ret = gc_write_reg(client, GC_8BIT,
+			0xFE, (u16)0x00);
+	if (ret)
+		return ret;
+
+	/* Compute exposure time */
+	*value = (coarse*10) / div;
+
+	pltfrm_camera_module_pr_info(sd, "expos time: %dms(coarse:%d div:%d)\n",
+			*value, coarse, div);
+
+	return 0;
+}
+
+/* This returns the iso sensitivity. This should only be used
+   for filling in EXIF data, not for actual image processing. */
+int __gc_g_iso(struct v4l2_subdev *sd, s32 *value)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct gc_device *dev = to_gc_sensor(sd);
+	int ret;
+	u8 col_code, reg_val;
+
+	/* Switch to page 0 */
+	ret = gc_write_reg(client, GC_8BIT,
+			0xFE, (u16)0x00);
+	if (ret)
+		return ret;
+
+	/* Col code for analog gain */
+	ret = gc_read_reg(client, GC_8BIT,
+			dev->product_info->reg_col_code, &reg_val);
+	if (ret)
+		return ret;
+
+	col_code = reg_val & 0x7; /* [2:0] col_code */
+	*value = col_code == 0 ? 100 : col_code*200;
+
+	pltfrm_camera_module_pr_info(sd, "iso: %d(col:%d)\n",
+			*value, col_code);
 
 	return 0;
 }
@@ -535,6 +557,21 @@ static struct gc_ctrl_config __gc_default_ctrls[] = {
 		},
 		.s_ctrl = NULL,
 		.g_ctrl = __gc_g_focal_absolute,
+	},
+
+	{
+		.config = {
+			.ops = NULL,
+			.id = V4L2_CID_ISO_SENSITIVITY,
+			.name = "iso sensitivity",
+			.type = V4L2_CTRL_TYPE_INTEGER,
+			.min = GC_ISO_MIN,
+			.max = GC_ISO_MAX,
+			.step = 200,
+			.def = 0,
+		},
+		.s_ctrl = NULL,
+		.g_ctrl = __gc_g_iso,
 	},
 #if 0
 	{

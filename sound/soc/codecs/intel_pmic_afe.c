@@ -97,7 +97,7 @@ static const u8 afe_reg_cache[] = {
 	0x13, /* AFE_GAIN_OUT2_REG */
 	0x06, /* AFE_GAIN_OUT3_REG */
 	0x0E, /* AFE_GAIN_OUT4_REG */
-	0x84, /* AFE_GAIN_IN1_REG */
+	0x9A, /* AFE_GAIN_IN1_REG */
 	0x07, /* AFE_GAIN_IN2_REG */
 	0x0,  /* AFE_GAIN_IN3_REG */
 	0x0,  /* AFE_GAIN_IN4_REG */
@@ -594,7 +594,7 @@ static inline int afe_reg_write(struct snd_soc_codec *codec,
 	if (reg >= AFE_REG_END)
 		return -EIO;
 
-#if 0 /* BU_HACK accessory detection not working on ES1.0 */
+
 #ifdef CONFIG_SND_SOC_AGOLD_ACC_DET_INTERFACE
 	if ((reg == AFE_AUDIOINCTRL3_REG)
 			|| (reg == AFE_AUDIOINCTRL4_REG)
@@ -604,7 +604,7 @@ static inline int afe_reg_write(struct snd_soc_codec *codec,
 		afe_calculate_acc_settings(reg, value, &final_value);
 	}
 #endif
-#endif
+
 	afe_write_register_cache(codec, reg, (u32)final_value);
 	afe_debug("%s : AFE REG OFFSET = %s, value = 0x%0x\n",
 		__func__, afe_reg_name[reg],

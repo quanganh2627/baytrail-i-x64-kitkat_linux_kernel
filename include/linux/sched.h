@@ -302,6 +302,9 @@ static inline void set_cpu_sd_state_idle(void) { }
  * Only dump TASK_* tasks. (0 for all tasks)
  */
 extern void show_state_filter(unsigned long state_filter);
+#ifdef CONFIG_EMMC_IPANIC
+extern void emmc_ipanic_stream_emmc(void);
+#endif
 
 static inline void show_state(void)
 {

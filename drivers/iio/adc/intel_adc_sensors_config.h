@@ -131,6 +131,13 @@ static struct adc_sensors_data_table_uv_to_degc adc_sensors_tbat_data = {
 	adc_sensors_10kOhm_thermistor_table,
 };
 
+static struct adc_sensors_data_table_uv_to_degc adc_sensors_tsystem_data = {
+	TBAT_PARALLEL_RESISTOR_PRESENT,
+	TBAT_PARALLEL_RESISTOR_OHMS,
+	TBAT_TABLE_START_TEMP_DEGC,
+	sizeof(adc_sensors_10kOhm_thermistor_table) / sizeof(int),
+	adc_sensors_10kOhm_thermistor_table,
+};
 /**
  * Battery ID for AG620 is measured as follows:
  *
@@ -250,8 +257,8 @@ static struct adc_sensors_channel intel_adc_sensors_ag620_channels[] = {
 	CAL_DEFAULT, 0},
 
 	{"agold_meas_thermal", ADC_SENSORS_CHANNEL_SYSTEMP0,
-	ADC_SENSORS_CONVERSION_LINEAR_UV_TO_DEGC,
-	&adc_sensors_agold_die_temp_data, CAL_DEFAULT, 0},
+	ADC_SENSORS_CONVERSION_TABLE_UV_TO_DEGC,
+	&adc_sensors_tsystem_data, CAL_DEFAULT, 0},
 
 	{"sim_charge_pump", ADC_SENSORS_CHANNEL_VBAT,
 	ADC_SENSORS_CONVERSION_LINEAR_UV_TO_MV, &adc_sensors_vbat_data,

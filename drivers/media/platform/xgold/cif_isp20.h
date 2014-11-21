@@ -137,7 +137,8 @@ enum cif_isp20_cid {
 	CIF_ISP20_CID_HFLIP = 14,
 	CIF_ISP20_CID_VFLIP = 15,
 	CIF_ISP20_CID_AUTO_FPS = 16,
-	CIF_ISP20_CID_VBLANKING = 17
+	CIF_ISP20_CID_VBLANKING = 17,
+	CIF_ISP20_CID_ISO_SENSITIVITY
 };
 
 /* correspond to bit field values */
@@ -425,7 +426,6 @@ struct cif_isp20_stream {
 	bool updt_cfg;
 	bool stall;
 	bool first_frame;
-	bool expect_frame_end;
 };
 
 struct cif_isp20_jpeg_config {

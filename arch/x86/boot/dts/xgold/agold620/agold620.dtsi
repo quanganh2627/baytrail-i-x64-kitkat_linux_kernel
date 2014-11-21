@@ -561,8 +561,8 @@ agold {
 
 		meas_thermal {
 			compatible = "intel,meas_thermal";
-			intel,thermal-names = "pmictemp";
-			intel,sensor-names = "PMICTEMP_SENSOR";
+			intel,thermal-names = "pmictemp", "systemtemp";
+			intel,sensor-names = "PMICTEMP_SENSOR", "SYSTEMP0_SENSOR";
 		};
 
 		fuel_gauge:fuel_gauge {
@@ -629,6 +629,8 @@ agold {
 			pm,user-name = "ccd";
 			pm,state-D0 = "enable";
 			pm,state-D3 = "disable";
+
+			offset_error_uc_per_s = <0>;
 		};
 		vibrator:vibrator {
 			compatible = "intel,vibra";

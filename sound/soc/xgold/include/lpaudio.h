@@ -3,6 +3,7 @@
 
 #if defined(LPVM)
 #include "lpvm.h"
+#include "speex_resampler.h"
 
 #define LPAUDIO_PROMPT		"lpaudio_vm"
 
@@ -14,11 +15,32 @@ void lpaudio_init(TX_BYTE_POOL *pool);
 #include <stdint.h>
 #include <string.h>
 
-typedef unsigned int	u32;
-typedef unsigned short	u16;
-typedef unsigned char	u8;
+typedef unsigned long long	u64;
+typedef unsigned int		u32;
+typedef unsigned short		u16;
+typedef unsigned char		u8;
 
 #define LPAUDIO_PROMPT		"lpaudio_lib"
+
+#define RESAMPLER_ERR_SUCCESS	0
+#define SpeexResamplerState	int
+#define speex_resampler_destroy(x...)
+#define speex_resampler_init(x...) 0
+#define speex_resampler_process_interleaved_int(x...) 0
+
+#elif defined(LPAUDIO_HOST_TEST)
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include "speex_resampler.h"
+
+typedef unsigned long long	u64;
+typedef unsigned int		u32;
+typedef unsigned short		u16;
+typedef unsigned char		u8;
+
+#define LPAUDIO_PROMPT		"lpaudio_test"
 
 #elif defined(__KERNEL__)
 #define LPAUDIO_PROMPT		"lpaudio_drv"
@@ -36,7 +58,8 @@ extern void setup_pcm_play_path(void);
 #define OFFSET_SM_AUDIO_BUFFER_SIZE_UL	1074
 #define OFFSET_SM_AUDIO_BUFFER_UL	114
 
-#define DMA_PADDING_SIZE		(8*4096)
+#define LPAUDIO_OUTPUT_MAX		(8*4096)
+#define DMA_PADDING_SIZE		LPAUDIO_OUTPUT_MAX
 #define DMA_BURST_SIZE			256
 #define DMA_BLOCK_SIZE			(960)
 #define DMA_BLOCK_NUM			(220)
@@ -59,15 +82,16 @@ extern void setup_pcm_play_path(void);
 #define LPAUDIO_IOCTRL_DSP_PLAY		_IOWR('A', 9, u32)
 #define LPAUDIO_IOCTRL_START		_IOWR('A', 21, u32)
 #define LPAUDIO_IOCTRL_STOP		_IOWR('A', 22, u32)
+#define LPAUDIO_IOCTRL_ENABLE		_IOWR('A', 23, u32)
+#define LPAUDIO_IOCTRL_DISABLE		_IOWR('A', 24, u32)
 
-#define WORK_BUF_SIZE			(128 * 4096)
-#define LPAUDIO_LPVM_WBUF_SIZE		(400 * 1024)
-#define LPAUDIO_INPUT_PADDING_SIZE	(4096)
-#define LPAUDIO_INPUT_BUF_SIZE		(32*1024)
+#define LPAUDIO_LPVM_WBUF_SIZE		(4 * 1024)
+#define LPAUDIO_INPUT_PADDING_SIZE	(512 * 1024)
+#define LPAUDIO_INPUT_BUF_SIZE		(512 * 1024)
 #define LPAUDIO_INPUT_BLOCK_MAX		4096
 #define LPAUDIO_INPUT_TOTAL_SIZE	\
 		((LPAUDIO_INPUT_BUF_SIZE + LPAUDIO_INPUT_PADDING_SIZE) * 2)
-#define LPAUDIO_WORKING_BUF_SIZE	(512*1024)
+#define WORK_BUF_SIZE			(LPAUDIO_LPVM_WBUF_SIZE + LPAUDIO_INPUT_TOTAL_SIZE)
 
 #define LPAUDIO_CMD_DEBUG		0x00
 #define LPAUDIO_CMD_INIT		0x01
@@ -77,6 +101,8 @@ extern void setup_pcm_play_path(void);
 #define LPAUDIO_CMD_STOP		0x05
 #define LPAUDIO_CMD_DATA		0x06
 #define LPAUDIO_CMD_PLAY		0x07
+#define LPAUDIO_CMD_VOL			0x08
+#define LPAUDIO_CMD_FLUSH		0x09
 
 #define LPAUDIO_CMD_ACK			0x81
 
@@ -85,6 +111,7 @@ extern void setup_pcm_play_path(void);
 
 #define LPAUDIO_TYPE_WAV		0
 #define LPAUDIO_TYPE_MP3		1
+#define LPAUDIO_TYPE_AAC		2
 
 #define lpaudio_err(x...)	lpvm_print("["LPAUDIO_PROMPT"] Err: " x)
 #define lpaudio_info(x...)	lpvm_print("["LPAUDIO_PROMPT"] Inf: " x)
@@ -96,6 +123,19 @@ extern void setup_pcm_play_path(void);
 
 typedef int(*LPAUDIO_PLAYER)(u8 *buf, int len);
 
+struct lpaudio_ctrl_t {
+#define LPAUDIO_STATUS_STOP	0
+#define LPAUDIO_STATUS_PLAY	1
+#define LPAUDIO_STATUS_PAUSE	2
+	int			start_play;
+	int			status;
+	int			frame;
+	u32			cur_seq;
+	u32			play_seq;
+	int			vol;
+	u32 			*dma_ptr;
+};
+
 struct lpaudio_ipc_head {
 	u8			cmd;
 	u8			id;
@@ -104,7 +144,6 @@ struct lpaudio_ipc_head {
 
 struct lpaudio_setup_param {
 	/* output buf setup */
-	u32	*dma_ptr;
 	u8	*output_start;
 	u8	*output_end;
 	u32	output_len;
@@ -125,8 +164,10 @@ struct lpaudio_play_param {
 };
 
 struct lpaudio_ack_param {
+#define LPAUDIO_ACK_RET		0
+#define LPAUDIO_ACK_LOG		1
 	u8	id;
-	u8	is_log;
+	u8	type;
 	union {
 		int	ret;
 		u8	log[80];
@@ -141,11 +182,14 @@ struct lpaudio_ipc_t {
 		struct lpaudio_setup_param setup;
 		struct lpaudio_play_param play;
 		u8 payload[LPAUDIO_PAYLOAD_SIZE];
+		u32 value;
 		int return_value;
 	};
 };
 
 extern int lpaudio_debug_enable;
 extern u32 lpaudio_rate;
+extern volatile struct lpaudio_ctrl_t *lpaudio_ctrl;
+int lpaudio_need_pause(void);
 
 #endif /*__LPAUDIO_H__*/

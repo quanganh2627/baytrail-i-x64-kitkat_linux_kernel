@@ -209,7 +209,6 @@ static inline void *dma_alloc_writeback(struct device *dev, size_t size,
 	return dma_alloc_attrs(dev, size, dma_handle, flag, &attrs);
 }
 
-
 static inline void dma_free_writecombine(struct device *dev, size_t size,
 				     void *cpu_addr, dma_addr_t dma_handle)
 {

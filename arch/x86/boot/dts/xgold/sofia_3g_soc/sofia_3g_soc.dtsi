@@ -104,7 +104,7 @@
 				counter,nr = < 2 >;
 
 				probe,offset = < 0x1000 >;
-#ifdef SOFIA3G_ES2
+#if defined (SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 				probe,portsel,0 = "CIF", "CPU0", "DMA8C_2", "GPU";
 				probe,portsel,1 = "CPU1", "DCC1", "DCC2", "VPU";
 				probe,portsel,2 = "EMIC";
@@ -119,7 +119,7 @@
 				stat,1 = "CPU1";
 				stat,2 = "EMIC";
 				stat,3 = "GPU";
-#ifdef SOFIA3G_ES2
+#if defined (SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 				stat,4 = "DCC2";
 
 				intel,qos-configs = "DCC2", "GPU";
@@ -279,7 +279,7 @@
 						clock-names = "clk_kernel", "clk_ahb";
 						interrupts = < I2C1_INT IRQ_TYPE_DEFAULT >;
 					/*	intel,i2c,dma = "i2c1_txrx";*/
-						intel,i2c,b400 = < 1 54 13 0 >;
+						intel,i2c,b400 = < 1 28 13 0 >;
 						intel,i2c,b100 = < 1 256 0 0 >;
 						resets = <&dbb_rst1 7>;
 						reset-names = "i2c";
@@ -408,7 +408,7 @@
 						pm,state-D1 = "mid_perf";
 						pm,state-D2 = "low_perf";
 						pm,state-D3 = "disable";
-#ifdef SOFIA3G_ES2
+#if defined (SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 						intel,dcc-clkrate = <416000000>;
 #else
 						intel,dcc-clkrate = <312000000>;
@@ -433,7 +433,7 @@
 					gpu{
 						compatible = "intel,mali";
 						reg = <0xE2E00000 0x100000>;
-#ifdef SOFIA3G_ES2
+#if defined (SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 						intel,mali,cores = < 2 >;
 #endif
 						clocks = <&clk_gpu>, <&clk_ahb_per2>;

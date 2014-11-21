@@ -551,27 +551,6 @@ static int dcc_dsi_get_bllp(struct dcc_display *lcd,
 	return 0;
 }
 
-static int dcc_dsi_get_line(struct dcc_display *lcd,
-		int nlines, int clk, int fps,
-		int *bllp_time, int *line_time)
-{
-	/* target line time */
-	unsigned int tlt = NSEC_PER_SEC / (fps) / nlines;
-	/* clock cycle duration in ps */
-	unsigned int clk_time = 1000000 / (clk/1000000);
-
-	*bllp_time = 0;
-	*line_time = tlt*1000 / clk_time;
-
-	DCC_DBG2("%d lines, fps target %d\n", nlines, fps);
-	DCC_DBG2("target time  = %d ns\n", tlt);
-	DCC_DBG2("clock cycle  = %d\n", clk_time);
-	DCC_DBG2("bllp_time 0x%08x(%d)\n", *bllp_time, *bllp_time);
-	DCC_DBG2("line_time 0x%08x(%d)\n", *line_time, *line_time);
-
-	return 0;
-}
-
 static int dcc_dsi_configure_video_mode(struct dcc_display *lcd,
 					int stride, int nlines)
 {
@@ -586,24 +565,13 @@ static int dcc_dsi_configure_video_mode(struct dcc_display *lcd,
 	}
 	dsicfg = DSI_CFG_TX_HS_PIXEL(dif->nblanes, dif->mode);
 
-	/* Temporarily disable DSI_PULSES mode for MRD5S enable */
-#if 0
-	if (dif->video_mode == DSI_PULSES) {
-		dcc_dsi_get_line(lcd,
-				nlines + dif->vfp + dif->vbp + dif->vsa,
-				pdata->clk_rate,
-				lcd->fps, &dif->bllp_time, &dif->line_time);
-	} else
-#endif
-	{
-		dcc_dsi_get_bllp(lcd,
-				nlines + dif->vfp + dif->vbp + dif->vsa,
-				stride + dif->hfp + dif->hbp,
-				pdata->clk_rate,
-				lcd->fps,
-				lcd->get_rate(lcd),
-				dif->nblanes, &dif->bllp_time, &dif->line_time);
-	}
+	dcc_dsi_get_bllp(lcd,
+			nlines + dif->vfp + dif->vbp + dif->vsa,
+			stride + dif->hfp + dif->hbp,
+			pdata->clk_rate,
+			lcd->fps,
+			lcd->get_rate(lcd),
+			dif->nblanes, &dif->bllp_time, &dif->line_time);
 
 	vid0 =	BITFLDS(INR_DIF_DSIVID0_HFP, (!!lcd->dif.u.dsi.hfp))|
 		BITFLDS(INR_DIF_DSIVID0_HBP, (!!lcd->dif.u.dsi.hbp))|

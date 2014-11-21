@@ -5,7 +5,7 @@
 #define BOARD_SOFIA3G_SVB2
 #define BOARD_SOFIA3G_MRD_P0
 #define BOARD_SOFIA3G_MRD_7S
-#define BOARD_SOFIA3G_MRD_5S		(66)
+#define BOARD_SOFIA3G_MRD_5S		(13)
 
 int sofia_board_is(id);
 unsigned int sofia_get_board_id(void);

@@ -4431,6 +4431,9 @@ void show_state_filter(unsigned long state_filter)
 		touch_nmi_watchdog();
 		if (!state_filter || (p->state & state_filter))
 			sched_show_task(p);
+#ifdef CONFIG_EMMC_IPANIC
+	emmc_ipanic_stream_emmc();
+#endif
 	} while_each_thread(g, p);
 
 	touch_all_softlockup_watchdogs();
@@ -4444,6 +4447,10 @@ void show_state_filter(unsigned long state_filter)
 	 */
 	if (!state_filter)
 		debug_show_all_locks();
+#ifdef CONFIG_EMMC_IPANIC
+	emmc_ipanic_stream_emmc();
+#endif
+
 }
 
 void init_idle_bootup_task(struct task_struct *idle)

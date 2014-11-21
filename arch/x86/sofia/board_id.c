@@ -1,7 +1,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
-static unsigned int board_id = 0xffff;
+static unsigned int board_id = ~(0);
 
 static int __init sofia_board_id_setup(char *str)
 {

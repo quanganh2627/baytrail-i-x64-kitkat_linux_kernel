@@ -1710,6 +1710,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 		goto err;
 	}
 
+	host->ocr = rocr;
 	/*
 	 * Detect and init the card.
 	 */
