@@ -91,7 +91,7 @@
 /* ======================================================================== */
 /* Base sensor configs */
 /* ======================================================================== */
-static const struct ov_camera_module_reg ov2685_init_tab_2MP_30fps[] = {/*{{{*/
+static const struct ov_camera_module_reg ov2685_init_tab_2MP_15fps[] = {/*{{{*/
 	/*1lanes, 30fps*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103 , 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_TIMEOUT, 0x0000, 0x01},
@@ -621,6 +621,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_VGA_30fps[] = {/*{{{*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3723 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3738 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3781 , 0x80},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3784 , 0x0c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3789 , 0x60},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3800 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3801 , 0xa0},
@@ -645,6 +646,8 @@ static const struct ov_camera_module_reg ov2685_init_tab_VGA_30fps[] = {/*{{{*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814 , 0x31},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3815 , 0x31},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3819 , 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820 , 0xc2},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821 , 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a06 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a07 , 0xc1},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a08 , 0x00},
@@ -835,7 +838,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_VGA_30fps[] = {/*{{{*/
 
 static struct ov_camera_module_config ov2685_configs[] = {/*{{{*/
 	{
-		.name = "2MP_30fps",
+		.name = "2MP_15fps",
 		.frm_fmt = {
 			.width = 1600,
 			.height = 1200,
@@ -844,17 +847,17 @@ static struct ov_camera_module_config ov2685_configs[] = {/*{{{*/
 		.frm_intrvl = {
 			.interval = {
 				.numerator = 1,
-				.denominator = 30
+				.denominator = 15
 			}
 		},
 		.auto_exp_enabled = false,
 		.auto_gain_enabled = false,
 		.auto_wb_enabled = false,
-		.reg_table = (void *)ov2685_init_tab_2MP_30fps,
+		.reg_table = (void *)ov2685_init_tab_2MP_15fps,
 		.reg_table_num_entries =
-			sizeof(ov2685_init_tab_2MP_30fps)
+			sizeof(ov2685_init_tab_2MP_15fps)
 			/
-			sizeof(ov2685_init_tab_2MP_30fps[0])
+			sizeof(ov2685_init_tab_2MP_15fps[0])
 	},
 	{
 		.name = "720P_30fps",
