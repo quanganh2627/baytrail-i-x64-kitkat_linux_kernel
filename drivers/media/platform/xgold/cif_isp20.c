@@ -5195,6 +5195,9 @@ int marvin_mipi_isr(void *cntxt)
 			      dev->config.base_addr + CIF_MIPI_ICR);
 	}
 
+	/* clean all mipi error interrupt to pass MTBF test */
+	cif_iowrite32(0xffffffff, dev->config.base_addr + CIF_MIPI_ICR);
+
 	return 0;
 }
 
