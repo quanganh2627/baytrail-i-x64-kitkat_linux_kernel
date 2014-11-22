@@ -1056,6 +1056,12 @@ static int cif_isp20_img_src_select_strm_fmt(
 						maximize the size */
 					better_match = true;
 				else if (!dev->config.jpeg_config.enable &&
+					(img_src_width ==
+					 request_strm_fmt.frm_fmt.width) &&
+					(img_src_height ==
+					 request_strm_fmt.frm_fmt.height))
+					better_match = true;
+				else if (!dev->config.jpeg_config.enable &&
 					(diff < best_diff))
 					better_match = true;
 				else if (!dev->config.jpeg_config.enable &&
