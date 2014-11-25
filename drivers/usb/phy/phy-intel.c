@@ -989,7 +989,8 @@ static void intel_otg_sm_work(struct work_struct *w)
 						= OTG_STATE_B_PERIPHERAL;
 					break;
 				case POWER_SUPPLY_CHARGER_TYPE_USB_SDP:
-					intel_otg_notify_charger(iphy, IUNIT);
+					intel_otg_notify_charger(iphy,
+							ICFG_MAX);
 					intel_otg_start_peripheral(otg, 1);
 					otg->phy->state
 						= OTG_STATE_B_PERIPHERAL;
