@@ -90,10 +90,30 @@ struct rtc_datetime_shared_data {
 	uint16_t   m_msecond;
 };
 
+#define HWID_GPIO_SHARED_MAX_SIZE 4
+#define HWID_ADC_SHARED_MAX_SIZE  2
+
+struct hwid_boot_shared_data {
+  uint32_t num_of_gpio;
+  struct exchange_boot_gpio
+  {
+    uint32_t id;
+    uint32_t gpio_status;
+  } gpio[HWID_GPIO_SHARED_MAX_SIZE];
+
+  uint32_t num_of_adc;
+  struct exchange_boot_adc
+  {
+    uint32_t id;
+    uint32_t sensor_value_ohm;
+  } adc[HWID_ADC_SHARED_MAX_SIZE];
+};
+
 struct pal_shared_data {
 	struct pm_control_shared_data pm_control_shared_data;
 	struct pmic_access_shared_data pmic_access_shared_data;
 	struct rtc_datetime_shared_data rtc_shared_data;
+	struct hwid_boot_shared_data hwid_shared_data;
 };
 
 enum VMM_POWER_STATE_E {
