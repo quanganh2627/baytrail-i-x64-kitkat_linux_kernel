@@ -68,8 +68,8 @@ enum mv_service_type {
 	RTC_SERVICE,
 	VMM_SPCU_THERMAL_SERVICE,
 	VMM_PWM_SERVICE,
-        VMM_SECURITY_VERIFY_VM_COMPLETED_SERVICE,
-        VMM_SECURITY_GETVM_LOADINFO_SERVICE
+	VMM_SECURITY_VERIFY_VM_COMPLETED_SERVICE,
+	VMM_SECURITY_GETVM_LOADINFO_SERVICE
 };
 
 
@@ -544,4 +544,18 @@ int32_t mv_svc_spcu_thermal_service(uint32_t opcode, uint32_t dev_id,
 int32_t mv_svc_pwm_access(enum pwm_op_code op,
 			uint32_t duty_ns, uint32_t period_ns);
 
-#endif /* _VMM_PLATFORM_SERVICE_H */
+/**
+ @brief Mobilevisor platform security verify vm complete service
+ @param vm verify result and vm id
+**/
+int32_t mv_svc_security_verify_vm_completed(uint32_t verify_result,
+						uint32_t vm_id);
+/**
+ @brief Mobilevisor platform security getvm loadinfo service
+ @param vm id
+ @return value vm load address and size
+**/
+int32_t mv_svc_security_getvm_loadinfo(uint32_t vm_id, uint32_t *vm_loadaddr,
+					uint32_t *vm_loadsize);
+
+#endif /* _MV_SVC_HYPERCALLS_H */
