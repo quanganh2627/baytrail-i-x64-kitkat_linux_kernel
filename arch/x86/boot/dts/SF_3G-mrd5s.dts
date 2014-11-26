@@ -406,7 +406,7 @@
 		pinctrl-0 = <&accel_default_pins>;
 		pinctrl-1 = <&accel_sleep_pins>;
 		pinctrl-2 = <&accel_inactive_pins>;
-		pm,class-name = "lsm303dlhc_acc_class";
+		pm,class-name = "kxcjk1013_class";
 		pm,user-name = "accelerometer";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
