@@ -45,7 +45,6 @@ static int xgold_ion_get_param(struct ion_client *client,
 	struct ion_handle *handle;
 	ion_phys_addr_t paddr;
 	size_t size;
-	struct ion_buffer *buffer;
 	struct xgold_ion_get_params_data *user_data =
 				(struct xgold_ion_get_params_data *)arg;
 
