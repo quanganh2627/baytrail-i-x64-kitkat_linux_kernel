@@ -124,7 +124,7 @@
 
 #if defined(CONFIG_VBPIPE)
 
-#include "../vvpu/vvpu_vbpipe.h"
+#include <sofia/vvpu_vbpipe.h>
 
 #ifdef CONFIG_X86_INTEL_SOFIA
 #include <sofia/nk_sofia_bridge.h>
@@ -991,7 +991,7 @@ static int xgold_vpu_enc_probe(struct platform_device *pdev)
 		 * the first time it is used
 		 */
 		if (result != 0) {
-			dev_warn(dev, "vbpipe init error, postpone");
+			dev_warn(dev, "vbpipe open is postponed");
 
 			/* TODO: ignore and skip probing; open pipe later */
 			result = 0;

@@ -899,16 +899,8 @@ static int cif_isp20_img_src_set_state(
 		break;
 	case CIF_ISP20_IMG_SRC_STATE_SW_STNDBY:
 		if (dev->img_src_state == CIF_ISP20_IMG_SRC_STATE_STREAMING) {
-			struct cif_isp20_frm_intrvl *frm_intrvl =
-				&dev->config.img_src_output.frm_intrvl;
 			ret = cif_isp20_img_src_s_streaming(
 				dev->img_src, false);
-			/* wait for a frame period to make sure that there is
-				no pending frame left. */
-			mdelay((1000 *
-				frm_intrvl->numerator +
-				frm_intrvl->denominator - 1) /
-				frm_intrvl->denominator);
 		} else
 			ret = cif_isp20_img_src_s_power(dev->img_src, true);
 		break;
@@ -4728,7 +4720,9 @@ int cif_isp20_s_input(
 	}
 
 	dev->img_src = NULL;
-	if (inp == CIF_ISP20_INP_DMA) /* DMA -> ISP*/
+
+	/* DMA -> ISP or DMA -> IE */
+	if ((inp == CIF_ISP20_INP_DMA) || (inp == CIF_ISP20_INP_DMA_IE))
 		dev->config.isp_config.input =
 			&dev->config.mi_config.dma.output;
 	else if (inp < CIF_ISP20_INP_DMA) {
@@ -5004,6 +4998,8 @@ int cif_isp20_s_ctrl(
 	case CIF_ISP20_CID_AUTO_N_PRESET_WHITE_BALANCE:
 	case CIF_ISP20_CID_SCENE_MODE:
 	case CIF_ISP20_CID_AUTO_FPS:
+	case CIF_ISP20_CID_HFLIP:
+	case CIF_ISP20_CID_VFLIP:
 		return cif_isp20_img_src_s_ctrl(dev->img_src,
 			id, val);
 	default:
@@ -5125,7 +5121,8 @@ int marvin_mipi_isr(void *cntxt)
 				break;
 			}
 		}
-	} else if (mipi_mis & CIF_MIPI_ERR_CSI) {
+	}
+	if (mipi_mis & CIF_MIPI_ERR_CSI) {
 		/*clear_mipi_csi_error*/
 		cif_iowrite32(CIF_MIPI_ERR_CSI,
 			      dev->config.base_addr + CIF_MIPI_ICR);
@@ -5146,7 +5143,8 @@ int marvin_mipi_isr(void *cntxt)
 				break;
 			}
 		}
-	} else if ((mipi_mis & CIF_MIPI_SYNC_FIFO_OVFLW(3))) {
+	}
+	if ((mipi_mis & CIF_MIPI_SYNC_FIFO_OVFLW(3))) {
 
 		/* clear_mipi_fifo_error*/
 		cif_iowrite32(CIF_MIPI_SYNC_FIFO_OVFLW(3),
@@ -5168,7 +5166,8 @@ int marvin_mipi_isr(void *cntxt)
 				break;
 			}
 		}
-	} else if (mipi_mis & CIF_MIPI_ADD_DATA_OVFLW) {
+	}
+	if (mipi_mis & CIF_MIPI_ADD_DATA_OVFLW) {
 		/* clear_mipi_fifo_error*/
 		cif_iowrite32(CIF_MIPI_ADD_DATA_OVFLW,
 				  dev->config.base_addr + CIF_MIPI_ICR);

@@ -364,12 +364,38 @@ int ov_camera_module_s_stream(struct v4l2_subdev *sd, int enable)
 		mdelay(cam_mod->custom.power_up_delays_ms[2]);
 		cam_mod->state = OV_CAMERA_MODULE_STREAMING;
 	} else {
+		int pclk;
+		int wait_ms;
+		struct ov_camera_module_timings timings;
 		if (cam_mod->state != OV_CAMERA_MODULE_STREAMING)
 			return 0;
 		ret = cam_mod->custom.stop_streaming(cam_mod);
 		if (IS_ERR_VALUE(ret))
 			goto err;
+
+		ret = ov_camera_module_ioctl(sd,
+					INTEL_VIDIOC_SENSOR_MODE_DATA,
+					&timings);
+
 		cam_mod->state = OV_CAMERA_MODULE_SW_STANDBY;
+
+		if (IS_ERR_VALUE(ret))
+			goto err;
+
+		pclk = timings.vt_pix_clk_freq_hz / 1000;
+
+		if (!pclk)
+			goto err;
+
+		wait_ms =
+			(timings.line_length_pck *
+			timings.frame_length_lines) /
+			pclk;
+
+		/* wait for a frame period to make sure that there is
+			no pending frame left. */
+
+		mdelay(wait_ms + 1);
 	}
 
 	cam_mod->state_before_suspend = cam_mod->state;
@@ -662,8 +688,15 @@ int ov_camera_module_s_ext_ctrls(
 					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 				} else {
 					pltfrm_camera_module_set_pin_state(
+				pltfrm_camera_module_set_pin_state(
 					sd,
 					PLTFRM_CAMERA_MODULE_PIN_FLASH,
+					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE
+					);
+				if (!strcmp(flash_driver, "FP6773C")) {
+					pltfrm_camera_module_set_pin_state(
+					sd,
+					PLTFRM_CAMERA_MODULE_PIN_TORCH,
 					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 					}
 			} else if (ctrl->value ==
@@ -762,9 +795,16 @@ int ov_camera_module_s_ext_ctrls(
 			ctrl->value);
 			break;
 		case V4L2_CID_HFLIP:
+			if (ctrl->value)
+				cam_mod->hflip = true;
+			else
+				cam_mod->hflip = false;
+			break;
 		case V4L2_CID_VFLIP:
-			/* TBD */
-			/* fallthrough */
+			if (ctrl->value)
+				cam_mod->vflip = true;
+			else
+				cam_mod->vflip = false;
 			break;
 		default:
 			pltfrm_camera_module_pr_warn(&cam_mod->sd,
@@ -851,7 +891,10 @@ long ov_camera_module_ioctl(struct v4l2_subdev *sd,
 		struct isp_supplemental_sensor_mode_data *timings =
 		(struct isp_supplemental_sensor_mode_data *) arg;
 
-		ret = cam_mod->custom.g_timings(cam_mod, &ov_timings);
+		if (cam_mod->custom.g_timings)
+			ret = cam_mod->custom.g_timings(cam_mod, &ov_timings);
+		else
+			ret = -EPERM;
 
 		if (IS_ERR_VALUE(ret)) {
 			pltfrm_camera_module_pr_err(&cam_mod->sd,
