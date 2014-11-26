@@ -688,17 +688,11 @@ int ov_camera_module_s_ext_ctrls(
 					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
 				} else {
 					pltfrm_camera_module_set_pin_state(
-				pltfrm_camera_module_set_pin_state(
 					sd,
 					PLTFRM_CAMERA_MODULE_PIN_FLASH,
 					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE
 					);
-				if (!strcmp(flash_driver, "FP6773C")) {
-					pltfrm_camera_module_set_pin_state(
-					sd,
-					PLTFRM_CAMERA_MODULE_PIN_TORCH,
-					PLTFRM_CAMERA_MODULE_PIN_STATE_ACTIVE);
-					}
+                                 }
 			} else if (ctrl->value ==
 					V4L2_FLASH_LED_MODE_TORCH){
 				if (!strcmp(flash_driver, "FP6773C")) {
