@@ -284,6 +284,7 @@ struct kionix_accel_driver {
 	atomic_t accel_enabled;
 	atomic_t accel_input_event;
 	atomic_t accel_enable_resume;
+	atomic_t on_before_suspend;
 	struct mutex mutex_earlysuspend;
 	struct mutex mutex_resume;
 	rwlock_t rwlock_accel_data;
@@ -466,6 +467,7 @@ static struct kionix_accel_platform_data *kionix_acc_of_get_platdata(
 	struct device_node *np = dev->of_node;
 	struct kionix_accel_platform_data *acc_pdata;
 	int ret = 0;
+	u32 direction = 0;
 
 	acc_pdata = kzalloc(sizeof(*acc_pdata), GFP_KERNEL);
 
@@ -495,12 +497,13 @@ static struct kionix_accel_platform_data *kionix_acc_of_get_platdata(
 skip_pinctrl:
 	/* Axis direction property */
 	if (of_property_read_u32(np, OF_ACC_DIRECTION,
-				&acc_pdata->accel_direction) < 0) {
+				&direction) < 0) {
 
 		dev_err(dev, "Error parsing %s property of node %s\n",
 			OF_ACC_DIRECTION, np->name);
 		goto out;
 	}
+	 acc_pdata->accel_direction = (u8)direction;
 	dev_dbg(dev, "accel direction:%d\n", acc_pdata->accel_direction);
 
 	/* Poll interval property */
@@ -1948,6 +1951,55 @@ exit:
 }
 #endif	/* CONFIG_HAS_EARLYSUSPEND */
 
+#ifdef CONFIG_PM
+static int kxcjk1013_resume(struct device *dev)
+{
+	int err = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct kionix_accel_driver *acceld = i2c_get_clientdata(client);
+
+	dev_dbg(dev, "%s: resume\n", KIONIX_ACCEL_NAME);
+	if (atomic_read(&acceld->on_before_suspend)) {
+		kionix_accel_power_on(acceld);
+		/*
+		 * Only needs to reinitialized the registers if Vdd
+		 * is pulled low during suspend
+		 */
+		err = acceld->kionix_accel_power_on_init(acceld);
+		if (err)
+			KMSGERR(&acceld->client->dev,
+					"%s: kionix_accel_power_on_init returned err = %d\n",
+					__func__, err);
+
+		err = kionix_accel_enable(acceld);
+	}
+	return err;
+}
+
+static int kxcjk1013_suspend(struct device *dev)
+{
+	int err = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct kionix_accel_driver *acceld = i2c_get_clientdata(client);
+
+	dev_dbg(dev, "%s: suspend\n", KIONIX_ACCEL_NAME);
+	if (atomic_read(&acceld->accel_enabled))
+		atomic_set(&acceld->on_before_suspend, 0);
+
+	err = kionix_accel_disable(acceld);
+	kionix_accel_power_off(acceld);
+
+	return err;
+}
+#else
+#define kxcjk1013_suspend NULL
+#define kxcjk1013_resume  NULL
+#endif /* CONFIG_PM */
+
+static const struct dev_pm_ops kxcjk1013_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(kxcjk1013_suspend, kxcjk1013_resume)
+};
+
 static int kionix_accel_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -2022,7 +2074,6 @@ static int kionix_accel_probe(struct i2c_client *client,
 				__func__, err);
 		goto err_accel_pdata_exit;
 	}
-
 	/* Setup group specific configuration and function callback */
 	switch (err) {
 	case KIONIX_ACCEL_WHO_AM_I_KXTE9:
@@ -2157,6 +2208,8 @@ static int kionix_accel_probe(struct i2c_client *client,
 	atomic_set(&acceld->accel_enabled, 0);
 	atomic_set(&acceld->accel_input_event, 0);
 	atomic_set(&acceld->accel_enable_resume, 0);
+	atomic_set(&acceld->on_before_suspend, 0);
+
 
 	mutex_init(&acceld->mutex_earlysuspend);
 	mutex_init(&acceld->mutex_resume);
@@ -2281,6 +2334,7 @@ static struct i2c_driver kionix_accel_driver = {
 	.driver = {
 		.name = KIONIX_ACCEL_NAME,
 		.owner = THIS_MODULE,
+		.pm = &kxcjk1013_pm,
 	},
 	.probe = kionix_accel_probe,
 	.remove = kionix_accel_remove,
