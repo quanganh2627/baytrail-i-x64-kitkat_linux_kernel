@@ -664,19 +664,19 @@ static void kionix_accel_grp1_report_accel_data(struct kionix_accel_driver
 
 				if (atomic_read(&acceld->accel_input_event)
 						> 0) {
-					input_report_abs(
+					input_report_rel(
 							acceld->input_dev,
-							ABS_X,
+							REL_X,
 							acceld->accel_data
 							[acceld->axis_map_x]);
-					input_report_abs(
+					input_report_rel(
 							acceld->input_dev,
-							ABS_Y,
+							REL_Y,
 							acceld->accel_data
 							[acceld->axis_map_y]);
-					input_report_abs(
+					input_report_rel(
 							acceld->input_dev,
-							ABS_Z,
+							REL_Z,
 							acceld->accel_data
 							[acceld->axis_map_z]);
 					input_sync(acceld->input_dev);
@@ -866,16 +866,16 @@ static void kionix_accel_grp2_report_accel_data(struct kionix_accel_driver
 
 				if (atomic_read(&acceld->accel_input_event)
 						> 0) {
-					input_report_abs(
-						acceld->input_dev, ABS_X,
+					input_report_rel(
+						acceld->input_dev, REL_X,
 						acceld->accel_data
 						[acceld->axis_map_x]);
-					input_report_abs(
-						acceld->input_dev, ABS_Y,
+					input_report_rel(
+						acceld->input_dev, REL_Y,
 						acceld->accel_data
 						[acceld->axis_map_y]);
-					input_report_abs(
-						acceld->input_dev, ABS_Z,
+					input_report_rel(
+						acceld->input_dev, REL_Z,
 						acceld->accel_data
 						[acceld->axis_map_z]);
 					input_sync(acceld->input_dev);
@@ -1122,16 +1122,16 @@ static void kionix_accel_grp4_report_accel_data(struct kionix_accel_driver
 
 				if (atomic_read(&acceld->accel_input_event)
 						> 0) {
-					input_report_abs(
-						acceld->input_dev, ABS_X,
+					input_report_rel(
+						acceld->input_dev, REL_X,
 						acceld->accel_data
 						[acceld->axis_map_x]);
-					input_report_abs(
-						acceld->input_dev, ABS_Y,
+					input_report_rel(
+						acceld->input_dev, REL_Y,
 						acceld->accel_data
 						[acceld->axis_map_y]);
-					input_report_abs(
-						acceld->input_dev, ABS_Z,
+					input_report_rel(
+						acceld->input_dev, REL_Z,
 						acceld->accel_data
 						[acceld->axis_map_z]);
 					input_sync(acceld->input_dev);
@@ -1455,13 +1455,16 @@ static void kionix_accel_input_close(struct input_dev *dev)
 static void kionix_accel_init_input_device(struct kionix_accel_driver *acceld,
 		struct input_dev *input_dev)
 {
-	__set_bit(EV_ABS, input_dev->evbit);
-	input_set_abs_params(input_dev, ABS_X, -ACCEL_G_MAX, ACCEL_G_MAX,
-			ACCEL_FUZZ, ACCEL_FLAT);
-	input_set_abs_params(input_dev, ABS_Y, -ACCEL_G_MAX, ACCEL_G_MAX,
-			ACCEL_FUZZ, ACCEL_FLAT);
-	input_set_abs_params(input_dev, ABS_Z, -ACCEL_G_MAX, ACCEL_G_MAX,
-			ACCEL_FUZZ, ACCEL_FLAT);
+	/*
+	 * Driver use EV_REL event to report data to user space
+	 * instead of EV_ABS. Because EV_ABS event will be ignored
+	 * if current input has same value as former one. which effect
+	 * data smooth
+	 */
+	set_bit(EV_REL, input_dev->evbit);
+	set_bit(REL_X, input_dev->relbit);
+	set_bit(REL_Y, input_dev->relbit);
+	set_bit(REL_Z, input_dev->relbit);
 
 	input_dev->name = KIONIX_ACCEL_NAME;
 	input_dev->id.bustype = BUS_I2C;
