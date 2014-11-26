@@ -1066,7 +1066,7 @@ static void fan54x_boost_worker(struct work_struct *work)
 
 	down(&chrgr->prop_lock);
 
-	ret = fan54x_attr_read(chrgr->client, BOOST_EN, &val);
+	ret = fan54x_attr_read(chrgr->client, BOOST_UP, &val);
 
 	if ((!ret) && val && chrgr->state.boost_enabled) {
 		fan54x_trigger_wtd(chrgr);
@@ -1088,10 +1088,6 @@ static void fan54x_set_boost(struct work_struct *work)
 
 	down(&chrgr->prop_lock);
 
-	/* Clear state flags */
-	chrgr->state.boost_ov = 0;
-	chrgr->state.bat_uv = 0;
-
 	if (on) {
 		/* Enable boost regulator */
 		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 1);
@@ -1100,6 +1096,10 @@ static void fan54x_set_boost(struct work_struct *work)
 
 		/* Boost startup time is 2 ms max */
 		mdelay(2);
+
+		ret = fan54x_attr_write(chrgr->client, OTG_EN, 1);
+		if (ret)
+			goto exit_boost;
 
 		/* Ensure Boost is in regulation */
 		ret = fan54x_attr_read(chrgr->client, BOOST_UP, &chr_reg);
@@ -1135,6 +1135,10 @@ static void fan54x_set_boost(struct work_struct *work)
 		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 0);
 		if (ret)
 			pr_err("%s: fail to disable boost mode\n", __func__);
+
+		ret = fan54x_attr_write(chrgr->client, OTG_EN, 0);
+		if (ret)
+			pr_err("%s: fail to disable otg pin\n", __func__);
 	}
 
 exit_boost:
@@ -1181,18 +1185,18 @@ static void fan54x_chgint_cb_work_func(struct work_struct *work)
 			 chrgr->state.t32s_timer_expired) {
 			/*
 			 * In case of BOOST fault, BOOST_EN bit is automatically
-			 * cleared. Only need to clear boost enabled sw flag and
-			 * stop the booster workqueue
+			 * cleared.
+			 * Switch to OTG pin to hardware restart BOOST mode.
 			 */
-			atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
-					INTEL_USB_DRV_VBUS_ERR, NULL);
 
-			wake_unlock(&chrgr->suspend_lock);
 			if (chrgr->state.boost_ov)
-				pr_err("%s: boost mode overcurrent detected\n",
+				pr_err("%s: boost mode over current detected\n",
 						__func__);
 			if (chrgr->state.bat_uv)
 				pr_err("%s: boost mode under voltage detected\n",
+						__func__);
+			if (chrgr->state.t32s_timer_expired)
+				pr_err("%s: boost mode t32 timer expired\n",
 						__func__);
 
 			goto fail;
