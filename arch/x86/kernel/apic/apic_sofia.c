@@ -64,7 +64,11 @@ static void sofia_send_IPI_all(int vector)
 static int sofia_wakeup_secondary_cpu(int apicid, unsigned long start_ip)
 {
 	/* FIXME: Not so good to highjack the parameter.. */
+#ifdef CONFIG_X86_32
 	unsigned long hack_start_ip = (unsigned long)__pa(startup_32_smp);
+#else
+	unsigned long hack_start_ip = (unsigned long)__pa(secondary_startup_64);
+#endif
 	mv_start_vcpu(apicid, hack_start_ip);
 	return 0;
 }
@@ -171,10 +175,12 @@ static void sofia_apic_mem_write(u32 reg, u32 v)
 	}
 }
 
+#ifdef CONFIG_X86_32
 static int sofia_early_logical_apicid(int cpu)
 {
 	return BIT(cpu);
 }
+#endif
 
 static void sofia_apic_eoi_write(u32 reg, u32 value)
 {
@@ -252,7 +258,9 @@ static struct apic apic_sofia = {
 	.wait_icr_idle			= sofia_apic_wait_icr_idle,
 	.safe_wait_icr_idle		= NULL,
 
+#ifdef CONFIG_X86_32
 	.x86_32_early_logical_apicid	= sofia_early_logical_apicid,
+#endif
 };
 
 apic_driver(apic_sofia);

@@ -1910,7 +1910,8 @@ int __init APIC_init_uniprocessor(void)
 	connect_bsp_APIC();
 
 #ifdef CONFIG_X86_64
-	apic_write(APIC_ID, SET_APIC_ID(boot_cpu_physical_apicid));
+	if (apic->set_apic_id)
+		apic_write(APIC_ID, SET_APIC_ID(boot_cpu_physical_apicid));
 #else
 	/*
 	 * Hack: In case of kdump, after a crash, kernel might be booting
@@ -2626,7 +2627,7 @@ early_param("nolapic_pm", parse_nolapic_pm);
 static int __init apic_set_verbosity(char *arg)
 {
 	if (!arg)  {
-#ifdef CONFIG_X86_64
+#if defined(CONFIG_X86_64) && defined(CONFIG_X86_IO_APIC)
 		skip_ioapic_setup = 0;
 		return 0;
 #endif
