@@ -273,6 +273,8 @@ static void xgold_sdhci_of_init(struct sdhci_host *host)
 	if ((of_property_read_u32(np, "intel,is_non_removable", &bits) == 0) &&
 		bits == 1)
 		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
+
+	host->mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
 }
 
 static struct sdhci_ops xgold_sdhci_ops = {
