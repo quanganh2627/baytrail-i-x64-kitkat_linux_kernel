@@ -77,7 +77,7 @@
 #define ADC_NON_BAT_CUR_DATAL_MASK	0x0F
 
 #define ADC_TS_PIN_CNRTL_REG           0x84
-#define ADC_TS_PIN_ON                  0xF3
+#define ADC_TS_PIN_ON                  0xF2
 
 #define DEV_NAME			"dollar_cove_adc"
 
@@ -132,6 +132,8 @@ static struct iio_map iio_maps[] = {
 	ADC_MAP("CH3", "CURRENT", "BATCCUR"),
 	ADC_MAP("CH4", "CURRENT", "BATDCUR"),
 	ADC_MAP("CH5", "VIBAT", "VBAT"),
+	ADC_MAP("CH1", "byt_cr_thermal", "PMICTEMP"),
+	ADC_MAP("CH2", "byt_cr_thermal", "SYSTEMP0"),
 };
 
 /**
