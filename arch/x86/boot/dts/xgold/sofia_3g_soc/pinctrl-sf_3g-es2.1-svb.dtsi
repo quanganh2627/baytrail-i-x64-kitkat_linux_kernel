@@ -78,26 +78,37 @@
 		pinctrl-single,pins = <
 			0x200 0x2001	/* kp_in0 */
 			0x204 0x2001	/* kp_in1 */
-			0x20c 0x10410	/* kp_out0 */
-			0x214 0x10410	/* kp_out2 */
+#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+#else
+			0x20c 0x10010	/* kp_out0 */
+#endif
+			0x214 0x10010	/* kp_out2 */
 		>;
 	};
 	kp_inactive_pins:kp_inactive_pins {
 		pinctrl-single,pins = <
 			0x200 0x2001	/* kp_in0 */
 			0x204 0x2001	/* kp_in1 */
-			0x20c 0x10410	/* kp_out0 */
-			0x214 0x10410	/* kp_out2 */
+#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+#else
+			0x20c 0x10010	/* kp_out0 */
+#endif
+			0x214 0x10010	/* kp_out2 */
 		>;
 	};
-	kp_sleep_pins:kp_sleep_pins {
+kp_sleep_pins:kp_sleep_pins {
 		pinctrl-single,pins = <
 			0x200 0x2001	/* kp_in0 */
 			0x204 0x2001	/* kp_in1 */
-			0x20c 0x10410	/* kp_out0 */
-			0x214 0x10410	/* kp_out2 */
+#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+#else
+			0x20c 0x10010	/* kp_out0 */
+#endif
+			0x214 0x10010	/* kp_out2 */
 		>;
 	};
+
+
 	mipi_function_B_active_pins:mipi_function_B_active_pins {
 		pinctrl-single,pins = <
 			0x200 0x31040	/* mipi_trace_data8 */
@@ -454,6 +465,9 @@
 	};
 	touch_default_pins:touch_default_pins {
 		pinctrl-single,pins = <
+#ifdef SOFIA3G_MRD7S
+			0x21c 0x1700	/* panel_en */
+#endif
 			0x280 0x1700	/* touch_reset */
 			0x308 0x2002	/* touch_irq */
 		>;
