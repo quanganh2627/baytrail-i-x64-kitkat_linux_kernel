@@ -1,1 +1,23 @@
-
+#ifdef SOFIA3G_CATALOG_MRD0_P0_SENSOR
+#ifndef RECOVERY_KERNEL
+#ifdef CONFIG_INPUT_ROHM_RPR0521
+        rpr521 {
+                compatible = "rohm,rpr521";
+                reg = < 0x38 >;
+                interrupt-parent = <&eint>;
+                interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+                intel,axis-map = < 1 0 2 >;
+                intel,negate = < 1 0 0 >;
+                intel,poll-interval = < 100 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&prox_catalog_p0_default_pins>;
+                pinctrl-1 = <&prox_catalog_p0_sleep_pins>;
+                pinctrl-2 = <&prox_catalog_p0_inactive_pins>;
+                pm,class-name = "rpr521_class";
+                pm,user-name = "acclerometer";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+        };
+#endif
+#endif
+#endif
