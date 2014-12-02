@@ -1372,7 +1372,7 @@ static irqreturn_t fan54x_charger_chgint_cb(int irq, void *dev)
 {
 	struct fan54x_charger *chrgr = dev;
 
-	pr_info("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 
 	unfreezable_bh_schedule(&chrgr->chgint_bh);
 
