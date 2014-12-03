@@ -160,7 +160,7 @@
 					0x1D90 0x100    /* bandwidth */
 					0x1D94 0x10     /* saturation */
 					0x1D98 0x5>;    /* QoSEn */
-#elif defined(SOFIA3G_ES2)
+#elif defined(SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 				intel,qos-configs = "DCC2", "GPU";
 				intel,GPU-qos-settings = <
 					0x1C88 0x0      /* prio */
