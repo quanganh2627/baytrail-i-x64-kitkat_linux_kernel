@@ -2911,8 +2911,8 @@ static int binder_open(struct inode *nodp, struct file *filp)
 
 	binder_debug(BINDER_DEBUG_OPEN_CLOSE, "binder_open: %d:%d\n",
 		     current->group_leader->pid, current->pid);
-		     
-        pr_err("binder open: %s\n", current->comm);
+
+	pr_debug("binder open: %s\n", current->comm);
 
 	proc = kzalloc(sizeof(*proc), GFP_KERNEL);
 	if (proc == NULL)
