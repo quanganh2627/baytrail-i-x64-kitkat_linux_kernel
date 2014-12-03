@@ -316,7 +316,7 @@
 
 	};
 #endif
-#ifdef SOFIA3G_CATALOG_MRD0_P0
+#ifdef SOFIA3G_CATALOG_MRD0_P0_TOUCH
 #include "catalog/Sf_3G-catalog-Touch.dtsi"
 #else
 #ifndef RECOVERY_KERNEL
