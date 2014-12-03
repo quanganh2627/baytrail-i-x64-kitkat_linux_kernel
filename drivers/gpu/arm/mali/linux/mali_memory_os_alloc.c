@@ -381,10 +381,11 @@ mali_mem_allocation *mali_mem_os_alloc(u32 mali_addr, u32 size, struct vm_area_s
 	err = mali_mem_os_mali_map(descriptor, session); /* Map on Mali */
 	if (0 != err) goto mali_map_failed;
 
-	_mali_osk_mutex_signal(session->memory_lock);
 
 	err = mali_mem_os_cpu_map(descriptor, vma); /* Map on CPU */
 	if (0 != err) goto cpu_map_failed;
+
+	_mali_osk_mutex_signal(session->memory_lock);
 
 	pr_debug("success allocate OS %dK\n", size/1024);
 	return descriptor;
