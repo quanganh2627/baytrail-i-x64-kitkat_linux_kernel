@@ -1525,6 +1525,8 @@ static ssize_t kionix_accel_set_enable(struct device *dev,
 	unsigned long enable;
 	int err = 0;
 
+	/* flush on-executing worker to avoid stuck on mutex */
+	flush_delayed_work(&acceld->accel_work);
 	/* Lock the device to prevent races with open/close (and itself) */
 	mutex_lock(&input_dev->mutex);
 
