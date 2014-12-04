@@ -60,24 +60,6 @@
 		pm,state-D3 = "disable";
 	};
 
-#ifndef RECOVERY_KERNEL
-	headset:headset {
-		compatible = "intel,headset";
-		#address-cells = < 0 >;
-		reg = <0xE6501C00 0x4>;
-		reg-names = "headset-registers";
-		interrupts = < 0 1 >;
-		interrupt-parent = < &headset>;
-		#interrupt-cells = < 1 >;
-		interrupt-map = <
-			 0 &ag620_pmu ABB_PMU_ACD1 XGOLD_IRQ_TYPE_NONE
-			 1 &ag620_pmu ABB_PMU_ACD2 XGOLD_IRQ_TYPE_NONE
-			>;
-		interrupt-names = "acd1", "acd2";
-		io-channel-names = "ACCID_ADC";
-		io-channels = < &meas 4 >;
-	};
-#endif
 	lcd:lcd {
 		compatible = "intel,lcd";
 		pm,class-name = "generic_class";
@@ -132,12 +114,13 @@
 	};
 
 #ifndef RECOVERY_KERNEL
-	sound {
+	sound:sound {
 		compatible = "intel,xgold-snd-asoc";
 		intel,audio-codec = < &afe >;
 		intel,pcm-audio = <&pcm_music>;
 		intel,pcm-voice = <&pcm_voice>;
 		intel,speech = <&speech_probe>;
+		intel,jack = <&headset>;
 	};
 #endif
 	gpio_keys:gpio_keys {
@@ -180,7 +163,7 @@
 				  2300 /*capacity*/
 				  4350 /*voltage_max*/
 				  82 /*chrg_term_ma*/
-				  3200 /*low_batt_mv*/
+				  3000 /*low_batt_mv*/
 				  60 /*disch_tmp_ul*/
 				  0xffffffec /*disch_tmp_ll (-20)*/
 				  0 /*min_temp*/
@@ -463,10 +446,16 @@
 };
 
 &gnss {
-	pinctrl-names = "default", "sleep", "inactive";
-	pinctrl-0 = <&tcxo_agold_default_pins>;
-	pinctrl-1 = <&tcxo_agold_sleep_pins>;
-	pinctrl-2 = <&tcxo_agold_inactive_pins>;
+        pinctrl-names = "default", "sleep", "inactive", "default_lna", "inactive_lna", "default_fta", "inactive_fta", "gnss_default", "gnss_inactive";
+        pinctrl-0 = <&tcxo_agold_default_pins>;
+        pinctrl-1 = <&tcxo_agold_sleep_pins>;
+        pinctrl-2 = <&tcxo_agold_inactive_pins>;
+        pinctrl-3 = <&ext_agold_default_pins>;
+        pinctrl-4 = <&ext_agold_sleep_pins>;
+        pinctrl-5 = <&gnss_agold_default_pins>;
+        pinctrl-6 = <&gnss_agold_sleep_pins>;
+        pinctrl-7 = <&gnss_default_pins>;
+        pinctrl-8 = <&gnss_inactive_pins>;
 };
 
 &backlight {
