@@ -1,5 +1,6 @@
 /dts-v1/;
 #define SOFIA3G_MRD5S
+//#define SOFIA3G_CATALOG_MRD5S_SENSOR
 #include "xgold/sofia_3g_soc/irq.h"
 
 / {
@@ -350,7 +351,9 @@
 		pm,state-D3 = "disable";
 	};
 #endif
-
+#ifdef SOFIA3G_CATALOG_MRD5S_SENSOR
+#include "catalog/Sf_3G-catalog-Sensor.dtsi"
+#else
 #ifndef RECOVERY_KERNEL
 	acc_kxcjk1013 {
 		compatible = "kionix,kxcjk1013_acc";
@@ -422,6 +425,7 @@
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
 	};
+#endif
 #endif
 };
 
