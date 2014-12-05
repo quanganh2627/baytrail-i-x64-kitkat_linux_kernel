@@ -571,19 +571,18 @@ static void pphwc_fence_create(struct vpu_dec_device_t *pdata,
 		return;
 	}
 
-	/* Create fence */
-	fence = sync_fence_create("dcc-fence", point);
-	if (fence == NULL) {
+	/* Create fd */
+	fd = get_unused_fd();
+	if (fd < 0) {
+		dev_err(pdata->dev, "fence_fd not initialized\n");
 		sync_pt_free(point);
 		cmd->release_fence_fd = -EINVAL;
 		return;
 	}
 
-	/* Create fd */
-	fd = get_unused_fd();
-	if (fd < 0) {
-		dev_err(pdata->dev, "fence_fd not initialized\n");
-		sync_fence_put(fence);
+	/* Create fence */
+	fence = sync_fence_create("dcc-fence", point);
+	if (fence == NULL) {
 		sync_pt_free(point);
 		cmd->release_fence_fd = -EINVAL;
 		return;
