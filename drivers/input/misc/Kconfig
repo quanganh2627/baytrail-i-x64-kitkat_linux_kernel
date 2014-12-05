@@ -755,7 +755,11 @@ config INPUT_STK3310
           To compile this driver as a module, choose M here: the module
           will be called stk3x1x.
 
-
+config INPUT_STK8312
+        tristate "Sensortek STK8312 Accelerometer"
+        depends on I2C && INPUT
+        help
+          Say Y here if you have an STK8312 chip.
 
 
 

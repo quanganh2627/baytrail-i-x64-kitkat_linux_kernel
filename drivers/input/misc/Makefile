@@ -73,3 +73,4 @@ obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
 obj-$(CONFIG_INPUT_ROHM_RPR0521)        += rpr0521_driver.o
 obj-$(CONFIG_INPUT_STK3310)             += stk3x1x.o
+obj-$(CONFIG_INPUT_STK8312)             += stk831x.o
