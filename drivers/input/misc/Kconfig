@@ -761,6 +761,11 @@ config INPUT_STK8312
         help
           Say Y here if you have an STK8312 chip.
 
+config INPUT_STK8BAXX
+        tristate"sensortek stk8baxx accelerometer"
+        depends on I2C && INPUT
+        help
+          If you say yes here you get support for the stk8baxx.
 
 
 
