@@ -2246,6 +2246,33 @@ int i915_set_plane_180_rotation(struct drm_device *dev, void *data,
 	return ret;
 }
 
+void i9xx_get_pfit_mode(struct drm_crtc *crtc, uint32_t src_w, uint32_t src_h)
+{
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct drm_display_mode *adjusted_mode = &intel_crtc->config.adjusted_mode;
+	u32 scaled_width = adjusted_mode->hdisplay * src_h;
+	u32 scaled_height = src_w * adjusted_mode->vdisplay;
+	u32 pfit_control = intel_crtc->config.gmch_pfit.control;
+
+	if (scaled_width > scaled_height) {
+		pfit_control &= MASK_PFIT_SCALING_MODE;
+		pfit_control |= PFIT_SCALING_PILLAR;
+	} else if (scaled_width < scaled_height) {
+		pfit_control &=  MASK_PFIT_SCALING_MODE;
+		pfit_control |= PFIT_SCALING_LETTER;
+	} else if (!(adjusted_mode->hdisplay <= (src_w+25) &&
+			adjusted_mode->hdisplay >= (src_w-25))) {
+		/*
+		 * TODO: If native width doest not lies b/n src layer
+		 * width-25 and width+25, we put pfit in auto scale,
+		 * not expecting variation more than 25
+		 */
+		pfit_control &=  MASK_PFIT_SCALING_MODE;
+		pfit_control |= PFIT_SCALING_AUTO;
+	}
+	intel_crtc->config.gmch_pfit.control = pfit_control;
+}
+
 static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 			     int x, int y)
 {
@@ -2370,12 +2397,10 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	if (IS_VALLEYVIEW(dev)) {
 		/* if panel fitter is enabled program the input src size */
 		if (intel_crtc->scaling_src_size &&
-			intel_crtc->config.gmch_pfit.control) {
+			(intel_crtc->config.gmch_pfit.control & PFIT_ENABLE)) {
 			intel_crtc->reg.pfit_control =
 				intel_crtc->config.gmch_pfit.control;
 			intel_crtc->reg.pipesrc = intel_crtc->scaling_src_size;
-			dev_priv->pfit_pipe = ((intel_crtc->reg.pfit_control &
-						PFIT_PIPE_MASK) >> 29);
 			if (!dev_priv->atomic_update) {
 				I915_WRITE(PFIT_CONTROL,
 					intel_crtc->reg.pfit_control);
@@ -2384,10 +2409,11 @@ static int i9xx_update_plane(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 				intel_crtc->pfit_en_status = true;
 			}
 		} else if (intel_crtc->pfit_en_status) {
+			intel_crtc->reg.pfit_control =
+				intel_crtc->config.gmch_pfit.control;
 			intel_crtc->reg.pipesrc =
 				((mode->hdisplay - 1) <<
 				SCALING_SRCSIZE_SHIFT) | (mode->vdisplay - 1);
-			intel_crtc->reg.pfit_control = 0;
 			if (!dev_priv->atomic_update) {
 				I915_WRITE(PIPESRC(pipe),
 						intel_crtc->reg.pipesrc);
@@ -4142,9 +4168,8 @@ static void i9xx_pfit_enable(struct intel_crtc *crtc)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc_config *pipe_config = &crtc->config;
 
-	if (!crtc->config.gmch_pfit.control)
+	if (!crtc->config.gmch_pfit.control && !dev_priv->scaling_reqd)
 		return;
-
 	/*
 	 * The panel fitter should only be adjusted whilst the pipe is disabled,
 	 * according to register description and PRM.
@@ -4155,12 +4180,42 @@ static void i9xx_pfit_enable(struct intel_crtc *crtc)
 
 	I915_WRITE(PFIT_PGM_RATIOS, pipe_config->gmch_pfit.pgm_ratios);
 	I915_WRITE(PFIT_CONTROL, pipe_config->gmch_pfit.control);
-
 	/* Border color in case we don't scale up to the full screen. Black by
 	 * default, change to something else for debugging. */
 	I915_WRITE(BCLRPAT(crtc->pipe), 0);
 	crtc->pfit_en_status = true;
 }
+
+static void vlv_update_watermarks(struct drm_i915_private *dev_priv)
+{
+	I915_WRITE(DSPFW1,
+		   (DSPFW_SR_VAL << DSPFW_SR_SHIFT) |
+		   (DSPFW_CURSORB_VAL << DSPFW_CURSORB_SHIFT) |
+		   (DSPFW_PLANEB_VAL << DSPFW_PLANEB_SHIFT) |
+		   DSPFW_PLANEA_VAL);
+	I915_WRITE(DSPFW2,
+		   (DSPFW2_RESERVED) |
+		   (DSPFW_CURSORA_VAL << DSPFW_CURSORA_SHIFT) |
+		   DSPFW_PLANEC_VAL);
+	I915_WRITE(DSPFW3,
+		   (I915_READ(DSPFW3) & ~DSPFW_CURSOR_SR_MASK) |
+		   (DSPFW3_VLV));
+	I915_WRITE(DSPFW4, (DSPFW4_SPRITEB_VAL << DSPFW4_SPRITEB_SHIFT) |
+			(DSPFW4_CURSORA_VAL << DSPFW4_CURSORA_SHIFT) |
+			DSPFW4_SPRITEA_VAL);
+	POSTING_READ(DSPFW4);
+	I915_WRITE(DSPFW5, (DSPFW5_DISPLAYB_VAL << DSPFW5_DISPLAYB_SHIFT) |
+			(DSPFW5_DISPLAYA_VAL << DSPFW5_DISPLAYA_SHIFT) |
+			(DSPFW5_CURSORB_VAL << DSPFW5_CURSORB_SHIFT) |
+			DSPFW5_CURSORSR_VAL);
+	I915_WRITE(DSPFW6, DSPFW6_DISPLAYSR_VAL);
+	I915_WRITE(DSPFW7, (DSPFW7_SPRITED1_VAL << DSPFW7_SPRITED1_SHIFT) |
+			(DSPFW7_SPRITED_VAL << DSPFW7_SPRITED_SHIFT) |
+			(DSPFW7_SPRITEC1_VAL << DSPFW7_SPRITEC1_SHIFT) |
+			DSPFW7_SPRITEC_VAL);
+	I915_WRITE(DSPARB, DSPARB_VLV_DEFAULT);
+}
+
 static void valleyview_crtc_enable(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
@@ -4181,7 +4236,10 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	intel_crtc->active = true;
 	if (dev_priv->s0ixstat == true)
 		intel_crtc->s0ix_suspend_state = false;
-	intel_update_watermarks(dev);
+	if (!dev_priv->atomic_update)
+		intel_update_watermarks(dev);
+	else
+		vlv_update_watermarks(dev_priv);
 
 	for_each_encoder_on_crtc(dev, crtc, encoder)
 		if (encoder->pre_pll_enable)
@@ -4271,7 +4329,8 @@ static void i9xx_crtc_enable(struct drm_crtc *crtc)
 
 	intel_update_fbc(dev);
 	intel_update_drrs(dev);
-	intel_update_watermarks(dev);
+	if (!dev_priv->atomic_update)
+		intel_update_watermarks(dev);
 
 	for_each_encoder_on_crtc(dev, crtc, encoder)
 		encoder->enable(encoder);
@@ -4288,8 +4347,11 @@ static void i9xx_pfit_disable(struct intel_crtc *crtc)
 	assert_pipe_disabled(dev_priv, crtc->pipe);
 
 	DRM_DEBUG_DRIVER("disabling pfit, current: 0x%08x\n",
-			 I915_READ(PFIT_CONTROL));
-	I915_WRITE(PFIT_CONTROL, 0);
+			I915_READ(PFIT_CONTROL));
+	if (I915_READ(PFIT_CONTROL) !=
+			(crtc->config.gmch_pfit.control & ~PFIT_ENABLE))
+		I915_WRITE(PFIT_CONTROL,
+			(crtc->config.gmch_pfit.control & ~PFIT_ENABLE));
 	crtc->pfit_en_status = false;
 }
 
@@ -4368,7 +4430,8 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 		intel_crtc->s0ix_suspend_state = true;
 	intel_update_fbc(dev);
 	intel_update_drrs(dev);
-	intel_update_watermarks(dev);
+	if (!dev_priv->atomic_update)
+		intel_update_watermarks(dev);
 
 	if ((pipe == 0) && (dev_priv->is_mipi || dev_priv->is_hdmi)) {
 		/* Ensure that port, plane, pipe, pf, pll are all disabled
@@ -4383,7 +4446,6 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 		if (wait_for(I915_READ( VLV_DISPLAY_BASE + 0x70008) & 0x40000000, 50))
 			DRM_DEBUG_KMS("pipe not turned off\n");
 
-		I915_WRITE_BITS(VLV_DISPLAY_BASE + 0x61230, 0, 0x80000000);
 		I915_WRITE_BITS(VLV_DISPLAY_BASE + 0x6014, 0, 0x80000000);
 	}
 
@@ -4655,8 +4717,15 @@ static void intel_encoder_dpms(struct intel_encoder *encoder, int mode)
 		encoder->connectors_active = true;
 
 		intel_crtc_update_dpms(encoder->base.crtc);
+
+		/* Restore Gamma/Csc/Hue/Saturation/Brightness/Contrast */
+		if (!intel_restore_clr_mgr_status(encoder->base.crtc->dev))
+			DRM_ERROR("Restore Color manager status failed");
 	} else {
 		encoder->connectors_active = false;
+
+		/* Save Hue/Saturation/Brightness/Contrast status */
+		intel_save_clr_mgr_status(encoder->base.crtc->dev);
 
 		intel_crtc_update_dpms(encoder->base.crtc);
 	}
@@ -5760,7 +5829,8 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 
 	ret = intel_pipe_set_base(crtc, x, y, fb);
 
-	intel_update_watermarks(dev);
+	if (!dev_priv->atomic_update)
+		intel_update_watermarks(dev);
 	/* Added for HDMI Audio */
 	if (IS_VALLEYVIEW(dev) && intel_pipe_has_type(crtc,
 		INTEL_OUTPUT_HDMI)) {
@@ -9173,23 +9243,30 @@ static void i915_commit(struct drm_i915_private *dev_priv,
 			intel_plane->pri_update = false;
 		}
 	}
-	/*
-	 * Allow only the pipe/crtc which previously enabled panel fitter to
-	 * make changes to the pfit_control and pipesrc register.
-	 */
-	if (pipe == dev_priv->pfit_pipe) {
-		if (I915_READ(PFIT_CONTROL) != reg->pfit_control)
+
+	if (reg->pfit_control && reg->pipesrc) {
+		if (dev_priv->pfit_pipe == ((reg->pfit_control & PFIT_PIPE_MASK) >> 29)
+				&& I915_READ(PFIT_CONTROL) != reg->pfit_control)
 			I915_WRITE(PFIT_CONTROL, reg->pfit_control);
 		if (I915_READ(PIPESRC(pipe)) != reg->pipesrc)
 			I915_WRITE(PIPESRC(pipe), reg->pipesrc);
+		intel_crtc->pfit_en_status = true;
+	} else if (intel_crtc->pfit_en_status) {
+		if (I915_READ(PIPESRC(pipe)) != reg->pipesrc)
+			I915_WRITE(PIPESRC(pipe), reg->pipesrc);
+		if (dev_priv->pfit_pipe == ((reg->pfit_control & PFIT_PIPE_MASK) >> 29)
+				&& I915_READ(PFIT_CONTROL) != reg->pfit_control)
+			I915_WRITE(PFIT_CONTROL, reg->pfit_control);
+		intel_crtc->pfit_en_status = false;
 	}
+
 	if (type == SPRITE_PLANE) {
 		I915_WRITE(SPSTRIDE(pipe, plane), reg->stride);
 		I915_WRITE(SPPOS(pipe, plane), reg->pos);
 		I915_WRITE(SPTILEOFF(pipe, plane), reg->tileoff);
 		I915_WRITE(SPLINOFF(pipe, plane), reg->linoff);
 		I915_WRITE(SPSIZE(pipe, plane),	reg->size);
-		I915_WRITE_BITS(SPCNTR(pipe, plane), reg->cntr, 0xFFFFFFF8);
+		I915_WRITE_BITS(SPCNTR(pipe, plane), reg->cntr, 0xBFFFFFF8);
 		I915_MODIFY_DISPBASE(SPSURF(pipe, plane), reg->surf);
 		if (intel_plane->flags & DRM_MODE_SET_DISPLAY_PLANE_UPDATE_RRB2) {
 			if (intel_plane->rrb2_enable) {
@@ -9312,29 +9389,25 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 	if (disp->update_flag & DRM_MODE_SET_DISPLAY_UPDATE_PANEL_FITTER) {
 		if (intel_crtc->config.gmch_pfit.control ||
 				disp->panel_fitter.mode) {
-			u32 pfit_control = intel_crtc->config.gmch_pfit.control
-				& MASK_PFIT_SCALING_MODE;
+			u32 pfit_control = intel_crtc->config.gmch_pfit.control;
 
 			/* If any of the mode is set then panel fitter should be enabled*/
 			pfit_control = (1 << 31) | pfit_control;
-			if (disp->panel_fitter.mode == AUTOSCALE)
+			if (disp->panel_fitter.mode == AUTOSCALE) {
+				pfit_control &=  MASK_PFIT_SCALING_MODE;
 				pfit_control |= PFIT_SCALING_AUTO;
-			else if (disp->panel_fitter.mode == PILLARBOX)
+			} else if (disp->panel_fitter.mode == PILLARBOX) {
+				pfit_control &=  MASK_PFIT_SCALING_MODE;
 				pfit_control |= PFIT_SCALING_PILLAR;
-			else if (disp->panel_fitter.mode == LETTERBOX)
+			} else if (disp->panel_fitter.mode == LETTERBOX) {
+				pfit_control &=  MASK_PFIT_SCALING_MODE;
 				pfit_control |= PFIT_SCALING_LETTER;
-			else {
-				/* None of the above mode, then pfit is disabled */
-				/* None of the above mode, then pfit is disabled
-				 * In case of BYT_CR platform with the panasonic panel of
-				 * esolution 19x10, panel fitter needs to be enabled always
-				 * becoz we simulate the 12x8 mode due to memory limitation
-				 */
-				pfit_control |= PFIT_SCALING_AUTO;
-				if (!(BYT_CR_CONFIG &&
-						(intel_crtc->config.adjusted_mode.hdisplay > 1280 ||
-						intel_crtc->config.adjusted_mode.vdisplay > 800)))
-					pfit_control &= ~(1 << 31);
+			} else {
+				if (!dev_priv->scaling_reqd) {
+					/* None of the above mode, then pfit is disabled */
+					pfit_control &= ~PFIT_ENABLE;
+				} else
+					pfit_control &=  MASK_PFIT_SCALING_MODE;
 			}
 			intel_crtc->config.gmch_pfit.control = pfit_control;
 		}
@@ -9359,7 +9432,10 @@ static int intel_crtc_set_display(struct drm_crtc *crtc,
 		}
 		kfree(zorder);
 	}
-	for (i = 0; i < disp->num_planes; ++i) {
+	/* Need to issue the drm_mode_page_flip_ioctl last as it triggers the flip done callback.
+	 * It just happens that index 0 is for the CRTC id, but this should be fixed properly.
+	 */
+	for (i = disp->num_planes-1; i >= 0; i--) {
 		if (!(disp->update_flag & DRM_MODE_SET_DISPLAY_UPDATE_PLANE(i)))
 			continue;
 		DRM_DEBUG("plane %u (obj_id %u, obj_type 0x%x)", i,
@@ -10383,6 +10459,11 @@ intel_modeset_check_state(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
+	if (dev_priv->port_disabled_on_unplug) {
+		dev_priv->port_disabled_on_unplug = false;
+		return;
+	}
+
 	if (dev_priv->is_suspending)
 		return;
 
@@ -11196,6 +11277,12 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	intel_crtc->scaling_src_size = 0;
 	intel_crtc->pfit_en_status = false;
 	intel_crtc->dummy_flip = false;
+
+	/*
+	 * TODO: Assigning PFIT to LFP
+	 */
+	I915_WRITE(PFIT_CONTROL, 0);
+	dev_priv->pfit_pipe = 0;
 }
 
 int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
