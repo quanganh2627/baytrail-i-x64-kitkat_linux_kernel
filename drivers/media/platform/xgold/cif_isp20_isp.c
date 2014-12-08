@@ -34,6 +34,7 @@
 #include "cif_isp20_regs.h"
 #include "cif_isp20_isp.h"
 #include "cif_isp20_pltfrm.h"
+#include "cif_isp20.h"
 
 #define _GET_ 0
 #define _SET_ 1
@@ -209,6 +210,7 @@
 /* Leave time for scaler reprogramming */
 #define CIFISP_MODULE_YCFLT_PROC_TIME (10 + 500)
 #define CIFISP_MODULE_AFC_PROC_TIME 8
+#define CIFISP_MODULE_IE_PROC_TIME 5
 
 /* For Debugging only!!! */
 #define CIFISP_MODULE_BPC     1
@@ -228,8 +230,9 @@
 #define CIFISP_MODULE_TMAP     25
 #define CIFISP_MODULE_YCFLT    26
 #define CIFISP_MODULE_AFC      27
+#define CIFISP_MODULE_IE      28
 
-#define CIFISP_MODULE_DEFAULT_VBLANKING_TIME 3000
+#define CIFISP_MODULE_DEFAULT_VBLANKING_TIME 2000
 
 static int cifisp_dbg_level = CIFISP_DEBUG_ERROR;
 
@@ -678,6 +681,30 @@ static int cifisp_afc_enable(struct xgold_isp_dev *isp_dev,
 
 	return 0;
 }
+
+static int cifisp_ie_enable(struct xgold_isp_dev *isp_dev,
+			     bool flag, __s32 *value)
+{
+	if (flag == _GET_) {
+		*value = isp_dev->ie_en;
+		return 0;
+	}
+
+	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			  "%s %d\n", __func__, *value);
+
+	if (isp_dev->ie_en != *value) {
+		unsigned long lock_flags = 0;
+
+		isp_dev->ie_en = *value;
+		spin_lock_irqsave(&isp_dev->config_lock, lock_flags);
+		isp_dev->isp_param_ie_update_needed = true;
+		spin_unlock_irqrestore(&isp_dev->config_lock, lock_flags);
+	}
+
+	return 0;
+}
+
 
 /* ISP BP interface function */
 static int cifisp_bpc_param(struct xgold_isp_dev *isp_dev,
@@ -1529,6 +1556,48 @@ static int cifisp_afc_param(struct xgold_isp_dev *isp_dev,
 	spin_lock_irqsave(&isp_dev->config_lock, lock_flags);
 	memcpy(&isp_dev->afc_config, arg, sizeof(struct cifisp_afc_config));
 	isp_dev->isp_param_afc_update_needed = true;
+	spin_unlock_irqrestore(&isp_dev->config_lock, lock_flags);
+
+	return 0;
+}
+
+static int cifisp_ie_param(struct xgold_isp_dev *isp_dev,
+			    bool flag, struct cifisp_ie_config *arg)
+{
+	unsigned long lock_flags = 0;
+
+	if (arg == NULL)
+		return -EINVAL;
+
+	if (flag == _GET_) {
+		memcpy(arg, &(isp_dev->ie_config), sizeof(*arg));
+		return 0;
+	}
+
+	cifisp_param_dump(arg, CIFISP_MODULE_IE);
+
+	if (memcmp(arg, &(isp_dev->ie_config), sizeof(*arg)) == 0) {
+		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			      "same param in function: %s\n", __func__);
+		return 0;
+	}
+
+	if (arg->effect != V4L2_COLORFX_NONE &&
+			arg->effect != V4L2_COLORFX_BW &&
+			arg->effect != V4L2_COLORFX_SEPIA &&
+			arg->effect != V4L2_COLORFX_NEGATIVE &&
+			arg->effect != V4L2_COLORFX_EMBOSS &&
+			arg->effect != V4L2_COLORFX_SKETCH &&
+			arg->effect != V4L2_COLORFX_AQUA &&
+			arg->effect != V4L2_COLORFX_SET_CBCR) {
+		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			      "incompatible param in function: %s\n", __func__);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&isp_dev->config_lock, lock_flags);
+	memcpy(&isp_dev->ie_config, arg, sizeof(struct cifisp_ie_config));
+	isp_dev->isp_param_ie_update_needed = true;
 	spin_unlock_irqrestore(&isp_dev->config_lock, lock_flags);
 
 	return 0;
@@ -2917,6 +2986,86 @@ static void cifisp_get_hst_meas(const struct xgold_isp_dev *isp_dev,
 	cifisp_iowrite32OR(CIFISP_HST_MANUAL_RST, CIF_ISP_HIST_PROP);
 }
 
+/* IMAGE EFFECT */
+/*****************************************************************************/
+static void cifisp_ie_config(const struct xgold_isp_dev *isp_dev)
+{
+	const struct cifisp_ie_config *pconfig = &(isp_dev->ie_config);
+
+	switch (pconfig->effect) {
+	case V4L2_COLORFX_SET_CBCR:
+		cifisp_iowrite32(pconfig->eff_tint, CIF_IMG_EFF_TINT);
+		break;
+	/*Color selection is similiar to water color(AQUA):
+		grayscale + selected color w threshold*/
+	case V4L2_COLORFX_AQUA:
+		cifisp_iowrite32(pconfig->color_sel, CIF_IMG_EFF_COLOR_SEL);
+		break;
+	case V4L2_COLORFX_EMBOSS:
+		cifisp_iowrite32(pconfig->eff_mat_1, CIF_IMG_EFF_MAT_1);
+		cifisp_iowrite32(pconfig->eff_mat_2, CIF_IMG_EFF_MAT_2);
+		cifisp_iowrite32(pconfig->eff_mat_3, CIF_IMG_EFF_MAT_3);
+		break;
+	case V4L2_COLORFX_SKETCH:
+		cifisp_iowrite32(pconfig->eff_mat_3, CIF_IMG_EFF_MAT_3);
+		cifisp_iowrite32(pconfig->eff_mat_4, CIF_IMG_EFF_MAT_4);
+		cifisp_iowrite32(pconfig->eff_mat_5, CIF_IMG_EFF_MAT_5);
+		break;
+	default:
+		break;
+	}
+}
+
+static void cifisp_ie_en(const struct xgold_isp_dev *isp_dev)
+{
+	const struct cifisp_ie_config *pconfig = &(isp_dev->ie_config);
+	enum cif_isp20_image_effect effect;
+
+	switch (pconfig->effect) {
+	case V4L2_COLORFX_SEPIA:
+	case V4L2_COLORFX_SET_CBCR:
+		effect = CIF_ISP20_IE_SEPIA;
+		break;
+	case V4L2_COLORFX_BW:
+		effect = CIF_ISP20_IE_BW;
+		break;
+	case V4L2_COLORFX_NEGATIVE:
+		effect = CIF_ISP20_IE_NEGATIVE;
+		break;
+	case V4L2_COLORFX_EMBOSS:
+		effect = CIF_ISP20_IE_EMBOSS;
+		break;
+	case V4L2_COLORFX_SKETCH:
+		effect = CIF_ISP20_IE_SKETCH;
+		break;
+	case V4L2_COLORFX_AQUA:
+		effect = CIF_ISP20_IE_C_SEL;
+		break;
+	case V4L2_COLORFX_NONE:
+	default:
+		effect = CIF_ISP20_IE_NONE;
+		break;
+	}
+
+	if (effect < CIF_ISP20_IE_NONE) {
+		cifisp_iowrite32OR(CIF_ICCL_IE_CLK, CIF_ICCL);
+		cifisp_iowrite32(CIF_IMG_EFF_CTRL_ENABLE |
+			effect << 1, CIF_IMG_EFF_CTRL);
+		cifisp_iowrite32OR(CIF_IMG_EFF_CTRL_CFG_UPD, CIF_IMG_EFF_CTRL);
+	} else if (effect == CIF_ISP20_IE_NONE) {
+		cifisp_iowrite32AND(~CIF_IMG_EFF_CTRL_ENABLE, CIF_IMG_EFF_CTRL);
+		cifisp_iowrite32AND(~CIF_ICCL_IE_CLK, CIF_ICCL);
+	}
+}
+
+/*****************************************************************************/
+static void cifisp_ie_end(const struct xgold_isp_dev *isp_dev)
+{
+	/*Disable measurement */
+	cifisp_iowrite32AND(~CIF_IMG_EFF_CTRL_ENABLE, CIF_IMG_EFF_CTRL);
+	cifisp_iowrite32AND(~CIF_ICCL_IE_CLK, CIF_ICCL);
+}
+
 /* ================================QUEUE OPS ================== */
 static int cifisp_stat_vbq_setup(struct videobuf_queue *vq,
 				 unsigned int *cnt, unsigned int *size)
@@ -3106,6 +3255,8 @@ static int cifisp_g_ctrl(struct file *file, void *priv, struct v4l2_control *vc)
 		return cifisp_ycflt_enable(isp_dev, _GET_, &vc->value);
 	case V4L2_CID_CIFISP_AFC:
 		return cifisp_afc_enable(isp_dev, _GET_, &vc->value);
+	case V4L2_CID_CIFISP_IE:
+		return cifisp_ie_enable(isp_dev, _GET_, &vc->value);
 	default:
 		return -EINVAL;
 	}
@@ -3150,6 +3301,8 @@ static int cifisp_s_ctrl(struct file *file, void *priv, struct v4l2_control *vc)
 		return cifisp_ycflt_enable(isp_dev, _SET_, &vc->value);
 	case V4L2_CID_CIFISP_AFC:
 		return cifisp_afc_enable(isp_dev, _SET_, &vc->value);
+	case V4L2_CID_CIFISP_IE:
+		return cifisp_ie_enable(isp_dev, _SET_, &vc->value);
 	default:
 		return -EINVAL;
 	}
@@ -3229,6 +3382,10 @@ static long cifisp_ioctl_default(struct file *file,
 		return cifisp_afc_param(isp, _GET_, arg);
 	case CIFISP_IOC_S_AFC:
 		return cifisp_afc_param(isp, _SET_, arg);
+	case CIFISP_IOC_G_IE:
+		return cifisp_ie_param(isp, _GET_, arg);
+	case CIFISP_IOC_S_IE:
+		return cifisp_ie_param(isp, _SET_, arg);
 	case CIFISP_IOC_G_LAST_CONFIG:
 		return cifisp_last_capture_config(arg);
 	default:
@@ -3282,18 +3439,108 @@ static int cifisp_mmap(struct file *file, struct vm_area_struct *vma)
 	return videobuf_mmap_mapper(&isp_dev->vbq_stat, vma);
 }
 
+static int cifisp_open(struct file *file)
+{
+	struct xgold_isp_dev *isp_dev =
+		video_get_drvdata(video_devdata(file));
+
+	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_open\n");
+
+	isp_dev->bpc_en = false;
+	isp_dev->bls_en = false;
+	isp_dev->sdg_en = false;
+	isp_dev->lsc_en = false;
+	isp_dev->awb_meas_en = false;
+	isp_dev->awb_gain_en = false;
+	isp_dev->flt_en = false;
+	isp_dev->bdm_en = false;
+	isp_dev->ctk_en = false;
+	isp_dev->goc_en = false;
+	isp_dev->hst_en = false;
+	isp_dev->aec_en = false;
+	isp_dev->cproc_en = false;
+	isp_dev->macc_en = false;
+	isp_dev->tmap_en = false;
+	isp_dev->ycflt_en = false;
+	isp_dev->afc_en = false;
+	isp_dev->ie_en = false;
+
+	memset(&isp_dev->bpc_config, 0, sizeof(isp_dev->bpc_config));
+	memset(&isp_dev->bls_config, 0, sizeof(isp_dev->bls_config));
+	memset(&isp_dev->sdg_config, 0, sizeof(isp_dev->sdg_config));
+	memset(&isp_dev->lsc_config, 0, sizeof(isp_dev->lsc_config));
+	memset(&isp_dev->awb_meas_config, 0, sizeof(isp_dev->awb_meas_config));
+	memset(&isp_dev->awb_gain_config, 0, sizeof(isp_dev->awb_gain_config));
+	memset(&isp_dev->flt_config, 0, sizeof(isp_dev->flt_config));
+	memset(&isp_dev->bdm_config, 0, sizeof(isp_dev->bdm_config));
+	memset(&isp_dev->ctk_config, 0, sizeof(isp_dev->ctk_config));
+	memset(&isp_dev->goc_config, 0, sizeof(isp_dev->goc_config));
+	memset(&isp_dev->hst_config, 0, sizeof(isp_dev->hst_config));
+	memset(&isp_dev->aec_config, 0, sizeof(isp_dev->aec_config));
+	memset(&isp_dev->cproc_config, 0, sizeof(isp_dev->cproc_config));
+	memset(&isp_dev->macc_config, 0, sizeof(isp_dev->macc_config));
+	memset(&isp_dev->tmap_config, 0, sizeof(isp_dev->tmap_config));
+	memset(&isp_dev->ycflt_config, 0, sizeof(isp_dev->ycflt_config));
+	memset(&isp_dev->afc_config, 0, sizeof(isp_dev->afc_config));
+	memset(&isp_dev->ie_config, 0, sizeof(isp_dev->ie_config));
+
+	isp_dev->isp_param_bpc_update_needed = false;
+	isp_dev->isp_param_bls_update_needed = false;
+	isp_dev->isp_param_sdg_update_needed = false;
+	isp_dev->isp_param_lsc_update_needed = false;
+	isp_dev->isp_param_awb_meas_update_needed = false;
+	isp_dev->isp_param_awb_gain_update_needed = false;
+	isp_dev->isp_param_flt_update_needed = false;
+	isp_dev->isp_param_bdm_update_needed = false;
+	isp_dev->isp_param_ctk_update_needed = false;
+	isp_dev->isp_param_goc_update_needed = false;
+	isp_dev->isp_param_hst_update_needed = false;
+	isp_dev->isp_param_aec_update_needed = false;
+	isp_dev->isp_param_cproc_update_needed = false;
+	isp_dev->isp_param_macc_update_needed = false;
+	isp_dev->isp_param_tmap_update_needed = false;
+	isp_dev->isp_param_ycflt_update_needed = false;
+	isp_dev->isp_param_afc_update_needed = false;
+	isp_dev->isp_param_ie_update_needed = false;
+	isp_dev->isp_param_awb_meas_update_fast_needed = false;
+	isp_dev->isp_param_afc_update_fast_needed = false;
+	isp_dev->isp_param_aec_update_fast_needed = false;
+
+	isp_dev->active_lsc_width = 0;
+	isp_dev->active_lsc_height = 0;
+
+	isp_dev->streamon = false;
+
+	return 0;
+}
+
+static int cifisp_close(struct file *file)
+{
+	struct xgold_isp_dev *isp_dev =
+		video_get_drvdata(video_devdata(file));
+
+	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_close\n");
+
+	videobuf_stop(&isp_dev->vbq_stat);
+	videobuf_mmap_free(&isp_dev->vbq_stat);
+
+	return 0;
+}
+
 struct v4l2_file_operations cifisp_fops = {
 	.mmap = cifisp_mmap,
 	.ioctl = video_ioctl2,
-	.poll = cifisp_poll
+#ifdef CONFIG_COMPAT
+	.compat_ioctl32 = video_ioctl2,
+#endif
+	.poll = cifisp_poll,
+	.open = cifisp_open,
+	.release = cifisp_close
 };
 
 static void cifisp_release(struct video_device *vdev)
 {
-	struct xgold_isp_dev *isp_dev = video_get_drvdata(vdev);
-
-	videobuf_stop(&isp_dev->vbq_stat);
-	videobuf_mmap_free(&isp_dev->vbq_stat);
+	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_release\n");
 
 	video_device_release(vdev);
 
@@ -3561,6 +3808,12 @@ void cifisp_configure_isp(struct xgold_isp_dev *isp_dev,
 		isp_dev->isp_param_hst_update_needed = false;
 	}
 
+	if (isp_dev->ie_en) {
+		cifisp_ie_config(isp_dev);
+		cifisp_ie_en(isp_dev);
+		isp_dev->isp_param_ie_update_needed = false;
+	}
+
 	if (capture)
 		cifisp_reg_dump_capture(isp_dev);
 
@@ -3628,6 +3881,9 @@ void cifisp_disable_isp(struct xgold_isp_dev *isp_dev)
 
 	cifisp_afc_end(isp_dev);
 	isp_dev->afc_en = false;
+
+	cifisp_ie_end(isp_dev);
+	isp_dev->ie_en = false;
 
 	mutex_unlock(&isp_dev->mutex);
 }
@@ -3797,7 +4053,8 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			isp_dev->isp_param_goc_update_needed ||
 			isp_dev->isp_param_cproc_update_needed ||
 			isp_dev->isp_param_macc_update_needed ||
-			isp_dev->isp_param_tmap_update_needed) {
+			isp_dev->isp_param_tmap_update_needed ||
+			isp_dev->isp_param_ie_update_needed) {
 
 			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
 				"time-left 1:%d %d\n",
@@ -4059,10 +4316,30 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 
 				time_left -= CIFISP_MODULE_TMAP_PROC_TIME;
 			}
+
+			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+				"time-left 14:%d %d\n",
+				time_left,
+				isp_dev->isp_param_ie_update_needed);
+
+			if (isp_dev->isp_param_ie_update_needed &&
+				time_left >= CIFISP_MODULE_IE_PROC_TIME) {
+				/*update ie config */
+				cifisp_ie_config(isp_dev);
+
+				if (isp_dev->ie_en)
+					cifisp_ie_en(isp_dev);
+				else
+					cifisp_ie_end(isp_dev);
+
+				isp_dev->isp_param_ie_update_needed = false;
+
+				time_left -= CIFISP_MODULE_IE_PROC_TIME;
+			}
 		} else {
 #endif
 			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
-				"time-left 14:%d %d\n",
+				"time-left 15:%d %d\n",
 				time_left,
 				isp_dev->isp_param_awb_meas_update_needed ||
 				isp_dev->isp_param_awb_meas_update_fast_needed);
@@ -4085,7 +4362,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			}
 
 			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
-				"time-left 15:%d %d\n",
+				"time-left 16:%d %d\n",
 				time_left,
 				isp_dev->isp_param_afc_update_needed ||
 				isp_dev->isp_param_afc_update_fast_needed);
@@ -4108,7 +4385,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			}
 
 			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
-				"time-left 16:%d %d\n",
+				"time-left 17:%d %d\n",
 				time_left,
 				isp_dev->isp_param_hst_update_needed);
 
@@ -4125,7 +4402,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			}
 
 			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
-				"time-left 17:%d %d\n",
+				"time-left 18:%d %d\n",
 				time_left,
 				isp_dev->isp_param_aec_update_needed ||
 				isp_dev->isp_param_aec_update_fast_needed);
@@ -4699,7 +4976,17 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 				      pconfig->var_shift);
 			break;
 		}
-
+	case CIFISP_MODULE_IE: {
+			struct cifisp_ie_config *pconfig =
+			    (struct cifisp_ie_config *)config;
+			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+				"effect %d, %x, %x, %x, %x, %x, %x\n",
+				pconfig->effect, pconfig->color_sel,
+				pconfig->eff_mat_1, pconfig->eff_mat_2,
+				pconfig->eff_mat_3, pconfig->eff_mat_4,
+				pconfig->eff_mat_5, pconfig->eff_tint);
+			break;
+		}
 	default:
 		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
 			      "####%s: Invalid Module ID ####\n", ISP_DEV_NAME);

@@ -167,8 +167,8 @@ static void mv_gal_xirq_handler(registers_t *regs)
 		idx = XIRQ_NUM2INDX(virq);
 		entry = xirq_callbacks[idx];
 		while (entry) {
-#if defined(CONFIG_SYSTEM_PROFILING)
 			if (entry->cb) {
+#if defined(CONFIG_SYSTEM_PROFILING)
 				sysprof_interrupt(virq);
 				sysprof_int_enter();
 #endif
@@ -255,7 +255,7 @@ int sofia_vmm_init_secondary(void)
 	return sofia_vmm_map_vcpu_shmem();
 }
 
-static int __init sofia_vmm_init(void)
+int __init sofia_vmm_init(void)
 {
 	pr_debug("In sofia_vmm_init\n");
 
@@ -280,7 +280,6 @@ static int __init sofia_vmm_init(void)
 	return 0;
 }
 
-early_initcall(sofia_vmm_init);
 #endif
 
 inline unsigned int mv_gal_os_id(void)

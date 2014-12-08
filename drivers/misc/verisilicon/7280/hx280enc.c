@@ -124,9 +124,10 @@
 
 #if defined(CONFIG_VBPIPE)
 
-#include "../vvpu/vvpu_vbpipe.h"
+#include <sofia/vvpu_vbpipe.h>
 
 #ifdef CONFIG_X86_INTEL_SOFIA
+#include <linux/xgold_noc.h>
 #include <sofia/nk_sofia_bridge.h>
 #endif
 
@@ -538,6 +539,7 @@ static long hx280enc_ioctl(struct file *filp, unsigned int cmd,
 		} else
 			hx280enc_req_counter++;
 
+		xgold_noc_qos_set("VPU");
 		up(&hx280enc_req_counter_lock);
 
 #endif /* __SKIP_POWER_ON_OFF__ */
@@ -668,6 +670,9 @@ static const struct file_operations hx280enc_fops = {
 	.open		= hx280enc_open,
 	.release	= hx280enc_release,
 	.unlocked_ioctl = hx280enc_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = hx280enc_ioctl,
+#endif
 	.fasync		= hx280enc_fasync,
 };
 
@@ -991,7 +996,7 @@ static int xgold_vpu_enc_probe(struct platform_device *pdev)
 		 * the first time it is used
 		 */
 		if (result != 0) {
-			dev_warn(dev, "vbpipe init error, postpone");
+			dev_warn(dev, "vbpipe open is postponed");
 
 			/* TODO: ignore and skip probing; open pipe later */
 			result = 0;

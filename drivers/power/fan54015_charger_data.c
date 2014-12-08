@@ -73,6 +73,9 @@
 #define VOREG_O 2
 #define VOREG_M 0x3F
 
+#define OTG_EN_O 0
+#define OTG_EN_M 1
+
 /* REG_SP_CHARGER */
 #define IO_LEVEL_O 5
 #define IO_LEVEL_M 0x1
@@ -137,6 +140,7 @@ struct charger_attrmap fan54015_charger_attr_map[ATTR_MAX] = {
 		"boost_mode", BITS, REG_CHARGE_CTRL1, BOOST_EN_O, BOOST_EN_M},
 	[BOOST_UP] = {
 		"boost_up", BITS, REG_CHARGE_CTRL0, BOOST_UP_O, BOOST_UP_M},
+	[OTG_EN] = {"otg_en", BITS, REG_VOREG, OTG_EN_O, OTG_EN_M},
 	[IOCHARGE] = {"Iocharge", BITS, REG_IBAT, IOCHARGE_O, IOCHARGE_M},
 	[ITERM] = {"Iterm", BITS, REG_IBAT, ITERM_O, ITERM_M},
 	[VOREG] = {"Voreg", BITS, REG_VOREG, VOREG_O, VOREG_M},
@@ -177,6 +181,7 @@ static int fan54015_get_charger_state(struct fan54x_charger *chrgr)
 	chrgr->state.health = (chrgr->state.vbus == VBUS_ON) ?
 			POWER_SUPPLY_HEALTH_GOOD : POWER_SUPPLY_HEALTH_UNKNOWN;
 
+	/* Clear state flags */
 	chrgr->state.vbus_ovp = 0;
 	chrgr->state.sleep_mode = 0;
 	chrgr->state.poor_input_source = 0;
@@ -184,6 +189,8 @@ static int fan54015_get_charger_state(struct fan54x_charger *chrgr)
 	chrgr->state.tsd_flag = 0;
 	chrgr->state.t32s_timer_expired = 0;
 	chrgr->state.no_bat = 0;
+	chrgr->state.boost_ov = 0;
+	chrgr->state.bat_uv = 0;
 
 	switch (charge_ctrl0_reg & (FAULT_M << FAULT_O)) {
 	case NO_FAULT:
@@ -222,6 +229,28 @@ static int fan54015_get_charger_state(struct fan54x_charger *chrgr)
 
 fail:
 	return ret;
+}
+
+static int fan54015_iocharge_list[8] = {
+	550, 650, 750, 850, 1050, 1150, 1350, 1450};
+
+static int fan54015_calc_iocharge_regval(struct fan54x_charger *chrgr,
+					int current_to_set_ma)
+{
+	int i;
+
+	for (i = 0; i < 7; i++) {
+		if (current_to_set_ma >= fan54015_iocharge_list[i] &&
+			current_to_set_ma < fan54015_iocharge_list[i+1])
+			break;
+	}
+
+	return i;
+}
+
+static int fan54015_get_iocharge_val(int regval)
+{
+	return fan54015_iocharge_list[regval];
 }
 
 struct fan54x_charger fan54015_chrgr_data = {
@@ -278,5 +307,7 @@ struct fan54x_charger fan54015_chrgr_data = {
 	.configure_chip = fan54015_configure_chip,
 	.enable_charger = fan54015_enable_charger,
 	.get_charger_state = fan54015_get_charger_state,
+	.calc_iocharge_regval = fan54015_calc_iocharge_regval,
+	.get_iocharge_val = fan54015_get_iocharge_val,
 };
 

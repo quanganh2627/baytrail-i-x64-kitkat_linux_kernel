@@ -1,0 +1,58 @@
+#ifdef SOFIA3G_CATALOG_MRD0_P0_SENSOR
+#ifndef RECOVERY_KERNEL
+#ifdef CONFIG_INPUT_ROHM_RPR0521
+        rpr521 {
+                compatible = "rohm,rpr521";
+                reg = < 0x38 >;
+                interrupt-parent = <&eint>;
+                interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+                intel,axis-map = < 1 0 2 >;
+                intel,negate = < 1 0 0 >;
+                intel,poll-interval = < 100 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&prox_catalog_p0_default_pins>;
+                pinctrl-1 = <&prox_catalog_p0_sleep_pins>;
+                pinctrl-2 = <&prox_catalog_p0_inactive_pins>;
+                pm,class-name = "rpr521_class";
+                pm,user-name = "acclerometer";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+        };
+#endif
+#endif
+
+#else
+#ifdef SOFIA3G_CATALOG_MRD5S_SENSOR
+#ifndef RECOVERY_KERNEL
+#ifdef CONFIG_INPUT_STK3310
+       als {
+                compatible = "sensortek,stk_ps";
+                reg = < 0x48 >;
+                interrupt-parent = <&eint>;
+                interrupts = < EINT_EXI11  XGOLD_IRQ_TYPE_EDGE_FALLING >;
+                intel,axis-map = < 1 0 2 >;
+                intel,negate = < 1 0 0 >;
+                intel,poll-interval = < 100 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&prox_default_pins>;
+                pinctrl-1 = <&prox_sleep_pins>;
+                pinctrl-2 = <&prox_inactive_pins>;
+                pm,class-name = "stk_ps_class";
+                pm,user-name = "proximity";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+                stk,state-reg = <0x0>;
+                stk,psctrl-reg = <0x31>;
+                stk,alsctrl-reg = <0x38>;
+                stk,ledctrl-reg = <0xFF>;
+                stk,wait-reg = <0x07>;
+                stk,ps-thd-h = <1700>;
+                stk,ps-thd-l = <1500>;
+                stk,transmittance = <500>;
+                stk,use-fir;
+        };
+#endif
+#endif
+#endif
+
+#endif

@@ -2030,6 +2030,9 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 				"procedure, falling back to fixed sampling "
 				"clock\n");
 			ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+			if (tuning_loop_counter == 1 &&
+				(SDHCI_QUIRK2_HOST_EXEC_TUNING_WA & host->quirks2))
+				goto skip;
 			ctrl &= ~SDHCI_CTRL_TUNED_CLK;
 			ctrl &= ~SDHCI_CTRL_EXEC_TUNING;
 			sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
@@ -2037,7 +2040,7 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 			err = -EIO;
 			goto out;
 		}
-
+skip:
 		host->tuning_done = 0;
 
 		ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);

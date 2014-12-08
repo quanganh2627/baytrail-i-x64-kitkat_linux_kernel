@@ -24,14 +24,23 @@
 #include <linux/platform_device.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of.h>
+#include <linux/io.h>
+#include <linux/delay.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
+#include <sound/jack.h>
+#include <linux/iio/iio.h>
+#include <linux/iio/machine.h>
+#include <linux/iio/consumer.h>
+#include <linux/iio/driver.h>
+
+#include "xgold_jack.h"
 
 #define PCL_LOCK_EXCLUSIVE	1
 #define PCL_OPER_ACTIVATE	0
-#define PROP_CODEC_DAI_NAME "intel,codec_dai_name"
+#define PROP_CODEC_DAI_NAME	"intel,codec_dai_name"
 
 
 #define	xgold_err(fmt, arg...) \
@@ -41,6 +50,12 @@
 		pr_debug("snd: mac: "fmt, ##arg)
 
 int audio_native_mode;
+
+struct xgold_mc_private {
+	struct xgold_jack *jack;
+};
+
+struct snd_soc_jack hs_jack;
 
 /* XGOLD machine DAPM */
 static const struct snd_soc_dapm_widget xgold_dapm_widgets[] = {
@@ -64,13 +79,13 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	/* Earphone speaker */
 	{"Earphone", NULL, "EARPIECE"},
 
+	/* Microphone */
 	{"Headset Mic", NULL, "AMIC2"},
 	{"Handset Mic", NULL, "AMIC1"}
 };
 
 static int xgold_snd_init(struct snd_soc_pcm_runtime *runtime)
 {
-
 	struct snd_soc_codec *codec = runtime->codec;
 	int ret = 0;
 
@@ -95,6 +110,13 @@ static int xgold_snd_init(struct snd_soc_pcm_runtime *runtime)
 	snd_soc_dapm_enable_pin(&codec->dapm, "Handset Mic");
 
 	ret = snd_soc_dapm_sync(&codec->dapm);
+	if (ret) {
+		xgold_err("Failed to enable dapm pins\n");
+		return ret;
+	}
+
+	/* Set up jack detection */
+	ret = xgold_jack_setup(codec, &hs_jack);
 
 	return ret;
 }
@@ -186,7 +208,9 @@ static int xgold_mc_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct device_node *codec_of_node = NULL;
+	struct device_node *jack_of_node = NULL;
 	struct snd_soc_dai_link *dai_link;
+	struct xgold_mc_private *mc_drv_ctx;
 	const char *codec_dai_name = NULL;
 	int ret = 0;
 	int i;
@@ -311,16 +335,41 @@ static int xgold_mc_probe(struct platform_device *pdev)
 #endif
 
 	ret = snd_soc_register_card(&xgold_snd_card);
-
-	if (ret < 0)
+	if (ret < 0) {
 		xgold_err("%s: unable to register sound card err %d\n",
 			  __func__, ret);
+		return ret;
+	}
 
-	return ret;
+	mc_drv_ctx = devm_kzalloc(&pdev->dev, sizeof(*mc_drv_ctx), GFP_ATOMIC);
+	if (!mc_drv_ctx) {
+		xgold_err("Allocation failed!\n");
+		return -ENOMEM;
+	}
+
+	platform_set_drvdata(pdev, mc_drv_ctx);
+
+	jack_of_node = of_parse_phandle(np, "intel,jack", 0);
+	if (!jack_of_node)
+		return 0;
+
+	mc_drv_ctx->jack = of_xgold_jack_probe(pdev, jack_of_node, &hs_jack);
+	if (IS_ERR_OR_NULL(mc_drv_ctx->jack)) {
+		xgold_err("Jack detection probe failed.\n");
+		mc_drv_ctx->jack = NULL;
+		/* Allow machine probe to succeed anyway */
+	}
+
+	return 0;
 }
 
 static int xgold_mc_remove(struct platform_device *pdev)
 {
+	struct xgold_mc_private *mc_drv_ctx = platform_get_drvdata(pdev);
+
+	if (mc_drv_ctx)
+		xgold_jack_remove(mc_drv_ctx->jack);
+
 	xgold_debug("%s:\n", __func__);
 	return 0;
 }
@@ -342,8 +391,7 @@ static struct platform_driver xgold_snd_mc_drv = {
 		.name = "XGOLD_MACHINE",
 		.owner = THIS_MODULE,
 		.of_match_table = xgold_snd_asoc_of_match,
-		},
-
+	},
 	.probe = xgold_mc_probe,
 	.remove = xgold_mc_remove,
 };

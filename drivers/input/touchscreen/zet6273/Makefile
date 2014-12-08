@@ -1,0 +1,1 @@
+obj-$(CONFIG_TOUCHSCREEN_ZET6273)	+= zet62xx.o

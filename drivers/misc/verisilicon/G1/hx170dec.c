@@ -127,9 +127,10 @@
 
 #if defined(CONFIG_VBPIPE)
 
-#include "../vvpu/vvpu_vbpipe.h"
+#include <sofia/vvpu_vbpipe.h>
 
 #ifdef CONFIG_X86_INTEL_SOFIA
+#include <linux/xgold_noc.h>
 #include <sofia/nk_sofia_bridge.h>
 #endif
 
@@ -993,6 +994,9 @@ static const struct file_operations hx170dec_fops = {
 	.open		= hx170dec_open,
 	.release	= hx170dec_release,
 	.unlocked_ioctl = hx170dec_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = hx170dec_ioctl,
+#endif
 	.fasync		= hx170dec_fasync,
 };
 
@@ -1369,7 +1373,7 @@ static int xgold_vpu_dec_probe(struct platform_device *pdev)
 		 * the first time it is used
 		 */
 		if (error != 0) {
-			dev_warn(dev, "vbpipe init error, postpone");
+			dev_warn(dev, "vbpipe open is postponed");
 
 			/* TODO: ignore and skip probing; open pipe later */
 			error = 0;
@@ -1785,7 +1789,7 @@ int hx170dec_resume(struct device *dev)
 					pm_platdata->pm_state_D0_name, err);
 				ret = -EAGAIN;
 			}
-
+			xgold_noc_qos_set("VPU");
 		}
 		up(&hx170dec_req_counter_lock);
 

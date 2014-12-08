@@ -359,6 +359,25 @@
 			0x244 0x2100	/* prox _amb_irq */
 		>;
 	};
+
+#ifdef SOFIA3G_CATALOG_MRD0_P0_SENSOR
+        prox_catalog_p0_default_pins:prox_catalog_p0_default_pins {
+                pinctrl-single,pins = <
+                        0x248 0x2003    /* prox _amb_irq */
+                >;
+        };
+        prox_catalog_p0_inactive_pins:prox_catalog_p0_inactive_pins {
+                pinctrl-single,pins = <
+                        0x248 0x2100    /* prox _amb_irq */
+                >;
+        };
+        prox_catalog_p0_sleep_pins:prox_catalog_p0_sleep_pins {
+                pinctrl-single,pins = <
+                        0x248 0x2100    /* prox _amb_irq */
+                >;
+        };
+#endif
+
 	accel_default_pins:accel_default_pins {
 		pinctrl-single,pins = <
 			0x248 0x3	/* accel_mag_irq */

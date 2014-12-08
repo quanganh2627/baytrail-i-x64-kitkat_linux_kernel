@@ -1,0 +1,41 @@
+#ifdef SOFIA3G_CATALOG_MRD0_P0_TOUCH
+#ifdef CONFIG_TOUCHSCREEN_ZET6273
+#ifndef RECOVERY_KERNEL
+	touchscreen {
+		compatible = "zeitec,zet6221-ts";
+		reg = < 0x76 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI0 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&touch_default_pins>;
+		pinctrl-1 = <&touch_sleep_pins>;
+		pinctrl-2 = <&touch_inactive_pins>;
+		intel,ts-gpio-reset = <&xgold_pmx_gpio 32 0>;
+		intel,ts-gpio-irq = <&xgold_pmx_gpio 66 0>;
+		pm,class-name = "zet622x_class";
+		pm,user-name = "tp";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+#endif
+#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_FT6X36
+#ifndef RECOVERY_KERNEL
+    touchscreen {
+		compatible = "focaltech,ft6x36_ts";
+		reg = < 0x38 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI0 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&touch_default_pins>;
+		pinctrl-1 = <&touch_sleep_pins>;
+		pinctrl-2 = <&touch_inactive_pins>;
+		intel,ts-gpio-reset = <&xgold_pmx_gpio 32 0>;
+		pm,class-name = "ft6x36_class";
+ 		pm,user-name = "tp";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+#endif
+#endif
