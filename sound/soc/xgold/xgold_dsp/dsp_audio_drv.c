@@ -2013,6 +2013,182 @@ static const struct dev_pm_ops dsp_audio_pm = {
 			dsp_audio_resume)
 };
 
+/* DSP API */
+static int get_dsp_pcm_channels(unsigned int channels)
+{
+        if (channels == 1)
+                return 0;
+        else if (channels == 2)
+                return 3;
+        else
+                return -1;
+}
+
+static int get_dsp_pcm_rate(unsigned int rate)
+{
+        switch (rate) {
+        case 8000:
+                return 0;
+        case 11025:
+                return 1;
+        case 12000:
+                return 2;
+        case 16000:
+                return 3;
+        case 22050:
+                return 4;
+        case 24000:
+                return 5;
+        case 32000:
+                return 6;
+        case 44100:
+                return 7;
+        case 48000:
+                return 8;
+        }
+        return -1;
+}
+
+struct dsp_audio_device *of_dsp_register_client(
+                struct device *dev, struct device_node *np)
+{
+        struct dsp_audio_device *dsp;
+
+        list_for_each_entry(dsp, &list_dsp, node) {
+                if (dsp->dev->of_node == np)
+                        return dsp;
+
+        }
+
+        return NULL;
+}
+EXPORT_SYMBOL(of_dsp_register_client);
+
+#if 0
+int dsp_pcm_play(struct dsp_audio_device *dsp, enum xgold_pcm_stream_type type,
+                unsigned int channels, unsigned int rate, bool dma_mode)
+{
+        struct T_AUD_DSP_CMD_PCM_PLAY_PAR pcm_par = { 0 };
+        struct dsp_aud_cmd_data cmd_data;
+
+        pcm_par.setting = 1; /* Init & Go */
+        pcm_par.mode = get_dsp_pcm_channels(channels);
+        pcm_par.rate = get_dsp_pcm_rate(rate);
+        pcm_par.req = (dma_mode == true) ? 1 : 0;
+
+        xgold_debug("PCM %s cmd mode %d rate %d req %s",
+                        (type == STREAM_PLAY) ? "PLAY1" : "PLAY2",
+                        pcm_par.mode, pcm_par.rate,
+                        (dma_mode == true) ? "DMA" : "PIO");
+
+        cmd_data.command_id = (type == STREAM_PLAY) ?
+                DSP_AUD_PCM1_PLAY : DSP_AUD_PCM2_PLAY;
+        cmd_data.command_len = sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR);
+        cmd_data.p_data = (u16 *)&pcm_par;
+
+        dsp->p_dsp_common_data->ops->set_controls(
+                        DSP_AUDIO_CONTROL_SEND_CMD, (void *)&cmd_data);
+
+        return 0;
+}
+
+int dsp_pcm_rec(struct dsp_audio_device *dsp, unsigned int channels,
+                unsigned int rate, bool dma_mode)
+{
+        struct T_AUD_DSP_CMD_PCM_REC_PAR pcm_rec_par = { 0 };
+        struct dsp_aud_cmd_data cmd_data;
+
+        pcm_rec_par.setting = 3; /* Init & Go */
+        pcm_rec_par.mode = get_dsp_pcm_channels(channels);
+        pcm_rec_par.rate = get_dsp_pcm_rate(rate);
+        pcm_rec_par.req = (dma_mode == true) ? 1 : 0;
+        pcm_rec_par.path_select = 0;
+
+        xgold_debug("PCM REC cmd mode %d rate %d",
+                        pcm_rec_par.mode, pcm_rec_par.rate);
+
+        cmd_data.command_id = DSP_AUD_PCM_REC;
+        cmd_data.command_len = sizeof(struct T_AUD_DSP_CMD_PCM_REC_PAR);
+        cmd_data.p_data = (u16 *)&pcm_rec_par;
+
+        dsp->p_dsp_common_data->ops->set_controls(
+                        DSP_AUDIO_CONTROL_SEND_CMD, (void *)&cmd_data);
+
+        return 0;
+}
+
+int dsp_pcm_feed(struct dsp_audio_device *dsp, enum xgold_pcm_stream_type type,
+                unsigned int channels, unsigned int rate)
+{
+        struct T_AUD_DSP_CMD_PCM_PLAY_PAR pcm_par = { 0 };
+        struct dsp_aud_cmd_data cmd_data;
+
+        pcm_par.setting = 2; /* Feed */
+        pcm_par.mode = get_dsp_pcm_channels(channels);
+        pcm_par.rate = get_dsp_pcm_rate(rate);
+        pcm_par.req = 0;
+
+        cmd_data.command_id = (STREAM_PLAY == type) ?
+                DSP_AUD_PCM1_PLAY : DSP_AUD_PCM2_PLAY;
+        cmd_data.command_len = sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR);
+        cmd_data.p_data = (u16 *)&pcm_par;
+
+        dsp->p_dsp_common_data->ops->set_controls(
+                        DSP_AUDIO_CONTROL_SEND_CMD, (void *)&cmd_data);
+
+        return 0;
+}
+
+int dsp_pcm_stop(struct dsp_audio_device *dsp, enum xgold_pcm_stream_type type)
+{
+        struct T_AUD_DSP_CMD_PCM_PLAY_PAR pcm_par = { 0 };
+        struct T_AUD_DSP_CMD_PCM_REC_PAR pcm_rec_par = { 0 };
+        struct T_AUD_DSP_CMD_HW_PROBE hw_probe_par = { 0 };
+        struct dsp_aud_cmd_data cmd_data;
+
+        switch (type) {
+        case STREAM_PLAY:
+        case STREAM_PLAY2:
+                pcm_par.setting = 0; /* Off */
+                cmd_data.command_id = (type == STREAM_PLAY) ?
+                        DSP_AUD_PCM1_PLAY : DSP_AUD_PCM2_PLAY;
+                cmd_data.command_len =
+                        sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR);
+                cmd_data.p_data = (u16 *)&pcm_par;
+                dsp->p_dsp_common_data->ops->set_controls(
+                                DSP_AUDIO_CONTROL_SEND_CMD, &cmd_data);
+                break;
+
+        case STREAM_REC:
+                pcm_rec_par.setting = 0;
+                cmd_data.command_id = DSP_AUD_PCM_REC;
+                cmd_data.command_len =
+                        sizeof(struct T_AUD_DSP_CMD_PCM_REC_PAR);
+                cmd_data.p_data = (u16 *)&pcm_rec_par;
+                dsp->p_dsp_common_data->ops->set_controls(
+                                DSP_AUDIO_CONTROL_SEND_CMD, &cmd_data);
+                break;
+
+        case HW_PROBE_B:
+        case HW_PROBE_A:
+                hw_probe_par.setting = 0x0;
+                cmd_data.command_id = DSP_AUD_HW_PROBE;
+                cmd_data.command_len =
+                        sizeof(struct T_AUD_DSP_CMD_HW_PROBE);
+                cmd_data.p_data = (u16 *)&hw_probe_par;
+
+                dsp->p_dsp_common_data->ops->set_controls(
+                                DSP_AUDIO_CONTROL_SEND_CMD, &cmd_data);
+                break;
+
+        default:
+                return -EINVAL;
+        }
+
+        return 0;
+}
+#endif
+
 /* device probe function */
 static int dsp_audio_drv_probe(struct platform_device *pdev)
 {

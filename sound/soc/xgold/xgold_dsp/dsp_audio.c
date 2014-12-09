@@ -1,5 +1,5 @@
 /*
- * Component: Intel XGOLD DSP Audio Driver
+ * Component: XGOLD6321 DSP Audio Driver
  *
  * Copyright (C) 2014, Intel Mobile Communications GmbH.
  *
@@ -119,7 +119,10 @@ enum dsp_err_code dsp_audio_init(struct list_head *list)
 		num_dsp++;
 		switch (dsp_dev->id) {
 		case XGOLD_DSP_XG742_FBA:
+		case XGOLD_DSP_XG632:
 		case XGOLD_DSP_XG642:
+		case XGOLD_DSP_XG631:
+		case XGOLD_DSP_XG223:
 			dsp.dsp_fba = dsp_dev;
 			break;
 		case XGOLD_DSP_XG742_SBA:
