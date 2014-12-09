@@ -611,10 +611,10 @@ struct rq {
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	u64 prev_irq_time;
 #endif
-#ifdef CONFIG_PARAVIRT
+#if defined CONFIG_PARAVIRT || defined CONFIG_X86_INTEL_SOFIA
 	u64 prev_steal_time;
 #endif
-#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+#if defined CONFIG_PARAVIRT_TIME_ACCOUNTING || defined CONFIG_X86_INTEL_SOFIA
 	u64 prev_steal_time_rq;
 #endif
 
@@ -1213,7 +1213,7 @@ extern void update_idle_cpu_load(struct rq *this_rq);
 
 extern void init_task_runnable_average(struct task_struct *p);
 
-#ifdef CONFIG_PARAVIRT
+#if defined CONFIG_PARAVIRT || defined CONFIG_X86_INTEL_SOFIA
 static inline u64 steal_ticks(u64 steal)
 {
 	if (unlikely(steal > NSEC_PER_SEC))
