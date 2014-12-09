@@ -75,3 +75,4 @@ obj-$(CONFIG_INPUT_ROHM_RPR0521)        += rpr0521_driver.o
 obj-$(CONFIG_INPUT_STK3310)             += stk3x1x.o
 obj-$(CONFIG_INPUT_STK8312)             += stk831x.o
 obj-$(CONFIG_INPUT_STK8BAXX)            += stk8baxx.o
+obj-$(CONFIG_INPUT_KIONIX_ACCEL)        += kionix_accel.o
