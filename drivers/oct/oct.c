@@ -959,12 +959,12 @@ static int oct_thread(void *param)
 					DMA_FROM_DEVICE);
 
 				/* call subscribed function to forward data */
-/*
+
 				oct_write_data_to_usb((char *)
 					(&((char *)oct_ext_rbuff_ptr)[oct_read_ptr]),
 						num_bytes);
-*/
-//					OCT_DBG("Sent out %d bytes", num_bytes);
+
+					OCT_DBG("Sent out %d bytes", num_bytes);
 
 			}
 			else if (oct_out_path == OCT_PATH_FILE)
