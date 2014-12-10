@@ -118,7 +118,7 @@ static int lpaudio_stop(void)
 	else {
 		pcm_par.setting = 0;
 		dsp_audio_cmd(
-				DSP_AUD_PCM2_PLAY,
+				DSP_AUD_PCM1_PLAY,
 				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
 				(u16 *)&pcm_par);
 		dsp_audio_irq_deactivate(p_dsp_audio_dev, DSP_IRQ_1);
@@ -136,7 +136,7 @@ static int lpaudio_start(void)
 	} else {
 		pcm_par.req = 0; /*pio*/
 		dsp_audio_cmd(
-				DSP_AUD_PCM2_PLAY,
+				DSP_AUD_PCM1_PLAY,
 				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
 				(u16 *) &pcm_par);
 		dsp_audio_irq_activate(p_dsp_audio_dev,

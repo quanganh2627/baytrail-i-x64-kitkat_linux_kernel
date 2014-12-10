@@ -178,7 +178,6 @@ enum dsp_aud_cmds {
 	DSP_AUD_SPEECH_PROBE       = 66, /* config/start/stop a speech I/O */
 	DSP_AUD_SET_SWM_MIX_MATRIX = 77, /* set the mix matrix coefficients */
 	DSP_AUD_HW_PROBE           = 100,
-	DSP_AUD_PCM2_PLAY          = 106, /* start and stop PCM2 playback */
 	DSP_AUD_SPEECH_PATH        = 26
 };
 
