@@ -1724,13 +1724,19 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	The values written are the maximum values possible to allow freedom
 	of setting all required settings during runtime. */
 	if ((pn_info == 1 && rev_info != 0) || pn_info == 5) {
-		ret = fan54x_attr_write(client, SAFETY_REG, 0xFF);
+		/* CC = 1450mA, CV = 4.40V */
+		ret = fan54x_attr_write(client, SAFETY_REG, 0x7A);
 		if (ret) {
 			pr_err("fan54x write SAFETY_REG error, ret = %d\n",
 								ret);
 			ret = -ENODEV;
 			goto pre_fail;
 		}
+	}
+
+	if (pn_info == 5) {
+		pr_debug("setting VLOWV to 3.4v\n");
+		ret = fan54x_attr_write(client, VLOWV, 0);
 	}
 
 	/* Trigger charger watchdog to prevent expiry if the watchdog

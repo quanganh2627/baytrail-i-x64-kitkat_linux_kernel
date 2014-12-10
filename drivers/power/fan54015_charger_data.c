@@ -59,6 +59,9 @@
 #define IBUS_O 6
 #define IBUS_M 0x3
 
+#define VLOWV_O 4
+#define VLOWV_M 0x3
+
 #define BOOST_EN_O 0
 #define BOOST_EN_M 0x1
 
@@ -145,6 +148,7 @@ struct charger_attrmap fan54015_charger_attr_map[ATTR_MAX] = {
 	[ITERM] = {"Iterm", BITS, REG_IBAT, ITERM_O, ITERM_M},
 	[VOREG] = {"Voreg", BITS, REG_VOREG, VOREG_O, VOREG_M},
 	[IBUS] = {"Ibus", BITS, REG_CHARGE_CTRL1, IBUS_O, IBUS_M},
+	[VLOWV] = {"Vlowv", BITS, REG_CHARGE_CTRL1, VLOWV_O, VLOWV_M},
 	[TMR_RST] = {"tmr_rst", BITS, REG_CHARGE_CTRL0, TMR_RST_O, TMR_RST_M},
 	[CHG_EN] = {"chg_en", BITS, REG_CHARGE_CTRL1, CHG_EN_O, CHG_EN_M},
 	[IO_LEVEL] = {"io_level", BITS, REG_SP_CHARGER, IO_LEVEL_O, IO_LEVEL_M},
@@ -261,7 +265,7 @@ struct fan54x_charger fan54015_chrgr_data = {
 	.min_voreg = 3500,
 	.max_iocharge = 1450,
 	.min_iocharge = 550,
-	.max_ibus_limit = 800,
+	.max_ibus_limit = 900,
 	.min_ibus_limit = 100,
 	.default_cc = 550,
 	.default_cv = 3540,
