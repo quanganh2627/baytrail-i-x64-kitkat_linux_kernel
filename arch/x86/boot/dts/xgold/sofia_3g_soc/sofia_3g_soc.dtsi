@@ -152,7 +152,7 @@
 					0x1D0C 0x2      /* mode regulator */
 					0x1D10 0xF6     /* bandwidth */
 					0x1D14 0x10     /* saturation */
-					0x1D18 0x4>;    /* QoSEn */
+					0x1D18 0x5>;    /* QoSEn */
 
 				intel,CIF-qos-settings = <
 					0x1D88 0x4      /* prio */
@@ -177,6 +177,24 @@
 					0x1E18 0x5>;    /* QoSEn */
 #endif
 				#include "xgold/sofia_3g_soc/NoC.dtsi"
+			};
+
+			audio_noc {
+				compatible = "intel,audionoc";
+				#address-cells = <1>;
+				#size-cells = <1>;
+				ranges;
+				reg = <0xEF020000 0x2000>;
+
+				interrupts = < NOC_ERR_AUDIO_IDI IRQ_TYPE_DEFAULT >, < NOC_STATALARM IRQ_TYPE_DEFAULT >;
+				interrupt-names = "error", "stat_alarm";
+
+				probe,nr = < 2 >;
+				filter,nr = < 0 >;
+				counter,nr = < 0 >;
+
+				probe,offset = < 0x1000 >;
+
 			};
 
 			l2_noc {
