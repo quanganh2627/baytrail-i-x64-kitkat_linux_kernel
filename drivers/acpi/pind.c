@@ -104,15 +104,17 @@ static void acpi_pind_notify(struct acpi_device *device, u32 event)
 
 static void add_notify_list(int key_type, int key_code, struct acpi_pind *pind)
 {
-	struct notify_package *obj;
+	struct notify_package *obj = NULL;
 
 	input_set_capability(pind->input,
 		key_type, key_code);
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
-	obj->index = pind->count;
-	obj->key_type = key_type;
-	obj->key_code = key_code;
-	list_add_tail(&obj->list, &pind->list);
+	if (NULL != obj) {
+		obj->index = pind->count;
+		obj->key_type = key_type;
+		obj->key_code = key_code;
+		list_add_tail(&obj->list, &pind->list);
+	}
 }
 
 static void type_notify_handler(char *name, struct acpi_pind *pind)
