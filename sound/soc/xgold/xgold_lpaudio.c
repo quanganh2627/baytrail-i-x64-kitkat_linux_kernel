@@ -113,6 +113,7 @@ static u32 lpaudio_find_dma(void)
 
 static int lpaudio_stop(void)
 {
+#if 0
 	if (lpaudio_enable_dma)
 		dmaengine_terminate_all(lpaudio_dmach);
 	else {
@@ -123,12 +124,13 @@ static int lpaudio_stop(void)
 				(u16 *)&pcm_par);
 		dsp_audio_irq_deactivate(p_dsp_audio_dev, DSP_IRQ_1);
 	}
-
+#endif
 	return 0;
 }
 
 static int lpaudio_start(void)
 {
+#if 0
 	pcm_par.setting = 1;
 	if (lpaudio_enable_dma) {
 		dma_async_issue_pending(lpaudio_dmach);
@@ -142,6 +144,7 @@ static int lpaudio_start(void)
 		dsp_audio_irq_activate(p_dsp_audio_dev,
 				DSP_IRQ_1);
 	}
+#endif
 	return 0;
 }
 
@@ -190,6 +193,7 @@ static long lpaudio_fs_ioctl(struct file *file,
 
 	dev_dbg(lpaudio_dev, "%s: cmd: %d\n", __func__, cmd);
 	switch (cmd) {
+	/*
 	case LPAUDIO_IOCTRL_DSP_DL:
 		shm = (void *)dsp_get_audio_shmem_base_addr() +
 			OFFSET_SM_AUDIO_BUFFER_1_DL;
@@ -200,6 +204,7 @@ static long lpaudio_fs_ioctl(struct file *file,
 			OFFSET_SM_AUDIO_BUFFER_UL;
 		ret = (u32)shm;
 		break;
+	*/
 	case LPAUDIO_IOCTRL_DSP_PLAY:
 		pcm_par.setting = 2;
 		dsp_audio_cmd(

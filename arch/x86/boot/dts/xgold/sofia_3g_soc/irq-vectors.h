@@ -1,3 +1,11 @@
+/*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
 #ifndef _IRQ_VECTORS_H
 #define _IRQ_VECTORS_H
 /* AUTO GENERATED - DO NOT MODIFY */
@@ -15,7 +23,6 @@
 #define LINUX_OS_RESCHEDULE_IPI 114
 #define VMM_LAPIC_SPURIOUS 255
 #define NOC_TRACEALARM 0
-#define NOC_ERR_AUDIO_IDI 0
 #define SDIO_INT 0
 #define DIF_RX_BREQ_INT 0
 #define NANDCTRL_INT 0
@@ -137,6 +144,7 @@
 #define STM_INT0 109
 #define EXI8 115
 #define EXI14 116
+#define NOC_ERR_AUDIO_IDI 118
 #define VID_HINT_ENC 126
 #define VID_HINT_DEC 127
 #define NSEC_CEU1_RX_IRQ 128

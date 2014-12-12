@@ -31,6 +31,7 @@
 #define XGOLD631_NOC_ERROR_ID 0x00FA1200
 #define XGOLD726_NOC_ERROR_ID 0x010C0C00
 
+
 /**
  * Tasklet called by interrupt when a measurement is finished.
  * @param data a pointer to the struct xgold_noc_probe which generated the
@@ -443,40 +444,52 @@ static struct of_device_id xgold_noc_of_match[] = {
 	 .compatible = "intel,l1noc",},
 	{
 	 .compatible = "intel,l2noc",},
+	{
+	 .compatible = "intel,audionoc",},
 	{},
 };
+
+static int xgold_noc_get_error(struct xgold_noc_device *noc_device)
+{
+	void __iomem *base = noc_device->hw_base;
+	struct xgold_noc_error *noc_err;
+	unsigned long flags;
+
+	struct device *mydev = noc_device->dev;
+
+	noc_err = kzalloc(sizeof(struct xgold_noc_error), GFP_ATOMIC);
+	if (!noc_err)
+		return -ENOMEM;
+
+	noc_err->timestamp = get_jiffies_64();
+
+	noc_err->err[0] = ioread32(ERRLOG_0_ERRLOG0(base));
+	noc_err->err[1] = ioread32(ERRLOG_0_ERRLOG1(base));
+	noc_err->err[2] = ioread32(ERRLOG_0_ERRLOG3(base));
+	noc_err->err[3] = ioread32(ERRLOG_0_ERRLOG5(base));
+	noc_err->err[4] = ioread32(ERRLOG_0_ERRLOG7(base));
+
+	spin_lock_irqsave(&noc_device->lock, flags);
+	list_add_tail(&noc_err->link, &noc_device->err_queue);
+	spin_unlock_irqrestore(&noc_device->lock, flags);
+	dev_err(mydev,
+		"Error interrupt"
+		" -0 0x%08x -1 0x%08x -3 0x%08x -5 0x%08x -7 0x%08x\n",
+		noc_err->err[0], noc_err->err[1],
+		noc_err->err[2], noc_err->err[3], noc_err->err[4]);
+
+	iowrite32(1, ERRLOG_0_ERRCLR(base));
+
+	return 0;
+}
 
 static irqreturn_t xgold_noc_error_irq(int irq, void *dev)
 {
 	struct xgold_noc_device *noc_device = dev;
-	struct device *mydev = noc_device->dev;
-	struct xgold_noc_error *noc_err;
 	void __iomem *base = noc_device->hw_base;
-	unsigned long flags;
 
-	while (ioread32(ERRLOG_0_ERRVLD(base))) {
-		iowrite32(1, ERRLOG_0_ERRCLR(base));
-		noc_err = kzalloc(sizeof(struct xgold_noc_error), GFP_ATOMIC);
-		if (!noc_err)
-			return IRQ_HANDLED;
-
-		noc_err->timestamp = get_jiffies_64();
-
-		noc_err->err[0] = ioread32(ERRLOG_0_ERRLOG0(base));
-		noc_err->err[1] = ioread32(ERRLOG_0_ERRLOG1(base));
-		noc_err->err[2] = ioread32(ERRLOG_0_ERRLOG3(base));
-		noc_err->err[3] = ioread32(ERRLOG_0_ERRLOG5(base));
-		noc_err->err[4] = ioread32(ERRLOG_0_ERRLOG7(base));
-
-		spin_lock_irqsave(&noc_device->lock, flags);
-		list_add_tail(&noc_err->link, &noc_device->err_queue);
-		spin_unlock_irqrestore(&noc_device->lock, flags);
-		dev_err(mydev,
-			"Error interrupt"
-			" -0 0x%08x -1 0x%08x -3 0x%08x -5 0x%08x -7 0x%08x\n",
-			noc_err->err[0], noc_err->err[1],
-			noc_err->err[2], noc_err->err[3], noc_err->err[4]);
-	}
+	while (ioread32(ERRLOG_0_ERRVLD(base)))
+		xgold_noc_get_error(noc_device);
 
 	return IRQ_HANDLED;
 }
@@ -1462,7 +1475,7 @@ static int xgold_noc_probe(struct platform_device *pdev)
 
 	noc_device->clock = of_clk_get(np, 0);
 	if (IS_ERR_OR_NULL(noc_device->clock)) {
-		dev_err(mydev, "Error %d while getting clock\n",
+		dev_dbg(mydev, "Error %d while getting clock\n",
 			(int)noc_device->clock);
 	}
 
@@ -1620,12 +1633,32 @@ static int xgold_noc_remove(struct platform_device *pdev)
 static int noc_resume(struct device *dev)
 {
 	struct xgold_noc_device *noc_device = dev_get_drvdata(dev);
+	void __iomem *base = noc_device->hw_base;
+
 	noc_device_qos_set(noc_device);
+
+	while (ioread32(ERRLOG_0_ERRVLD(base))) {
+		dev_err(dev, "NoC Error pending during resume\n");
+		xgold_noc_get_error(noc_device);
+	}
+
+	iowrite32(1, ERRLOG_0_FAULTEN(base));
+
 	return 0;
 }
 
 static int noc_suspend(struct device *dev)
 {
+	struct xgold_noc_device *noc_device = dev_get_drvdata(dev);
+	void __iomem *base = noc_device->hw_base;
+
+	iowrite32(0, ERRLOG_0_FAULTEN(base));
+
+	while (ioread32(ERRLOG_0_ERRVLD(base))) {
+		dev_err(dev, "NoC Error pending during suspend\n");
+		xgold_noc_get_error(noc_device);
+	}
+
 	return 0;
 }
 
