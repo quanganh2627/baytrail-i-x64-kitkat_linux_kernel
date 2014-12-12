@@ -2060,7 +2060,7 @@ static const struct idi_device_id idi_ids[] = {
 static struct idi_peripheral_driver fan54x_idi_driver = {
 	.driver = {
 		.owner  = THIS_MODULE,
-		.name   = "fan54x_idi",
+		.name   = "chgr_idi",
 		.pm = NULL,
 	},
 	.p_type = IDI_CHG,

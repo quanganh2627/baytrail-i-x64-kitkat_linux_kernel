@@ -386,12 +386,20 @@ config CHARGER_MAX8998
 config CHARGER_BQ2415X
 	tristate "TI BQ2415x battery charger driver"
 	depends on I2C
+	depends on IDI
 	help
 	  Say Y to enable support for the TI BQ2415x battery charger
 	  PMICs.
 
 	  You'll need this driver to charge batteries on e.g. Nokia
 	  RX-51/N900.
+
+config CHARGER_BQ24296
+        tristate "BQ24296 battery charger driver"
+        depends on I2C
+        depends on IDI
+        help
+          Say Y here to enable support for bq24296 Charger.
 
 config CHARGER_BQ24190
 	tristate "TI BQ24190 battery charger driver"
