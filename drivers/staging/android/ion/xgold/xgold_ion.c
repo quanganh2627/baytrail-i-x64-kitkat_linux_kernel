@@ -48,10 +48,8 @@ static int xgold_ion_get_param(struct ion_client *client,
 					unsigned long arg)
 {
 	struct xgold_ion_get_params_data *data=NULL;
-	struct ion_handle *handle;
 	ion_phys_addr_t paddr;
 	size_t size;
-	struct ion_buffer *buffer;
 	int ret = 0;
 
 	if (is_compat_task()) {
@@ -70,10 +68,9 @@ static int xgold_ion_get_param(struct ion_client *client,
 		}
 	}
 
-	handle = ion_handle_get_by_id(client, data->handle);
-	buffer = ion_handle_buffer(handle);
-	ion_phys(client, handle, &paddr, &size);
-	ion_free(client, handle);
+	if (ion_phys_get_by_id(client, data->handle, &paddr, &size))
+		return -EFAULT;
+
 	data->addr = paddr;
 	data->size = size;
 
