@@ -2,6 +2,7 @@
  * Copyright (C) 2014 Intel Mobile Communications GmbH
  *
  * Notes:
+ * Nov 05 2014: IMC: Add missing 64bit alignment
  * Jul 11 2014: IMC: Force explicit alignment for all structures
  *                   used in ioctls that have an IS_ALIGNED check
  *                   in mali_kernel_linux.c
@@ -274,8 +275,8 @@ typedef struct {
 	u32 perf_counter_src1;              /**< [in] source id for performance counter 1 (see ARM DDI0415A, Table 3-60) */
 	u32 frame_builder_id;               /**< [in] id of the originating frame builder */
 	u32 flush_id;                       /**< [in] flush id within the originating frame builder */
-	_mali_uk_fence_t __attribute__((aligned(8))) fence;           /**< [in] fence this job must wait on */
-	u64  __attribute__((aligned(8))) timeline_point_ptr;            /**< [in,out] pointer to u32: location where point on gp timeline for this job will be written */
+	_mali_uk_fence_t __attribute__((aligned(8))) fence; /**< [in] fence this job must wait on */
+	u64 __attribute__((aligned(8))) timeline_point_ptr; /**< [in,out] pointer to u32: location where point on gp timeline for this job will be written */
 } __attribute__((aligned(8))) _mali_uk_gp_start_job_s;
 
 #define _MALI_PERFORMANCE_COUNTER_FLAG_SRC0_ENABLE (1<<0) /**< Enable performance counter SRC0 for a job */
@@ -381,9 +382,9 @@ typedef struct {
 	u32 tilesy;                         /**< [in] number of tiles in y direction (needed for reading the heatmap memory) */
 	u32 heatmap_mem;                    /**< [in] memory address to store counter values per tile (aka heatmap) */
 	u32 num_memory_cookies;             /**< [in] number of memory cookies attached to job */
-	u64 __attribute__((aligned(8))) memory_cookies;            /**< [in] pointer to array of u32 memory cookies attached to job */
-	_mali_uk_fence_t fence;             /**< [in] fence this job must wait on */
-	u64  __attribute__((aligned(8))) timeline_point_ptr;           /**< [in,out] pointer to location of u32 where point on pp timeline for this job will be written */
+	u64 __attribute__((aligned(8))) memory_cookies;      /**< [in] pointer to array of u32 memory cookies attached to job */
+	_mali_uk_fence_t fence;                              /**< [in] fence this job must wait on */
+	u64  __attribute__((aligned(8))) timeline_point_ptr; /**< [in,out] pointer to location of u32 where point on pp timeline for this job will be written */
 } __attribute__((aligned(8))) _mali_uk_pp_start_job_s;
 
 typedef struct {
@@ -590,7 +591,7 @@ typedef struct {
 		_mali_uk_pp_job_finished_s  pp_job_finished; /**< [out] Notification data for _MALI_NOTIFICATION_PP_FINISHED notification type */
 		_mali_uk_settings_changed_s setting_changed;/**< [out] Notification data for _MALI_NOTIFICAATION_SETTINGS_CHANGED notification type */
 		_mali_uk_soft_job_activated_s soft_job_activated; /**< [out] Notification data for _MALI_NOTIFICATION_SOFT_ACTIVATED notification type */
-	}  __attribute__((aligned(8)))data;
+	} __attribute__((aligned(8))) data;
 } __attribute__((aligned(8))) _mali_uk_wait_for_notification_s;
 
 /** @brief Arguments for _mali_ukk_post_notification()
@@ -706,7 +707,7 @@ typedef struct {
 	u64 ctx;                       /**< [in,out] user-kernel context (trashed on output) */
 	_mali_uk_user_setting_t setting; /**< [in] setting to get */
 	u32 value;                       /**< [out] value of setting */
-} _mali_uk_get_user_setting_s;
+} __attribute__((aligned(8))) _mali_uk_get_user_setting_s;
 
 /** @brief Arguments for _mali_ukk_request_high_priority() */
 typedef struct {
@@ -793,11 +794,11 @@ typedef struct {
 typedef struct {
 	u64 ctx;                      /**< [in,out] user-kernel context (trashed on output) */
 	u32 size;                       /**< [in] size of buffer to receive mmu page table information */
-	u64 buffer;                   /**< [in,out] buffer to receive mmu page table information */
+	u64 __attribute__((aligned(8))) buffer;          /**< [in,out] buffer to receive mmu page table information */
 	u32 register_writes_size;       /**< [out] size of MMU register dump */
-	u64 register_writes;           /**< [out] pointer within buffer where MMU register dump is stored */
+	u64 __attribute__((aligned(8))) register_writes; /**< [out] pointer within buffer where MMU register dump is stored */
 	u32 page_table_dump_size;       /**< [out] size of MMU page table dump */
-	u64 page_table_dump;           /**< [out] pointer within buffer where MMU page table dump is stored */
+	u64 __attribute__((aligned(8))) page_table_dump; /**< [out] pointer within buffer where MMU page table dump is stored */
 } __attribute__((aligned(8))) _mali_uk_dump_mmu_page_table_s;
 
 /** @} */ /* end group _mali_uk_memory */
