@@ -186,11 +186,11 @@
 	prof-standrd-ntemp_ranges = <1>;
 
 	prof-standrd-temp_range0 = < 45 /*max_temp*/
-					     4160 /*full_chrg_vol*/
-					     850 /*full_chrg_cur*/
+					     4350 /*full_chrg_vol*/
+					     1450 /*full_chrg_cur*/
 					     98 /*charging_res_cap*/
-					     4160 /*maint_chrg_vol_ul*/
-					     850 /*maint_chrg_cur*/ >;
+					     4250 /*maint_chrg_vol_ul*/
+					     1450 /*maint_chrg_cur*/ >;
 
 	nprofiles = <1>;
 };
