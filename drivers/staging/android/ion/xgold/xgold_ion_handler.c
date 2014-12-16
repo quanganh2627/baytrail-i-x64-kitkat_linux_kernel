@@ -349,7 +349,7 @@ static int xgold_ion_handle_command(uint32_t cmd[], int cmd_len)
 
 		len = cmd[3];
 		i_handle = ion_alloc(xgold_ion_client, len,
-			16, ION_HEAP_TYPE_SECURE_MASK, 0);
+			16, (1 << ION_HEAP_TYPE_DMA), 0);
 
 		pr_debug("xg_ion: ion_alloc(clnt %p, l %ul, 16, DMA, 0) = %p\n",
 			xgold_ion_client, len, i_handle);
