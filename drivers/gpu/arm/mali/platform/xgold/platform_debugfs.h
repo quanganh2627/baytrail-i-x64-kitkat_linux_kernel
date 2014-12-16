@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  *
  * Notes:
+ * Nov 18 2014: IMC: Adaptions for Mali Utgard driver r5p0-01rel0
  * Jul 16 2014: IMC: [OSS Scan] Add missing license type
  * Jun 02 2014: IMC: Add pm and debugfs support
  *                   Splitup platform adaption for better readability
@@ -18,5 +19,5 @@
 
 
 int platform_debugfs_register(struct mali_platform_pm *pdev_pm,
-	struct platform_device *pdev, const struct dev_pm_ops *pdev_pm_ops);
+	struct platform_device *pdev);
 

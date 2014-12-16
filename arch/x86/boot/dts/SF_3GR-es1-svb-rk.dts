@@ -24,6 +24,20 @@
 		reg = <0x800000 0x1800000>;
 	};
 
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* global autoconfigured region for contiguous allocations */
+		cma_default_region: region@0 {
+			size = <0x08000000>;
+			limit = <0x00000000>;
+			linux,cma-default;
+		};
+	};
+
+
 	cpufreq:cpufreq {
 		compatible = "intel,xgold-cpufreq";
 		clocks = <&clk_cpu>,<&MUX_CPU>,<&B_0_1>,<&G_0_1>;
@@ -49,7 +63,7 @@
 		secvm-handler;
 #endif
 		cma-heap {
-			intel,heapmem = < 0x00000000 0x08000000 >;
+			memory-region = <&cma_default_region>;
 		};
 	};
 
@@ -344,7 +358,7 @@
 #endif
 
 &sd {
-	intel,tap_values = <0x080400F5 0x08040004 0x00040004 0x08040004 0x5CF501A5 0x00F500A5 0x00F500A5>;
+	intel,tap_values = <0x0C51020 0x0C41020 0x0C41020 0x1114120 0x0C51020 0x0F50F20 0x0F50F20>;
 	pinctrl-names = "default", "sleep", "inactive";
 	pinctrl-0 = <&sdmmc_default_pins>;
 	pinctrl-1 = <&sdmmc_sleep_pins>;
