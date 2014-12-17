@@ -774,5 +774,12 @@ config INPUT_KIONIX_ACCEL
         help
           If you say yes here you get support for the kionix accelerometer.
 
+config INPUT_SENSORS_MPU6500
+	tristate "MPU6500 Accelerometer and Gyroscope support"
+	default n
+	depends on I2C
+	help
+	  If you say yes here you get support for InvenSense's
+	  Accelerometer and Gyroscope sensor.
 
 endif
