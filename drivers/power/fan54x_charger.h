@@ -259,6 +259,7 @@ struct fan54x_charger {
 	int (*configure_chip)(struct fan54x_charger *chrgr,
 					bool enable_charging);
 	int (*enable_charger)(struct fan54x_charger *chrgr, bool enable);
+	int (*enable_charging)(struct fan54x_charger *chrgr, bool enable);
 	int (*get_charger_state)(struct fan54x_charger *chrgr);
 	int (*get_clr_wdt_expiry_flag)(struct fan54x_charger *chrgr);
 	int (*calc_iocharge_regval)(struct fan54x_charger *chrgr,

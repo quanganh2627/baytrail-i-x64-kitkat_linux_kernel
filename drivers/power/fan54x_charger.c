@@ -96,6 +96,9 @@ enum {
 static int fan54x_configure_chip(
 			struct fan54x_charger *chrgr, bool enable_charging);
 
+static int fan54x_enable_charger(
+			struct fan54x_charger *chrgr, bool enable_charger);
+
 static int fan54x_enable_charging(
 			struct fan54x_charger *chrgr, bool enable);
 
@@ -724,18 +727,18 @@ static void fan54x_charging_worker(struct work_struct *work)
 	return;
 }
 
-static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
+static int fan54x_enable_charger(struct fan54x_charger *chrgr,
+					bool enable_charger)
 {
 	int ret;
 
 	if (chrgr->enable_charger) {
-		ret = chrgr->enable_charger(chrgr, enable);
+		ret = chrgr->enable_charger(chrgr, enable_charger);
 		if (ret)
 			return ret;
-	} else
-		return -EINVAL;
+	}
 
-	if (enable) {
+	if (enable_charger) {
 		/*
 		 * Obtain Wake Lock to prevent suspend during charging
 		 * because the charger watchdog needs to be cont. retriggered.
@@ -747,6 +750,19 @@ static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
 		wake_unlock(&chrgr->suspend_lock);
 		cancel_delayed_work(&chrgr->charging_work);
 	}
+	return 0;
+}
+
+static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
+{
+	int ret;
+
+	if (chrgr->enable_charging) {
+		ret = chrgr->enable_charging(chrgr, enable);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -843,13 +859,18 @@ static int fan54x_charger_set_property(struct power_supply *psy,
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_ENABLE_CHARGER,
 								val->intval, 0);
 
-		chrgr->state.charger_enabled = val->intval;
-		value_set = val->intval;
+		ret = fan54x_enable_charger(chrgr, val->intval);
+		if (!ret) {
+			chrgr->state.charger_enabled = val->intval;
+			value_set = val->intval;
+		}
 		break;
 
 	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_ENABLE_CHARGING,
 								val->intval, 0);
+
+		chrgr->ack_time = jiffies;
 
 		if (val->intval == chrgr->state.charging_enabled) {
 			value_set = val->intval;
@@ -1990,7 +2011,7 @@ static int fan54x_suspend(struct device *dev)
 {
 	struct fan54x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
 
-	if (chrgr->state.charging_enabled) {
+	if (chrgr->state.charger_enabled) {
 		/* If charging is in progess, prevent suspend. */
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SUSPEND_ERROR, 0, 0);
 		return -EBUSY;

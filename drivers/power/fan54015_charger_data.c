@@ -156,13 +156,29 @@ struct charger_attrmap fan54015_charger_attr_map[ATTR_MAX] = {
 
 static int fan54015_enable_charger(struct fan54x_charger *chrgr, bool enable)
 {
+	int ret;
+
+	if (enable) {
+		/* In case when CE or HZ bit is set,
+		 * we have to manually clear it to enable charger again.
+		 * No need to set the bit when disabling charger.
+		 */
+		ret = fan54x_attr_write(chrgr->client, CHG_EN, 0);
+		if (ret)
+			return ret;
+
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 0);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
 static int fan54015_configure_chip(struct fan54x_charger *chrgr,
 							bool enable_charging)
 {
-	return fan54015_enable_charger(chrgr, enable_charging);
+	return 0;
 }
 
 static int fan54015_get_charger_state(struct fan54x_charger *chrgr)
