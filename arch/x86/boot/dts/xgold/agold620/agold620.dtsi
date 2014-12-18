@@ -24,6 +24,9 @@ agold {
 			"dma", "dma", "dma", "signal", "software",
 			"errors", "software", "software";
 
+#if defined(SOFIA_SECURED_VMM_ACCESS)
+	intel,vmm-secured-access;
+#endif
 	#include "clock.dtsi"
 
 	abb_rst:reset-controller {
@@ -32,7 +35,9 @@ agold {
 		#reset-cells = <1>;
 		intel,reset-set = <0>;
 		intel,reset-status = <0>;
-		intel,io-access-guest;
+#if defined(SOFIA_SECURED_VMM_ACCESS)
+		intel,vmm-secured-access;
+#endif
 	};
 
 	abb_pmx_core:pinmux@E6300000 {
@@ -45,6 +50,9 @@ agold {
 		pinctrl-single,register-width = <32>;
 		pinctrl-single,first-pin-offset = <0x20C>;
 		pinctrl-single,function-mask = <0xfffff>;
+#if defined(SOFIA_SECURED_VMM_ACCESS)
+		intel,vmm-secured-access;
+#endif
 		range_abb: gpio-range {
 			#pinctrl-single,gpio-range-cells = <3>;
 		};
@@ -63,6 +71,9 @@ agold {
 		intel,gpiochip-base = <94>;
 		intel,gpiochip-id = <1>;
 		intel,gpiochip-num = <45>;
+#if defined(SOFIA_SECURED_VMM_ACCESS)
+		intel,vmm-secured-access;
+#endif
 	};
 	on_button:on_button {
 		compatible = "intel,agold620,on-button";
@@ -491,7 +502,7 @@ agold {
 				adc,log-channel-id = <ADC_ID_PCB>;
 				adc,phy-channel-num = <ADC_PHY_M3>;
 				adc,autoscaling-on;
-				adc,adc-bias-na = <0>;
+				adc,adc-bias-na = <4500>;
 				adc,max-signal-settling-time-ms = <0>;
 				adc,average-sample = <ADC_HAL_AVG_SAMPLE_LEVEL_MEDIUM>;
 				adc,iio-type = <IIO_RESISTANCE>;
