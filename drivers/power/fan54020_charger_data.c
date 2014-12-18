@@ -275,7 +275,7 @@ static int fan54020_configure_chip(struct fan54x_charger *chrgr,
 	return 0;
 }
 
-static int fan54020_enable_charger(struct fan54x_charger *chrgr, bool enable)
+static int fan54020_enable_charging(struct fan54x_charger *chrgr, bool enable)
 {
 	return fan54x_attr_write(chrgr->client, HZ_MODE, ((enable) ? 0 : 1));
 }
@@ -348,7 +348,7 @@ struct fan54x_charger fan54020_chrgr_data = {
 
 	.attrmap = fan54020_charger_attr_map,
 	.configure_chip = fan54020_configure_chip,
-	.enable_charger = fan54020_enable_charger,
+	.enable_charging = fan54020_enable_charging,
 	.get_charger_state = fan54020_get_charger_state,
 	.get_clr_wdt_expiry_flag = fan54020_get_clr_wdt_expiry_flag,
 };
