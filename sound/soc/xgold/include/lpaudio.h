@@ -28,6 +28,7 @@ typedef unsigned char		u8;
 #define speex_resampler_init(x...) 0
 #define speex_resampler_process_interleaved_int(x...) 0
 
+#include "lpaudio_lib.h"
 #elif defined(LPAUDIO_HOST_TEST)
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,11 +41,21 @@ typedef unsigned int		u32;
 typedef unsigned short		u16;
 typedef unsigned char		u8;
 
+#define VOLATILE
 #define LPAUDIO_PROMPT		"lpaudio_test"
 
 #elif defined(__KERNEL__)
 #define LPAUDIO_PROMPT		"lpaudio_drv"
 #define lpvm_print		pr_info
+#define VOLATILE
+
+void xgold_lpmp3_enable(void);
+void xgold_lpmp3_disable(void);
+
+extern struct dma_async_tx_descriptor *
+	       (*lpaudio_dma_setup)(struct dma_chan *dmach);
+extern void (*lpaudio_dma_release)(struct dma_chan *dmach);
+extern void (*lpaudio_trigger)(int start);
 
 extern int lpaudio_enabled;
 extern struct dsp_audio_device *p_dsp_audio_dev;
@@ -187,9 +198,9 @@ struct lpaudio_ipc_t {
 	};
 };
 
+extern VOLATILE struct lpaudio_ctrl_t *lpaudio_ctrl;
 extern int lpaudio_debug_enable;
 extern u32 lpaudio_rate;
-extern volatile struct lpaudio_ctrl_t *lpaudio_ctrl;
 int lpaudio_need_pause(void);
 
 #endif /*__LPAUDIO_H__*/

@@ -63,6 +63,8 @@
 #define SYSFS_INPUT_VAL_LEN (1)
 
 struct dma_async_tx_descriptor *(*lpaudio_dma_setup)(struct dma_chan *dmach);
+void (*lpaudio_dma_release)(struct dma_chan *dmach);
+
 static unsigned int bt_init_en;
 
 #define	xgold_err(fmt, arg...) \
@@ -785,6 +787,8 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 
 		/* Release the DMA channel */
 		if (pcm_dma_stream->dmach) {
+			if (lpaudio_dma_release && STREAM_PLAY2 == stream_type)
+				lpaudio_dma_release(pcm_dma_stream->dmach);
 			dma_release_channel(pcm_dma_stream->dmach);
 			pcm_dma_stream->dmach = NULL;
 		}

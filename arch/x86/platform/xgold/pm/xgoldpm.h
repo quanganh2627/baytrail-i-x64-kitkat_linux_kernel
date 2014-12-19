@@ -26,5 +26,6 @@ int xgold_dev_pm_set_state(struct device *dev,
 /* Function prototype for getting the initial state */
 struct device_state_pm_state*
 xgold_dev_pm_get_initial_state(struct device *dev);
+int xgold_lpmp3_mode(void);
 
 #endif
