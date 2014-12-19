@@ -25,6 +25,19 @@
 		reg = <0x800000 0x1800000>;
 	};
 
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* global autoconfigured region for contiguous allocations */
+		cma_default_region: region@0 {
+			size = <0x08000000>;
+			limit = <0x00000000>;
+			linux,cma-default;
+		};
+	};
+
 	cpufreq:cpufreq {
 		compatible = "intel,xgold-cpufreq";
 		clocks = <&clk_cpu>,<&MUX_CPU>,<&B_0_1>,<&G_0_1>;
@@ -46,7 +59,7 @@
 		secvm-handler;
 #endif
 		cma-heap {
-			intel,heapmem = <   0x00000000 0x08000000 >;
+			memory-region = <&cma_default_region>;
 		};
 	};
 
@@ -186,11 +199,11 @@
 	prof-standrd-ntemp_ranges = <1>;
 
 	prof-standrd-temp_range0 = < 45 /*max_temp*/
-					     4160 /*full_chrg_vol*/
-					     850 /*full_chrg_cur*/
+					     4350 /*full_chrg_vol*/
+					     1450 /*full_chrg_cur*/
 					     98 /*charging_res_cap*/
-					     4160 /*maint_chrg_vol_ul*/
-					     850 /*maint_chrg_cur*/ >;
+					     4250 /*maint_chrg_vol_ul*/
+					     1450 /*maint_chrg_cur*/ >;
 
 	nprofiles = <1>;
 };
@@ -509,5 +522,10 @@
 };
 #endif
 
+#if defined(SOFIA3G_ES21)
+#include "xgold/sofia_3g_soc/pinctrl-sf_3g-es2.1-svb.dtsi"
+#include "xgold/agold620/pinctrl-sf_3g-es2.1-svb.dtsi"
+#else
 #include "xgold/agold620/pinctrl-sf_3g-es2-svb.dtsi"
 #include "xgold/sofia_3g_soc/pinctrl-sf_3g-es2-svb.dtsi"
+#endif
