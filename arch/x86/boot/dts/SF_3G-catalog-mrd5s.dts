@@ -188,11 +188,11 @@
 	prof-standrd-ntemp_ranges = <1>;
 
 	prof-standrd-temp_range0 = < 45 /*max_temp*/
-					     4160 /*full_chrg_vol*/
-					     850 /*full_chrg_cur*/
+					     4350 /*full_chrg_vol*/
+					     1450 /*full_chrg_cur*/
 					     98 /*charging_res_cap*/
-					     4160 /*maint_chrg_vol_ul*/
-					     850 /*maint_chrg_cur*/ >;
+					     4250 /*maint_chrg_vol_ul*/
+					     1450 /*maint_chrg_cur*/ >;
 
 	nprofiles = <1>;
 };
@@ -236,6 +236,7 @@
 		reg = < 0x0C >;
 	};
 
+#ifndef MRD5S_OV5648
 	camera0: camera-module@0 {
 		compatible = "omnivision,OV8858-v4l2-i2c-subdev";
 		reg = < 0x36 >;
@@ -278,6 +279,50 @@
 			intel,csi-ana-bandgap-bias = <3>;
 		};
 	};
+#else
+	camera0: camera-module@0 {
+		compatible = "omnivision,ov5648-v4l2-i2c-subdev";
+		reg = < 0x36 >;
+		device_type = "v4l2-i2c-subdev";
+
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&cam1_default_pins>;
+		pinctrl-1 = <&cam1_sleep_pins>;
+		pinctrl-2 = <&cam1_inactive_pins>;
+
+		intel,pd-gpio = <&xgold_pmx_gpio 39 0>;
+		intel,pd-gpio_1v2 = <&xgold_pmx_gpio 68 0>;
+		intel,pd-gpio-is_active_low;
+		intel,rst-gpio = <&xgold_pmx_gpio 35 0>;
+		intel,rst-gpio-is_active_low;
+		intel,flash-gpio = <&xgold_pmx_gpio 37 0>;
+		intel,torch-gpio = <&xgold_pmx_gpio 38 0>;
+		intel.flash-driver = "FP6773C";
+
+		pm,class-name = "generic_class";
+		pm,user-name = "primcam";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+
+		/* ["front","back"] */
+		intel,camera-module-facing = "back";
+		/* ["landscape","landscape-flipped","portrait","portrait-flipped"] */
+		intel,camera-module-mounting = "landscape";
+		intel,camera-module-flash-support = <1>;
+		intel,camera-module-flash-exp-time = <5000>;
+
+		intel,af-ctrl = <&afc0>;
+
+		intel,camera-module-csi-config-0 {
+			intel,csi-pixels-per-second = <0>;
+			intel,csi-vc = <0>;
+			intel,csi-lanes = <2>;
+			intel,csi-dphy1 = <0x60061c1>;
+			intel,csi-dphy2 = <0x00>;
+			intel,csi-ana-bandgap-bias = <3>;
+		};
+	};
+#endif
 #endif
 #ifndef RECOVERY_KERNEL
 	camera1: camera-module@1 {
@@ -536,5 +581,10 @@
 };
 #endif
 
+#if defined(SOFIA3G_ES21)
+#include "xgold/sofia_3g_soc/pinctrl-sf_3g-es2.1-svb.dtsi"
+#include "xgold/agold620/pinctrl-sf_3g-es2.1-svb.dtsi"
+#else
 #include "xgold/agold620/pinctrl-sf_3g-es2-svb.dtsi"
 #include "xgold/sofia_3g_soc/pinctrl-sf_3g-es2-svb.dtsi"
+#endif
