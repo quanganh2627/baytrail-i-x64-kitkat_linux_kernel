@@ -1,0 +1,13 @@
+config TOUCHSCREEN_FOCALTECH_FT5406
+	tristate "Focaltech touchscreen controllers"
+	depends on I2C
+	help
+	  Say Y here if you want to support Focaltech
+	  touchscreen controller.
+
+config TOUCHSCREEN_FOCALTECH_FT5446
+	tristate "Focaltech touchscreen controllers"
+	depends on I2C
+	help
+	  Say Y here if you want to support Focaltech
+	  touchscreen controller.

@@ -972,4 +972,5 @@ source "drivers/input/touchscreen/gt910/Kconfig"
 source "drivers/input/touchscreen/vtl_ts/Kconfig"
 source "drivers/input/touchscreen/zet6273/Kconfig"
 source "drivers/input/touchscreen/ft6x36/Kconfig"
+source "drivers/input/touchscreen/ftxxxx/Kconfig"
 endif

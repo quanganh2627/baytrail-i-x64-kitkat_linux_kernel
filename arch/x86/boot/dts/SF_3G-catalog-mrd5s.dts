@@ -2,6 +2,7 @@
 #define SOFIA3G_MRD5S
 //#define SOFIA3G_CATALOG_MRD5S_SENSOR
 //#define SOFIA3G_CATALOG_MRD5S_CHARGER
+//#define SOFIA3G_CATALOG_MRD5S_TOUCH
 #include "xgold/sofia_3g_soc/irq.h"
 
 / {
@@ -383,6 +384,9 @@
 	pinctrl-1 = <&i2c2_sleep_pins>;
 	pinctrl-2 = <&i2c2_inactive_pins>;
 
+#ifdef SOFIA3G_CATALOG_MRD5S_TOUCH
+#include "catalog/Sf_3G-catalog-Touch.dtsi"
+#else
 #ifndef RECOVERY_KERNEL
 	touchscreen {
 		compatible = "focaltech,ft5x06";
@@ -409,6 +413,7 @@
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
 	};
+#endif
 #endif
 #ifdef SOFIA3G_CATALOG_MRD5S_SENSOR
 #include "catalog/Sf_3G-catalog-Sensor.dtsi"
