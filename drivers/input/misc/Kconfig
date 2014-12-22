@@ -774,6 +774,16 @@ config INPUT_KIONIX_ACCEL
         help
           If you say yes here you get support for the kionix accelerometer.
 
+config INPUT_LTR559
+    tristate "Liteon LTR559 ALS & Proximity Sensor"
+        depends on I2C
+        help
+          Say Y here to use the LTR559  ALS & Proximity Sensor.
+          from Liteon.
+
+          To compile this driver as a module, choose M here: the module
+          will be called ltr559.
+
 config INPUT_SENSORS_MPU6500
 	tristate "MPU6500 Accelerometer and Gyroscope support"
 	default n

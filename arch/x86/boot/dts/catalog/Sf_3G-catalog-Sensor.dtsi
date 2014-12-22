@@ -114,6 +114,30 @@
         };
 #endif
  
+
+#ifdef CONFIG_INPUT_LTR559
+        ltr559 {
+                compatible = "liteon,ltr559";
+                reg = < 0x23 >;
+                interrupt-parent = <&eint>;
+                interrupts = < EINT_EXI11 XGOLD_IRQ_TYPE_EDGE_FALLING >;
+                intel,axis-map = < 1 0 2 >;
+                intel,negate = < 1 0 0 >;
+                intel,poll-interval = < 100 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&prox_default_pins>;
+                pinctrl-1 = <&prox_sleep_pins>;
+                pinctrl-2 = <&prox_inactive_pins>;
+                pm,class-name = "ltr559_class";
+                pm,user-name = "proximity";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+                ltr,ps-threshold = < 650 >;
+                ltr,ps-hysteresis-threshold = < 500 >;
+                ltr,als-polling-time = < 200 >;
+        };
+#endif
+
 #ifdef CONFIG_INPUT_SENSORS_MPU6500
         mpu6500 {
                 compatible = "invensense,mpu6500";
