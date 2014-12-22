@@ -67,14 +67,25 @@ uint32_t mv_svc_pinctrl_service(
 				uint32_t arg2,
 				uint32_t *arg3)
 {
-	if ((PINCTRL_GET_PCL == opcode) ||
-			(PINCTRL_GET_PIN == opcode)) {
-		return mv_platform_service(PINCTRL_SERVICE, opcode, arg1,
-						0, 0, 0, 0, 0, arg3);
-	} else {
-		return mv_platform_service(PINCTRL_SERVICE, opcode,
-				arg1, arg2, 0, 0, 0, 0, 0);
+	int ret = 0;
+	switch (opcode) {
+	case PINCTRL_OPEN:
+	case PINCTRL_SET:
+	case PINCTRL_CONFIG_FUNC:
+	case PINCTRL_CLOSE:
+		ret = mv_platform_service(PINCTRL_SERVICE, opcode,
+					arg1, arg2, 0, 0, 0, 0, 0);
+		break;
+
+	case PINCTRL_GET:
+		ret = mv_platform_service(PINCTRL_SERVICE, opcode, arg1,
+					0, 0, 0, 0, 0, arg3);
+		break;
+
+	default:
+		break;
 	}
+	return ret;
 }
 
 uint32_t mv_svc_pm_control(uint32_t pm_opcode,
@@ -397,4 +408,26 @@ int32_t mv_svc_spcu_thermal_service(uint32_t opcode, uint32_t dev_id,
 }
 #ifdef __KERNEL__
 EXPORT_SYMBOL(mv_svc_spcu_thermal_service);
+#endif
+
+int32_t mv_svc_security_verify_vm_completed(uint32_t verify_result,
+						uint32_t vm_id)
+{
+	return mv_platform_service(VMM_SECURITY_VERIFY_VM_COMPLETED_SERVICE,
+			verify_result, vm_id, 0, 0, 0, 0, 0, 0);
+}
+
+#ifdef __KERNEL__
+EXPORT_SYMBOL(mv_svc_security_verify_vm_completed);
+#endif
+
+int32_t mv_svc_security_getvm_loadinfo(uint32_t vm_id, uint32_t *vm_loadaddr,
+					uint32_t *vm_loadsize)
+{
+	return mv_platform_service(VMM_SECURITY_GETVM_LOADINFO_SERVICE,
+			vm_id, 0, 0, 0,	0, 0, vm_loadaddr, vm_loadsize);
+}
+
+#ifdef __KERNEL__
+EXPORT_SYMBOL(mv_svc_security_getvm_loadinfo);
 #endif

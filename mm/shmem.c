@@ -1903,6 +1903,8 @@ out:
 	return error;
 }
 
+#define HACK_BIONIC_KK_CTS
+#ifndef HACK_BIONIC_KK_CTS
 static int shmem_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct shmem_sb_info *sbinfo = SHMEM_SB(dentry->d_sb);
@@ -1923,6 +1925,7 @@ static int shmem_statfs(struct dentry *dentry, struct kstatfs *buf)
 	/* else leave those fields 0 like simple_statfs */
 	return 0;
 }
+#endif
 
 /*
  * File creation. Allocate an inode, and we're done..
@@ -2772,7 +2775,11 @@ static const struct super_operations shmem_ops = {
 	.alloc_inode	= shmem_alloc_inode,
 	.destroy_inode	= shmem_destroy_inode,
 #ifdef CONFIG_TMPFS
+#ifdef HACK_BIONIC_KK_CTS
+	.statfs		= simple_statfs,
+#else
 	.statfs		= shmem_statfs,
+#endif
 	.remount_fs	= shmem_remount_fs,
 	.show_options	= shmem_show_options,
 #endif

@@ -489,6 +489,9 @@ static int dcc_fb_init(struct platform_device *pdev)
 	unsigned int width, height;
 	struct dcc_drvdata *pdata = dev_get_drvdata(&pdev->dev);
 
+	if (!pdata)
+		return -EINVAL;
+
 	info = framebuffer_alloc(sizeof(struct dcc_fb), &pdev->dev);
 	if (info == NULL) {
 		ret = -ENOMEM;
@@ -957,11 +960,16 @@ int dcc_main_probe(struct platform_device *pdev)
 
 	ret = platform_device_pm_set_state_by_name(pdev,
 			pdata->pm_platdata->pm_state_D0_name);
-#endif
 	if (ret) {
 		dcc_err("Error during state transition to D0\n");
 		return ret;
 	}
+
+	if (pdata->pm_lcd) {
+		regulator_enable(pdata->pm_lcd);
+		regulator_set_voltage(pdata->pm_lcd, 2800000, 3000000);
+	}
+#endif
 
 	ret = dcc_core_probe(pdev);
 	if (ret) {
@@ -1058,9 +1066,12 @@ static int dcc_main_suspend(struct device *dev)
 #ifdef CONFIG_PLATFORM_DEVICE_PM
 	ret = platform_device_pm_set_state_by_name(pdev,
 			pdata->pm_platdata->pm_state_D3_name);
-#endif
 	if (ret)
 		dcc_err("Error during state transition to D3\n");
+
+	if (pdata->pm_lcd)
+		regulator_disable(pdata->pm_lcd);
+#endif
 
 	reset_control_assert(pdata->reset);
 	diffus = measdelay_stop(NULL, &begin);
@@ -1085,7 +1096,7 @@ static int dcc_main_resume(struct device *dev)
 
 	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 	if (!pdata)
-		return -1;
+		return -EINVAL;
 
 	if (pdata->drv_state == DRV_DCC_ENABLED) {
 		DCC_DBG2("already enabled\n");
@@ -1093,11 +1104,12 @@ static int dcc_main_resume(struct device *dev)
 	}
 
 	if (down_interruptible(&pdata->sem))
-		return -1;
+		return -EINVAL;
 
 	measdelay_start(&begin);
 	reset_control_deassert(pdata->reset);
 #ifdef CONFIG_PLATFORM_DEVICE_PM
+	regulator_enable(pdata->pm_lcd);
 	ret = platform_device_pm_set_state_by_name(pdev,
 			pdata->pm_platdata->pm_state_D0_name);
 #endif
@@ -1108,9 +1120,6 @@ static int dcc_main_resume(struct device *dev)
 	ret = dcc_core_resume(pdev);
 	if (ret)
 		dcc_err("Unable to resume core\n");
-
-	/* release semaphore */
-	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 
 	dcc_clearscreen(pdata);
 	up(&pdata->sem);

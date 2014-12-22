@@ -22,6 +22,46 @@
 #include <linux/wakelock.h>
 #include "phy-intel.h"
 
+#include <sofia/mv_svc_hypercalls.h>
+
+static inline uint32_t _usb_phy_intel_ioread32(struct intel_usb_addr addrs,
+					long offset) {
+
+#ifdef CONFIG_X86_INTEL_SOFIA
+	uint32_t tmp = 0;
+	if (SCU_IO_ACCESS_BY_VMM == addrs.scu_io_master) {
+		if (mv_svc_reg_read(((uint32_t)addrs.phy_addr) + offset,
+					&tmp, -1)) {
+			pr_err("%s: mv_svc_reg_read fails @%p\n",
+				__func__, (void *)(addrs.phy_addr + offset));
+			return -1;
+		}
+	} else
+#endif
+		tmp = ioread32(addrs.logic_addr + offset);
+	return tmp;
+}
+
+static inline int _usb_phy_intel_iowrite32(uint32_t value,
+						struct intel_usb_addr addrs,
+						long offset) {
+
+#ifdef CONFIG_X86_INTEL_SOFIA
+	if (SCU_IO_ACCESS_BY_VMM == addrs.scu_io_master) {
+		if (mv_svc_reg_write(((uint32_t)addrs.phy_addr) + offset,
+					value, -1)) {
+			pr_err("%s: mv_svc_reg_write fails @%p\n",
+				__func__, (void *)(addrs.phy_addr + offset));
+			return -1;
+		}
+	} else
+#endif
+		iowrite32(value, addrs.logic_addr + offset);
+	return 0;
+}
+
+
+
 #define DECLARE_USB_ACCESSOR(TYPE)\
 int usb_parse_##TYPE(struct intel_usbphy *iphy, struct device *dev)\
 {\
@@ -126,7 +166,8 @@ int usb_##TYPE##_status(struct intel_usbphy *iphy) \
 	unsigned tmp = 0;\
 	if (iphy->TYPE) {\
 		list_for_each_entry(reg, &iphy->TYPE->list, list) {\
-			tmp = ((ioread32(iphy->scuregs + reg->base))\
+			tmp = ((_usb_phy_intel_ioread32(iphy->scuregs,\
+							reg->base))\
 					& (reg->mask)) >> reg->offset;\
 			if (tmp == reg->enable)\
 				return 1;\
@@ -146,21 +187,21 @@ int usb_enable_##TYPE(struct intel_usbphy *iphy, bool enable)\
 	if (iphy->TYPE) {\
 		list_for_each_entry(regs_##TYPE, &iphy->TYPE->list, list) {\
 			if (enable) {\
-				tmp = (ioread32(iphy->scuregs \
-							+ regs_##TYPE->base))\
+				tmp = (_usb_phy_intel_ioread32(iphy->scuregs, \
+							regs_##TYPE->base))\
 							& ~(regs_##TYPE->mask);\
 				tmp |= (regs_##TYPE->enable\
 						<< regs_##TYPE->offset);\
-				iowrite32(tmp, iphy->scuregs\
-							+ regs_##TYPE->base);\
+				_usb_phy_intel_iowrite32(tmp, iphy->scuregs,\
+							 regs_##TYPE->base);\
 			} else { \
-				tmp = (ioread32(iphy->scuregs\
-							+ regs_##TYPE->base))\
+				tmp = (_usb_phy_intel_ioread32(iphy->scuregs,\
+							  regs_##TYPE->base))\
 							& ~(regs_##TYPE->mask);\
 				tmp |= (regs_##TYPE->disable\
 						<< regs_##TYPE->offset);\
-				iowrite32(tmp, iphy->scuregs\
-							+ regs_##TYPE->base);\
+				_usb_phy_intel_iowrite32(tmp, iphy->scuregs,\
+							 regs_##TYPE->base);\
 			} \
 		} \
 	} \
@@ -304,12 +345,12 @@ static int intel_otg_suspend(struct intel_usbphy *iphy)
 	usb_enable_chrgsel(iphy, 0);
 
 	/* USB core gate power down sequence */
-	writel(readl(pcgctlregs) & ~PCGCTL_PWRCLMP, pcgctlregs);
-	writel(readl(pcgctlregs) & ~PCGCTL_RSTPDWNMODULE, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_PWRCLMP, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_RSTPDWNMODULE, pcgctlregs);
 
 	usb_enable_phy_sus(iphy, false);
 
-	writel(readl(pcgctlregs) & ~PCGCTL_STOPPCLK, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_STOPPCLK, pcgctlregs);
 
 	usb_enable_pll_en(iphy, false);
 
@@ -369,10 +410,10 @@ static int intel_otg_resume(struct intel_usbphy *iphy)
 	mdelay(1);
 
 	/* USB core gate power up sequence */
-	writel(readl(pcgctlregs) & ~PCGCTL_STOPPCLK, pcgctlregs);
-	writel(readl(pcgctlregs) & ~PCGCTL_PWRCLMP, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_STOPPCLK, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_PWRCLMP, pcgctlregs);
 	udelay(50);
-	writel(readl(pcgctlregs) & ~PCGCTL_RSTPDWNMODULE, pcgctlregs);
+	iowrite32(ioread32(pcgctlregs) & ~PCGCTL_RSTPDWNMODULE, pcgctlregs);
 
 	ret = device_state_pm_set_state(iphy->dev,
 			iphy->pm_states[USB_PMS_ENABLE_ISO]);
@@ -565,14 +606,6 @@ static void intel_otg_start_peripheral(struct usb_otg *otg, int on)
 	if (!otg->gadget)
 		return;
 
-	if (on) {
-		dev_dbg(otg->phy->dev, "gadget on\n");
-		usb_gadget_vbus_connect(otg->gadget);
-	} else {
-		dev_dbg(otg->phy->dev, "gadget off\n");
-		usb_gadget_vbus_disconnect(otg->gadget);
-	}
-
 	/*
 	 * Assert vbus valid and B-Valid
 	 * to indicate a B session
@@ -581,6 +614,15 @@ static void intel_otg_start_peripheral(struct usb_otg *otg, int on)
 	usb_enable_bvalid(iphy, on);
 	usb_enable_vbusvalid(iphy, on);
 	usb_enable_sessend(iphy, !on);
+
+	if (on) {
+		dev_dbg(otg->phy->dev, "gadget on\n");
+		usb_gadget_vbus_connect(otg->gadget);
+	} else {
+		dev_dbg(otg->phy->dev, "gadget off\n");
+		usb_gadget_vbus_disconnect(otg->gadget);
+	}
+
 }
 
 static int intel_usb2phy_set_peripheral(struct usb_otg *otg,
@@ -1022,7 +1064,9 @@ static void intel_otg_sm_work(struct work_struct *w)
 			intel_otg_notify_charger(iphy, 0);
 			iphy->chg_type = POWER_SUPPLY_CHARGER_TYPE_NONE;
 			pm_runtime_put_noidle(otg->phy->dev);
-			pm_runtime_suspend(otg->phy->dev);
+			/* Wait for gadget to be quite */
+			pm_runtime_mark_last_busy(otg->phy->dev);
+			pm_runtime_autosuspend(otg->phy->dev);
 		}
 		break;
 	case OTG_STATE_B_PERIPHERAL:
@@ -1465,9 +1509,16 @@ static int intel_usb2phy_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	iphy->scuregs = devm_ioremap_resource(dev, res);
-	if (IS_ERR_OR_NULL(iphy->scuregs))
+	/* Get SCU I/O access mode */
+	if (of_find_property(np, "intel,vmm-secured-access", NULL))
+		iphy->scuregs.scu_io_master = SCU_IO_ACCESS_BY_VMM;
+	else
+		iphy->scuregs.scu_io_master = SCU_IO_ACCESS_BY_LNX;
+
+	iphy->scuregs.logic_addr = devm_ioremap_resource(dev, res);
+	if (IS_ERR_OR_NULL(iphy->scuregs.logic_addr))
 		return -ENOMEM;
+	iphy->scuregs.phy_addr = res->start;
 
 	PARSE_USB_STATUS(drvvbus);
 	PARSE_USB_STATUS(ridgnd);
@@ -1636,6 +1687,8 @@ static int intel_usb2phy_probe(struct platform_device *pdev)
 	usb_register_notifier(&iphy->phy, &iphy->usb_nb);
 	device_init_wakeup(&pdev->dev, true);
 	wake_lock(&iphy->wlock);
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, PHY_AUTO_SUSPEND_DEALY);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	return 0;
@@ -1660,7 +1713,7 @@ static int intel_usb2phy_remove(struct platform_device *pdev)
 
 	free_irq(iphy->resume_irq, iphy);
 
-	iounmap(iphy->scuregs);
+	iounmap(iphy->scuregs.logic_addr);
 	pm_runtime_set_suspended(&pdev->dev);
 	kfree(iphy->phy.otg);
 	kfree(iphy);
