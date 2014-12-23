@@ -398,8 +398,8 @@ agold {
 		bq2429x_idi:bq2429x_idi{
 			compatible = "intel,bq2429x_idi", "intel,idi,peripheral";
 #else
-		fan54x_idi:fan54x_idi{
-			compatible = "intel,fan54x_idi", "intel,idi,peripheral";
+		chgr_idi:chgr_idi{
+			compatible = "intel,chgr_idi", "intel,idi,peripheral";
 #endif
 			#address-cells = < 0 >;
 			reg = < 0xE6500A00 0x10 >;
@@ -407,7 +407,7 @@ agold {
 #ifdef SF_3G_TAB
 			idi-peripheral-type = "intel,idi,bq2429x";
 #else
-			idi-peripheral-type = "intel,idi,fan54x";
+			idi-peripheral-type = "intel,idi,chgr";
 #endif
 			idi-id-vendor = <0x8086>;
 			idi-id-device = <0xA6200>;

@@ -1235,7 +1235,10 @@ static void cif_isp20_program_jpeg_tables(
 			q = yq_table_base_zigzag[i * 2];
 			q_next = yq_table_base_zigzag[i * 2 + 1];
 			q = (scale * q + 50) / 100;
+			q = (q > 1) ? ((q < 255) ? q : 255) : 1;
 			q_next = (scale * q_next + 50) / 100;
+			q_next = (q_next > 1) ?
+				((q_next < 255) ? q_next : 255) : 1;
 			cif_iowrite32(q_next + (q << 8),
 				dev->config.base_addr +
 				CIF_JPE_TABLE_DATA);
@@ -1258,7 +1261,10 @@ static void cif_isp20_program_jpeg_tables(
 			q = uvq_table_base_zigzag[i * 2];
 			q_next = uvq_table_base_zigzag[i * 2 + 1];
 			q = (scale * q + 50) / 100;
+			q = (q > 1) ? ((q < 255) ? q : 255) : 1;
 			q_next = (scale * q_next + 50) / 100;
+			q_next = (q_next > 1) ?
+				((q_next < 255) ? q_next : 255) : 1;
 			cif_iowrite32(q_next + (q << 8),
 				dev->config.base_addr +
 				CIF_JPE_TABLE_DATA);

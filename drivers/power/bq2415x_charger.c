@@ -1,1740 +1,2116 @@
 /*
- * bq2415x charger driver
- *
- * Copyright (C) 2011-2013  Pali Rohár <pali.rohar@gmail.com>
+ * -------------------------------------------------------------------------
+ *  Copyright (C) 2014 Intel Mobile Communications GmbH
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * the Free Software Foundation; version 2 of the License.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
  */
+
+#define BQ2415x_NAME "bq2415x_charger"
+#define pr_fmt(fmt) BQ2415x_NAME": "fmt
+
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/interrupt.h>
+#include <linux/i2c.h>
+#include <linux/usb/otg.h>
+#include <linux/workqueue.h>
+#include <linux/power_supply.h>
+#include <linux/seq_file.h>
+#include <linux/debugfs.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
+#include <linux/io.h>
+#include <linux/semaphore.h>
+#include <linux/uaccess.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/idi/idi_interface.h>
+#include <linux/idi/idi_controller.h>
+#include <linux/idi/idi_ids.h>
+#include <linux/idi/idi_bus.h>
+#include <linux/idi/idi_device_pm.h>
+#include <linux/usb/phy-intel.h>
+
+#include <linux/time.h>
+#include <linux/wakelock.h>
+#include "bq2415x_charger.h"
 
 /*
- * Datasheets:
- * http://www.ti.com/product/bq24150
- * http://www.ti.com/product/bq24150a
- * http://www.ti.com/product/bq24152
- * http://www.ti.com/product/bq24153
- * http://www.ti.com/product/bq24153a
- * http://www.ti.com/product/bq24155
+ * Development debugging is not enabled in release image to prevent
+ * loss of event history in the debug array which has a limited size
  */
+#include <linux/power/charger_debug.h>
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/param.h>
-#include <linux/err.h>
-#include <linux/workqueue.h>
-#include <linux/sysfs.h>
-#include <linux/platform_device.h>
-#include <linux/power_supply.h>
-#include <linux/idr.h>
-#include <linux/i2c.h>
-#include <linux/slab.h>
+#define VOREG_STEP_MV 20
+#define IOCHARGE_STEP_MA 100
+#define IBUS_LIMIT_STEP_MA 400
+#define IBUS_NO_LIMIT 3
 
-#include <linux/power/bq2415x_charger.h>
+enum {
+	VBUS_OFF = 0,
+	VBUS_ON,
 
-/* timeout for resetting chip timer */
-#define BQ2415X_TIMER_TIMEOUT		10
-
-#define BQ2415X_REG_STATUS		0x00
-#define BQ2415X_REG_CONTROL		0x01
-#define BQ2415X_REG_VOLTAGE		0x02
-#define BQ2415X_REG_VENDER		0x03
-#define BQ2415X_REG_CURRENT		0x04
-
-/* reset state for all registers */
-#define BQ2415X_RESET_STATUS		BIT(6)
-#define BQ2415X_RESET_CONTROL		(BIT(4)|BIT(5))
-#define BQ2415X_RESET_VOLTAGE		(BIT(1)|BIT(3))
-#define BQ2415X_RESET_CURRENT		(BIT(0)|BIT(3)|BIT(7))
-
-/* status register */
-#define BQ2415X_BIT_TMR_RST		7
-#define BQ2415X_BIT_OTG			7
-#define BQ2415X_BIT_EN_STAT		6
-#define BQ2415X_MASK_STAT		(BIT(4)|BIT(5))
-#define BQ2415X_SHIFT_STAT		4
-#define BQ2415X_BIT_BOOST		3
-#define BQ2415X_MASK_FAULT		(BIT(0)|BIT(1)|BIT(2))
-#define BQ2415X_SHIFT_FAULT		0
-
-/* control register */
-#define BQ2415X_MASK_LIMIT		(BIT(6)|BIT(7))
-#define BQ2415X_SHIFT_LIMIT		6
-#define BQ2415X_MASK_VLOWV		(BIT(4)|BIT(5))
-#define BQ2415X_SHIFT_VLOWV		4
-#define BQ2415X_BIT_TE			3
-#define BQ2415X_BIT_CE			2
-#define BQ2415X_BIT_HZ_MODE		1
-#define BQ2415X_BIT_OPA_MODE		0
-
-/* voltage register */
-#define BQ2415X_MASK_VO		(BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7))
-#define BQ2415X_SHIFT_VO		2
-#define BQ2415X_BIT_OTG_PL		1
-#define BQ2415X_BIT_OTG_EN		0
-
-/* vender register */
-#define BQ2415X_MASK_VENDER		(BIT(5)|BIT(6)|BIT(7))
-#define BQ2415X_SHIFT_VENDER		5
-#define BQ2415X_MASK_PN			(BIT(3)|BIT(4))
-#define BQ2415X_SHIFT_PN		3
-#define BQ2415X_MASK_REVISION		(BIT(0)|BIT(1)|BIT(2))
-#define BQ2415X_SHIFT_REVISION		0
-
-/* current register */
-#define BQ2415X_MASK_RESET		BIT(7)
-#define BQ2415X_MASK_VI_CHRG		(BIT(4)|BIT(5)|BIT(6))
-#define BQ2415X_SHIFT_VI_CHRG		4
-/* N/A					BIT(3) */
-#define BQ2415X_MASK_VI_TERM		(BIT(0)|BIT(1)|BIT(2))
-#define BQ2415X_SHIFT_VI_TERM		0
-
-
-enum bq2415x_command {
-	BQ2415X_TIMER_RESET,
-	BQ2415X_OTG_STATUS,
-	BQ2415X_STAT_PIN_STATUS,
-	BQ2415X_STAT_PIN_ENABLE,
-	BQ2415X_STAT_PIN_DISABLE,
-	BQ2415X_CHARGE_STATUS,
-	BQ2415X_BOOST_STATUS,
-	BQ2415X_FAULT_STATUS,
-
-	BQ2415X_CHARGE_TERMINATION_STATUS,
-	BQ2415X_CHARGE_TERMINATION_ENABLE,
-	BQ2415X_CHARGE_TERMINATION_DISABLE,
-	BQ2415X_CHARGER_STATUS,
-	BQ2415X_CHARGER_ENABLE,
-	BQ2415X_CHARGER_DISABLE,
-	BQ2415X_HIGH_IMPEDANCE_STATUS,
-	BQ2415X_HIGH_IMPEDANCE_ENABLE,
-	BQ2415X_HIGH_IMPEDANCE_DISABLE,
-	BQ2415X_BOOST_MODE_STATUS,
-	BQ2415X_BOOST_MODE_ENABLE,
-	BQ2415X_BOOST_MODE_DISABLE,
-
-	BQ2415X_OTG_LEVEL,
-	BQ2415X_OTG_ACTIVATE_HIGH,
-	BQ2415X_OTG_ACTIVATE_LOW,
-	BQ2415X_OTG_PIN_STATUS,
-	BQ2415X_OTG_PIN_ENABLE,
-	BQ2415X_OTG_PIN_DISABLE,
-
-	BQ2415X_VENDER_CODE,
-	BQ2415X_PART_NUMBER,
-	BQ2415X_REVISION,
+	T32_TO_OCCURRED = 1,
 };
 
-enum bq2415x_chip {
-	BQUNKNOWN,
-	BQ24150,
-	BQ24150A,
-	BQ24151,
-	BQ24151A,
-	BQ24152,
-	BQ24153,
-	BQ24153A,
-	BQ24155,
-	BQ24156,
-	BQ24156A,
-	BQ24158,
+
+#define CHARGER_CONTROL_O 0x0
+#define CHARGER_CONTROL(_base) ((_base) + CHARGER_CONTROL_O)
+	#define CHARGER_CONTROL_CIEDG_O 26
+	#define CHARGER_CONTROL_CIEDG_M 0x1
+	#define CHARGER_CONTROL_CILVL_O 25
+	#define CHARGER_CONTROL_CILVL_M 0x1
+	#define CHARGER_CONTROL_CISENS_O 24
+	#define CHARGER_CONTROL_CISENS_M 0x1
+	#define CHARGER_CONTROL_CIEN_O 23
+	#define CHARGER_CONTROL_CIEN_M 0x1
+	#define CHARGER_CONTROL_CIDBT_O 17
+	#define CHARGER_CONTROL_CIDBT_M 0x7
+	#define CHARGER_CONTROL_CHGLVL_O 1
+	#define CHARGER_CONTROL_CHGLVL_M 0x1
+
+#define CHARGER_CONTROL_CIEDG_FALLING 0
+#define CHARGER_CONTROL_CILVL_LOW 0
+#define CHARGER_CONTROL_CISENS_EDGE 1
+#define CHARGER_CONTROL_CIEN_EN 0
+#define CHARGER_CONTROL_CHGLVL_LOW 0
+#define CHARGER_CONTROL_IRQ_DEBOUNCE_DISABLE 0
+
+#define CHARGER_CONTROL_WR_O 0x8
+#define CHARGER_CONTROL_WR(_base) ((_base) + CHARGER_CONTROL_WR_O)
+	#define CHARGER_CONTROL_WR_WS_O 0
+	#define CHARGER_CONTROL_WR_WS_M 0x1
+
+#define CHARGER_WR_O 0xC
+#define CHARGER_WR(_base) ((_base) + CHARGER_WR_O)
+	#define CHARGER_WR_WS_O 0
+	#define CHARGER_WR_WS_M 0x1
+
+static int bq2415x_configure_chip(
+			struct bq2415x_charger *chrgr, bool enable_charging);
+
+static int bq2415x_enable_charging(
+			struct bq2415x_charger *chrgr, bool enable);
+
+struct charger_debug_data chrgr_dbg = {
+	.printk_logs_en = 0,
 };
 
-static char *bq2415x_chip_name[] = {
-	"unknown",
-	"bq24150",
-	"bq24150a",
-	"bq24151",
-	"bq24151a",
-	"bq24152",
-	"bq24153",
-	"bq24153a",
-	"bq24155",
-	"bq24156",
-	"bq24156a",
-	"bq24158",
+static struct power_supply_throttle bq2415x_dummy_throttle_states[] = {
+	{
+		.throttle_action = PSY_THROTTLE_CC_LIMIT,
+	},
 };
 
-struct bq2415x_device {
-	struct device *dev;
-	struct bq2415x_platform_data init_data;
-	struct power_supply charger;
-	struct delayed_work work;
-	struct power_supply *notify_psy;
-	struct notifier_block nb;
-	enum bq2415x_mode reported_mode;/* mode reported by hook function */
-	enum bq2415x_mode mode;		/* current configured mode */
-	enum bq2415x_chip chip;
-	const char *timer_error;
-	char *model;
-	char *name;
-	int autotimer;	/* 1 - if driver automatically reset timer, 0 - not */
-	int automode;	/* 1 - enabled, 0 - disabled; -1 - not supported */
-	int id;
+static char *bq2415x_supplied_to[] = {
+		"battery",
 };
 
-/* each registered chip must have unique id */
-static DEFINE_IDR(bq2415x_id);
+static enum power_supply_property bq2415x_power_props[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_INLMT,
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
+};
 
-static DEFINE_MUTEX(bq2415x_id_mutex);
-static DEFINE_MUTEX(bq2415x_timer_mutex);
-static DEFINE_MUTEX(bq2415x_i2c_mutex);
-
-/**** i2c read functions ****/
-
-/* read value from register */
-static int bq2415x_i2c_read(struct bq2415x_device *bq, u8 reg)
+static void bq2415x_dump_all_regs(struct bq2415x_charger *chrgr)
 {
-	struct i2c_client *client = to_i2c_client(bq->dev);
-	struct i2c_msg msg[2];
+	int i, ret;
 	u8 val;
-	int ret;
+	pr_info("%s:\n", __func__);
+	for (i = 0; i < ATTR_MAX; i++) {
+		if (chrgr->attrmap[i].rpt &&
+			chrgr->attrmap[i].type == FULL_REG) {
+			ret = bq2415x_attr_read(chrgr->client, i, &val);
+			if (ret) {
+				pr_err("chrgr->attrmap[%d].rpt=%s, read fail!\n",
+						i, chrgr->attrmap[i].rpt);
+				continue;
+			}
+			pr_info("%s = 0x%x\n",
+					chrgr->attrmap[i].rpt,  val);
+		}
+	}
+}
 
-	if (!client->adapter)
+#ifdef SYSFS_FAKE_VBUS_SUPPORT
+
+/**
+ * fake_vbus_show	Called when value queried from driver to sysfs
+ * @dev			[in] pointer to device
+ * @attr		[in] pointer to devices's attribute
+ * @buf			[out] pointer to buffer that is to be filled with
+ *			string. Passed from driver to sysfs
+ *
+ * Returns:		number of characters read
+ */
+static ssize_t fake_vbus_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+	size_t size_copied;
+	int value;
+
+	value = chrgr->fake_vbus;
+	size_copied = sprintf(buf, "%d\n", value);
+
+	return size_copied;
+}
+
+/**
+ * fake_vbus_store	Called when value written from sysfs to driver
+ * @dev			[in] pointer to device
+ * @attr		[in] pointer to devices's attribute
+ * @buf			[in] pointer to buffer containing string passed
+ *			from sysfs
+ * @count		[in] number of characters in string
+ *
+ * Returns:		number of characters written
+ */
+static ssize_t fake_vbus_store(
+			struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+	int sysfs_val;
+	int ret;
+	size_t size_to_cpy;
+	char strvalue[SYSFS_INPUT_VAL_LEN + 1];
+
+	size_to_cpy = (count > SYSFS_INPUT_VAL_LEN) ?
+				SYSFS_INPUT_VAL_LEN : count;
+
+	strncpy(strvalue, buf, size_to_cpy);
+	strvalue[size_to_cpy] = '\0';
+
+	ret = kstrtoint(strvalue, 10, &sysfs_val);
+	if (ret != 0)
+		return ret;
+
+	sysfs_val = (sysfs_val == 0) ? 0 : 1;
+
+	down(&chrgr->prop_lock);
+
+	chrgr->fake_vbus = -1;
+	pr_info("%s: sysfs_val=%d, chrgr->state.charging_enabled=%d\n",
+			__func__, sysfs_val, chrgr->state.charging_enabled);
+	if (chrgr->state.vbus != 1) {
+		pr_err("fake vbus event requested when USB cable removed !\n");
+		up(&chrgr->prop_lock);
+		return count;
+	}
+
+	if (sysfs_val == 0) {
+		chrgr->fake_vbus = 0;
+		atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+				USB_EVENT_VBUS, &chrgr->fake_vbus);
+
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_FAKE_VBUS,
+						chrgr->fake_vbus, 0);
+		pr_info("fake vbus removal sent\n");
+
+	} else if (sysfs_val == 1 && !chrgr->state.charging_enabled) {
+		chrgr->fake_vbus = 1;
+		atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+				USB_EVENT_VBUS, &chrgr->fake_vbus);
+
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_FAKE_VBUS,
+						chrgr->fake_vbus, 0);
+		pr_info("fake vbus connection sent\n");
+	}
+
+	up(&chrgr->prop_lock);
+
+	return count;
+}
+
+static struct device_attribute bq2415x_fake_vbus_attr = {
+	.attr = {
+		.name = "fake_vbus_event",
+		.mode = S_IRUSR | S_IWUSR,
+	},
+	.show = fake_vbus_show,
+	.store = fake_vbus_store,
+};
+
+/**
+ * bq2415x_setup_sysfs_attr	Sets up sysfs entries for bq2415x i2c device
+ * @chrgr			[in] pointer to charger driver internal
+ *				structure
+ */
+static void bq2415x_setup_fake_vbus_sysfs_attr(struct bq2415x_charger *chrgr)
+{
+	struct device *dev = &chrgr->client->dev;
+	int err;
+
+	err = device_create_file(dev, &bq2415x_fake_vbus_attr);
+	if (err)
+		pr_err("Unable to create sysfs entry: '%s'\n",
+				bq2415x_fake_vbus_attr.attr.name);
+}
+
+#else
+
+static inline void bq2415x_setup_fake_vbus_sysfs_attr(
+					struct bq2415x_charger *chrgr)
+{
+	(void) chrgr;
+}
+
+#endif /*SYSFS_FAKE_VBUS_SUPPORT*/
+
+
+
+
+
+#ifdef CONFIG_DEBUG_FS
+
+
+static int dbg_evt_open(struct inode *inode, struct file *file)
+{
+
+	/* save private data (the address of test_mod) in file struct
+	(will be used by read()) */
+	file->private_data = inode->i_private;
+
+	return 0;
+}
+
+static ssize_t dbg_evt_read(
+			struct file *filp, char __user *buf,
+					size_t count, loff_t *f_pos)
+{
+
+	/* obtaining private data saved by open method */
+	struct charger_debug_data *dbg_array =
+			(struct charger_debug_data *) filp->private_data;
+
+	unsigned long time_stamp_jiffies, time_stamp_s;
+	enum charger_debug_event event;
+	const char *event_str;
+	u32 cnt, read_idx;
+	int prm, prm2;
+	ssize_t retval;
+
+	int i, chars_count, total_chars = 0;
+
+	char log_line[LOG_LINE_LENGTH];
+
+	for (i = 0; i < LINES_PER_PAGE; i++) {
+
+		chars_count = 0;
+
+		spin_lock(&dbg_array->lock);
+		cnt = dbg_array->count;
+
+		if (!cnt) {
+			spin_unlock(&dbg_array->lock);
+			return total_chars;
+		}
+
+		read_idx = dbg_array->read_index;
+		event = dbg_array->log_array[read_idx].event;
+		event_str = dbg_array->log_array[read_idx].event_string;
+		time_stamp_jiffies =
+			dbg_array->log_array[read_idx].time_stamp_jiffies;
+
+		prm = dbg_array->log_array[read_idx].param;
+		prm2 = dbg_array->log_array[read_idx].param2;
+		dbg_array->count--;
+		dbg_array->read_index++;
+		dbg_array->read_index &= (CHARGER_DEBUG_DATA_SIZE-1);
+
+
+		spin_unlock(&dbg_array->lock);
+
+
+		time_stamp_s = time_stamp_jiffies/HZ;
+		chars_count += snprintf(
+			log_line, LOG_LINE_LENGTH, "[%5lu.%3lu]: %s ",
+			time_stamp_s, (time_stamp_jiffies - time_stamp_s*HZ),
+								event_str);
+
+		if (event == CHG_DBG_REG) {
+			chars_count += snprintf(
+				log_line + chars_count,
+				LOG_LINE_LENGTH - chars_count,
+				"addr=0x%x, val=0x%x\n", prm, prm2);
+
+		} else if (event == CHG_DBG_I2C_READ_ERROR ||
+				event == CHG_DBG_I2C_WRITE_ERROR) {
+
+			chars_count += snprintf(
+				log_line + chars_count,
+				LOG_LINE_LENGTH - chars_count,
+				"err=%d, at addr=0x%x\n", prm, prm2);
+
+		} else if (event < CHG_DBG_LAST_NO_PARAM_EVENT) {
+
+			chars_count += snprintf(
+				log_line + chars_count,
+				LOG_LINE_LENGTH - chars_count, "\n");
+		} else {
+			chars_count += snprintf(
+				log_line + chars_count,
+				LOG_LINE_LENGTH - chars_count, "val=%d\n", prm);
+		}
+
+		/* copy data from driver to user space buffer */
+		if (copy_to_user(buf + total_chars, log_line, chars_count)) {
+			retval = -EFAULT;
+			goto out;
+		}
+		total_chars += chars_count;
+
+	}
+
+	retval = total_chars;
+
+out:
+	return retval;
+}
+
+static const struct file_operations bq2415x_evt_dbg_fops = {
+	.open = dbg_evt_open,
+	.read = dbg_evt_read,
+};
+
+
+
+static int bq2415x_dbg_regs_show(struct seq_file *m, void *data)
+{
+	int i, ret = 0;
+	struct bq2415x_charger *chrgr = (struct bq2415x_charger *) m->private;
+	u8 val;
+	unsigned long timestamp_jiffies, timestamp_s;
+
+	if (!chrgr->attrmap)
 		return -ENODEV;
 
-	msg[0].addr = client->addr;
-	msg[0].flags = 0;
-	msg[0].buf = &reg;
-	msg[0].len = sizeof(reg);
-	msg[1].addr = client->addr;
-	msg[1].flags = I2C_M_RD;
-	msg[1].buf = &val;
-	msg[1].len = sizeof(val);
+	down(&chrgr->prop_lock);
 
-	mutex_lock(&bq2415x_i2c_mutex);
-	ret = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
-	mutex_unlock(&bq2415x_i2c_mutex);
+	timestamp_jiffies = jiffies - INITIAL_JIFFIES;
+	timestamp_s = timestamp_jiffies/HZ;
+	seq_printf(m, "[%5lu.%3lu] :\n", timestamp_s,
+				(timestamp_jiffies - timestamp_s*HZ));
 
-	if (ret < 0)
-		return ret;
+	for (i = 0; i < ATTR_MAX; i++) {
+		if (chrgr->attrmap[i].rpt &&
+			chrgr->attrmap[i].type == FULL_REG) {
+			ret = bq2415x_attr_read(chrgr->client, i, &val);
+			if (ret)
+				goto out;
+			seq_printf(m, "%s = 0x%x\n",
+					chrgr->attrmap[i].rpt,	val);
+		}
+	}
 
-	return val;
+out:
+	up(&chrgr->prop_lock);
+
+	return ret;
 }
 
-/* read value from register, apply mask and right shift it */
-static int bq2415x_i2c_read_mask(struct bq2415x_device *bq, u8 reg,
-				 u8 mask, u8 shift)
+static int bq2415x_dbg_regs_open(struct inode *inode, struct file *file)
 {
-	int ret;
-
-	if (shift > 8)
-		return -EINVAL;
-
-	ret = bq2415x_i2c_read(bq, reg);
-	if (ret < 0)
-		return ret;
-	return (ret & mask) >> shift;
+	return single_open(file, bq2415x_dbg_regs_show, inode->i_private);
 }
 
-/* read value from register and return one specified bit */
-static int bq2415x_i2c_read_bit(struct bq2415x_device *bq, u8 reg, u8 bit)
+static const struct file_operations bq2415x_dbg_regs_fops = {
+	.open = bq2415x_dbg_regs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+
+static int bq2415x_dbg_state_show(struct seq_file *m, void *data)
 {
-	if (bit > 8)
-		return -EINVAL;
-	return bq2415x_i2c_read_mask(bq, reg, BIT(bit), bit);
-}
+	struct bq2415x_charger *chrgr = (struct bq2415x_charger *) m->private;
+	unsigned long timestamp_jiffies, timestamp_s;
 
-/**** i2c write functions ****/
+	(void)data;
 
-/* write value to register */
-static int bq2415x_i2c_write(struct bq2415x_device *bq, u8 reg, u8 val)
-{
-	struct i2c_client *client = to_i2c_client(bq->dev);
-	struct i2c_msg msg[1];
-	u8 data[2];
-	int ret;
+	timestamp_jiffies = jiffies - INITIAL_JIFFIES;
+	timestamp_s = timestamp_jiffies/HZ;
+	seq_printf(m, "[%5lu.%3lu] :\n", timestamp_s,
+				(timestamp_jiffies - timestamp_s*HZ));
 
-	data[0] = reg;
-	data[1] = val;
+	seq_printf(m, "vbus = %d\n", chrgr->state.vbus);
+	seq_printf(m, "cc = %d\n", chrgr->state.cc);
+	seq_printf(m, "max_cc = %d\n", chrgr->state.max_cc);
+	seq_printf(m, "cv = %d\n", chrgr->state.cv);
+	seq_printf(m, "iterm = %d\n", chrgr->state.iterm);
+	seq_printf(m, "inlmt = %d\n", chrgr->state.inlmt);
+	seq_printf(m, "health = %d\n", chrgr->state.health);
+	seq_printf(m, "cable_type = %d\n", chrgr->state.cable_type);
+	seq_printf(m, "charger_enabled = %d\n", chrgr->state.charger_enabled);
+	seq_printf(m, "charging_enabled = %d\n",
+				chrgr->state.charging_enabled);
+	seq_printf(m, "to_enable_boost = %d\n\n",
+				chrgr->state.to_enable_boost);
+	seq_printf(m, "boost_enabled = %d\n\n",
+				chrgr->state.boost_enabled);
 
-	msg[0].addr = client->addr;
-	msg[0].flags = 0;
-	msg[0].buf = data;
-	msg[0].len = ARRAY_SIZE(data);
+	seq_printf(m, "pok_b = %u\n", chrgr->state.pok_b);
+	seq_printf(m, "ovp_flag = %u\n", chrgr->state.ovp_flag);
+	seq_printf(m, "ovp_recov = %u\n", chrgr->state.ovp_recov);
+	seq_printf(m, "t32s_timer_expired = %u\n",
+				chrgr->state.t32s_timer_expired);
 
-	mutex_lock(&bq2415x_i2c_mutex);
-	ret = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
-	mutex_unlock(&bq2415x_i2c_mutex);
+	seq_printf(m, "vbus_fault = %u\n", chrgr->state.vbus_fault);
+	seq_printf(m, "treg_flag = %u\n", chrgr->state.treg_flag);
+	seq_printf(m, "ot_recov_flag = %u\n\n", chrgr->state.ot_recov_flag);
 
-	/* i2c_transfer returns number of messages transferred */
-	if (ret < 0)
-		return ret;
-	else if (ret != 1)
-		return -EIO;
+	seq_printf(m, "vbus_ovp = %u\n", chrgr->state.vbus_ovp);
+	seq_printf(m, "sleep_mode = %u\n", chrgr->state.sleep_mode);
+	seq_printf(m, "poor_input_source = %u\n",
+					chrgr->state.poor_input_source);
+	seq_printf(m, "bat_ovp = %u\n", chrgr->state.bat_ovp);
+	seq_printf(m, "no_bat = %u\n", chrgr->state.no_bat);
+	seq_printf(m, "bat_uv = %u\n", chrgr->state.bat_uv);
+	seq_printf(m, "boost_ov = %u\n\n", chrgr->state.boost_ov);
 
 	return 0;
 }
 
-/* read value from register, change it with mask left shifted and write back */
-static int bq2415x_i2c_write_mask(struct bq2415x_device *bq, u8 reg, u8 val,
-				  u8 mask, u8 shift)
+static int bq2415x_dbg_state_open(struct inode *inode, struct file *file)
 {
-	int ret;
-
-	if (shift > 8)
-		return -EINVAL;
-
-	ret = bq2415x_i2c_read(bq, reg);
-	if (ret < 0)
-		return ret;
-
-	ret &= ~mask;
-	ret |= val << shift;
-
-	return bq2415x_i2c_write(bq, reg, ret);
+	return single_open(file, bq2415x_dbg_state_show, inode->i_private);
 }
 
-/* change only one bit in register */
-static int bq2415x_i2c_write_bit(struct bq2415x_device *bq, u8 reg,
-				 bool val, u8 bit)
+static const struct file_operations bq2415x_dbg_state_fops = {
+	.open = bq2415x_dbg_state_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+
+/**
+ * bq2415x_setup_debugfs - sets up debugfs entries for bq2415x charger driver
+ * @chrgr		[in] pointer to charger driver internal structure
+ * @dbg_data		[in] pointer to debug array containing events logs.
+ */
+static void bq2415x_setup_debugfs(struct bq2415x_charger *chrgr,
+				struct charger_debug_data *dbg_data)
 {
-	if (bit > 8)
-		return -EINVAL;
-	return bq2415x_i2c_write_mask(bq, reg, val, BIT(bit), bit);
+	struct dentry *dbgfs_entry;
+
+	dbgfs_entry = debugfs_create_dir(BQ2415x_NAME, NULL);
+	if (!dbgfs_entry)
+		return;
+
+	chrgr->debugfs_root_dir = dbgfs_entry;
+
+	(void)debugfs_create_file(EVENTS_LOG_FILENAME, S_IRUGO,
+			dbgfs_entry, dbg_data, &bq2415x_evt_dbg_fops);
+
+	(void)debugfs_create_file(DBG_REGS_FILENAME, S_IRUGO,
+			dbgfs_entry, chrgr, &bq2415x_dbg_regs_fops);
+
+	(void)debugfs_create_file(DBG_STATE_FILENAME, S_IRUGO,
+			dbgfs_entry, chrgr, &bq2415x_dbg_state_fops);
+
+	return;
 }
 
-/**** global functions ****/
+/**
+ * bq2415x_remove_debugfs_dir	recursively removes debugfs root directory
+ *				of BQ2415x charger driver
+ * @chrgr			[in] pointer to charger driver's
+ *				internal structure
+ */
+static void bq2415x_remove_debugfs_dir(struct bq2415x_charger *chrgr)
+{
+	debugfs_remove_recursive(chrgr->debugfs_root_dir);
+	return;
+}
 
-/* exec command function */
-static int bq2415x_exec_command(struct bq2415x_device *bq,
-				enum bq2415x_command command)
+#else
+
+static inline void bq2415x_setup_debugfs(struct bq2415x_charger *chrgr,
+				struct charger_debug_data *dbg_data)
+{
+
+}
+
+static inline void bq2415x_remove_debugfs_dir(struct bq2415x_charger *chrgr)
+{
+
+}
+
+#endif /* CONFIG_DEBUG_FS  */
+
+static int bq2415x_trigger_wtd(struct bq2415x_charger *chrgr)
 {
 	int ret;
+	u8 charge_ctrl0_reg;
 
-	switch (command) {
-	case BQ2415X_TIMER_RESET:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_STATUS,
-				1, BQ2415X_BIT_TMR_RST);
-	case BQ2415X_OTG_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_STATUS,
-				BQ2415X_BIT_OTG);
-	case BQ2415X_STAT_PIN_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_STATUS,
-				BQ2415X_BIT_EN_STAT);
-	case BQ2415X_STAT_PIN_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_STATUS, 1,
-				BQ2415X_BIT_EN_STAT);
-	case BQ2415X_STAT_PIN_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_STATUS, 0,
-				BQ2415X_BIT_EN_STAT);
-	case BQ2415X_CHARGE_STATUS:
-		return bq2415x_i2c_read_mask(bq, BQ2415X_REG_STATUS,
-				BQ2415X_MASK_STAT, BQ2415X_SHIFT_STAT);
-	case BQ2415X_BOOST_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_STATUS,
-				BQ2415X_BIT_BOOST);
-	case BQ2415X_FAULT_STATUS:
-		return bq2415x_i2c_read_mask(bq, BQ2415X_REG_STATUS,
-			BQ2415X_MASK_FAULT, BQ2415X_SHIFT_FAULT);
+	bq2415x_dump_all_regs(chrgr);
 
-	case BQ2415X_CHARGE_TERMINATION_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_CONTROL,
-				BQ2415X_BIT_TE);
-	case BQ2415X_CHARGE_TERMINATION_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				1, BQ2415X_BIT_TE);
-	case BQ2415X_CHARGE_TERMINATION_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				0, BQ2415X_BIT_TE);
-	case BQ2415X_CHARGER_STATUS:
-		ret = bq2415x_i2c_read_bit(bq, BQ2415X_REG_CONTROL,
-			BQ2415X_BIT_CE);
-		if (ret < 0)
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TRIGGERING_WTD, 0, 0);
+	ret = bq2415x_attr_write(chrgr->client, TMR_RST, 1);
+	return ret;
+}
+
+
+static int bq2415x_set_voreg(struct bq2415x_charger *chrgr,
+				int volt_to_set, int *volt_set, bool propagate)
+{
+	int ret, volt_to_set_mv;
+	u8 volt_regval, readback_val;
+	pr_info("%s: volt_to_set=%d mV\n", __func__, volt_to_set);
+	volt_to_set_mv = fit_in_range(volt_to_set,
+				chrgr->min_voreg, chrgr->max_voreg);
+
+	volt_regval = (u8)((volt_to_set_mv - chrgr->min_voreg) / VOREG_STEP_MV);
+	pr_info("volt_regval=0x%x\n", volt_regval);
+
+	if (propagate) {
+		ret = bq2415x_attr_write(chrgr->client, VOREG, volt_regval);
+		if (ret)
 			return ret;
-		else
-			return ret > 0 ? 0 : 1;
-	case BQ2415X_CHARGER_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				0, BQ2415X_BIT_CE);
-	case BQ2415X_CHARGER_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				1, BQ2415X_BIT_CE);
-	case BQ2415X_HIGH_IMPEDANCE_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_CONTROL,
-				BQ2415X_BIT_HZ_MODE);
-	case BQ2415X_HIGH_IMPEDANCE_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				1, BQ2415X_BIT_HZ_MODE);
-	case BQ2415X_HIGH_IMPEDANCE_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				0, BQ2415X_BIT_HZ_MODE);
-	case BQ2415X_BOOST_MODE_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_CONTROL,
-				BQ2415X_BIT_OPA_MODE);
-	case BQ2415X_BOOST_MODE_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				1, BQ2415X_BIT_OPA_MODE);
-	case BQ2415X_BOOST_MODE_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_CONTROL,
-				0, BQ2415X_BIT_OPA_MODE);
 
-	case BQ2415X_OTG_LEVEL:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_VOLTAGE,
-				BQ2415X_BIT_OTG_PL);
-	case BQ2415X_OTG_ACTIVATE_HIGH:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_VOLTAGE,
-				1, BQ2415X_BIT_OTG_PL);
-	case BQ2415X_OTG_ACTIVATE_LOW:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_VOLTAGE,
-				0, BQ2415X_BIT_OTG_PL);
-	case BQ2415X_OTG_PIN_STATUS:
-		return bq2415x_i2c_read_bit(bq, BQ2415X_REG_VOLTAGE,
-				BQ2415X_BIT_OTG_EN);
-	case BQ2415X_OTG_PIN_ENABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_VOLTAGE,
-				1, BQ2415X_BIT_OTG_EN);
-	case BQ2415X_OTG_PIN_DISABLE:
-		return bq2415x_i2c_write_bit(bq, BQ2415X_REG_VOLTAGE,
-				0, BQ2415X_BIT_OTG_EN);
-
-	case BQ2415X_VENDER_CODE:
-		return bq2415x_i2c_read_mask(bq, BQ2415X_REG_VENDER,
-			BQ2415X_MASK_VENDER, BQ2415X_SHIFT_VENDER);
-	case BQ2415X_PART_NUMBER:
-		return bq2415x_i2c_read_mask(bq, BQ2415X_REG_VENDER,
-				BQ2415X_MASK_PN, BQ2415X_SHIFT_PN);
-	case BQ2415X_REVISION:
-		return bq2415x_i2c_read_mask(bq, BQ2415X_REG_VENDER,
-			BQ2415X_MASK_REVISION, BQ2415X_SHIFT_REVISION);
-	}
-	return -EINVAL;
-}
-
-/* detect chip type */
-static enum bq2415x_chip bq2415x_detect_chip(struct bq2415x_device *bq)
-{
-	struct i2c_client *client = to_i2c_client(bq->dev);
-	int ret = bq2415x_exec_command(bq, BQ2415X_PART_NUMBER);
-
-	if (ret < 0)
-		return ret;
-
-	switch (client->addr) {
-	case 0x6b:
-		switch (ret) {
-		case 0:
-			if (bq->chip == BQ24151A)
-				return bq->chip;
-			else
-				return BQ24151;
-		case 1:
-			if (bq->chip == BQ24150A ||
-				bq->chip == BQ24152 ||
-				bq->chip == BQ24155)
-				return bq->chip;
-			else
-				return BQ24150;
-		case 2:
-			if (bq->chip == BQ24153A)
-				return bq->chip;
-			else
-				return BQ24153;
-		default:
-			return BQUNKNOWN;
-		}
-		break;
-
-	case 0x6a:
-		switch (ret) {
-		case 0:
-			if (bq->chip == BQ24156A)
-				return bq->chip;
-			else
-				return BQ24156;
-		case 2:
-			return BQ24158;
-		default:
-			return BQUNKNOWN;
-		}
-		break;
-	}
-
-	return BQUNKNOWN;
-}
-
-/* detect chip revision */
-static int bq2415x_detect_revision(struct bq2415x_device *bq)
-{
-	int ret = bq2415x_exec_command(bq, BQ2415X_REVISION);
-	int chip = bq2415x_detect_chip(bq);
-
-	if (ret < 0 || chip < 0)
-		return -1;
-
-	switch (chip) {
-	case BQ24150:
-	case BQ24150A:
-	case BQ24151:
-	case BQ24151A:
-	case BQ24152:
-		if (ret >= 0 && ret <= 3)
+		/* Reading back the register value becuase it could ignore our
+		setting as a result of being limited by the value of
+		SAFETY register  */
+		ret = bq2415x_attr_read(chrgr->client, VOREG, &readback_val);
+		if (ret)
 			return ret;
-		else
-			return -1;
-	case BQ24153:
-	case BQ24153A:
-	case BQ24156:
-	case BQ24156A:
-	case BQ24158:
-		if (ret == 3)
-			return 0;
-		else if (ret == 1)
-			return 1;
-		else
-			return -1;
-	case BQ24155:
-		if (ret == 3)
-			return 3;
-		else
-			return -1;
-	case BQUNKNOWN:
-		return -1;
+
+		if (volt_regval != readback_val) {
+			pr_err("I2C write() error! Register VOREG still contains the old value\n");
+			return -EIO;
+		}
+
 	}
 
-	return -1;
+	*volt_set = ((int)volt_regval * VOREG_STEP_MV) + chrgr->min_voreg;
+	pr_info("End of %s: volt_set=%d mV\n", __func__, *volt_set);
+
+	return 0;
 }
 
-/* return chip vender code */
-static int bq2415x_get_vender_code(struct bq2415x_device *bq)
+static int bq2415x_set_iocharge(
+			struct bq2415x_charger *chrgr, int curr_to_set,
+						int *curr_set, bool propagate)
 {
-	int ret;
-
-	ret = bq2415x_exec_command(bq, BQ2415X_VENDER_CODE);
-	if (ret < 0)
+	int ret, current_to_set_ma;
+	u8 regval, readback_val;
+	pr_info("%s: curr_to_set=%d mA\n", __func__, curr_to_set);
+	if (curr_to_set < chrgr->min_iocharge) {
+		if (chrgr->state.charging_enabled && propagate) {
+			ret = bq2415x_enable_charging(chrgr, false);
+			if (ret != 0)
+				return ret;
+			chrgr->state.charging_enabled = 0;
+		}
+		*curr_set = 0;
 		return 0;
-
-	/* convert to binary */
-	return (ret & 0x1) +
-	       ((ret >> 1) & 0x1) * 10 +
-	       ((ret >> 2) & 0x1) * 100;
-}
-
-/* reset all chip registers to default state */
-static void bq2415x_reset_chip(struct bq2415x_device *bq)
-{
-	bq2415x_i2c_write(bq, BQ2415X_REG_CURRENT, BQ2415X_RESET_CURRENT);
-	bq2415x_i2c_write(bq, BQ2415X_REG_VOLTAGE, BQ2415X_RESET_VOLTAGE);
-	bq2415x_i2c_write(bq, BQ2415X_REG_CONTROL, BQ2415X_RESET_CONTROL);
-	bq2415x_i2c_write(bq, BQ2415X_REG_STATUS, BQ2415X_RESET_STATUS);
-	bq->timer_error = NULL;
-}
-
-/**** properties functions ****/
-
-/* set current limit in mA */
-static int bq2415x_set_current_limit(struct bq2415x_device *bq, int mA)
-{
-	int val;
-
-	if (mA <= 100)
-		val = 0;
-	else if (mA <= 500)
-		val = 1;
-	else if (mA <= 800)
-		val = 2;
-	else
-		val = 3;
-
-	return bq2415x_i2c_write_mask(bq, BQ2415X_REG_CONTROL, val,
-			BQ2415X_MASK_LIMIT, BQ2415X_SHIFT_LIMIT);
-}
-
-/* get current limit in mA */
-static int bq2415x_get_current_limit(struct bq2415x_device *bq)
-{
-	int ret;
-
-	ret = bq2415x_i2c_read_mask(bq, BQ2415X_REG_CONTROL,
-			BQ2415X_MASK_LIMIT, BQ2415X_SHIFT_LIMIT);
-	if (ret < 0)
-		return ret;
-	else if (ret == 0)
-		return 100;
-	else if (ret == 1)
-		return 500;
-	else if (ret == 2)
-		return 800;
-	else if (ret == 3)
-		return 1800;
-	return -EINVAL;
-}
-
-/* set weak battery voltage in mV */
-static int bq2415x_set_weak_battery_voltage(struct bq2415x_device *bq, int mV)
-{
-	int val;
-
-	/* round to 100mV */
-	if (mV <= 3400 + 50)
-		val = 0;
-	else if (mV <= 3500 + 50)
-		val = 1;
-	else if (mV <= 3600 + 50)
-		val = 2;
-	else
-		val = 3;
-
-	return bq2415x_i2c_write_mask(bq, BQ2415X_REG_CONTROL, val,
-			BQ2415X_MASK_VLOWV, BQ2415X_SHIFT_VLOWV);
-}
-
-/* get weak battery voltage in mV */
-static int bq2415x_get_weak_battery_voltage(struct bq2415x_device *bq)
-{
-	int ret;
-
-	ret = bq2415x_i2c_read_mask(bq, BQ2415X_REG_CONTROL,
-			BQ2415X_MASK_VLOWV, BQ2415X_SHIFT_VLOWV);
-	if (ret < 0)
-		return ret;
-	return 100 * (34 + ret);
-}
-
-/* set battery regulation voltage in mV */
-static int bq2415x_set_battery_regulation_voltage(struct bq2415x_device *bq,
-						  int mV)
-{
-	int val = (mV/10 - 350) / 2;
-
-	/*
-	 * According to datasheet, maximum battery regulation voltage is
-	 * 4440mV which is b101111 = 47.
-	 */
-	if (val < 0)
-		val = 0;
-	else if (val > 47)
-		return -EINVAL;
-
-	return bq2415x_i2c_write_mask(bq, BQ2415X_REG_VOLTAGE, val,
-			BQ2415X_MASK_VO, BQ2415X_SHIFT_VO);
-}
-
-/* get battery regulation voltage in mV */
-static int bq2415x_get_battery_regulation_voltage(struct bq2415x_device *bq)
-{
-	int ret = bq2415x_i2c_read_mask(bq, BQ2415X_REG_VOLTAGE,
-			BQ2415X_MASK_VO, BQ2415X_SHIFT_VO);
-
-	if (ret < 0)
-		return ret;
-	return 10 * (350 + 2*ret);
-}
-
-/* set charge current in mA (platform data must provide resistor sense) */
-static int bq2415x_set_charge_current(struct bq2415x_device *bq, int mA)
-{
-	int val;
-
-	if (bq->init_data.resistor_sense <= 0)
-		return -ENOSYS;
-
-	val = (mA * bq->init_data.resistor_sense - 37400) / 6800;
-	if (val < 0)
-		val = 0;
-	else if (val > 7)
-		val = 7;
-
-	return bq2415x_i2c_write_mask(bq, BQ2415X_REG_CURRENT, val,
-			BQ2415X_MASK_VI_CHRG | BQ2415X_MASK_RESET,
-			BQ2415X_SHIFT_VI_CHRG);
-}
-
-/* get charge current in mA (platform data must provide resistor sense) */
-static int bq2415x_get_charge_current(struct bq2415x_device *bq)
-{
-	int ret;
-
-	if (bq->init_data.resistor_sense <= 0)
-		return -ENOSYS;
-
-	ret = bq2415x_i2c_read_mask(bq, BQ2415X_REG_CURRENT,
-			BQ2415X_MASK_VI_CHRG, BQ2415X_SHIFT_VI_CHRG);
-	if (ret < 0)
-		return ret;
-	return (37400 + 6800*ret) / bq->init_data.resistor_sense;
-}
-
-/* set termination current in mA (platform data must provide resistor sense) */
-static int bq2415x_set_termination_current(struct bq2415x_device *bq, int mA)
-{
-	int val;
-
-	if (bq->init_data.resistor_sense <= 0)
-		return -ENOSYS;
-
-	val = (mA * bq->init_data.resistor_sense - 3400) / 3400;
-	if (val < 0)
-		val = 0;
-	else if (val > 7)
-		val = 7;
-
-	return bq2415x_i2c_write_mask(bq, BQ2415X_REG_CURRENT, val,
-			BQ2415X_MASK_VI_TERM | BQ2415X_MASK_RESET,
-			BQ2415X_SHIFT_VI_TERM);
-}
-
-/* get termination current in mA (platform data must provide resistor sense) */
-static int bq2415x_get_termination_current(struct bq2415x_device *bq)
-{
-	int ret;
-
-	if (bq->init_data.resistor_sense <= 0)
-		return -ENOSYS;
-
-	ret = bq2415x_i2c_read_mask(bq, BQ2415X_REG_CURRENT,
-			BQ2415X_MASK_VI_TERM, BQ2415X_SHIFT_VI_TERM);
-	if (ret < 0)
-		return ret;
-	return (3400 + 3400*ret) / bq->init_data.resistor_sense;
-}
-
-/* set default value of property */
-#define bq2415x_set_default_value(bq, prop) \
-	do { \
-		int ret = 0; \
-		if (bq->init_data.prop != -1) \
-			ret = bq2415x_set_##prop(bq, bq->init_data.prop); \
-		if (ret < 0) \
-			return ret; \
-	} while (0)
-
-/* set default values of all properties */
-static int bq2415x_set_defaults(struct bq2415x_device *bq)
-{
-	bq2415x_exec_command(bq, BQ2415X_BOOST_MODE_DISABLE);
-	bq2415x_exec_command(bq, BQ2415X_CHARGER_DISABLE);
-	bq2415x_exec_command(bq, BQ2415X_CHARGE_TERMINATION_DISABLE);
-
-	bq2415x_set_default_value(bq, current_limit);
-	bq2415x_set_default_value(bq, weak_battery_voltage);
-	bq2415x_set_default_value(bq, battery_regulation_voltage);
-
-	if (bq->init_data.resistor_sense > 0) {
-		bq2415x_set_default_value(bq, charge_current);
-		bq2415x_set_default_value(bq, termination_current);
-		bq2415x_exec_command(bq, BQ2415X_CHARGE_TERMINATION_ENABLE);
 	}
 
-	bq2415x_exec_command(bq, BQ2415X_CHARGER_ENABLE);
+	current_to_set_ma = fit_in_range(curr_to_set, chrgr->min_iocharge,
+							chrgr->max_iocharge);
+	if (chrgr->calc_iocharge_regval)
+		regval = chrgr->calc_iocharge_regval(chrgr, current_to_set_ma);
+	else
+		regval = (u8)((current_to_set_ma - chrgr->min_iocharge) /
+							IOCHARGE_STEP_MA);
+
+	pr_info("current_to_set_ma=%d, regval=0x%x\n",
+			current_to_set_ma, regval);
+	if (propagate) {
+		ret = bq2415x_attr_write(chrgr->client, IOCHARGE, regval);
+		if (ret)
+			return ret;
+
+		/* Reading back the register value because it could ignore our
+		setting as a result of being limited by the value of
+		SAFETY register  */
+		ret = bq2415x_attr_read(chrgr->client, IOCHARGE, &readback_val);
+		if (ret)
+			return ret;
+
+		if (readback_val != regval) {
+			pr_err("I2C write() error! Register IBAT still contains the old value\n");
+			return -EIO;
+		}
+
+
+		regval = readback_val;
+	}
+	if (chrgr->get_iocharge_val)
+		*curr_set = chrgr->get_iocharge_val(regval);
+	else
+		*curr_set = (regval * IOCHARGE_STEP_MA + chrgr->min_iocharge);
+
+	pr_info("End of %s: curr_set = %d mA\n", __func__, *curr_set);
 	return 0;
 }
 
-/**** charger mode functions ****/
+static int bq2415x_set_ibus_limit(struct bq2415x_charger *chrgr,
+						int ilim_to_set, int *ilim_set)
+{
+	int ret, current_to_set_ma;
+	u8 regval, readback_val;
+	pr_info("%s:, ilim_to_set=%d mA\n", __func__, ilim_to_set);
 
-/* set charger mode */
-static int bq2415x_set_mode(struct bq2415x_device *bq, enum bq2415x_mode mode)
+	if (ilim_to_set < chrgr->min_ibus_limit) {
+		if (chrgr->state.charging_enabled) {
+			ret = bq2415x_enable_charging(chrgr, false);
+			if (ret != 0)
+				return ret;
+			chrgr->state.charging_enabled = 0;
+		}
+		*ilim_set = 0;
+		return 0;
+	}
+
+	if (ilim_to_set <= chrgr->max_ibus_limit) {
+		current_to_set_ma = fit_in_range(ilim_to_set,
+				chrgr->min_ibus_limit, chrgr->max_ibus_limit);
+
+		regval = (u8)((current_to_set_ma - chrgr->min_ibus_limit) /
+							IBUS_LIMIT_STEP_MA);
+	} else {
+		regval = IBUS_NO_LIMIT;
+	}
+
+	ret = bq2415x_attr_write(chrgr->client, IBUS, regval);
+	if (ret)
+		return ret;
+
+	ret = bq2415x_attr_read(chrgr->client, IBUS, &readback_val);
+	if (ret)
+		return ret;
+
+	if (readback_val != regval) {
+		pr_err("I2C write() error! Register IBUS still contains the old value\n");
+		return -EIO;
+	}
+
+
+	*ilim_set = (regval == IBUS_NO_LIMIT) ? ilim_to_set :
+			(regval * IBUS_LIMIT_STEP_MA + chrgr->min_ibus_limit);
+	pr_info("End of %s:, ilim_set=%d mA\n", __func__, *ilim_set);
+	return 0;
+}
+
+
+static inline bool bq2415x_is_online(struct bq2415x_charger *chrgr,
+						struct power_supply *psy)
+{
+	if (!(chrgr->state.health == POWER_SUPPLY_HEALTH_GOOD) ||
+		!chrgr->state.charger_enabled)
+		return false;
+
+
+	if (psy->type == POWER_SUPPLY_TYPE_MAINS)
+		return ((chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_CDP) ||
+			(chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_DCP));
+
+	else if (psy->type == POWER_SUPPLY_TYPE_USB)
+		return ((chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_SDP) ||
+			(chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING));
+
+	return false;
+}
+
+static void bq2415x_charging_worker(struct work_struct *work)
+{
+	int ret;
+	struct bq2415x_charger *chrgr =
+		container_of(work, struct bq2415x_charger, charging_work.work);
+
+	if (!time_after(jiffies, chrgr->ack_time + (60*HZ))) {
+		down(&chrgr->prop_lock);
+		ret = bq2415x_trigger_wtd(chrgr);
+		up(&chrgr->prop_lock);
+		if (ret != 0)
+			return;
+	}
+
+	power_supply_changed(chrgr->current_psy);
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TRIG_POWER_SUPPLY_CHARGER, 0, 0);
+
+	schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
+
+	return;
+}
+
+static int bq2415x_enable_charging(struct bq2415x_charger *chrgr, bool enable)
+{
+	int ret;
+
+	if (chrgr->enable_charger) {
+		ret = chrgr->enable_charger(chrgr, enable);
+		if (ret)
+			return ret;
+	} else
+		return -EINVAL;
+
+	if (enable) {
+		/*
+		 * Obtain Wake Lock to prevent suspend during charging
+		 * because the charger watchdog needs to be cont. retriggered.
+		 */
+		wake_lock(&chrgr->suspend_lock);
+		schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
+	} else {
+		/* Release Wake Lock to allow suspend during discharging */
+		wake_unlock(&chrgr->suspend_lock);
+		cancel_delayed_work(&chrgr->charging_work);
+	}
+	return 0;
+}
+
+
+static int bq2415x_charger_set_property(struct power_supply *psy,
+					enum power_supply_property psp,
+					const union power_supply_propval *val)
+{
+	int value_to_set, value_set = 0, ret = 0;
+	struct bq2415x_charger *chrgr =
+			i2c_get_clientdata(to_i2c_client(psy->dev->parent));
+
+	bool call_psy_changed = false;
+
+	down(&chrgr->prop_lock);
+
+	if (chrgr->state.status == BQ2415x_STATUS_FAULT) {
+		ret = -EFAULT;
+		CHARGER_DEBUG_REL(
+				chrgr_dbg, CHG_DBG_SET_PROPERTY_ERROR, ret, 0);
+
+		CHARGER_DEBUG_REL(
+				chrgr_dbg, CHG_DBG_DRIVER_IN_FAULT_STATE, 0, 0);
+		up(&chrgr->prop_lock);
+		return ret;
+	}
+
+	switch (psp) {
+
+	case POWER_SUPPLY_PROP_CABLE_TYPE:
+		CHARGER_DEBUG_REL(
+			chrgr_dbg, CHG_DBG_SET_PROP_CABLE_TYPE, val->intval, 0);
+
+		value_set = val->intval;
+		if (chrgr->state.cable_type == val->intval)
+			break;
+		chrgr->state.cable_type = val->intval;
+
+		if ((chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_SDP) ||
+			(chrgr->state.cable_type ==
+			POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING))
+
+			chrgr->current_psy = &chrgr->usb_psy;
+		else
+			chrgr->current_psy = &chrgr->ac_psy;
+
+		call_psy_changed = true;
+		break;
+
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_CURRENT,
+								val->intval, 0);
+
+		bq2415x_attr_write(chrgr->client, IO_LEVEL, 0);
+		value_to_set = fit_in_range(val->intval, 0,
+						chrgr->state.max_cc);
+
+		bq2415x_set_iocharge(chrgr, value_to_set, &value_set, false);
+		if (value_set == chrgr->state.cc)
+			break;
+		ret = bq2415x_set_iocharge(chrgr, value_to_set,
+							&value_set, true);
+
+		if (ret) {
+			chrgr->state.status = BQ2415x_STATUS_FAULT;
+			chrgr->state.health =
+					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+			break;
+		}
+
+		chrgr->state.cc = value_set;
+		break;
+
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_VOLTAGE,
+								val->intval, 0);
+
+		bq2415x_set_voreg(chrgr, val->intval, &value_set, false);
+		if (value_set == chrgr->state.cv)
+			break;
+		ret = bq2415x_set_voreg(chrgr, val->intval, &value_set, true);
+		if (ret) {
+			chrgr->state.status = BQ2415x_STATUS_FAULT;
+			chrgr->state.health =
+					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+			break;
+		}
+
+		chrgr->state.cv = value_set;
+		break;
+
+	case POWER_SUPPLY_PROP_ENABLE_CHARGER:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_ENABLE_CHARGER,
+								val->intval, 0);
+
+		chrgr->state.charger_enabled = val->intval;
+		value_set = val->intval;
+		break;
+
+	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_ENABLE_CHARGING,
+								val->intval, 0);
+
+		if (val->intval == chrgr->state.charging_enabled) {
+			value_set = val->intval;
+			break;
+		}
+		ret = bq2415x_enable_charging(chrgr, val->intval);
+		if (!ret) {
+			chrgr->state.charging_enabled = val->intval;
+			value_set = val->intval;
+			call_psy_changed = true;
+		}
+		break;
+
+	case POWER_SUPPLY_PROP_INLMT:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_INLMT,
+							val->intval, 0);
+
+		value_to_set = val->intval;
+		ret = bq2415x_set_ibus_limit(chrgr, value_to_set, &value_set);
+		if (ret) {
+			chrgr->state.status = BQ2415x_STATUS_FAULT;
+			chrgr->state.health =
+					POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+			break;
+		}
+
+		chrgr->state.inlmt = value_set;
+		if (value_set > chrgr->max_ibus_limit)
+			chrgr->state.max_cc =
+				fit_in_range(value_set, 0, chrgr->max_iocharge);
+		break;
+
+	case POWER_SUPPLY_PROP_CONTINUE_CHARGING:
+		CHARGER_DEBUG_REL(
+				chrgr_dbg, CHG_DBG_SET_PROP_CONTINUE_CHARGING,
+								val->intval, 0);
+
+		chrgr->ack_time = jiffies;
+		value_set = val->intval;
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CUR:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_TERM_CUR,
+								val->intval, 0);
+		chrgr->state.iterm = value_set;
+		break;
+
+	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_MIN_TEMP,
+								val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_MAX_TEMP,
+								val->intval, 0);
+		break;
+
+	default:
+		break;
+	};
+
+	if (!ret)
+		CHARGER_DEBUG_REL(
+			chrgr_dbg, CHG_DBG_SET_PROPERTY_VALUE_SET,
+							value_set, 0);
+	else
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROPERTY_ERROR,
+							ret, 0);
+
+	up(&chrgr->prop_lock);
+
+	if (call_psy_changed)
+		power_supply_changed(psy);
+
+	return ret;
+}
+
+static int bq2415x_charger_get_property(struct power_supply *psy,
+					enum power_supply_property psp,
+					union power_supply_propval *val)
 {
 	int ret = 0;
-	int charger = 0;
-	int boost = 0;
+	struct bq2415x_charger *chrgr =
+			i2c_get_clientdata(to_i2c_client(psy->dev->parent));
 
-	if (mode == BQ2415X_MODE_BOOST)
-		boost = 1;
-	else if (mode != BQ2415X_MODE_OFF)
-		charger = 1;
+	down(&chrgr->prop_lock);
 
-	if (!charger)
-		ret = bq2415x_exec_command(bq, BQ2415X_CHARGER_DISABLE);
+	switch (psp) {
 
-	if (!boost)
-		ret = bq2415x_exec_command(bq, BQ2415X_BOOST_MODE_DISABLE);
+	case POWER_SUPPLY_PROP_PRESENT:
+		if (psy->type == POWER_SUPPLY_TYPE_USB)
+			val->intval = ((chrgr->state.cable_type ==
+				POWER_SUPPLY_CHARGER_TYPE_USB_SDP) ||
+				(chrgr->state.cable_type ==
+				POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING));
 
-	if (ret < 0)
-		return ret;
+		else if (psy->type == POWER_SUPPLY_TYPE_MAINS)
+			val->intval = ((chrgr->state.cable_type ==
+				 POWER_SUPPLY_CHARGER_TYPE_USB_DCP) ||
+				(chrgr->state.cable_type ==
+				 POWER_SUPPLY_CHARGER_TYPE_USB_CDP));
+		else
+			val->intval = 0;
 
-	switch (mode) {
-	case BQ2415X_MODE_OFF:
-		dev_dbg(bq->dev, "changing mode to: Offline\n");
-		ret = bq2415x_set_current_limit(bq, 100);
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_PRESENT,
+								val->intval, 0);
 		break;
-	case BQ2415X_MODE_NONE:
-		dev_dbg(bq->dev, "changing mode to: N/A\n");
-		ret = bq2415x_set_current_limit(bq, 100);
+
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = bq2415x_is_online(chrgr, psy);
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_ONLINE,
+								val->intval, 0);
 		break;
-	case BQ2415X_MODE_HOST_CHARGER:
-		dev_dbg(bq->dev, "changing mode to: Host/HUB charger\n");
-		ret = bq2415x_set_current_limit(bq, 500);
+
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = chrgr->state.health;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_HEALTH,
+								val->intval, 0);
 		break;
-	case BQ2415X_MODE_DEDICATED_CHARGER:
-		dev_dbg(bq->dev, "changing mode to: Dedicated charger\n");
-		ret = bq2415x_set_current_limit(bq, 1800);
+
+	case POWER_SUPPLY_PROP_TYPE:
+		val->intval = POWER_SUPPLY_TYPE_USB;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_TYPE,
+								val->intval, 0);
 		break;
-	case BQ2415X_MODE_BOOST: /* Boost mode */
-		dev_dbg(bq->dev, "changing mode to: Boost\n");
-		ret = bq2415x_set_current_limit(bq, 100);
+
+	case POWER_SUPPLY_PROP_CABLE_TYPE:
+		val->intval = chrgr->state.cable_type;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_CABLE_TYPE,
+								val->intval, 0);
 		break;
-	}
 
-	if (ret < 0)
-		return ret;
+	case POWER_SUPPLY_PROP_ENABLE_CHARGER:
+		val->intval = chrgr->state.charger_enabled;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_ENABLE_CHARGER,
+								val->intval, 0);
+		break;
 
-	if (charger)
-		ret = bq2415x_exec_command(bq, BQ2415X_CHARGER_ENABLE);
-	else if (boost)
-		ret = bq2415x_exec_command(bq, BQ2415X_BOOST_MODE_ENABLE);
+	case POWER_SUPPLY_PROP_ENABLE_CHARGING:
+		val->intval = chrgr->state.charging_enabled;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_ENABLE_CHARGING,
+								val->intval, 0);
+		break;
 
-	if (ret < 0)
-		return ret;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = 0;
+		CHARGER_DEBUG_DEV(
+			chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_CONTROL_LIMIT,
+								val->intval, 0);
+		break;
 
-	bq2415x_set_default_value(bq, weak_battery_voltage);
-	bq2415x_set_default_value(bq, battery_regulation_voltage);
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->strval = chrgr->model_name;
+		break;
 
-	bq->mode = mode;
-	sysfs_notify(&bq->charger.dev->kobj, NULL, "mode");
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		val->strval = chrgr->manufacturer;
+		break;
 
-	return 0;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		val->intval = chrgr->state.cc;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_CURRENT,
+								val->intval, 0);
+		break;
 
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+		val->intval = chrgr->state.cv;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_VOLTAGE,
+								val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+		val->intval = chrgr->state.max_cc;
+		CHARGER_DEBUG_DEV(
+			chrgr_dbg, CHG_DBG_GET_PROP_MAX_CHARGE_CURRENT,
+								val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_INLMT:
+		val->intval = chrgr->state.inlmt;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_INLMT,
+								val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CUR:
+		val->intval = chrgr->state.iterm;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_TERM_CUR,
+								val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_PRIORITY:
+		val->intval = 0;
+		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_PRIORITY,
+								val->intval, 0);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	};
+
+	up(&chrgr->prop_lock);
+
+	return ret;
 }
 
-static int bq2415x_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static void bq2415x_boost_worker(struct work_struct *work)
 {
-	struct bq2415x_device *bq =
-		container_of(nb, struct bq2415x_device, nb);
-	struct power_supply *psy = v;
-	enum bq2415x_mode mode;
-	union power_supply_propval prop;
 	int ret;
-	int mA;
+	u8 val;
+	struct bq2415x_charger *chrgr =
+		container_of(work, struct bq2415x_charger, boost_work.work);
 
-	if (val != PSY_EVENT_PROP_CHANGED)
-		return NOTIFY_OK;
+	down(&chrgr->prop_lock);
 
-	if (psy != bq->notify_psy)
-		return NOTIFY_OK;
+	ret = bq2415x_attr_read(chrgr->client, BOOST_EN, &val);
 
-	dev_dbg(bq->dev, "notifier call was called\n");
+	if ((!ret) && val && chrgr->state.boost_enabled) {
+		bq2415x_trigger_wtd(chrgr);
+		schedule_delayed_work(&chrgr->boost_work, BOOST_WORK_DELAY);
+	}
 
-	ret = psy->get_property(psy, POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
+	up(&chrgr->prop_lock);
+	return;
+}
+
+static void bq2415x_set_boost(struct work_struct *work)
+{
+	struct bq2415x_charger *chrgr =
+		container_of(work, struct bq2415x_charger,
+					boost_op_bh.work);
+	int on = chrgr->state.to_enable_boost;
+	int ret = 0;
+	u8 chr_reg;
+
+	down(&chrgr->prop_lock);
+
+	/* Clear state flags */
+	chrgr->state.boost_ov = 0;
+	chrgr->state.bat_uv = 0;
+
+	if (on) {
+		/* Enable boost regulator */
+		ret = bq2415x_attr_write(chrgr->client, BOOST_EN, 1);
+		if (ret)
+			goto exit_boost;
+
+		/* Boost startup time is 2 ms max */
+		mdelay(2);
+
+		/* Ensure Boost is in regulation */
+		ret = bq2415x_attr_read(chrgr->client, BOOST_UP, &chr_reg);
+		if (ret)
+			goto exit_boost;
+
+		if (!chr_reg) {
+			/*
+			 * In case of BOOST fault, BOOST_EN bit is automatically
+			 * cleared
+			 */
+			pr_err("%s: boost mode didn't go in regulation\n",
+					__func__);
+			ret = -EINVAL;
+			goto exit_boost;
+		}
+
+		/* Enable boost mode flag */
+		chrgr->state.boost_enabled = 1;
+
+		wake_lock(&chrgr->suspend_lock);
+		schedule_delayed_work(&chrgr->boost_work, BOOST_WORK_DELAY);
+	} else {
+		cancel_delayed_work(&chrgr->boost_work);
+
+		/* Release Wake Lock */
+		wake_unlock(&chrgr->suspend_lock);
+
+		/* Disable boost mode flag */
+		chrgr->state.boost_enabled = 0;
+
+		/* Disable boost regulator */
+		ret = bq2415x_attr_write(chrgr->client, BOOST_EN, 0);
+		if (ret)
+			pr_err("%s: fail to disable boost mode\n", __func__);
+	}
+
+exit_boost:
+	if (on && ret)
+		atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+					INTEL_USB_DRV_VBUS_ERR, NULL);
+	up(&chrgr->prop_lock);
+	return;
+}
+
+/**
+ * bq2415x_chgint_cb_work_func	function executed by
+ *				bq2415x_charger::chgint_cb_work work
+ * @work			[in] pointer to associated 'work' structure
+ */
+static void bq2415x_chgint_cb_work_func(struct work_struct *work)
+{
+	int ret, vbus_state_prev, health_prev;
+	struct bq2415x_charger *chrgr =
+		container_of(work, struct bq2415x_charger,
+					chgint_bh.work);
+
+	down(&chrgr->prop_lock);
+
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_CHGINT_CB, 0, 0);
+
+	if (chrgr->state.status == BQ2415x_STATUS_FAULT) {
+		CHARGER_DEBUG_REL(
+				chrgr_dbg, CHG_DBG_DRIVER_IN_FAULT_STATE, 0, 0);
+		up(&chrgr->prop_lock);
+		pr_err("%s:chrgr->state.status == BQ2415x_STATUS_FAULT!\n",
+						 __func__);
+		return;
+	}
+
+	vbus_state_prev = chrgr->state.vbus;
+	health_prev = chrgr->state.health;
+	pr_info("%s: vbus_state_prev=%d, health_prev=%d\n",
+				__func__, vbus_state_prev, health_prev);
+	ret = chrgr->get_charger_state(chrgr);
 	if (ret != 0)
-		return NOTIFY_OK;
+		goto fail;
 
-	mA = prop.intval;
+	if (chrgr->state.boost_enabled) {
+		if (chrgr->state.boost_ov || chrgr->state.bat_uv
+			|| chrgr->state.tsd_flag || chrgr->state.ovp_flag ||
+			 chrgr->state.t32s_timer_expired) {
+			/*
+			 * In case of BOOST fault, BOOST_EN bit is automatically
+			 * cleared. Only need to clear boost enabled sw flag and
+			 * stop the booster workqueue
+			 */
+			atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+					INTEL_USB_DRV_VBUS_ERR, NULL);
 
-	if (mA == 0)
-		mode = BQ2415X_MODE_OFF;
-	else if (mA < 500)
-		mode = BQ2415X_MODE_NONE;
-	else if (mA < 1800)
-		mode = BQ2415X_MODE_HOST_CHARGER;
+			wake_unlock(&chrgr->suspend_lock);
+			if (chrgr->state.boost_ov)
+				pr_err("%s: boost mode overcurrent detected\n",
+						__func__);
+			if (chrgr->state.bat_uv)
+				pr_err("%s: boost mode under voltage detected\n",
+						__func__);
+
+			goto fail;
+		}
+	}
+
+	if (chrgr->state.treg_flag)
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TREG_IS_ON, 0, 0);
+
+	if (chrgr->state.ot_recov_flag)
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_OT_RECOVERY, 0, 0);
+
+	if (chrgr->state.t32s_timer_expired) {
+		chrgr->state.health = POWER_SUPPLY_HEALTH_DEAD;
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_T32_TIMER_EXPIRED, 0, 0);
+		power_supply_changed(chrgr->current_psy);
+		pr_err("TIMER expired, HEALTH_DEAD!\n");
+		goto fail;
+	}
+
+	chrgr->state.health = (chrgr->state.vbus == VBUS_ON) ?
+			POWER_SUPPLY_HEALTH_GOOD : POWER_SUPPLY_HEALTH_UNKNOWN;
+
+
+	if (chrgr->state.vbus_fault) {
+		chrgr->state.health = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+		pr_err("VBUS POWER_SUPPLY_HEALTH_UNSPEC_FAILURE");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_FAULT, 0, 0);
+	}
+
+	if (chrgr->state.ovp_flag || chrgr->state.vbus_ovp) {
+		chrgr->state.health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+		pr_err("VBUS Over-Voltage Shutdown!");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_OVP, 0, 0);
+	}
+
+	if (chrgr->state.tsd_flag) {
+		chrgr->state.health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		pr_err("Chip Over-temperature Shutdown!");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_TSD_IS_ON, 0, 0);
+	}
+
+	if (chrgr->state.ovp_recov) {
+		pr_info("VBUS OVP Recovery occurred!");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_VBUS_OVP_RECOV, 0, 0);
+	}
+
+	if (chrgr->state.poor_input_source) {
+		pr_err("Poor Input Source!\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_POOR_INPUT_SOURCE, 0, 0);
+	}
+
+	if (chrgr->state.sleep_mode) {
+		pr_info("Sleep Mode\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SLEEP, 0, 0);
+	}
+
+	if (chrgr->state.bat_ovp) {
+		pr_debug("Battery Over-Voltage!");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_BAT_OVP, 0, 0);
+	}
+
+	if (chrgr->state.no_bat) {
+		pr_err("No Battery!\n");
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_NO_BAT, 0, 0);
+	}
+
+	if (health_prev != chrgr->state.health &&
+		chrgr->state.health != POWER_SUPPLY_HEALTH_GOOD &&
+		 chrgr->state.health != POWER_SUPPLY_HEALTH_UNKNOWN)
+				power_supply_changed(chrgr->current_psy);
+
+
+	/* when vbus is disconnected all registers are reseted (known HW bug)
+	therefore need to reconfigure the chip */
+#if 1
+	if (chrgr->state.vbus == VBUS_OFF && vbus_state_prev == VBUS_ON) {
+		chrgr->state.cc = chrgr->default_cc;
+		chrgr->state.cv = chrgr->default_cv;
+		ret = bq2415x_configure_chip(
+					chrgr, chrgr->state.charging_enabled);
+		if (ret != 0)
+			goto fail;
+	}
+#endif
+	/* If vbus status changed, then notify USB OTG */
+	if (chrgr->state.vbus != vbus_state_prev) {
+		if (chrgr->otg_handle && (vbus_state_prev >= 0)) {
+			atomic_notifier_call_chain(&chrgr->otg_handle->notifier,
+					USB_EVENT_VBUS, &chrgr->state.vbus);
+
+			CHARGER_DEBUG_REL(
+				chrgr_dbg, CHG_DBG_VBUS, chrgr->state.vbus, 0);
+		}
+	}
+	pr_info("Leave %s: chrgr->state.health=%d, chrgr->state.vbus=%d\n",
+				__func__,
+				chrgr->state.health, chrgr->state.vbus);
+fail:
+	up(&chrgr->prop_lock);
+}
+
+static int unfreezable_bh_create(struct unfreezable_bh_struct *bh,
+		const char *wq_name, const char *wakelock_name,
+		void (*work_func)(struct work_struct *work))
+{
+	spin_lock_init(&bh->lock);
+
+	/* Create private, single-threaded workqueue instead of using one of
+	the system predefined workqueues to reduce latency */
+	bh->wq = create_singlethread_workqueue(wq_name);
+
+	if (NULL == bh->wq)
+		return -ENOMEM;
+
+	INIT_WORK(&bh->work, work_func);
+
+	wake_lock_init(&bh->evt_wakelock,
+			WAKE_LOCK_SUSPEND,
+			wakelock_name);
+
+	return 0;
+}
+
+static void unfreezable_bh_destroy(struct unfreezable_bh_struct *bh)
+{
+	cancel_work_sync(&bh->work);
+
+	destroy_workqueue(bh->wq);
+
+	wake_lock_destroy(&bh->evt_wakelock);
+}
+
+static void unfreezable_bh_schedule(struct unfreezable_bh_struct *bh)
+{
+	spin_lock(&bh->lock);
+
+	if (!bh->in_suspend) {
+		queue_work(bh->wq, &bh->work);
+
+		wake_lock_timeout(&bh->evt_wakelock, EVT_WAKELOCK_TIMEOUT);
+	} else {
+		bh->pending_evt = true;
+	}
+
+	spin_unlock(&bh->lock);
+}
+
+static void unfreezable_bh_resume(struct unfreezable_bh_struct *bh)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&bh->lock, flags);
+
+	bh->in_suspend = false;
+	if (bh->pending_evt) {
+		bh->pending_evt = false;
+
+		queue_work(bh->wq, &bh->work);
+
+		wake_lock_timeout(&bh->evt_wakelock, EVT_WAKELOCK_TIMEOUT);
+	}
+
+	spin_unlock_irqrestore(&bh->lock, flags);
+}
+
+static void unfreezable_bh_suspend(struct unfreezable_bh_struct *bh)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&bh->lock, flags);
+	bh->in_suspend = true;
+	spin_unlock_irqrestore(&bh->lock, flags);
+}
+
+static irqreturn_t bq2415x_charger_chgint_cb(int irq, void *dev)
+{
+	struct bq2415x_charger *chrgr = dev;
+
+	pr_info("%s\n", __func__);
+
+	unfreezable_bh_schedule(&chrgr->chgint_bh);
+
+	return IRQ_HANDLED;
+}
+
+/**
+ * bq2415x_configure_pmu_irq - function configuring PMU's Charger status IRQ
+ * @chrgr		[in] pointer to charger driver internal structure
+ */
+static int bq2415x_configure_pmu_irq(struct bq2415x_charger *chrgr)
+{
+	int ret;
+
+	/* register callback with PMU for CHGINT irq */
+	ret = request_irq(chrgr->irq,
+		bq2415x_charger_chgint_cb,
+			IRQF_NO_SUSPEND, BQ2415x_NAME, chrgr);
+	if (ret != 0) {
+		pr_err("Failed to register @PMU for GHGINT irq! ret=%d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * bq2415x_configure_pmu_regs -function configuring PMU's Charger
+ *				part registers
+ * @chrgr			[in] pointer to charger driver's internal struct
+ */
+static int bq2415x_configure_pmu_regs(struct bq2415x_charger *chrgr)
+{
+	u32 regval;
+	struct device_state_pm_state *pm_state_en, *pm_state_dis;
+	int ret;
+
+
+	if (!chrgr->ctrl_io || !chrgr->ididev)
+		return -EINVAL;
+
+	pm_state_en =
+		idi_peripheral_device_pm_get_state_handler(
+						chrgr->ididev, "enable");
+	if (pm_state_en == NULL) {
+		pr_err("Unable to get handler for PM state 'enable'!\n");
+		return -EINVAL;
+	}
+
+	pm_state_dis =
+		idi_peripheral_device_pm_get_state_handler(
+						chrgr->ididev, "disable");
+	if (pm_state_dis == NULL) {
+		pr_err("Unable to get handler for PM state 'disable'!\n");
+		return -EINVAL;
+	}
+
+	pr_info("Getting PM state handlers: OK\n");
+
+	ret = idi_set_power_state(chrgr->ididev, pm_state_en, true);
+
+	if (ret) {
+		pr_err("setting PM state '%s' failed!\n", pm_state_en->name);
+		return -EIO;
+	}
+
+	regval = ioread32(CHARGER_CONTROL(chrgr->ctrl_io));
+
+	/* ChargerIRQEdge - CHARGER_CONTROL_CIEDG_FALLING */
+	regval &= ~(CHARGER_CONTROL_CIEDG_M << CHARGER_CONTROL_CIEDG_O);
+	regval |= (CHARGER_CONTROL_CIEDG_FALLING << CHARGER_CONTROL_CIEDG_O);
+
+	/* ChargerIRQLevel - CHARGER_CONTROL_CILVL_LOW */
+	regval &= ~(CHARGER_CONTROL_CILVL_M << CHARGER_CONTROL_CILVL_O);
+	regval |= (CHARGER_CONTROL_CILVL_LOW << CHARGER_CONTROL_CILVL_O);
+
+	/* ChargerIRQSensibility - CHARGER_CONTROL_CISENS_EDGE */
+	regval &= ~(CHARGER_CONTROL_CISENS_M << CHARGER_CONTROL_CISENS_O);
+	regval |= (CHARGER_CONTROL_CISENS_EDGE << CHARGER_CONTROL_CISENS_O);
+
+	/* ChargerIRQEnable - CHARGER_CONTROL_CIEN_EN */
+	regval &= ~(CHARGER_CONTROL_CIEN_M << CHARGER_CONTROL_CIEN_O);
+	regval |= (CHARGER_CONTROL_CIEN_EN << CHARGER_CONTROL_CIEN_O);
+
+	/* ChargerResetLevel - CHARGER_CONTROL_CHGLVL_LOW */
+	regval &= ~(CHARGER_CONTROL_CHGLVL_M << CHARGER_CONTROL_CHGLVL_O);
+	regval |= (CHARGER_CONTROL_CHGLVL_LOW << CHARGER_CONTROL_CHGLVL_O);
+
+	/* ChargerIRQDebounce - CHARGER_CONTROL_IRQ_DEBOUNCE_DISABLE - as vbus
+	signal is clear enough (not bouncing) */
+	regval &= ~(CHARGER_CONTROL_CIDBT_M << CHARGER_CONTROL_CIDBT_O);
+	regval |= (CHARGER_CONTROL_IRQ_DEBOUNCE_DISABLE <<
+						CHARGER_CONTROL_CIDBT_O);
+
+	iowrite32(regval, CHARGER_CONTROL(chrgr->ctrl_io));
+
+	/* charger control WR strobe */
+	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
+					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
+					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+
+	/* Set CHGRST ball to low for MRD P1 (BQ2415x) */
+	/* charger WR */
+	iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
+
+	ret = idi_set_power_state(chrgr->ididev, pm_state_dis, false);
+
+	if (ret)
+		pr_err("setting PM state '%s' failed!\n", pm_state_dis->name);
+
+	return 0;
+}
+
+/**
+ * bq2415x_get_clr_wdt_expiry_flag -	func. gets WDT expiry status and clears
+ *					expired status if it had expired
+ * @chrgr		[in] pointer to charger driver internal structure
+ */
+static int bq2415x_get_clr_wdt_expiry_flag(struct bq2415x_charger *chrgr)
+{
+	if (chrgr->get_clr_wdt_expiry_flag)
+		return chrgr->get_clr_wdt_expiry_flag(chrgr);
 	else
-		mode = BQ2415X_MODE_DEDICATED_CHARGER;
+		return 0;
+}
 
-	if (bq->reported_mode == mode)
-		return NOTIFY_OK;
 
-	bq->reported_mode = mode;
+/**
+ * bq2415x_configure_chip - function configuring BQ2415x chip registers
+ * @chrgr		[in] pointer to charger driver internal structure
+ * @enable_charging	[in] controls if charging should be anebled or disabled
+ */
+static int bq2415x_configure_chip(struct bq2415x_charger *chrgr,
+							bool enable_charging)
+{
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_CONFIGURE_CHIP, 0, 0);
 
-	/* if automode is not enabled do not tell about reported_mode */
-	if (bq->automode < 1)
-		return NOTIFY_OK;
+	if (chrgr->configure_chip)
+		return chrgr->configure_chip(chrgr, enable_charging);
+	else
+		return -EINVAL;
+}
 
-	sysfs_notify(&bq->charger.dev->kobj, NULL, "reported_mode");
-	bq2415x_set_mode(bq, bq->reported_mode);
+static int bq2415x_set_pinctrl_state(struct i2c_client *client,
+		struct pinctrl_state *state)
+{
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(client);
+	int ret;
+
+	ret = pinctrl_select_state(chrgr->pinctrl, state);
+	if (ret != 0) {
+		pr_err("failed to configure CHGRESET pin !\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int bq2415x_otg_notification_handler(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct bq2415x_charger *chrgr =
+		container_of(nb, struct bq2415x_charger, otg_nb);
+	pr_info("%s: event=%d\n", __func__, event);
+	switch (event) {
+	case INTEL_USB_DRV_VBUS:
+		if (!data)
+			return NOTIFY_BAD;
+		chrgr->state.to_enable_boost = *((bool *)data);
+		pr_info("set chrgr->state.to_enable_boost=%d\n",
+				chrgr->state.to_enable_boost);
+		unfreezable_bh_schedule(&chrgr->boost_op_bh);
+		break;
+
+	default:
+		break;
+	}
 
 	return NOTIFY_OK;
 }
 
-/**** timer functions ****/
-
-/* enable/disable auto resetting chip timer */
-static void bq2415x_set_autotimer(struct bq2415x_device *bq, int state)
+static ssize_t dbg_logs_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
 {
-	mutex_lock(&bq2415x_timer_mutex);
+	size_t size_copied;
+	int value;
 
-	if (bq->autotimer == state) {
-		mutex_unlock(&bq2415x_timer_mutex);
-		return;
-	}
+	value = chrgr_dbg.printk_logs_en;
+	size_copied = sprintf(buf, "%d\n", value);
 
-	bq->autotimer = state;
-
-	if (state) {
-		schedule_delayed_work(&bq->work, BQ2415X_TIMER_TIMEOUT * HZ);
-		bq2415x_exec_command(bq, BQ2415X_TIMER_RESET);
-		bq->timer_error = NULL;
-	} else {
-		cancel_delayed_work_sync(&bq->work);
-	}
-
-	mutex_unlock(&bq2415x_timer_mutex);
+	return size_copied;
 }
 
-/* called by bq2415x_timer_work on timer error */
-static void bq2415x_timer_error(struct bq2415x_device *bq, const char *msg)
+static ssize_t dbg_logs_store(struct device *dev, struct device_attribute *attr,
+		 const char *buf, size_t count)
 {
-	bq->timer_error = msg;
-	sysfs_notify(&bq->charger.dev->kobj, NULL, "timer");
-	dev_err(bq->dev, "%s\n", msg);
-	if (bq->automode > 0)
-		bq->automode = 0;
-	bq2415x_set_mode(bq, BQ2415X_MODE_OFF);
-	bq2415x_set_autotimer(bq, 0);
-}
-
-/* delayed work function for auto resetting chip timer */
-static void bq2415x_timer_work(struct work_struct *work)
-{
-	struct bq2415x_device *bq = container_of(work, struct bq2415x_device,
-						 work.work);
+	int sysfs_val;
 	int ret;
-	int error;
-	int boost;
+	size_t size_to_cpy;
+	char strvalue[SYSFS_INPUT_VAL_LEN + 1];
 
-	if (!bq->autotimer)
-		return;
+	size_to_cpy = (count > SYSFS_INPUT_VAL_LEN) ?
+						SYSFS_INPUT_VAL_LEN : count;
+	strncpy(strvalue, buf, size_to_cpy);
+	strvalue[size_to_cpy] = '\0';
 
-	ret = bq2415x_exec_command(bq, BQ2415X_TIMER_RESET);
-	if (ret < 0) {
-		bq2415x_timer_error(bq, "Resetting timer failed");
-		return;
-	}
-
-	boost = bq2415x_exec_command(bq, BQ2415X_BOOST_MODE_STATUS);
-	if (boost < 0) {
-		bq2415x_timer_error(bq, "Unknown error");
-		return;
-	}
-
-	error = bq2415x_exec_command(bq, BQ2415X_FAULT_STATUS);
-	if (error < 0) {
-		bq2415x_timer_error(bq, "Unknown error");
-		return;
-	}
-
-	if (boost) {
-		switch (error) {
-		/* Non fatal errors, chip is OK */
-		case 0: /* No error */
-			break;
-		case 6: /* Timer expired */
-			dev_err(bq->dev, "Timer expired\n");
-			break;
-		case 3: /* Battery voltage too low */
-			dev_err(bq->dev, "Battery voltage to low\n");
-			break;
-
-		/* Fatal errors, disable and reset chip */
-		case 1: /* Overvoltage protection (chip fried) */
-			bq2415x_timer_error(bq,
-				"Overvoltage protection (chip fried)");
-			return;
-		case 2: /* Overload */
-			bq2415x_timer_error(bq, "Overload");
-			return;
-		case 4: /* Battery overvoltage protection */
-			bq2415x_timer_error(bq,
-				"Battery overvoltage protection");
-			return;
-		case 5: /* Thermal shutdown (too hot) */
-			bq2415x_timer_error(bq,
-					"Thermal shutdown (too hot)");
-			return;
-		case 7: /* N/A */
-			bq2415x_timer_error(bq, "Unknown error");
-			return;
-		}
-	} else {
-		switch (error) {
-		/* Non fatal errors, chip is OK */
-		case 0: /* No error */
-			break;
-		case 2: /* Sleep mode */
-			dev_err(bq->dev, "Sleep mode\n");
-			break;
-		case 3: /* Poor input source */
-			dev_err(bq->dev, "Poor input source\n");
-			break;
-		case 6: /* Timer expired */
-			dev_err(bq->dev, "Timer expired\n");
-			break;
-		case 7: /* No battery */
-			dev_err(bq->dev, "No battery\n");
-			break;
-
-		/* Fatal errors, disable and reset chip */
-		case 1: /* Overvoltage protection (chip fried) */
-			bq2415x_timer_error(bq,
-				"Overvoltage protection (chip fried)");
-			return;
-		case 4: /* Battery overvoltage protection */
-			bq2415x_timer_error(bq,
-				"Battery overvoltage protection");
-			return;
-		case 5: /* Thermal shutdown (too hot) */
-			bq2415x_timer_error(bq,
-				"Thermal shutdown (too hot)");
-			return;
-		}
-	}
-
-	schedule_delayed_work(&bq->work, BQ2415X_TIMER_TIMEOUT * HZ);
-}
-
-/**** power supply interface code ****/
-
-static enum power_supply_property bq2415x_power_supply_props[] = {
-	/* TODO: maybe add more power supply properties */
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_MODEL_NAME,
-};
-
-static int bq2415x_power_supply_get_property(struct power_supply *psy,
-					     enum power_supply_property psp,
-					     union power_supply_propval *val)
-{
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	int ret;
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		ret = bq2415x_exec_command(bq, BQ2415X_CHARGE_STATUS);
-		if (ret < 0)
-			return ret;
-		else if (ret == 0) /* Ready */
-			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		else if (ret == 1) /* Charge in progress */
-			val->intval = POWER_SUPPLY_STATUS_CHARGING;
-		else if (ret == 2) /* Charge done */
-			val->intval = POWER_SUPPLY_STATUS_FULL;
-		else
-			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
-		break;
-	case POWER_SUPPLY_PROP_MODEL_NAME:
-		val->strval = bq->model;
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-}
-
-static int bq2415x_power_supply_init(struct bq2415x_device *bq)
-{
-	int ret;
-	int chip;
-	char revstr[8];
-
-	bq->charger.name = bq->name;
-	bq->charger.type = POWER_SUPPLY_TYPE_USB;
-	bq->charger.properties = bq2415x_power_supply_props;
-	bq->charger.num_properties = ARRAY_SIZE(bq2415x_power_supply_props);
-	bq->charger.get_property = bq2415x_power_supply_get_property;
-
-	ret = bq2415x_detect_chip(bq);
-	if (ret < 0)
-		chip = BQUNKNOWN;
-	else
-		chip = ret;
-
-	ret = bq2415x_detect_revision(bq);
-	if (ret < 0)
-		strcpy(revstr, "unknown");
-	else
-		sprintf(revstr, "1.%d", ret);
-
-	bq->model = kasprintf(GFP_KERNEL,
-				"chip %s, revision %s, vender code %.3d",
-				bq2415x_chip_name[chip], revstr,
-				bq2415x_get_vender_code(bq));
-	if (!bq->model) {
-		dev_err(bq->dev, "failed to allocate model name\n");
-		return -ENOMEM;
-	}
-
-	ret = power_supply_register(bq->dev, &bq->charger);
-	if (ret) {
-		kfree(bq->model);
+	ret = kstrtoint(strvalue, 10, &sysfs_val);
+	if (ret != 0)
 		return ret;
-	}
 
-	return 0;
-}
+	sysfs_val = (sysfs_val == 0) ? 0 : 1;
 
-static void bq2415x_power_supply_exit(struct bq2415x_device *bq)
-{
-	bq->autotimer = 0;
-	if (bq->automode > 0)
-		bq->automode = 0;
-	cancel_delayed_work_sync(&bq->work);
-	power_supply_unregister(&bq->charger);
-	kfree(bq->model);
-}
+	chrgr_dbg.printk_logs_en = sysfs_val;
 
-/**** additional sysfs entries for power supply interface ****/
+	pr_info("sysfs attr %s=%d\n", attr->attr.name, sysfs_val);
 
-/* show *_status entries */
-static ssize_t bq2415x_sysfs_show_status(struct device *dev,
-					 struct device_attribute *attr,
-					 char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						charger);
-	enum bq2415x_command command;
-	int ret;
-
-	if (strcmp(attr->attr.name, "otg_status") == 0)
-		command = BQ2415X_OTG_STATUS;
-	else if (strcmp(attr->attr.name, "charge_status") == 0)
-		command = BQ2415X_CHARGE_STATUS;
-	else if (strcmp(attr->attr.name, "boost_status") == 0)
-		command = BQ2415X_BOOST_STATUS;
-	else if (strcmp(attr->attr.name, "fault_status") == 0)
-		command = BQ2415X_FAULT_STATUS;
-	else
-		return -EINVAL;
-
-	ret = bq2415x_exec_command(bq, command);
-	if (ret < 0)
-		return ret;
-	return sprintf(buf, "%d\n", ret);
-}
-
-/*
- * set timer entry:
- *    auto - enable auto mode
- *    off - disable auto mode
- *    (other values) - reset chip timer
- */
-static ssize_t bq2415x_sysfs_set_timer(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf,
-				       size_t count)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						charger);
-	int ret = 0;
-
-	if (strncmp(buf, "auto", 4) == 0)
-		bq2415x_set_autotimer(bq, 1);
-	else if (strncmp(buf, "off", 3) == 0)
-		bq2415x_set_autotimer(bq, 0);
-	else
-		ret = bq2415x_exec_command(bq, BQ2415X_TIMER_RESET);
-
-	if (ret < 0)
-		return ret;
 	return count;
 }
 
-/* show timer entry (auto or off) */
-static ssize_t bq2415x_sysfs_show_timer(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-
-	if (bq->timer_error)
-		return sprintf(buf, "%s\n", bq->timer_error);
-
-	if (bq->autotimer)
-		return sprintf(buf, "auto\n");
-	return sprintf(buf, "off\n");
-}
-
-/*
- * set mode entry:
- *    auto - if automode is supported, enable it and set mode to reported
- *    none - disable charger and boost mode
- *    host - charging mode for host/hub chargers (current limit 500mA)
- *    dedicated - charging mode for dedicated chargers (unlimited current limit)
- *    boost - disable charger and enable boost mode
- */
-static ssize_t bq2415x_sysfs_set_mode(struct device *dev,
-				      struct device_attribute *attr,
-				      const char *buf,
-				      size_t count)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	enum bq2415x_mode mode;
-	int ret = 0;
-
-	if (strncmp(buf, "auto", 4) == 0) {
-		if (bq->automode < 0)
-			return -ENOSYS;
-		bq->automode = 1;
-		mode = bq->reported_mode;
-	} else if (strncmp(buf, "off", 3) == 0) {
-		if (bq->automode > 0)
-			bq->automode = 0;
-		mode = BQ2415X_MODE_OFF;
-	} else if (strncmp(buf, "none", 4) == 0) {
-		if (bq->automode > 0)
-			bq->automode = 0;
-		mode = BQ2415X_MODE_NONE;
-	} else if (strncmp(buf, "host", 4) == 0) {
-		if (bq->automode > 0)
-			bq->automode = 0;
-		mode = BQ2415X_MODE_HOST_CHARGER;
-	} else if (strncmp(buf, "dedicated", 9) == 0) {
-		if (bq->automode > 0)
-			bq->automode = 0;
-		mode = BQ2415X_MODE_DEDICATED_CHARGER;
-	} else if (strncmp(buf, "boost", 5) == 0) {
-		if (bq->automode > 0)
-			bq->automode = 0;
-		mode = BQ2415X_MODE_BOOST;
-	} else if (strncmp(buf, "reset", 5) == 0) {
-		bq2415x_reset_chip(bq);
-		bq2415x_set_defaults(bq);
-		if (bq->automode <= 0)
-			return count;
-		bq->automode = 1;
-		mode = bq->reported_mode;
-	} else {
-		return -EINVAL;
-	}
-
-	ret = bq2415x_set_mode(bq, mode);
-	if (ret < 0)
-		return ret;
-	return count;
-}
-
-/* show mode entry (auto, none, host, dedicated or boost) */
-static ssize_t bq2415x_sysfs_show_mode(struct device *dev,
-				       struct device_attribute *attr,
-				       char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						charger);
-	ssize_t ret = 0;
-
-	if (bq->automode > 0)
-		ret += sprintf(buf+ret, "auto (");
-
-	switch (bq->mode) {
-	case BQ2415X_MODE_OFF:
-		ret += sprintf(buf+ret, "off");
-		break;
-	case BQ2415X_MODE_NONE:
-		ret += sprintf(buf+ret, "none");
-		break;
-	case BQ2415X_MODE_HOST_CHARGER:
-		ret += sprintf(buf+ret, "host");
-		break;
-	case BQ2415X_MODE_DEDICATED_CHARGER:
-		ret += sprintf(buf+ret, "dedicated");
-		break;
-	case BQ2415X_MODE_BOOST:
-		ret += sprintf(buf+ret, "boost");
-		break;
-	}
-
-	if (bq->automode > 0)
-		ret += sprintf(buf+ret, ")");
-
-	ret += sprintf(buf+ret, "\n");
-	return ret;
-}
-
-/* show reported_mode entry (none, host, dedicated or boost) */
-static ssize_t bq2415x_sysfs_show_reported_mode(struct device *dev,
-						struct device_attribute *attr,
-						char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-
-	if (bq->automode < 0)
-		return -EINVAL;
-
-	switch (bq->reported_mode) {
-	case BQ2415X_MODE_OFF:
-		return sprintf(buf, "off\n");
-	case BQ2415X_MODE_NONE:
-		return sprintf(buf, "none\n");
-	case BQ2415X_MODE_HOST_CHARGER:
-		return sprintf(buf, "host\n");
-	case BQ2415X_MODE_DEDICATED_CHARGER:
-		return sprintf(buf, "dedicated\n");
-	case BQ2415X_MODE_BOOST:
-		return sprintf(buf, "boost\n");
-	}
-
-	return -EINVAL;
-}
-
-/* directly set raw value to chip register, format: 'register value' */
-static ssize_t bq2415x_sysfs_set_registers(struct device *dev,
-					   struct device_attribute *attr,
-					   const char *buf,
-					   size_t count)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	ssize_t ret = 0;
-	unsigned int reg;
-	unsigned int val;
-
-	if (sscanf(buf, "%x %x", &reg, &val) != 2)
-		return -EINVAL;
-
-	if (reg > 4 || val > 255)
-		return -EINVAL;
-
-	ret = bq2415x_i2c_write(bq, reg, val);
-	if (ret < 0)
-		return ret;
-	return count;
-}
-
-/* print value of chip register, format: 'register=value' */
-static ssize_t bq2415x_sysfs_print_reg(struct bq2415x_device *bq,
-				       u8 reg,
-				       char *buf)
-{
-	int ret = bq2415x_i2c_read(bq, reg);
-
-	if (ret < 0)
-		return sprintf(buf, "%#.2x=error %d\n", reg, ret);
-	return sprintf(buf, "%#.2x=%#.2x\n", reg, ret);
-}
-
-/* show all raw values of chip register, format per line: 'register=value' */
-static ssize_t bq2415x_sysfs_show_registers(struct device *dev,
-					    struct device_attribute *attr,
-					    char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	ssize_t ret = 0;
-
-	ret += bq2415x_sysfs_print_reg(bq, BQ2415X_REG_STATUS, buf+ret);
-	ret += bq2415x_sysfs_print_reg(bq, BQ2415X_REG_CONTROL, buf+ret);
-	ret += bq2415x_sysfs_print_reg(bq, BQ2415X_REG_VOLTAGE, buf+ret);
-	ret += bq2415x_sysfs_print_reg(bq, BQ2415X_REG_VENDER, buf+ret);
-	ret += bq2415x_sysfs_print_reg(bq, BQ2415X_REG_CURRENT, buf+ret);
-	return ret;
-}
-
-/* set current and voltage limit entries (in mA or mV) */
-static ssize_t bq2415x_sysfs_set_limit(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf,
-				       size_t count)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	long val;
-	int ret;
-
-	if (kstrtol(buf, 10, &val) < 0)
-		return -EINVAL;
-
-	if (strcmp(attr->attr.name, "current_limit") == 0)
-		ret = bq2415x_set_current_limit(bq, val);
-	else if (strcmp(attr->attr.name, "weak_battery_voltage") == 0)
-		ret = bq2415x_set_weak_battery_voltage(bq, val);
-	else if (strcmp(attr->attr.name, "battery_regulation_voltage") == 0)
-		ret = bq2415x_set_battery_regulation_voltage(bq, val);
-	else if (strcmp(attr->attr.name, "charge_current") == 0)
-		ret = bq2415x_set_charge_current(bq, val);
-	else if (strcmp(attr->attr.name, "termination_current") == 0)
-		ret = bq2415x_set_termination_current(bq, val);
-	else
-		return -EINVAL;
-
-	if (ret < 0)
-		return ret;
-	return count;
-}
-
-/* show current and voltage limit entries (in mA or mV) */
-static ssize_t bq2415x_sysfs_show_limit(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	int ret;
-
-	if (strcmp(attr->attr.name, "current_limit") == 0)
-		ret = bq2415x_get_current_limit(bq);
-	else if (strcmp(attr->attr.name, "weak_battery_voltage") == 0)
-		ret = bq2415x_get_weak_battery_voltage(bq);
-	else if (strcmp(attr->attr.name, "battery_regulation_voltage") == 0)
-		ret = bq2415x_get_battery_regulation_voltage(bq);
-	else if (strcmp(attr->attr.name, "charge_current") == 0)
-		ret = bq2415x_get_charge_current(bq);
-	else if (strcmp(attr->attr.name, "termination_current") == 0)
-		ret = bq2415x_get_termination_current(bq);
-	else
-		return -EINVAL;
-
-	if (ret < 0)
-		return ret;
-	return sprintf(buf, "%d\n", ret);
-}
-
-/* set *_enable entries */
-static ssize_t bq2415x_sysfs_set_enable(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf,
-					size_t count)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	enum bq2415x_command command;
-	long val;
-	int ret;
-
-	if (kstrtol(buf, 10, &val) < 0)
-		return -EINVAL;
-
-	if (strcmp(attr->attr.name, "charge_termination_enable") == 0)
-		command = val ? BQ2415X_CHARGE_TERMINATION_ENABLE :
-			BQ2415X_CHARGE_TERMINATION_DISABLE;
-	else if (strcmp(attr->attr.name, "high_impedance_enable") == 0)
-		command = val ? BQ2415X_HIGH_IMPEDANCE_ENABLE :
-			BQ2415X_HIGH_IMPEDANCE_DISABLE;
-	else if (strcmp(attr->attr.name, "otg_pin_enable") == 0)
-		command = val ? BQ2415X_OTG_PIN_ENABLE :
-			BQ2415X_OTG_PIN_DISABLE;
-	else if (strcmp(attr->attr.name, "stat_pin_enable") == 0)
-		command = val ? BQ2415X_STAT_PIN_ENABLE :
-			BQ2415X_STAT_PIN_DISABLE;
-	else
-		return -EINVAL;
-
-	ret = bq2415x_exec_command(bq, command);
-	if (ret < 0)
-		return ret;
-	return count;
-}
-
-/* show *_enable entries */
-static ssize_t bq2415x_sysfs_show_enable(struct device *dev,
-					 struct device_attribute *attr,
-					 char *buf)
-{
-	struct power_supply *psy = dev_get_drvdata(dev);
-	struct bq2415x_device *bq = container_of(psy, struct bq2415x_device,
-						 charger);
-	enum bq2415x_command command;
-	int ret;
-
-	if (strcmp(attr->attr.name, "charge_termination_enable") == 0)
-		command = BQ2415X_CHARGE_TERMINATION_STATUS;
-	else if (strcmp(attr->attr.name, "high_impedance_enable") == 0)
-		command = BQ2415X_HIGH_IMPEDANCE_STATUS;
-	else if (strcmp(attr->attr.name, "otg_pin_enable") == 0)
-		command = BQ2415X_OTG_PIN_STATUS;
-	else if (strcmp(attr->attr.name, "stat_pin_enable") == 0)
-		command = BQ2415X_STAT_PIN_STATUS;
-	else
-		return -EINVAL;
-
-	ret = bq2415x_exec_command(bq, command);
-	if (ret < 0)
-		return ret;
-	return sprintf(buf, "%d\n", ret);
-}
-
-static DEVICE_ATTR(current_limit, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_limit, bq2415x_sysfs_set_limit);
-static DEVICE_ATTR(weak_battery_voltage, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_limit, bq2415x_sysfs_set_limit);
-static DEVICE_ATTR(battery_regulation_voltage, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_limit, bq2415x_sysfs_set_limit);
-static DEVICE_ATTR(charge_current, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_limit, bq2415x_sysfs_set_limit);
-static DEVICE_ATTR(termination_current, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_limit, bq2415x_sysfs_set_limit);
-
-static DEVICE_ATTR(charge_termination_enable, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_enable, bq2415x_sysfs_set_enable);
-static DEVICE_ATTR(high_impedance_enable, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_enable, bq2415x_sysfs_set_enable);
-static DEVICE_ATTR(otg_pin_enable, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_enable, bq2415x_sysfs_set_enable);
-static DEVICE_ATTR(stat_pin_enable, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_enable, bq2415x_sysfs_set_enable);
-
-static DEVICE_ATTR(reported_mode, S_IRUGO,
-		bq2415x_sysfs_show_reported_mode, NULL);
-static DEVICE_ATTR(mode, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_mode, bq2415x_sysfs_set_mode);
-static DEVICE_ATTR(timer, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_timer, bq2415x_sysfs_set_timer);
-
-static DEVICE_ATTR(registers, S_IWUSR | S_IRUGO,
-		bq2415x_sysfs_show_registers, bq2415x_sysfs_set_registers);
-
-static DEVICE_ATTR(otg_status, S_IRUGO, bq2415x_sysfs_show_status, NULL);
-static DEVICE_ATTR(charge_status, S_IRUGO, bq2415x_sysfs_show_status, NULL);
-static DEVICE_ATTR(boost_status, S_IRUGO, bq2415x_sysfs_show_status, NULL);
-static DEVICE_ATTR(fault_status, S_IRUGO, bq2415x_sysfs_show_status, NULL);
-
-static struct attribute *bq2415x_sysfs_attributes[] = {
-	/*
-	 * TODO: some (appropriate) of these attrs should be switched to
-	 * use power supply class props.
-	 */
-	&dev_attr_current_limit.attr,
-	&dev_attr_weak_battery_voltage.attr,
-	&dev_attr_battery_regulation_voltage.attr,
-	&dev_attr_charge_current.attr,
-	&dev_attr_termination_current.attr,
-
-	&dev_attr_charge_termination_enable.attr,
-	&dev_attr_high_impedance_enable.attr,
-	&dev_attr_otg_pin_enable.attr,
-	&dev_attr_stat_pin_enable.attr,
-
-	&dev_attr_reported_mode.attr,
-	&dev_attr_mode.attr,
-	&dev_attr_timer.attr,
-
-	&dev_attr_registers.attr,
-
-	&dev_attr_otg_status.attr,
-	&dev_attr_charge_status.attr,
-	&dev_attr_boost_status.attr,
-	&dev_attr_fault_status.attr,
-	NULL,
-};
-
-static const struct attribute_group bq2415x_sysfs_attr_group = {
-	.attrs = bq2415x_sysfs_attributes,
-};
-
-static int bq2415x_sysfs_init(struct bq2415x_device *bq)
-{
-	return sysfs_create_group(&bq->charger.dev->kobj,
-			&bq2415x_sysfs_attr_group);
-}
-
-static void bq2415x_sysfs_exit(struct bq2415x_device *bq)
-{
-	sysfs_remove_group(&bq->charger.dev->kobj, &bq2415x_sysfs_attr_group);
-}
-
-/* main bq2415x probe function */
-static int bq2415x_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
-{
-	int ret;
-	int num;
-	char *name;
-	struct bq2415x_device *bq;
-	struct device_node *np = client->dev.of_node;
-	struct bq2415x_platform_data *pdata = client->dev.platform_data;
-
-	if (!np && !pdata) {
-		dev_err(&client->dev, "platform data missing\n");
-		return -ENODEV;
-	}
-
-	/* Get new ID for the new device */
-	mutex_lock(&bq2415x_id_mutex);
-	num = idr_alloc(&bq2415x_id, client, 0, 0, GFP_KERNEL);
-	mutex_unlock(&bq2415x_id_mutex);
-	if (num < 0)
-		return num;
-
-	name = kasprintf(GFP_KERNEL, "%s-%d", id->name, num);
-	if (!name) {
-		dev_err(&client->dev, "failed to allocate device name\n");
-		ret = -ENOMEM;
-		goto error_1;
-	}
-
-	bq = devm_kzalloc(&client->dev, sizeof(*bq), GFP_KERNEL);
-	if (!bq) {
-		dev_err(&client->dev, "failed to allocate device data\n");
-		ret = -ENOMEM;
-		goto error_2;
-	}
-
-	if (np) {
-		bq->notify_psy = power_supply_get_by_phandle(np, "ti,usb-charger-detection");
-
-		if (!bq->notify_psy)
-			return -EPROBE_DEFER;
-	}
-	else if (pdata->notify_device)
-		bq->notify_psy = power_supply_get_by_name(pdata->notify_device);
-	else
-		bq->notify_psy = NULL;
-
-	i2c_set_clientdata(client, bq);
-
-	bq->id = num;
-	bq->dev = &client->dev;
-	bq->chip = id->driver_data;
-	bq->name = name;
-	bq->mode = BQ2415X_MODE_OFF;
-	bq->reported_mode = BQ2415X_MODE_OFF;
-	bq->autotimer = 0;
-	bq->automode = 0;
-
-	if (np) {
-		ret = of_property_read_u32(np, "ti,current-limit",
-				&bq->init_data.current_limit);
-		if (ret)
-			return ret;
-		ret = of_property_read_u32(np, "ti,weak-battery-voltage",
-				&bq->init_data.weak_battery_voltage);
-		if (ret)
-			return ret;
-		ret = of_property_read_u32(np, "ti,battery-regulation-voltage",
-				&bq->init_data.battery_regulation_voltage);
-		if (ret)
-			return ret;
-		ret = of_property_read_u32(np, "ti,charge-current",
-				&bq->init_data.charge_current);
-		if (ret)
-			return ret;
-		ret = of_property_read_u32(np, "ti,termination-current",
-				&bq->init_data.termination_current);
-		if (ret)
-			return ret;
-		ret = of_property_read_u32(np, "ti,resistor-sense",
-				&bq->init_data.resistor_sense);
-		if (ret)
-			return ret;
-	} else {
-		memcpy(&bq->init_data, pdata, sizeof(bq->init_data));
-	}
-
-	bq2415x_reset_chip(bq);
-
-	ret = bq2415x_power_supply_init(bq);
-	if (ret) {
-		dev_err(bq->dev, "failed to register power supply: %d\n", ret);
-		goto error_2;
-	}
-
-	ret = bq2415x_sysfs_init(bq);
-	if (ret) {
-		dev_err(bq->dev, "failed to create sysfs entries: %d\n", ret);
-		goto error_3;
-	}
-
-	ret = bq2415x_set_defaults(bq);
-	if (ret) {
-		dev_err(bq->dev, "failed to set default values: %d\n", ret);
-		goto error_4;
-	}
-
-	if (bq->notify_psy) {
-		bq->nb.notifier_call = bq2415x_notifier_call;
-		ret = power_supply_reg_notifier(&bq->nb);
-		if (ret) {
-			dev_err(bq->dev, "failed to reg notifier: %d\n", ret);
-			goto error_5;
-		}
-
-		/* Query for initial reported_mode and set it */
-		bq2415x_notifier_call(&bq->nb, PSY_EVENT_PROP_CHANGED, bq->notify_psy);
-		bq2415x_set_mode(bq, bq->reported_mode);
-
-		bq->automode = 1;
-		dev_info(bq->dev, "automode enabled\n");
-	} else {
-		bq->automode = -1;
-		dev_info(bq->dev, "automode not supported\n");
-	}
-
-	INIT_DELAYED_WORK(&bq->work, bq2415x_timer_work);
-	bq2415x_set_autotimer(bq, 1);
-
-	dev_info(bq->dev, "driver registered\n");
-	return 0;
-
-error_5:
-error_4:
-	bq2415x_sysfs_exit(bq);
-error_3:
-	bq2415x_power_supply_exit(bq);
-error_2:
-	kfree(name);
-error_1:
-	mutex_lock(&bq2415x_id_mutex);
-	idr_remove(&bq2415x_id, num);
-	mutex_unlock(&bq2415x_id_mutex);
-
-	return ret;
-}
-
-/* main bq2415x remove function */
-
-static int bq2415x_remove(struct i2c_client *client)
-{
-	struct bq2415x_device *bq = i2c_get_clientdata(client);
-
-	if (bq->notify_psy)
-		power_supply_unreg_notifier(&bq->nb);
-
-	bq2415x_sysfs_exit(bq);
-	bq2415x_power_supply_exit(bq);
-
-	bq2415x_reset_chip(bq);
-
-	mutex_lock(&bq2415x_id_mutex);
-	idr_remove(&bq2415x_id, bq->id);
-	mutex_unlock(&bq2415x_id_mutex);
-
-	dev_info(bq->dev, "driver unregistered\n");
-
-	kfree(bq->name);
-
-	return 0;
-}
-
-static const struct i2c_device_id bq2415x_i2c_id_table[] = {
-	{ "bq2415x", BQUNKNOWN },
-	{ "bq24150", BQ24150 },
-	{ "bq24150a", BQ24150A },
-	{ "bq24151", BQ24151 },
-	{ "bq24151a", BQ24151A },
-	{ "bq24152", BQ24152 },
-	{ "bq24153", BQ24153 },
-	{ "bq24153a", BQ24153A },
-	{ "bq24155", BQ24155 },
-	{ "bq24156", BQ24156 },
-	{ "bq24156a", BQ24156A },
-	{ "bq24158", BQ24158 },
-	{},
-};
-MODULE_DEVICE_TABLE(i2c, bq2415x_i2c_id_table);
-
-static struct i2c_driver bq2415x_driver = {
-	.driver = {
-		.name = "bq2415x-charger",
+static struct device_attribute dbg_logs_on_off_attr = {
+	.attr = {
+		.name = "dbg_logs_on_off",
+		.mode = S_IRUSR | S_IWUSR,
 	},
-	.probe = bq2415x_probe,
-	.remove = bq2415x_remove,
-	.id_table = bq2415x_i2c_id_table,
+	.show = dbg_logs_show,
+	.store = dbg_logs_store,
 };
-module_i2c_driver(bq2415x_driver);
 
-MODULE_AUTHOR("Pali Rohár <pali.rohar@gmail.com>");
-MODULE_DESCRIPTION("bq2415x charger driver");
-MODULE_LICENSE("GPL");
+/**
+ * bq2415x_setup_dbglogs_sysfs_attr	Sets up dbg_logs_on_off sysfs entry
+ *					for debug logs control for bq2415x
+ *					i2c device
+ * @dev					[in] pointer to device structure
+ *
+ */
+static void bq2415x_setup_dbglogs_sysfs_attr(struct device *dev)
+{
+	int err;
+
+	err = device_create_file(dev, &dbg_logs_on_off_attr);
+	if (err)
+		pr_err("Unable to create sysfs entry: '%s'\n",
+				dbg_logs_on_off_attr.attr.name);
+}
+
+
+static int bq2415x_i2c_probe(struct i2c_client *client,
+			const struct i2c_device_id *id)
+{
+	struct usb_phy *otg_handle;
+	struct bq2415x_charger *chrgr;
+	struct device *dev = &client->dev;
+	struct device_node *np = dev->of_node;
+	bool wtd_expired;
+	u8 ic_info, vendor_info, pn_info, rev_info;
+	int ret;
+
+	INIT_CHARGER_DEBUG_ARRAY(chrgr_dbg);
+
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_PROBE, 0, 0);
+
+	chrgr = (struct bq2415x_charger *)id->driver_data;
+	if (!chrgr)
+		return -ENODEV;
+
+	/* Get pinctrl configurations */
+	chrgr->pinctrl = devm_pinctrl_get(&client->dev);
+	if (IS_ERR(chrgr->pinctrl))
+		BUG();
+
+	chrgr->pins_default = pinctrl_lookup_state(chrgr->pinctrl,
+						PINCTRL_STATE_DEFAULT);
+	if (IS_ERR(chrgr->pins_default))
+		dev_err(dev, "could not get default pinstate\n");
+
+	chrgr->pins_sleep = pinctrl_lookup_state(chrgr->pinctrl,
+						PINCTRL_STATE_SLEEP);
+	if (IS_ERR(chrgr->pins_sleep))
+		dev_err(dev, "could not get sleep pinstate\n");
+
+	chrgr->pins_inactive = pinctrl_lookup_state(chrgr->pinctrl,
+						"inactive");
+	if (IS_ERR(chrgr->pins_inactive))
+		dev_err(dev, "could not get inactive pinstate\n");
+
+	chrgr->pins_active = pinctrl_lookup_state(chrgr->pinctrl,
+						"active");
+	if (IS_ERR(chrgr->pins_active))
+		dev_err(dev, "could not get active pinstate\n");
+
+	/* Register i2c clientdata before calling pinctrl */
+	i2c_set_clientdata(client, chrgr);
+
+	pr_info("%s\n", __func__);
+
+	chrgr->client = client;
+
+	otg_handle = usb_get_phy(USB_PHY_TYPE_USB2);
+	if (otg_handle == NULL) {
+		pr_err("ERROR!: getting OTG transceiver failed\n");
+		return -EINVAL;
+	}
+	chrgr->otg_handle = otg_handle;
+
+	/* Wait for bq2415x idi device to map io */
+	if (chrgr->ctrl_io == NULL)
+		BUG();
+
+	/*
+	 * Get interrupt from device tree
+	 */
+	chrgr->irq = irq_of_parse_and_map(np, 0);
+	if (!chrgr->irq) {
+		ret = -EINVAL;
+		pr_err("can't get irq\n");
+		goto remap_fail;
+	}
+	client->irq = chrgr->irq;
+
+	/* Setup the PMU registers. The charger IC reset line
+	is deasserted at this point. From this point onwards
+	the charger IC will act upon the values stored in its
+	registers instead of displaying default behaviour  */
+	ret = bq2415x_configure_pmu_regs(chrgr);
+	if (ret != 0)
+		goto pre_fail;
+
+	/* Check if the HW is supported */
+	bq2415x_attr_read(client, VENDOR_INFO, &vendor_info);
+	bq2415x_attr_read(client, PN_INFO, &pn_info);
+	bq2415x_attr_read(client, REV_INFO, &rev_info);
+	pr_info("Read charger IC info: vendor=%d, pn=%d, rev=%d\n",
+					vendor_info, pn_info, rev_info);
+
+
+	/* If charger IC is later than version 1.0 then the safety
+	registers need to be written before any others to prevent
+	the default voltage and current safety limits from being assumed.
+	The values written are the maximum values possible to allow freedom
+	of setting all required settings during runtime. */
+	if (1) {
+		ret = bq2415x_attr_write(client, SAFETY_REG, 0xFF);
+		if (ret) {
+			pr_err("bq2415x write SAFETY_REG error, ret = %d\n",
+								ret);
+			ret = -ENODEV;
+			goto pre_fail;
+		}
+	}
+
+	/* Trigger charger watchdog to prevent expiry if the watchdog
+	is about to expire due to a reset sequence having taken a long time.
+	Triggering the watchdog if it has already expired has no effect,
+	i.e. charging will not start again and the watchdog expiration flag in
+	the interrupt register will not be cleared. */
+	ret = bq2415x_trigger_wtd(chrgr);
+	if (ret != 0)
+		goto pre_fail;
+
+
+	INIT_DELAYED_WORK(&chrgr->charging_work, bq2415x_charging_worker);
+	INIT_DELAYED_WORK(&chrgr->boost_work, bq2415x_boost_worker);
+
+	sema_init(&chrgr->prop_lock, 1);
+
+	/* Set up the wake lock to prevent suspend when charging. */
+	wake_lock_init(&chrgr->suspend_lock,
+			WAKE_LOCK_SUSPEND,
+			"bq2415x_wake_lock");
+
+	if (unfreezable_bh_create(&chrgr->chgint_bh, "chrgr_wq",
+			"bq2415x_evt_lock", bq2415x_chgint_cb_work_func)) {
+		ret = -ENOMEM;
+		goto wq_creation_fail;
+	}
+
+	ret = bq2415x_get_clr_wdt_expiry_flag(chrgr);
+	if (ret < 0)
+		goto fail;
+
+	wtd_expired = (ret == T32_TO_OCCURRED) ? true : false;
+
+	/* Update internal respresentation of charging status.
+	chrgr->state.charging_enabled is preinitialised to true.
+	It will be set false if the charger watchdog is found to be
+	expired at boot. Charging will either be enabled or disabled
+	according to the outcome of the first iteration of the
+	PS Charger safety loop. */
+	if (wtd_expired) {
+		pr_err("Charging watchdog expiration detected!\n");
+		chrgr->state.charging_enabled = false;
+	}
+
+	ret = bq2415x_configure_chip(chrgr, chrgr->state.charging_enabled);
+	if (ret != 0)
+		goto fail;
+
+	ret = bq2415x_set_pinctrl_state(client, chrgr->pins_active);
+	if (ret != 0)
+		return ret;
+
+	chrgr->usb_psy.name           = "usb_charger";
+	chrgr->usb_psy.type           = POWER_SUPPLY_TYPE_USB;
+	chrgr->usb_psy.properties     = bq2415x_power_props;
+	chrgr->usb_psy.num_properties = ARRAY_SIZE(bq2415x_power_props);
+	chrgr->usb_psy.get_property   = bq2415x_charger_get_property;
+	chrgr->usb_psy.set_property   = bq2415x_charger_set_property;
+	chrgr->usb_psy.supported_cables = POWER_SUPPLY_CHARGER_TYPE_USB_SDP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_DCP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_CDP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING;
+	chrgr->usb_psy.supplied_to = bq2415x_supplied_to;
+	chrgr->usb_psy.num_supplicants = ARRAY_SIZE(bq2415x_supplied_to);
+	chrgr->usb_psy.throttle_states = bq2415x_dummy_throttle_states;
+	chrgr->usb_psy.num_throttle_states =
+				ARRAY_SIZE(bq2415x_dummy_throttle_states);
+
+	chrgr->current_psy = &chrgr->usb_psy;
+
+	ret = power_supply_register(&client->dev, &chrgr->usb_psy);
+	if (ret)
+		goto fail;
+
+	chrgr->ac_psy.name           = "ac_charger";
+	chrgr->ac_psy.type           = POWER_SUPPLY_TYPE_MAINS;
+	chrgr->ac_psy.properties     = bq2415x_power_props;
+	chrgr->ac_psy.num_properties = ARRAY_SIZE(bq2415x_power_props);
+	chrgr->ac_psy.get_property   = bq2415x_charger_get_property;
+	chrgr->ac_psy.set_property   = bq2415x_charger_set_property;
+	chrgr->ac_psy.supported_cables = POWER_SUPPLY_CHARGER_TYPE_USB_SDP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_DCP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_CDP |
+					POWER_SUPPLY_CHARGER_TYPE_USB_FLOATING;
+	chrgr->ac_psy.supplied_to = bq2415x_supplied_to;
+	chrgr->ac_psy.num_supplicants = ARRAY_SIZE(bq2415x_supplied_to);
+	chrgr->ac_psy.throttle_states = bq2415x_dummy_throttle_states;
+	chrgr->ac_psy.num_throttle_states =
+				ARRAY_SIZE(bq2415x_dummy_throttle_states);
+
+	ret = power_supply_register(&client->dev, &chrgr->ac_psy);
+	if (ret)
+		goto fail_ac_registr;
+
+
+	chrgr->ack_time = jiffies;
+
+	if (chrgr->state.charging_enabled)
+		schedule_delayed_work(&chrgr->charging_work, 0);
+
+	ret = bq2415x_configure_pmu_irq(chrgr);
+	if (ret != 0)
+		goto pmu_irq_fail;
+
+	i2c_set_clientdata(client, chrgr);
+
+	bq2415x_setup_debugfs(chrgr, &chrgr_dbg);
+	bq2415x_setup_fake_vbus_sysfs_attr(chrgr);
+
+	chrgr->state.status = BQ2415x_STATUS_READY;
+
+	/* Read the VBUS presence status for initial update by
+	making a dummy interrupt bottom half invocation */
+	queue_work(chrgr->chgint_bh.wq, &chrgr->chgint_bh.work);
+
+	if (unfreezable_bh_create(&chrgr->boost_op_bh, "boost_op_wq",
+			"bq2415x_boost_lock", bq2415x_set_boost)) {
+		ret = -ENOMEM;
+		goto pmu_irq_fail;
+	}
+
+	ret = usb_register_notifier(otg_handle, &chrgr->otg_nb);
+	if (ret) {
+		pr_err("ERROR!: registration for OTG notifications failed\n");
+		goto boost_fail;
+	}
+
+	bq2415x_setup_dbglogs_sysfs_attr(&client->dev);
+
+	device_init_wakeup(&client->dev, true);
+
+	return 0;
+
+boost_fail:
+	unfreezable_bh_destroy(&chrgr->boost_op_bh);
+pmu_irq_fail:
+	power_supply_unregister(&chrgr->ac_psy);
+fail_ac_registr:
+	power_supply_unregister(&chrgr->usb_psy);
+fail:
+	unfreezable_bh_destroy(&chrgr->chgint_bh);
+pre_fail:
+wq_creation_fail:
+remap_fail:
+	usb_put_phy(otg_handle);
+	return ret;
+}
+
+static int __exit bq2415x_i2c_remove(struct i2c_client *client)
+{
+	int ret = 0;
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(client);
+
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_REMOVE, 0, 0);
+	pr_info("%s\n", __func__);
+	free_irq(client->irq, chrgr);
+	power_supply_unregister(&chrgr->usb_psy);
+	power_supply_unregister(&chrgr->ac_psy);
+	wake_lock_destroy(&chrgr->suspend_lock);
+
+	unfreezable_bh_destroy(&chrgr->chgint_bh);
+	unfreezable_bh_destroy(&chrgr->boost_op_bh);
+
+	cancel_delayed_work_sync(&chrgr->charging_work);
+	if (chrgr->otg_handle)
+		usb_put_phy(chrgr->otg_handle);
+
+	ret = bq2415x_set_pinctrl_state(client, chrgr->pins_inactive);
+	if (ret != 0)
+		return ret;
+	bq2415x_remove_debugfs_dir(chrgr);
+
+	return 0;
+}
+
+static void idi_init(struct bq2415x_charger *chrgr,
+			void *__iomem ctrl_io,
+			struct idi_peripheral_device *ididev)
+{
+	chrgr->ctrl_io = ctrl_io;
+	chrgr->ididev = ididev;
+}
+
+static void idi_remove(struct bq2415x_charger *chrgr)
+{
+	iounmap(chrgr->ctrl_io);
+}
+
+static int bq2415x_idi_probe(struct idi_peripheral_device *ididev,
+					const struct idi_device_id *id)
+{
+	struct resource *res;
+	void __iomem *ctrl_io;
+	int ret = 0;
+
+	spin_lock_init(&chrgr_dbg.lock);
+
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_IDI_PROBE, 0, 0);
+	pr_info("%s\n", __func__);
+
+	res = idi_get_resource_byname(&ididev->resources,
+				IORESOURCE_MEM, "registers");
+
+	if (res == NULL) {
+		pr_err("getting PMU's Charger registers resources failed!\n");
+		return -EINVAL;
+	}
+
+	ctrl_io = ioremap(res->start, resource_size(res));
+
+	if (!ctrl_io) {
+		pr_err("mapping PMU's Charger registers failed!\n");
+		return -EINVAL;
+	}
+
+	/* HACK: chargers sharing same IDI device ID */
+	idi_init(&bq24158_chrgr_data, ctrl_io, ididev);
+
+	ret = idi_device_pm_set_class(ididev);
+	if (ret) {
+		pr_err("%s: Unable to register for generic pm class\n",
+								__func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int __exit bq2415x_idi_remove(struct idi_peripheral_device *ididev)
+{
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_IDI_REMOVE, 0, 0);
+	pr_info("%s\n", __func__);
+
+	idi_remove(&bq24158_chrgr_data);
+
+	return 0;
+}
+
+/**
+ * bq2415x_suspend() - Called when the system is attempting to suspend.
+ * If charging is in progress EBUSY is returned to abort the suspend and
+ * an error is logged, as the wake lock should prevent the situation.
+ * @dev		[in] Pointer to the device.(not used)
+ * returns	EBUSY if charging is ongoing, else 0
+ */
+static int bq2415x_suspend(struct device *dev)
+{
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+
+	if (chrgr->state.charging_enabled) {
+		/* If charging is in progess, prevent suspend. */
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SUSPEND_ERROR, 0, 0);
+		return -EBUSY;
+	} else {
+		/* Not charging - allow suspend. */
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SUSPEND_OK, 0, 0);
+		if (device_may_wakeup(dev)) {
+			pr_info("bq: enable wakeirq\n");
+			enable_irq_wake(chrgr->irq);
+		}
+		unfreezable_bh_suspend(&chrgr->chgint_bh);
+		unfreezable_bh_suspend(&chrgr->boost_op_bh);
+		return 0;
+	}
+}
+
+/**
+ * bq2415x_resume() - Called when the system is resuming from suspend.
+ * @dev		[in] Pointer to the device.(not used)
+ * returns	0
+ */
+static int bq2415x_resume(struct device *dev)
+{
+	struct bq2415x_charger *chrgr = i2c_get_clientdata(to_i2c_client(dev));
+
+	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_RESUME, 0, 0);
+
+	unfreezable_bh_resume(&chrgr->chgint_bh);
+	unfreezable_bh_resume(&chrgr->boost_op_bh);
+	if (device_may_wakeup(dev)) {
+		pr_info("bq: disable wakeirq\n");
+		disable_irq_wake(chrgr->irq);
+	}
+
+	return 0;
+}
+
+const struct dev_pm_ops bq2415x_pm = {
+	.suspend = bq2415x_suspend,
+	.resume = bq2415x_resume,
+};
+
+
+static const struct i2c_device_id bq2415x_id[] = {
+	{ "bq2415x_charger", (kernel_ulong_t)&bq24158_chrgr_data },
+	{ }
+};
+
+MODULE_DEVICE_TABLE(i2c, bq2415x_id);
+
+static struct i2c_driver bq2415x_i2c_driver = {
+	.probe          = bq2415x_i2c_probe,
+	.remove         = bq2415x_i2c_remove,
+	.id_table       = bq2415x_id,
+	.driver = {
+		.name   = BQ2415x_NAME,
+		.owner  = THIS_MODULE,
+		.pm = &bq2415x_pm,
+	},
+};
+
+static const struct idi_device_id idi_ids[] = {
+	{
+		.vendor = IDI_ANY_ID,
+		.device = IDI_DEVICE_ID_INTEL_AG620,
+		.subdevice = IDI_SUBDEVICE_ID_INTEL_CHG,
+	},
+
+	{ /* end: all zeroes */},
+};
+
+static struct idi_peripheral_driver bq2415x_idi_driver = {
+	.driver = {
+		.owner  = THIS_MODULE,
+		.name   = "chgr_idi",
+		.pm = NULL,
+	},
+	.p_type = IDI_CHG,
+	.id_table = idi_ids,
+	.probe  = bq2415x_idi_probe,
+	.remove = bq2415x_idi_remove,
+};
+
+
+static int __init bq2415x_init(void)
+{
+	int ret;
+
+	ret = idi_register_peripheral_driver(&bq2415x_idi_driver);
+	if (ret)
+		return ret;
+
+
+	ret = i2c_add_driver(&bq2415x_i2c_driver);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+late_initcall(bq2415x_init);
+
+static void __exit bq2415x_exit(void)
+{
+	i2c_del_driver(&bq2415x_i2c_driver);
+}
+module_exit(bq2415x_exit);
+
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Charger Driver for BQ2415x charger IC");

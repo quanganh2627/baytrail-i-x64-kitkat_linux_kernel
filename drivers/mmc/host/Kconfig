@@ -71,6 +71,14 @@ config MMC_SDHCI_PCI
 config	MMC_SDHCI_XGOLD
 	bool
 
+config	MMC_XGOLD_SDCARD_DETECT_POSITIVE
+	tristate "WorkAround for SDCARD detect"
+	help
+	  This work around helps Sofia3G SOC to enable to use
+	  high->low change on detect pin.
+
+	  If you want to use this kind of sdcard connector, say Y.
+	  If unsure, say N.
 
 config MMC_XGOLD
 	tristate "XGOLD Multimedia Card Interface support"

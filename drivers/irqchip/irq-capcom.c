@@ -130,8 +130,9 @@ static void xgold_irq_capcom_maskack(struct irq_data *data)
 static int xgold_irq_capcom_set_type(struct irq_data *data, unsigned int type)
 {
 	struct xgold_irq_chip_data *chipdata = irq_data_get_irq_chip_data(data);
-	u32 irq = data->hwirq;	/*xgold_find_hw_irq(data->domain, data->irq); */
+	u32 irq = data->hwirq;
 	u32 edge = XGOLD_CC_IRQ_TYPE_EDGE_DISABLED;
+	pr_debug("%s(%d, %#x)\n", __func__, irq, type);
 
 	if (!chipdata->edge[irq])
 		return 0;
@@ -193,7 +194,7 @@ static int __init xgold_irq_capcom_of_init(struct device_node *np,
 		return -ENOMEM;
 
 	data->chip = &xgold_irq_capcom_chip;
-	data->type = XGOLD_IRQ_DOMAIN_N2N;
+	data->type = XGOLD_IRQ_DOMAIN_N21;
 
 	/* extract info from dt */
 	xgold_irq_of_get(np, data);
@@ -264,8 +265,10 @@ static int __init xgold_capcom_probe(struct platform_device *pdev)
 
 	/* extract pm info */
 	pdata->pm_platdata = of_device_state_pm_setup(np);
-	if (IS_ERR(pdata->pm_platdata))
-		pdata->pm_platdata = NULL;
+	if (IS_ERR(pdata->pm_platdata)) {
+		dev_err(&pdev->dev, "no pm info available\n");
+		return -1;
+	}
 #endif
 
 	/* pm */

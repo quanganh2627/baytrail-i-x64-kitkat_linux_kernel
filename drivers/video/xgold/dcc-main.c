@@ -611,18 +611,17 @@ static int dcc_fence_create(struct dcc_drvdata *pdata,
 	if (point == NULL)
 		return -EINVAL;
 
-	/* Create fence */
-	fence = sync_fence_create("dcc-fence", point);
-	if (fence == NULL) {
-		sync_pt_free(point);
-		return -EINVAL;
-	}
-
 	/* Create fd */
 	fd = get_unused_fd();
 	if (fd < 0) {
 		dcc_err("fence_fd not initialized\n");
-		sync_fence_put(fence);
+		sync_pt_free(point);
+		return -EINVAL;
+	}
+
+	/* Create fence */
+	fence = sync_fence_create("dcc-fence", point);
+	if (fence == NULL) {
 		sync_pt_free(point);
 		return -EINVAL;
 	}

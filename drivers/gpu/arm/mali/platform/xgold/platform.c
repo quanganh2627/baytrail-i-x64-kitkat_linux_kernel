@@ -11,6 +11,13 @@
  * GNU General Public License for more details.
  *
  * Notes:
+ * Nov 18 2014: IMC: Adaptions for Mali Utgard driver r5p0-01rel0
+ *                   - Use Mali DT support instead of Intel bringup variant
+ *                   - Add Mali DVFS support
+ *                   - Simplify power management code on Kernel 3.14
+ *                   - New method to enable/disable DVFS via debugfs
+ *                   - Set NOC GPU QoS only on Probe and on os_resume
+ *                   - Cleanup Mali PMU function calls
  * Aug 25 2014: IMC: Support various register base adresses
  *                   Native basic support of dvfs
  * Aug 14 2013: IMC: Set QoS config
@@ -41,105 +48,143 @@
 #include "platform_debugfs.h"
 
 
-/* Throttle up and down thresholds must be in range 0..256 */
-#define GPU_THROTTLE_UP_THRESHOLD 166 /*65%*/
-#define GPU_THROTTLE_DOWN_THRESHOLD 76 /*30%*/
-
-
-#if defined(GPU_NO_PMU)
-static struct resource mali_gpu_0xE2E00000_mp1_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP1(0xE2E00000, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xE2E00000_mp2_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP2(0xE2E00000, -1, -1, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xE2E00000_mp4_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP4(0xE2E00000, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp1_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP1(0xEB300000, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp2_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP2(0xEB300000, -1, -1, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp4_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP4(0xEB300000, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1)
-};
-#else
-static struct resource mali_gpu_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP1_PMU(0xE2E00000, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_mp2_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP2_PMU(0xE2E00000, -1, -1, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_mp4_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP4_PMU(0xE2E00000, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp1_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP1_PMU(0xEB300000, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp2_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP2_PMU(0xEB300000, -1, -1, -1, -1, -1, -1)
-};
-
-static struct resource mali_gpu_0xEB300000_mp4_res[] = {
-MALI_GPU_RESOURCES_MALI400_MP4_PMU(0xEB300000, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1)
-};
-#endif
-
-
-struct xgold_mali_resources {
-	unsigned int base;
-	unsigned id;
-	struct resource *gpu_res;
-	unsigned resource_sz;
-} gpu_resources[] = {
-	{ 0xE2E00000, 1, mali_gpu_0xE2E00000_mp1_res,
-		ARRAY_SIZE(mali_gpu_0xE2E00000_mp1_res) },
-	{ 0xE2E00000, 2, mali_gpu_0xE2E00000_mp2_res,
-		ARRAY_SIZE(mali_gpu_0xE2E00000_mp2_res) },
-	{ 0xE2E00000, 4, mali_gpu_0xE2E00000_mp4_res,
-		ARRAY_SIZE(mali_gpu_0xE2E00000_mp4_res) },
-	{ 0xEB300000, 1, mali_gpu_0xEB300000_mp1_res,
-		ARRAY_SIZE(mali_gpu_0xEB300000_mp1_res) },
-	{ 0xEB300000, 2, mali_gpu_0xEB300000_mp2_res,
-		ARRAY_SIZE(mali_gpu_0xEB300000_mp2_res) },
-	{ 0xEB300000, 4, mali_gpu_0xEB300000_mp4_res,
-		ARRAY_SIZE(mali_gpu_0xEB300000_mp4_res) }
-};
-
 static struct mali_gpu_device_data xgold_mali_gpu_data;
-
 static struct mali_platform_data plf_data;
+static struct mali_platform_pm mali_dev_pm;
+
+static bool restore_gpu_qos;
 
 static struct of_device_id xgold_graphics_of_match[] = {
 	{ .compatible = "intel,graphics", },
 	{ },
 };
 
-static struct mali_platform_pm mali_dev_pm;
 
-struct mali_dev_dvfs_work_t {
-	struct work_struct my_work;
-	unsigned int util;
+#define GPU_NUM_DVFS_STEPS (GPU_NUM_PM_STATES - 1)
+struct work_struct mali_setting_clock_work;
+struct mali_gpu_clk_item mali_dvfs[GPU_NUM_DVFS_STEPS];
+struct mali_gpu_clock mali_clock_items = {
+	.item = &mali_dvfs[0],
+	.num_of_steps = GPU_NUM_DVFS_STEPS
 };
 
+static int mali_platform_dvfs_config(struct device_node *np)
+{
+	int i, length = 0;
+	struct mali_gpu_clk_item *curr_item;
+	struct property *prop;
+	const __be32 *p;
+	unsigned int val;
 
-static int mali_platform_memory_layout(struct device_node *ngpu,
-		struct mali_platform_data *pdata)
+	of_property_for_each_u32(np, "dvfs_clock_config",
+			prop, p, val)
+		length++;
+
+	if (!length) {
+		mali_err("dvfs_clock_config is not set!!\n");
+		return -1;
+	}
+
+	if (length%2) {
+		mali_err("dvfs_clock_config uneven number of tokens!!\n");
+		return -1;
+	}
+
+	if ((length/2) > mali_clock_items.num_of_steps) {
+		mali_err("dvfs_clock_config supports maximum %d slots\n",
+			mali_clock_items.num_of_steps);
+		return -1;
+	}
+
+	mali_clock_items.num_of_steps = length / 2;
+
+	mali_info("dvfs_clock_config from DT:\n");
+	for (i = 0; i < mali_clock_items.num_of_steps; i++) {
+		curr_item = &mali_clock_items.item[i];
+
+		of_property_read_u32_index(np, "dvfs_clock_config",
+			2*i, &curr_item->clock);
+		of_property_read_u32_index(np, "dvfs_clock_config",
+			2*i+1, &curr_item->vol);
+
+		mali_info("{%d, %d}\n", curr_item->clock, curr_item->vol);
+	}
+
+	return 0;
+}
+
+static void mali_dev_do_dvfs(struct work_struct *work)
+{
+	unsigned int prev_pm_state;
+	int ret;
+
+	prev_pm_state = mali_dev_pm.curr_pm_state;
+	if (prev_pm_state == mali_dev_pm.req_clock_index + 1) {
+		mali_dbg("Device pm already at state %d DVFS\n",
+			prev_pm_state);
+		return;
+	}
+
+	mali_dev_pm.curr_pm_state = mali_dev_pm.req_clock_index + 1;
+	mali_dbg("mali_gpu_set_clock_step(%d) DVFS \t-> Device pm set state to %d\n",
+		mali_dev_pm.req_clock_index, mali_dev_pm.curr_pm_state);
+	mali_dev_pause();
+	ret = platform_device_pm_set_state(mali_dev_pm.pdev,
+		mali_dev_pm.pm_states[
+		mali_dev_pm.curr_pm_state]);
+	mali_dev_resume();
+	if (ret) {
+		mali_dev_pm.curr_pm_state = prev_pm_state;
+		mali_err("Device pm set state failed (%d) DVFS\n", ret);
+	}
+}
+
+int mali_gpu_set_clock_step(int setting_clock_step)
+{
+	if (mali_dev_pm.curr_pm_state > 0) {
+		mali_dev_pm.req_clock_index = setting_clock_step;
+
+		/*
+		Only schedule clock / pm level change if DVFS is on. If it is
+		switched off, we just update the requested clock index, but
+		do not queue the work.
+		*/
+		if (!mali_dev_pm.dvfs_off) {
+			INIT_WORK(&mali_setting_clock_work, mali_dev_do_dvfs);
+			queue_work(mali_dev_pm.dvfs_wq,
+				&mali_setting_clock_work);
+		}
+
+		return MALI_TRUE;
+	} else
+		return MALI_FALSE;
+}
+
+void mali_report_gpu_clock_info(struct mali_gpu_clock **data)
+{
+	int i;
+	struct mali_gpu_clk_item *curr_item;
+
+	mali_dbg("mali_report_gpu_clock_info:\n");
+	for (i = 0; i < mali_clock_items.num_of_steps; i++) {
+		curr_item = &mali_clock_items.item[i];
+		mali_dbg("{%d, %d}\n", curr_item->clock, curr_item->vol);
+	}
+
+	*data = &mali_clock_items;
+}
+
+int mali_gpu_get_clock_step(void)
+{
+	/*
+	Always report the last requested clock index. Might not match with the
+	real clock level.
+	*/
+	return mali_dev_pm.req_clock_index;
+}
+
+
+static int mali_platform_memory_layout(struct mali_gpu_device_data *gpu_data)
 {
 	int ret = 0, length = 0;
 	u32 use_fbapi;
@@ -161,26 +206,21 @@ static int mali_platform_memory_layout(struct device_node *ngpu,
 
 	if (use_fbapi) {
 		of_property_for_each_u32(ngraphics, "intel,dcc-mem",
-				prop, p, val) {
+				prop, p, val)
 			length++;
-	};
 
-	if (length == 2) {
+		if (length == 2) {
 			ret = of_property_read_u32_array(ngraphics,
-					"intel,dcc-mem", array, 2);
-			pdata->gpu_data->fb_start = array[0];
-			pdata->gpu_data->fb_size = array[1];
-	} else {
-			pdata->gpu_data->fb_start = 0;
-			pdata->gpu_data->fb_size = 0;
+				"intel,dcc-mem", array, 2);
+			gpu_data->fb_start = array[0];
+			gpu_data->fb_size = array[1];
+		}
 	}
 
-	if (ret || (length != 2))
-			mali_dbg("Can't read property:%s\n", "intel,dcc-mem");
-	} else {
+	if (!use_fbapi || (length != 2)) {
 		mali_dbg("Framebuffer memory region not defined\n");
-		pdata->gpu_data->fb_start = 0;
-		pdata->gpu_data->fb_size = 0;
+		gpu_data->fb_start = 0;
+		gpu_data->fb_size = 0;
 	}
 
 	/* dedicated memory */
@@ -188,11 +228,11 @@ static int mali_platform_memory_layout(struct device_node *ngpu,
 					"intel,gpu-rsvd-mem", array, 2);
 	if (ret) {
 		mali_dbg("Dedicated memory region not defined\n");
-		pdata->gpu_data->dedicated_mem_start = 0;
-		pdata->gpu_data->dedicated_mem_size = 0;
+		gpu_data->dedicated_mem_start = 0;
+		gpu_data->dedicated_mem_size = 0;
 	} else {
-		pdata->gpu_data->dedicated_mem_start = array[0];
-		pdata->gpu_data->dedicated_mem_size = array[1];
+		gpu_data->dedicated_mem_start = array[0];
+		gpu_data->dedicated_mem_size = array[1];
 	}
 
 	/* shared memory */
@@ -200,115 +240,23 @@ static int mali_platform_memory_layout(struct device_node *ngpu,
 					"intel,gpu-shared-mem", array, 1);
 	if (ret) {
 		mali_dbg("Shared memory region not defined\n");
-		pdata->gpu_data->shared_mem_size = 0;
+		gpu_data->shared_mem_size = 0;
 	} else {
-		pdata->gpu_data->shared_mem_size = array[0];
+		gpu_data->shared_mem_size = array[0];
 	}
 
 	mali_info("fb   region @0x%08lx length = 0x%08lx (%liMB)\n",
-			pdata->gpu_data->fb_start,
-			pdata->gpu_data->fb_size,
-			pdata->gpu_data->fb_size/1024/1024);
+			gpu_data->fb_start,
+			gpu_data->fb_size,
+			gpu_data->fb_size/1024/1024);
 	mali_info("rsvd region @0x%08lx length = 0x%08lx (%liMB)\n",
-			pdata->gpu_data->dedicated_mem_start,
-			pdata->gpu_data->dedicated_mem_size,
-			pdata->gpu_data->dedicated_mem_size/1024/1024);
+			gpu_data->dedicated_mem_start,
+			gpu_data->dedicated_mem_size,
+			gpu_data->dedicated_mem_size/1024/1024);
 	mali_info("os   region length = 0x%08lx (%liMB)\n",
-			pdata->gpu_data->shared_mem_size,
-			pdata->gpu_data->shared_mem_size/1024/1024);
+			gpu_data->shared_mem_size,
+			gpu_data->shared_mem_size/1024/1024);
 	return 0;
-
-}
-
-static int mali_platform_update_irq(struct platform_device *pdev, int irq)
-{
-	struct resource *p_curr_mali_gpu_resource;
-	int i;
-
-	for (i = 0; i < pdev->num_resources; i++) {
-		p_curr_mali_gpu_resource = &pdev->resource[i];
-		if (p_curr_mali_gpu_resource->flags == IORESOURCE_IRQ) {
-			mali_dbg("Update %s from %d to %d\n",
-				p_curr_mali_gpu_resource->name,
-				p_curr_mali_gpu_resource->start, irq);
-			p_curr_mali_gpu_resource->start =
-				p_curr_mali_gpu_resource->end = irq;
-		}
-	}
-
-	return 0;
-}
-
-static int once_glb = 1;
-static void mali_dev_do_dvfs(struct work_struct *work)
-{
-	unsigned int util = ((struct mali_dev_dvfs_work_t *)work)->util;
-	unsigned int prev_pm_state;
-	int ret;
-
-	if (mali_dev_pm.dvfs_off)
-		goto end;
-
-	if ((util < GPU_THROTTLE_DOWN_THRESHOLD) &&
-		(mali_dev_pm.curr_pm_state > GPU_MIN_PM_STATE)) {
-		/*
-		Ramp down step by step, if utilization is lower
-		than GPU_THROTTLE_DOWN_THRESHOLD
-		*/
-		mali_dev_pm.curr_pm_state--;
-		mali_dbg("Utilization %d/256; Lowering power state to %d\n",
-			util, mali_dev_pm.curr_pm_state);
-		mali_dev_pause();
-		ret = platform_device_pm_set_state(mali_dev_pm.pdev,
-			mali_dev_pm.pm_states[
-			mali_dev_pm.curr_pm_state]);
-		mali_dev_resume();
-		if (ret != 0) {
-			mali_dev_pm.curr_pm_state++;
-			mali_err("Utilization set state failed (%d)\n", ret);
-			}
-	} else if ((util > GPU_THROTTLE_UP_THRESHOLD) &&
-		(mali_dev_pm.curr_pm_state < GPU_MAX_PM_STATE)) {
-		/*
-		Switch to maximum power level, if utilization is higher
-		than GPU_THROTTLE_UP_THRESHOLD
-		*/
-		prev_pm_state = mali_dev_pm.curr_pm_state;
-		mali_dev_pm.curr_pm_state = GPU_MAX_PM_STATE;
-		mali_dbg("Utilization %d/256, Increasing power state to %d\n",
-			util, mali_dev_pm.curr_pm_state);
-		mali_dev_pause();
-		ret = platform_device_pm_set_state(mali_dev_pm.pdev,
-			mali_dev_pm.pm_states[
-			mali_dev_pm.curr_pm_state]);
-		mali_dev_resume();
-		if (once_glb && (prev_pm_state == GPU_MIN_PM_STATE)) {
-			xgold_noc_qos_set("GPU");
-			once_glb--;
-		}
-		if (ret != 0) {
-			mali_dev_pm.curr_pm_state = prev_pm_state;
-			mali_err("Utilization PM set state failed (%d)\n", ret);
-			}
-	}
-
-end:
-	kfree(work);
-}
-
-static void mali_gpu_utilization_callback(
-	struct mali_gpu_utilization_data *data)
-{
-	mali_dev_pm.dvfs_work = kmalloc(sizeof(struct mali_dev_dvfs_work_t),
-		GFP_ATOMIC);
-
-	if (mali_dev_pm.dvfs_work) {
-		INIT_WORK((struct work_struct *)mali_dev_pm.dvfs_work,
-			mali_dev_do_dvfs);
-		mali_dev_pm.dvfs_work->util = data->utilization_gpu;
-		(void)queue_work(mali_dev_pm.dvfs_wq,
-			(struct work_struct *)mali_dev_pm.dvfs_work);
-	}
 
 }
 
@@ -324,57 +272,16 @@ int mali_platform_init(void)
 #endif
 }
 
-int mali_platform_probe(struct platform_device *pdev,
-	const struct dev_pm_ops *pdev_pm_ops)
+int mali_platform_device_init(struct platform_device *pdev)
 {
-	int ret = 0, i, mali_do_dvfs = 0;
-	unsigned int irq;
+	int ret = -1;
 	struct device_node *np;
-	unsigned int nr_cores, regbase;
 
 	mali_info("%s()\n", __func__);
 
 	np = pdev->dev.of_node;
 
-	ret = of_property_read_u32(np, "reg", &regbase);
-	if (ret) {
-		mali_err("Could not get register base adress\n");
-		return -1;
-	}
-
-	ret = of_property_read_u32(np, "intel,mali,cores", &nr_cores);
-	if (ret)
-		nr_cores = 1;
-
-	for (i = 0; i < ARRAY_SIZE(gpu_resources); i++)
-		if (gpu_resources[i].base == regbase)
-			if (gpu_resources[i].id == nr_cores)
-				break;
-
-	mali_info("Using %d cores\n",  nr_cores);
-
-	pdev->name                  = MALI_GPU_NAME_UTGARD;
-	pdev->id                    = 0;
-
-	pdev->num_resources         = gpu_resources[i].resource_sz;
-	pdev->resource              = gpu_resources[i].gpu_res;
-
-	pdev->dev.platform_data     = &xgold_mali_gpu_data;
-
 	plf_data.gpu_data = &xgold_mali_gpu_data;
-
-	/* Get shared interrupt vector from DTS */
-	irq = irq_of_parse_and_map(np, 0);
-	ret = mali_platform_update_irq(pdev, irq);
-	if (!irq || ret) {
-		mali_err("Could not update irq\n");
-		return -1;
-	}
-
-	if (of_property_read_bool(np, "intel,mali,dvfs"))
-		mali_do_dvfs = 1;
-
-	mali_info("dvfs %s\n", mali_do_dvfs?"ON":"OFF");
 
 
 #if !defined(CONFIG_PLATFORM_DEVICE_PM_VIRT)
@@ -383,7 +290,7 @@ int mali_platform_probe(struct platform_device *pdev,
 
 	plf_data.pm_platdata = of_device_state_pm_setup(np);
 	if (IS_ERR(plf_data.pm_platdata)) {
-		mali_err("Device state pm setzo\n");
+		mali_err("Device state pm setup from devicetree\n");
 		return -1;
 	}
 
@@ -424,41 +331,55 @@ int mali_platform_probe(struct platform_device *pdev,
 		return -1;
 	}
 
-	/* Set utilization callback */
-	plf_data.gpu_data->utilization_interval = 100;
-	plf_data.gpu_data->utilization_callback =
-		mali_gpu_utilization_callback;
-	mali_dev_pm.dvfs_wq = create_workqueue("CONFIG_GPU_DVFS_work_queue");
+	/* Use AMR DVFS with 500ms intervall */
+	plf_data.gpu_data->control_interval = 500;
+	plf_data.gpu_data->set_freq = mali_gpu_set_clock_step;
+	plf_data.gpu_data->get_clock_info = mali_report_gpu_clock_info;
+	plf_data.gpu_data->get_freq = mali_gpu_get_clock_step;
+
+	mali_dev_pm.dvfs_wq = alloc_ordered_workqueue("mali_setting_clock_wq",
+		WQ_NON_REENTRANT);
 	if (mali_dev_pm.dvfs_wq == 0) {
 		mali_err("Unable to create workqueue for dvfs\n");
 		return -1;
 	}
-	if (mali_do_dvfs) {
 
-		mali_dev_pm.dvfs_off = false;
-
-		mali_dev_pm.curr_pm_state = GPU_INITIAL_PM_STATE;
-		mali_dev_pm.resume_pm_state = GPU_INITIAL_PM_STATE;
-	} else {
-		mali_dev_pm.dvfs_off = true;
-
-		mali_dev_pm.curr_pm_state = GPU_MAX_PM_STATE;
-		mali_dev_pm.resume_pm_state = GPU_MAX_PM_STATE;
-	}
-
-	ret = platform_device_pm_set_state(pdev,
-		mali_dev_pm.pm_states[mali_dev_pm.curr_pm_state]);
-	if (ret < 0) {
-		mali_err("Device pm set state failed (%d)\n", ret);
-		destroy_workqueue(mali_dev_pm.dvfs_wq);
-		return ret;
-	}
+	/* Runtime resume after probe will switch things on */
+	mali_dev_pm.curr_pm_state = MALI_PLF_PM_STATE_D3;
+	mali_dev_pm.resume_pm_state = GPU_INITIAL_PM_STATE;
+	mali_dev_pm.req_clock_index = mali_dev_pm.resume_pm_state - 1;
 
 	mali_dev_pm.pdev = pdev;
 
-	ret = mali_platform_memory_layout(np, &plf_data);
-	if (ret)
+	ret = mali_platform_memory_layout(plf_data.gpu_data);
+	if (ret) {
 		mali_err("Memory layout is not set !!\n");
+		return ret;
+	}
+
+	/*
+	Disable DVFS based on DT setting; Basically it's still registered
+	and running but we ignore the clock switching requests from driver.
+	This is a debug option!
+	*/
+	mali_dev_pm.dvfs_off = of_property_read_bool(np, "dvfs_off");
+	mali_info("dvfs is %s\n", mali_dev_pm.dvfs_off?"disabled":"enabled");
+
+	ret = mali_platform_dvfs_config(np);
+	if (ret) {
+		mali_err("DVFS config is not set !!\n");
+		return ret;
+	}
+
+	ret = platform_device_add_data(pdev, &xgold_mali_gpu_data,
+		sizeof(xgold_mali_gpu_data));
+	if (ret) {
+		mali_err("Device platform_device_add_data\n");
+		return ret;
+	}
+
+	/* Need to set GPU QoS on bootup */
+	restore_gpu_qos = true;
 
 #if defined(CONFIG_PM_RUNTIME)
 	pm_runtime_set_autosuspend_delay(&(pdev->dev), 1000);
@@ -466,157 +387,143 @@ int mali_platform_probe(struct platform_device *pdev,
 	pm_runtime_enable(&(pdev->dev));
 #endif
 
-	platform_debugfs_register(&mali_dev_pm, pdev, pdev_pm_ops);
+	platform_debugfs_register(&mali_dev_pm, pdev);
 
 	return ret;
 }
 
-
-int mali_platform_remove(struct platform_device *pdev)
+int mali_platform_device_deinit(struct platform_device *pdev)
 {
 	mali_info("%s()\n", __func__);
 
+	mali_dev_pm.dvfs_off = true;
+	flush_workqueue(mali_dev_pm.dvfs_wq);
 	destroy_workqueue(mali_dev_pm.dvfs_wq);
 
 	return 0;
 }
+
 
 int mali_platform_suspend(struct platform_device *pdev)
 {
 	int ret;
 	bool skip_suspend = false;
 
-	mali_info("%s()\n", __func__);
+	mali_info("%s() \t\t-> Device pm set state to 0\n", __func__);
 
 #if defined(CONFIG_PM_RUNTIME)
-	/* Check Runtime PM status */
-	skip_suspend =
-		mali_dev_pm.runtime_suspended =
-			pm_runtime_suspended(&(pdev->dev));
+	/*
+	If we were already runtime suspended, then we can skip switching
+	to PM level zero again.
+	*/
+	skip_suspend = pm_runtime_suspended(&(pdev->dev));
 #endif
 
 	if (!skip_suspend) {
 		flush_workqueue(mali_dev_pm.dvfs_wq);
 
-#if !defined(GPU_NO_PMU)
-		ret = mali_pmu_powerdown();
-		if (ret != 0) {
-			mali_err("Device pmu powerdown failed(%d)\n", ret);
-			return ret;
-		}
-#endif
-
 		ret = platform_device_pm_set_state(pdev,
 			mali_dev_pm.pm_states[0]);
 		if (ret) {
 			mali_err("Device pm set state failed (%d)\n", ret);
-				return ret;
+			return ret;
 		} else
 			mali_dev_pm.curr_pm_state = 0;
-	}
+	} else
+		mali_dbg("Skipped, as already runtime suspended\n");
 
 	return 0;
 }
-
 
 int mali_platform_resume(struct platform_device *pdev)
 {
 	int ret;
-	once_glb = 1;
-	mali_info("%s()\n", __func__);
+	bool skip_resume = false;
 
-	ret = platform_device_pm_set_state(pdev,
-		mali_dev_pm.pm_states[mali_dev_pm.resume_pm_state]);
-	if (ret != 0) {
-		mali_err("Device pm set state failed (%d)\n", ret);
-		return ret;
-	}
-	mali_dev_pm.curr_pm_state = mali_dev_pm.resume_pm_state;
+	mali_info("%s() \t\t-> Device pm set state to %d\n", __func__,
+		mali_dev_pm.resume_pm_state);
 
-	xgold_noc_qos_set("GPU");
-#if !defined(GPU_NO_PMU)
-	ret = mali_pmu_powerup();
-	if (ret != 0) {
-		mali_err("Device pmu powerup failed (%d)\n", ret);
-		return ret;
-	}
-#endif
+	/* Need to restore GPU QoS on system resume */
+	restore_gpu_qos = true;
 
-	/* ToDo: Verify if it's ok to call this before mali_pm_os_resume! */
 #if defined(CONFIG_PM_RUNTIME)
 	/*
-	Update runtime PM status to reflect the actual post-system sleep status.
-	That means avoid calling mali_platform_runtime_resume if we come out of
-	OS suspend and were runtime suspended beforehand. See pm_runtime.txt
+	If we were runtime suspended before system suspend, then we can skip
+	switching things back on. Runtime resume will do this.
 	*/
-	if (mali_dev_pm.runtime_suspended) {
-		mali_dbg("Skip runtime resume\n");
-		pm_runtime_disable(&(pdev->dev));
-		pm_runtime_set_active(&(pdev->dev));
-		pm_runtime_enable(&(pdev->dev));
-		mali_dev_pm.runtime_suspended = false;
-	}
+	skip_resume = pm_runtime_suspended(&(pdev->dev));
 #endif
+
+	if (!skip_resume) {
+		ret = platform_device_pm_set_state(pdev,
+			mali_dev_pm.pm_states[mali_dev_pm.resume_pm_state]);
+		if (ret) {
+			mali_err("Device pm set state failed (%d)\n", ret);
+			return ret;
+		}
+		mali_dev_pm.curr_pm_state = mali_dev_pm.resume_pm_state;
+		mali_dev_pm.req_clock_index = mali_dev_pm.curr_pm_state - 1;
+
+		if (restore_gpu_qos) {
+			restore_gpu_qos = false;
+			xgold_noc_qos_set("GPU");
+			mali_dbg("Restore GPU QoS\n");
+		}
+	} else
+		mali_dbg("Skipped, as runtime suspended\n");
 
 	return 0;
 }
+
 
 #if defined(CONFIG_PM_RUNTIME)
 int mali_platform_runtime_suspend(struct platform_device *pdev)
 {
 	int ret;
 
-	mali_dbg("%s()\n", __func__);
+	mali_dbg("%s() \t-> Device pm set state to 0\n", __func__);
 
 	if (mali_dev_pm.curr_pm_state == 0)
-		mali_dbg("Already powered down!\n");
+		mali_warn("Already powered down!\n");
 
 	flush_workqueue(mali_dev_pm.dvfs_wq);
-	/* Note: mali_utilization_suspend not needed in runtime suspend */
-
-#if !defined(GPU_NO_PMU)
-	ret = mali_pmu_powerdown();
-	if (ret != 0) {
-		mali_err("Device pmu powerdown failed(%d)\n", ret);
-		return ret;
-	}
-#endif
 
 	ret = platform_device_pm_set_state(pdev,
 		mali_dev_pm.pm_states[0]);
-	if (ret != 0)
+	if (ret) {
 		mali_err("Device pm set state failed (%d)\n", ret);
-	else
+		return ret;
+	} else
 		mali_dev_pm.curr_pm_state = 0;
 
 	return 0;
 }
 
-
 int mali_platform_runtime_resume(struct platform_device *pdev)
 {
 	int ret;
 
-	mali_dbg("%s()\n", __func__);
+	mali_dbg("%s() \t-> Device pm set state to %d\n", __func__,
+		mali_dev_pm.resume_pm_state);
 
 	if (mali_dev_pm.curr_pm_state > 0)
-		mali_dbg("Already powered up!\n");
+		mali_warn("Already powered up at level %d!\n",
+			mali_dev_pm.curr_pm_state);
 
 	ret = platform_device_pm_set_state(pdev,
 		mali_dev_pm.pm_states[mali_dev_pm.resume_pm_state]);
-	if (ret != 0) {
+	if (ret) {
 		mali_err("Device pm set state failed (%d)\n", ret);
 		return ret;
 	}
 	mali_dev_pm.curr_pm_state = mali_dev_pm.resume_pm_state;
+	mali_dev_pm.req_clock_index  = mali_dev_pm.curr_pm_state - 1;
 
-#if !defined(GPU_NO_PMU)
-	ret = mali_pmu_powerup();
-	if (ret != 0) {
-		mali_err("Device pmu powerup failed (%d)\n", ret);
-		return ret;
+	if (restore_gpu_qos) {
+		restore_gpu_qos = false;
+		xgold_noc_qos_set("GPU");
+		mali_dbg("Restore GPU QoS\n");
 	}
-#endif
 
 	return 0;
 }

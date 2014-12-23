@@ -574,7 +574,6 @@ static int mmc3416x_get_data(int *xyz)
 static void mmc3416x_work_func(struct work_struct *work)
 {
 	int xyz[3] = { 0 };
-
 	mutex_lock(&ecompass_lock);
 
 	/* check mmc3416x_enabled staues first */

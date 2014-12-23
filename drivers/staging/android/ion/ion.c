@@ -761,7 +761,9 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 
 		buffer = handle->buffer;
 
-		seq_printf(s, "    bid=%3d, size=%8d, share_cnt=%d, flag=0x%02x\n", buffer->bid, buffer->size, buffer->handle_count, buffer->flags);
+		seq_printf(s, "    bid=%3d, size=%8d, share_cnt=%d, flag=0x%02lx\n",
+			buffer->bid, buffer->size,
+			buffer->handle_count, buffer->flags);
 	}
 	mutex_unlock(&client->lock);
 
@@ -1031,7 +1033,6 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_X86
 	/*
 	 * Since we already start supporting x86 cacheable ion buffer
 	 * we can do the mmap earlier for cacheable buffer just like
@@ -1046,7 +1047,6 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		ion_vm_open(vma);
 		return 0;
 	}
-#endif
 
 	if (!(buffer->flags & ION_FLAG_CACHED))
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);

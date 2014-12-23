@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  *
  * Notes:
+ * Nov 18 2014: IMC: Adaptions for Mali Utgard driver r5p0-01rel0
+ *                   - New method to enable/disable DVFS via debugfs
  * Jul 16 2014: IMC: [OSS Scan] Add missing license type
  * Jun 02 2014: IMC: Add pm and debugfs support
  *                   Splitup platform adaption for better readability
@@ -25,10 +27,9 @@
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include <linux/debugfs.h>
+#include <linux/mali/mali_utgard.h>
 
 #include "platform_intern.h"
-
-#include <mali_kernel_utilization.h>
 
 
 static struct dentry *dev_gpu_debugfs_dir;
@@ -70,9 +71,8 @@ static ssize_t dev_gpu_dvfs_write(struct file *filp, const char __user *ubuf,
 	if (control_value == 1) {
 		mali_dbg("DebugFS - Disable DVFS!\n");
 
-		flush_workqueue(p_dev_pm->dvfs_wq);
-		mali_utilization_term();
 		p_dev_pm->dvfs_off = true;
+		flush_workqueue(p_dev_pm->dvfs_wq);
 
 		/* When disabling DVFS switch to GPU_INITIAL_PM_STATE */
 #if defined(CONFIG_PM_RUNTIME)
@@ -102,8 +102,8 @@ static ssize_t dev_gpu_dvfs_write(struct file *filp, const char __user *ubuf,
 
 		/* When reenabling DVFS reset resume_pm_state to default */
 		p_dev_pm->resume_pm_state = GPU_INITIAL_PM_STATE;
+		p_dev_pm->req_clock_index = p_dev_pm->resume_pm_state - 1;
 
-		mali_utilization_init();
 		p_dev_pm->dvfs_off = false;
 	}
 
@@ -284,13 +284,13 @@ static const struct file_operations dev_gpu_pm_fops = {
 
 
 int platform_debugfs_register(struct mali_platform_pm *pdev_pm,
-	struct platform_device *pdev, const struct dev_pm_ops *pdev_pm_ops)
+	struct platform_device *pdev)
 {
-	if ((NULL == pdev_pm) || (NULL == pdev) || (NULL == pdev_pm_ops))
+	if ((NULL == pdev_pm) || (NULL == pdev))
 		return -EINVAL;
 
 	p_dev_pm = pdev_pm;
-	p_dev_pm_ops = pdev_pm_ops;
+	p_dev_pm_ops = pdev->dev.driver->pm;
 	p_dev = pdev;
 
 	dev_gpu_debugfs_dir = debugfs_create_dir("mali_platform", NULL);

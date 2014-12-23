@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  *
  * Notes:
+ * Nov 18 2014: IMC: Adaptions for Mali Utgard driver r5p0-01rel0
+ *                   - Cleanup Mali PMU function calls
  * Jul 16 2014: IMC: [OSS Scan] Add missing license type
  * Jun 02 2014: IMC: Add pm and debugfs support
  *                   Splitup platform adaption for better readability
@@ -22,12 +24,13 @@
 #endif
 
 
-#define mali_err(fmt, arg...)	pr_err("Mali Platform [ERROR]: " fmt, ##arg)
-#define mali_info(fmt, arg...)	pr_info("Mali Platform: " fmt, ##arg)
-#define mali_dbg(fmt, arg...)	pr_debug("Mali Platform: " fmt, ##arg)
+#define MALI_PLF_NAME "Mali Platform"
+#define mali_err(fmt, arg...)	pr_err(MALI_PLF_NAME" [ERROR]: " fmt, ##arg)
+#define mali_info(fmt, arg...)	pr_info(MALI_PLF_NAME": " fmt, ##arg)
+#define mali_warn(fmt, arg...)	pr_warn(MALI_PLF_NAME" [W]: " fmt, ##arg)
+#define mali_dbg(fmt, arg...)	pr_debug(MALI_PLF_NAME" [D]: " fmt, ##arg)
 
 /* ToDo: Should we get this in probe from DTS? */
-#define GPU_NO_PMU /* Disable PMU support */
 #undef GPU_USE_ULTRA_HIGH_PERF /* Enable to use ultra_high_perf mode */
 #if defined(GPU_USE_ULTRA_HIGH_PERF)
 #define GPU_NUM_PM_STATES 5
@@ -61,9 +64,7 @@ struct mali_platform_pm {
 	struct workqueue_struct *dvfs_wq;
 	struct mali_dev_dvfs_work_t *dvfs_work;
 	bool dvfs_off;
-#if defined(CONFIG_PM_RUNTIME)
-	bool runtime_suspended;
-#endif
+	int req_clock_index;
 	struct platform_device *pdev;
 };
 

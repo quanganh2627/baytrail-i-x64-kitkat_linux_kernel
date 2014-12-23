@@ -5,3 +5,4 @@ obj-$(CONFIG_X86_INTEL_SOFIA) += mv_gal.o
 obj-$(CONFIG_X86_INTEL_SOFIA) += nk_sofia_bridge.o
 obj-$(CONFIG_X86_INTEL_SOFIA) += reboot.o
 obj-$(CONFIG_SOFIA_BOARD_ID)  += board_id.o
+obj-$(CONFIG_X86_INTEL_SOFIA) += cpu.o

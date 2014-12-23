@@ -52,6 +52,88 @@
                 stk,use-fir;
         };
 #endif
+#ifdef CONFIG_INPUT_STK8312
+	stk8312 {
+		compatible = "sensortek,stk831x";
+
+		reg = < 0x3d >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "stk8312_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+#ifdef CONFIG_INPUT_STK8BAXX
+	stk8baxx {
+		compatible = "sensortek,stk8baxx";
+
+		reg = < 0x18 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "stk8baxx_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+
+#ifdef CONFIG_INPUT_KIONIX_ACCEL
+        kionix_accel {
+                compatible = "kionix,kionix_kxtj2_kxcj9";
+
+                reg = < 0xf >;
+                interrupt-parent = <&eint>;
+                interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+                intel,axis-map = < 1 0 2 >;
+                intel,negate = < 1 0 0 >;
+                intel,poll-interval = < 100 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&accel_default_pins>;
+                pinctrl-1 = <&accel_sleep_pins>;
+                pinctrl-2 = <&accel_inactive_pins>;
+                pm,class-name = "kionix_accel_class";
+                pm,user-name = "accelerometer";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+        };
+#endif
+ 
+#ifdef CONFIG_INPUT_SENSORS_MPU6500
+        mpu6500 {
+                compatible = "invensense,mpu6500";
+                reg = < 0x68 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&gyroscope_default_pins>;
+                pinctrl-1 = <&gyroscope_sleep_pins>;
+                pinctrl-2 = <&gyroscope_inactive_pins>;
+                intel,axis-map = < 0 1 2 >;
+                intel,negate = < 0 0 0 >;
+                intel,poll-interval = < 100 >;
+                intel,full-scale = < 2000 >;
+                pm,class-name = "mpu6500_class";
+                pm,user-name = "gyroscope";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+        };
+#endif
+
+
 #endif
 #endif
 

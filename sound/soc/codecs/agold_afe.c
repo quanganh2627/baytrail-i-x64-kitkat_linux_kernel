@@ -833,6 +833,13 @@ static const char * const agold_afe_route_text[] = { "DSP", "FM" };
 static const char * const agold_afe_hsps_ramp[] = { "50ms", "100ms",
 						"200ms", "400ms" };
 
+#ifdef CONFIG_SND_SOC_AGOLD_620
+static const char * const agold_afe_dmic_path_text[] = {
+	"MIC1_P1_MIC2_P2", "MIC1_P1_MIC2_P1",
+	"MIC1_P2_MIC2_P2", "MIC1_P2_MIC2_P1"
+};
+#endif
+
 static const DECLARE_TLV_DB_SCALE(DGAINCR_TLV, -2400, 1200, 1);
 static const DECLARE_TLV_DB_SCALE(DGAINFR_TLV, -450, 0, 0);
 static const DECLARE_TLV_DB_SCALE(DGAINCL_TLV, -2400, 1200, 1);
@@ -864,6 +871,11 @@ SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(agold_afe_out_sel_text),
 
 static const struct soc_enum agold_afe_hs_sw_enum =
 SOC_ENUM_SINGLE(AGOLD_AFE_AUDOUTCTRL2, 12, 2, agold_afe_gen_sw_enum_text);
+
+#ifdef CONFIG_SND_SOC_AGOLD_620
+static const struct soc_enum agold_afe_dmic_path_enum =
+SOC_ENUM_SINGLE(AGOLD_AFE_DIGMIC_CONTROL1, 4, 4, agold_afe_dmic_path_text);
+#endif
 
 static const struct snd_kcontrol_new agold_afe_ep_sel =
 SOC_DAPM_ENUM("Route", agold_afe_ep_mux_enum);
@@ -977,6 +989,7 @@ static const struct snd_kcontrol_new agold_afe_snd_controls[] = {
 		.put = agold_afe_set_trigger_calibration,
 	}
 #endif
+	,SOC_ENUM("DMIC Path", agold_afe_dmic_path_enum)
 };
 
 void afe_writel(struct snd_soc_codec *codec, unsigned int value, void *addr)
@@ -1245,30 +1258,6 @@ static int agold_afe_mic1_mode_event(struct snd_soc_dapm_widget *w,
 #endif
 }
 
-static int agold_afe_aif_event(struct snd_soc_dapm_widget *w,
-			struct snd_kcontrol *kcontrol, int event)
-{
-	afe_debug("%s:\n", __func__);
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		afe_debug("%s:SND_SOC_DAPM_PRE_PMU\n", __func__);
-		break;
-
-	case SND_SOC_DAPM_POST_PMU:
-		afe_debug("%s:SND_SOC_DAPM_POST_PMU\n", __func__);
-		break;
-
-	case SND_SOC_DAPM_PRE_PMD:
-		afe_debug("%s:SND_SOC_DAPM_PRE_PMD\n", __func__);
-		break;
-
-	case SND_SOC_DAPM_POST_PMD:
-		afe_debug("%s:SND_SOC_DAPM_POST_PMD\n", __func__);
-		break;
-	}
-	return 0;
-}
-
 static u32 agold_afe_get_hsamp_ramp_time(u32 step)
 {
 	/*Optimum time in mili seconds. Used as default */
@@ -1379,12 +1368,20 @@ static int agold_afe_dmic_event(struct snd_soc_dapm_widget *w,
 	struct agold_afe_data *agold_afe =
 		(struct agold_afe_data *)snd_soc_codec_get_drvdata(w->codec);
 	int ret;
-
+	u32 reg = 0;
 	afe_debug("%s\n", __func__);
+
+	reg = snd_soc_read(w->codec, AGOLD_AFE_BCON);
+	reg &= 0xFFFFFF3F;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		afe_debug("%s: SND_SOC_DAPM_PRE_PMU\n", __func__);
+
+		/* Program the INRATE bits */
+		/* For DigMic set sampling rate to 48KHz */
+		reg |= (0x3 << AFE_BCON_AUD_INRATE_POS);
+
 		ret = agold_afe_set_pinctrl_state(w->codec->dev,
 				agold_afe->pins_default);
 		if (ret)
@@ -1403,10 +1400,14 @@ static int agold_afe_dmic_event(struct snd_soc_dapm_widget *w,
 		afe_debug("%s: SND_SOC_DAPM_POST_PMD\n", __func__);
 		ret = agold_afe_set_pinctrl_state(w->codec->dev,
 				agold_afe->pins_sleep);
+		/* Set default sampling rate to 16KHz */
+		reg |= (0x1 << AFE_BCON_AUD_INRATE_POS);
 		if (ret)
 			afe_err("%s: Deactivating PCL pad failed\n", __func__);
 		break;
 	}
+	snd_soc_write(w->codec, AGOLD_AFE_BCON, reg);
+
 	return 0;
 }
 #endif
@@ -1566,10 +1567,8 @@ static const struct snd_soc_dapm_widget agold_afe_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("DSP In", "Playback", 0,
 			SND_SOC_NOPM, 0, 0),
 
-	SND_SOC_DAPM_AIF_OUT_E("Audio Capture", "Capture", 0,
-			SND_SOC_NOPM, 0, 0, agold_afe_aif_event,
-			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_AIF_OUT("Audio Capture", "Capture", 0,
+			SND_SOC_NOPM, 0, 0),
 
 #ifdef CONFIG_SND_SOC_AGOLD_620
 	SND_SOC_DAPM_PGA_E("DMIC On",
@@ -1581,12 +1580,12 @@ static const struct snd_soc_dapm_widget agold_afe_dapm_widgets[] = {
 
 	SND_SOC_DAPM_MUX("MICIN Sel", SND_SOC_NOPM, 0, 0, &agold_afe_mic_sel),
 
-	SND_SOC_DAPM_MICBIAS_E("MIC1 BIAS", AGOLD_AFE_AUDIOINCTRL,
+	SND_SOC_DAPM_SUPPLY("MIC1 BIAS", AGOLD_AFE_AUDIOINCTRL,
 			20, 0, agold_afe_mic1_mode_event,
 			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_MICBIAS_E("MIC2 BIAS", AGOLD_AFE_AUDIOINCTRL,
+	SND_SOC_DAPM_SUPPLY("MIC2 BIAS", AGOLD_AFE_AUDIOINCTRL,
 			22, 0, NULL,
 			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
@@ -1632,23 +1631,23 @@ static const struct snd_soc_dapm_route agold_afe_audio_map[] = {
 	{"EARPIECE", NULL, "EP Enable"},
 
 	/* Audio Input Map */
-	{"MIC1 BIAS", NULL, "AMIC1"},
-	{"MIC2 BIAS", NULL, "AMIC2"},
-	{"MICIN Sel", "AMIC1", "MIC1 BIAS"},
-	{"MICIN Sel", "AMIC2", "MIC2 BIAS"},
+	{"AMIC1", "NULL", "MIC1 BIAS"},
+	{"AMIC2", "NULL", "MIC2 BIAS"},
+	{"MICIN Sel", "AMIC1", "AMIC1"},
+	{"MICIN Sel", "AMIC2", "AMIC2"},
 	{"MIC Enable", NULL, "MICIN Sel"},
 	{"AMIC On", "Switch", "MIC Enable"},
 	{"Audio Capture", NULL, "AMIC On"},
 
 #ifdef CONFIG_SND_SOC_AGOLD_620
-	{"DMIC On", NULL, "DMIC1"},
-	{"DMIC On", NULL, "DMIC2"},
-	{"MIC Enable", NULL, "MIC1 BIAS"},
-	{"DMIC On", NULL, "MIC Enable"},
-	{"DMIC1 Enable", "Switch", "DMIC On"},
-	{"DMIC2 Enable", "Switch", "DMIC On"},
-	{"Audio Capture", NULL, "DMIC1 Enable"},
-	{"Audio Capture", NULL, "DMIC2 Enable"},
+	{"DMIC1", NULL, "MIC1 BIAS"},
+	{"DMIC2", NULL, "MIC1 BIAS"},
+	{"DMIC1 Enable", "Switch", "DMIC1"},
+	{"DMIC2 Enable", "Switch", "DMIC2"},
+	{"DMIC On", NULL, "DMIC1 Enable"},
+	{"DMIC On", NULL, "DMIC2 Enable"},
+	{"MIC Enable", NULL, "DMIC On"},
+	{"Audio Capture", NULL, "MIC Enable"},
 #endif
 };
 
@@ -1860,7 +1859,9 @@ static int agold_afe_hw_params(struct snd_pcm_substream *substream,
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		/* Program the INRATE bits */
 		reg &= 0xFFFFFF3F;
-		reg |= (0x3 << AFE_BCON_AUD_INRATE_POS);
+
+		/* Default to 16KHz input sampling rate */
+		reg |= (0x1 << AFE_BCON_AUD_INRATE_POS);
 
 		if (*audio_native)
 			reg |= BIT(5); /* INSTART */

@@ -98,6 +98,11 @@
 /* Scaling needed for battery temperature. POWER_SUPPLY_PROP_TEMP
 is in tenths of a degree. */
 #define SCALE_DECI_DEG_C			(10)
+
+/* Temperature of 0 Kelvins in deci-degrees Celcius to mark
+variable holding temperature as uninitialized */
+#define TEMP_0_KELVIN_DDEGC			(-2730)
+
 /* Multiplier / Divisor for milli-micro calculations. */
 #define SCALE_MILLI				(1000)
 
@@ -144,13 +149,13 @@ available after startup. */
 
 #define SW_FUEL_GAUGE_ENQUEUE(p_func, param) \
 	sw_fuel_gauge_enqueue_function((fp_scheduled_function)(p_func), \
-								(int)(param))
+								(long)(param))
 
 
 /* Message payload for work scheduler queue. */
 struct sw_fuel_gauge_fifo_payload {
 	fp_scheduled_function	p_func;
-	int			param;
+	long		param;
 };
 
 /*
@@ -229,6 +234,7 @@ struct bat_temperature_data {
 	u32	bat_temperature_overflow_error_count;
 	u32	bat_temperature_io_error_count;
 	struct iio_channel *p_iio_tbat;
+	int	temperature_notif_ddegc;
 };
 
 /**
@@ -399,7 +405,7 @@ static const char *bat_id_strings[BAT_ID_MAX] = {
 
 /* Prototype for functions exported to the HAL. */
 static void sw_fuel_gauge_enqueue_function(
-				fp_scheduled_function p_function, int param);
+				fp_scheduled_function p_function, long param);
 
 static void sw_fuel_gauge_cc_hal_callback(enum sw_fuel_gauge_hal_cb_event event,
 					union sw_fuel_gauge_hal_cb_param param);
@@ -483,6 +489,7 @@ static struct sw_fuel_gauge_data sw_fuel_gauge_instance = {
 	.tbat = {
 		.bat_temperature_overflow_error_count = 0,
 		.bat_temperature_io_error_count = 0,
+		.temperature_notif_ddegc = TEMP_0_KELVIN_DDEGC,
 	},
 };
 
@@ -570,7 +577,7 @@ static void sw_fuel_gauge_eoc_handler(int target_voltage_mv)
  * @param		[in] Parameter value for the function.
  */
 static void sw_fuel_gauge_enqueue_function(
-				fp_scheduled_function p_function, int param)
+				fp_scheduled_function p_function, long param)
 {
 	unsigned long flags;
 
@@ -913,6 +920,9 @@ static void sw_fuel_gauge_set_temperature(int temperature_degc, bool valid)
 	struct power_supply_properties *p_properties =
 					&sw_fuel_gauge_instance.properties;
 
+	int *temperature_notified = &sw_fuel_gauge_instance.
+					tbat.temperature_notif_ddegc;
+
 	if (valid) {
 		/* Power Supply Class unit is tenths of a degree C. */
 		int temperature = SCALE_DECI_DEG_C * temperature_degc;
@@ -928,11 +938,26 @@ static void sw_fuel_gauge_set_temperature(int temperature_degc, bool valid)
 			SW_FUEL_GAUGE_DEBUG_PARAM(
 				SW_FUEL_GAUGE_DEBUG_SET_PROPERTY_TEMPERATURE,
 								temperature);
+
+			if (abs(*temperature_notified - temperature) >
+							1 * SCALE_DECI_DEG_C) {
+
+				*temperature_notified = temperature;
+
+				/* End of critical section for update. */
+				up(&p_properties->lock);
+
+				/* Inform power supply class of
+				property change. */
+				power_supply_changed(
+					&sw_fuel_gauge_instance.
+							power_supply_bat);
+
+				return;
+			}
+
 			/* End of critical section for update. */
 			up(&p_properties->lock);
-			/* Inform power supply class of property change. */
-			power_supply_changed(
-				&sw_fuel_gauge_instance.power_supply_bat);
 		}
 	} else {
 		/* Obtain lock on properties data to ensure atomic access. */
@@ -1495,19 +1520,31 @@ static void sw_fuel_gauge_calculate_nvm_capacity_and_error(void)
 
 }
 
-/**
- * sw_fuel_gauge_nvs_ready_cb -	Called by NVS when the NVS is initialized.
- */
-static void sw_fuel_gauge_nvs_ready_cb(void)
+static void swfg_nvs_ready_work(int param)
 {
+	/* unused */
+	(void)param;
+
+	SW_FUEL_GAUGE_DEBUG_NO_PARAM(
+			SW_FUEL_GAUGE_DEBUG_NVS_READY_CB);
+
 	/* Double check that we only calculate the capacity from
-	 *	NVM in case that we are waiting for the initial SOC. */
+	NVM in case that we are waiting for the initial SOC. */
 	if (SW_FUEL_GAUGE_STM_STATE_WAIT_FOR_INITIAL_SOC ==
 		sw_fuel_gauge_instance.stm.state)
 			sw_fuel_gauge_calculate_nvm_capacity_and_error();
 	else
 		pr_err("%s() called in invalid state %d\n", __func__,
 			sw_fuel_gauge_instance.stm.state);
+}
+
+/**
+ * Called when the NVS is initialized.
+ */
+static void sw_fuel_gauge_nvs_ready_cb(void)
+{
+	/* Handle event in the serialized workqueue  */
+	SW_FUEL_GAUGE_ENQUEUE(swfg_nvs_ready_work, 0);
 }
 
 /*
@@ -2255,14 +2292,6 @@ static void sw_fuel_gauge_stm_process_event_soc_update(void)
 		SW_FUEL_GAUGE_DEBUG_PARAM(
 		 SW_FUEL_GAUGE_DEBUG_CALC_CAPACITY,
 		  sw_fuel_gauge_instance.latest_calculated_capacity_permil);
-
-		/* Reconfigure the reporting threshold in the coulomb counter,
-		even though the delta threshold remains the same. This is done
-		so that the current value is used as a baseline for the next
-		report. */
-		BUG_ON(0 != sw_fuel_gauge_instance.p_hal_interface->set(
-			SW_FUEL_GAUGE_HAL_SET_COULOMB_IND_DELTA_THRESHOLD,
-			 sw_fuel_gauge_instance.hal_set));
 
 		/* Push new value to the power supply class. */
 		sw_fuel_gauge_set_capacity(

@@ -2290,7 +2290,16 @@ static int mmc_do_hw_reset(struct mmc_host *host, int check)
 
 	if (!mmc_can_reset(card))
 		return -EOPNOTSUPP;
-
+	/*
+	* before HW reset card, cache needs to be flushed. Otherview
+	* the data in cache can be lost. But this flush may be failed
+	* because card may be not in good state
+	*/
+	if (mmc_flush_cache(card)) {
+		pr_err("%s: flushing cache before HW reset failed\n",
+			mmc_hostname(host));
+		pr_err("this maybe cause file system unexpected error!\n");
+	}
 	mmc_host_clk_hold(host);
 	mmc_set_clock(host, host->f_init);
 
@@ -2544,6 +2553,9 @@ void mmc_stop_host(struct mmc_host *host)
 
 	mmc_bus_get(host);
 	if (host->bus_ops && !host->bus_dead) {
+		/*flush and disable cache before remove card*/
+		mmc_cache_ctrl(host, 0);
+
 		/* Calling bus_ops->remove() with a claimed host can deadlock */
 		host->bus_ops->remove(host);
 		mmc_claim_host(host);
@@ -2580,6 +2592,8 @@ int mmc_power_save_host(struct mmc_host *host)
 
 	mmc_bus_put(host);
 
+	/*flush and disable cache before remove card*/
+	mmc_cache_ctrl(host, 0);
 	mmc_power_off(host);
 
 	return ret;
@@ -2703,6 +2717,9 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 			err = host->bus_ops->pre_suspend(host);
 		if (!err && host->bus_ops->suspend)
 			break;
+
+		/*disable cache before remove card*/
+		mmc_cache_ctrl(host, 0);
 
 		/* Calling bus_ops->remove() with a claimed host can deadlock */
 		host->bus_ops->remove(host);

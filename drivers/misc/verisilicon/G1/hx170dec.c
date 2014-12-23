@@ -571,19 +571,18 @@ static void pphwc_fence_create(struct vpu_dec_device_t *pdata,
 		return;
 	}
 
-	/* Create fence */
-	fence = sync_fence_create("dcc-fence", point);
-	if (fence == NULL) {
+	/* Create fd */
+	fd = get_unused_fd();
+	if (fd < 0) {
+		dev_err(pdata->dev, "fence_fd not initialized\n");
 		sync_pt_free(point);
 		cmd->release_fence_fd = -EINVAL;
 		return;
 	}
 
-	/* Create fd */
-	fd = get_unused_fd();
-	if (fd < 0) {
-		dev_err(pdata->dev, "fence_fd not initialized\n");
-		sync_fence_put(fence);
+	/* Create fence */
+	fence = sync_fence_create("dcc-fence", point);
+	if (fence == NULL) {
 		sync_pt_free(point);
 		cmd->release_fence_fd = -EINVAL;
 		return;
@@ -995,7 +994,7 @@ static const struct file_operations hx170dec_fops = {
 	.release	= hx170dec_release,
 	.unlocked_ioctl = hx170dec_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl   = hx170dec_ioctl,
+	.compat_ioctl	= hx170dec_ioctl,
 #endif
 	.fasync		= hx170dec_fasync,
 };
@@ -1191,10 +1190,8 @@ static int xgold_vpu_dec_probe(struct platform_device *pdev)
 	/* Allocate driver data record */
 	vpu_dec_data = kzalloc(sizeof(struct vpu_dec_device_t), GFP_KERNEL);
 
-	if (vpu_dec_data == NULL) {
-		result = -ENOMEM;
-		goto end;
-	}
+	if (vpu_dec_data == NULL)
+		return -ENOMEM;
 
 	/* link dev and pdev to vpu_dec_data */
 	platform_set_drvdata(pdev, vpu_dec_data);
@@ -1471,6 +1468,7 @@ end:
 #if defined(CONFIG_SW_SYNC_USER)
 	pphwc_fence_init(vpu_dec_data, 0);
 #endif
+
 	return result;
 }
 

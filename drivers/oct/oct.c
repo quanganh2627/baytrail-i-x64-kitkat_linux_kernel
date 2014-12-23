@@ -959,12 +959,12 @@ static int oct_thread(void *param)
 					DMA_FROM_DEVICE);
 
 				/* call subscribed function to forward data */
-/*
+
 				oct_write_data_to_usb((char *)
 					(&((char *)oct_ext_rbuff_ptr)[oct_read_ptr]),
 						num_bytes);
-*/
-//					OCT_DBG("Sent out %d bytes", num_bytes);
+
+					OCT_DBG("Sent out %d bytes", num_bytes);
 
 			}
 			else if (oct_out_path == OCT_PATH_FILE)
@@ -1093,6 +1093,8 @@ static ssize_t oct_write(struct file *p_file, const char __user *user_buffer,
 	mm_segment_t old_fs;
 	int result;
 	buffer = kmalloc(count+1, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
 	result = copy_from_user(buffer, user_buffer, count);
 	if (result)
 		OCT_DBG("Error copy_from_user");

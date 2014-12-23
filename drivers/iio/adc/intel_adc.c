@@ -104,32 +104,32 @@
 	adc_debug_data.log_array[adc_debug_data.index].adc_state = (_state); \
 	\
 	adc_debug_data.log_array[adc_debug_data.index].hmeas = \
-						(unsigned int)(_hmeas); \
+						(unsigned long)(_hmeas); \
 	adc_debug_data.log_array[adc_debug_data.index].context = \
-						(unsigned int)(_context); \
+						(unsigned long)(_context); \
 	adc_debug_data.log_array[adc_debug_data.index].context2 = \
-						(unsigned int)(_context2); \
+						(unsigned long)(_context2); \
 	adc_debug_data.log_array[adc_debug_data.index].context3 = \
-						(unsigned int)(_context3); \
+						(unsigned long)(_context3); \
 	adc_debug_data.log_array[adc_debug_data.index].context4 = \
-						(unsigned int)(_context4); \
+						(unsigned long)(_context4); \
 	adc_debug_data.log_array[adc_debug_data.index].context5 = \
-						(unsigned int)(_context5); \
+						(unsigned long)(_context5); \
 	adc_debug_data.index++; \
 	adc_debug_data.index &= (ADC_DEBUG_DATA_SIZE-1); \
 	spin_unlock(&adc_debug_data.lock); \
 	if (adc_debug_data.printk_logs_en)\
-		pr_info("%s->(%d):0x%x,%u,%u,%u,%u,%u\n", #_event, \
-			(unsigned int)_state, (unsigned int)_hmeas, \
-			(unsigned int)_context, (unsigned int)_context2, \
-			(unsigned int)_context3, (unsigned int)_context4, \
-			(unsigned int)_context5); \
+		pr_debug("%s->(%d):0x%lu,%lu,%lu,%lu,%lu,%lu\n", #_event, \
+			(unsigned int)_state, (unsigned long)_hmeas, \
+			(unsigned long)_context, (unsigned long)_context2, \
+			(unsigned long)_context3, (unsigned long)_context4, \
+			(unsigned long)_context5); \
 }
 
 #define intel_adc_dbg_printk(fmt, ...) \
 { \
 	if (adc_debug_data.printk_logs_en) \
-		pr_info(fmt, ##__VA_ARGS__); \
+		pr_debug(fmt, ##__VA_ARGS__); \
 }
 
 /**
@@ -345,12 +345,12 @@ struct adc_debug_data {
 		uint time_stamp;
 		enum adc_debug_event event;
 		enum adc_states adc_state;
-		int hmeas;
-		int context;
-		int context2;
-		int context3;
-		int context4;
-		int context5;
+		unsigned long hmeas;
+		unsigned long context;
+		unsigned long context2;
+		unsigned long context3;
+		unsigned long context4;
+		unsigned long context5;
 	} log_array[ADC_DEBUG_DATA_SIZE];
 };
 
@@ -364,7 +364,7 @@ static struct adc_manager_data adc_manager = {
 
 /* Array to collect debug data */
 static struct adc_debug_data adc_debug_data = {
-	.printk_logs_en = 1,
+	.printk_logs_en = 0,
 };
 
 /*---------------------------- Function prototypes: -------------------------*/
@@ -768,10 +768,10 @@ static void intel_adc_stuck_measurement(unsigned long dummy)
 				max_signal_settling_time_ms,
 				adc_manager.p_active_meas->autoscaling_on);
 
-	pr_err("intel_adc_stuck_measurement: adc stm state->%d, active_meas->handle:0x%x, channel id:%d\n",
-					adc_manager.state,
-					(unsigned int)adc_manager.p_active_meas,
-					adc_manager.p_active_meas->channel);
+	pr_err("intel_adc_stuck_measurement: adc stm state->%d, active_meas->handle:0x%lu, channel id:%d\n",
+				adc_manager.state,
+				(unsigned long)adc_manager.p_active_meas,
+				adc_manager.p_active_meas->channel);
 
 	/* dump HW registers */
 	(adc_manager.supported_channels[adc_manager.p_active_meas->channel].
@@ -795,8 +795,9 @@ static void intel_adc_stuck_measurement(unsigned long dummy)
 			hmeas = *(p_queue->p_data + p_queue->head);
 			/* Advance head index */
 			ADC_QADVANCE_HEAD(p_queue->head, p_queue->size);
-			pr_err("\t Remaining measurement in queue->%d, meas->handle:0x%x, channel id:%u\n",
-					i, (unsigned int)hmeas, hmeas->channel);
+			pr_err("\t Remaining measurement in queue->%d, meas->handle:0x%lu, channel id:%u\n",
+					i, (unsigned long)hmeas,
+					hmeas->channel);
 		}
 	}
 

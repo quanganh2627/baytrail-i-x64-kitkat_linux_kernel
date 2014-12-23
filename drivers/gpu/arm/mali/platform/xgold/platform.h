@@ -12,6 +12,8 @@
  *
  *
  * Notes:
+ * Nov 18 2014: IMC: Adaptions for Mali Utgard driver r5p0-01rel0
+ *                   - Use Mali DT support instead of Intel bringup variant
  * Jul 16 2014: IMC: [OSS Scan] Add missing license type
  * Jun 02 2014: IMC: Change hooks to platform adaption to use platform_device
  *                   Add hooks for platform runtime PM
@@ -20,9 +22,8 @@
 
 
 extern int mali_platform_init(void);
-extern int mali_platform_probe(struct platform_device *pdev,
-	const struct dev_pm_ops *pdev_pm_ops);
-extern int mali_platform_remove(struct platform_device *pdev);
+extern int mali_platform_device_init(struct platform_device *pdev);
+extern int mali_platform_device_deinit(struct platform_device *pdev);
 
 extern int mali_platform_suspend(struct platform_device *pdev);
 extern int mali_platform_resume(struct platform_device *pdev);

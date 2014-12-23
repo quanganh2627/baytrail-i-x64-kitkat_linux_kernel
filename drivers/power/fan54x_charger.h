@@ -86,6 +86,7 @@ enum FAN54x_ATTRS {
 	ITERM,
 	VOREG,
 	IBUS,
+	VLOWV,
 	TMR_RST,
 	T32_TO,
 	CHG_EN,

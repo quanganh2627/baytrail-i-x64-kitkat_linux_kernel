@@ -1,6 +1,7 @@
 /dts-v1/;
 #define SOFIA3G_MRD5S
 //#define SOFIA3G_CATALOG_MRD5S_SENSOR
+//#define SOFIA3G_CATALOG_MRD5S_CHARGER
 #include "xgold/sofia_3g_soc/irq.h"
 
 / {
@@ -434,6 +435,9 @@
 	pinctrl-0 = <&i2c5_agold_default_pins>;
 	pinctrl-1 = <&i2c5_agold_sleep_pins>;
 	pinctrl-2 = <&i2c5_agold_inactive_pins>;
+#ifdef SOFIA3G_CATALOG_MRD5S_CHARGER
+#include "catalog/Sf_3G-catalog-Charger.dtsi"
+#else
 	bat:battery {
 		compatible = "intel,fan54015_charger";
 		reg = < 0x6a >;
@@ -447,6 +451,7 @@
 		pinctrl-2 = < &chgreset_agold_inactive_pins >;
 		pinctrl-3 = < &chgreset_agold_active_pins >;
 	};
+#endif
 };
 
 &gnss {

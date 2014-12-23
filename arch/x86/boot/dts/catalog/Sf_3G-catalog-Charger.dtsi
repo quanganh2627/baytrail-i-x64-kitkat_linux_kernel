@@ -1,1 +1,35 @@
+#ifdef SOFIA3G_CATALOG_MRD5S_CHARGER
+#ifdef CONFIG_CHARGER_BQ2415X
+	bat:battery {
+                compatible = "intel,bq2415x_charger";
+                reg = < 0x6a >;
+                interrupts = < 0 >;
+                interrupt-parent = < &bat>;
+                #interrupt-cells = < 1 >;
+                interrupt-map = < 0 &ag620_pmu ABB_PMU_CI XGOLD_IRQ_TYPE_NONE >; /* CI */
+                pinctrl-names = "default", "sleep", "inactive", "active";
+                pinctrl-0 = < &chgreset_agold_default_pins >;
+                pinctrl-1 = < &chgreset_agold_sleep_pins >;
+                pinctrl-2 = < &chgreset_agold_inactive_pins >;
+                pinctrl-3 = < &chgreset_agold_active_pins >;
+        };
+#endif
+#endif
 
+#ifdef SOFIA3G_CATALOG_MRD7S_CHARGER
+#ifdef CONFIG_CHARGER_BQ24296
+        bat:battery {
+                compatible = "intel,bq24296_charger";
+                reg = < 0x6a >;
+                interrupts = < 0 >;
+                interrupt-parent = < &bat>;
+                #interrupt-cells = < 1 >;
+                interrupt-map = < 0 &ag620_pmu ABB_PMU_CI XGOLD_IRQ_TYPE_NONE >; /* CI */
+                pinctrl-names = "default", "sleep", "inactive", "active";
+                pinctrl-0 = < &chgreset_agold_default_pins >;
+                pinctrl-1 = < &chgreset_agold_sleep_pins >;
+                pinctrl-2 = < &chgreset_agold_inactive_pins >;
+                pinctrl-3 = < &chgreset_agold_active_pins >;
+        };
+#endif
+#endif
