@@ -2461,7 +2461,9 @@ static int _mmc_blk_suspend(struct mmc_card *card)
 	struct mmc_blk_data *md = mmc_get_drvdata(card);
 
 	/*flush mmc cache before mmc block driver suspend*/
+	mmc_claim_host(card->host);
 	mmc_flush_cache(card);
+	mmc_release_host(card->host);
 
 	if (md) {
 		mmc_queue_suspend(&md->queue);
