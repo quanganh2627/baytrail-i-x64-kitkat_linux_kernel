@@ -168,14 +168,14 @@ static struct snd_soc_dai_link xgold_dai[] = {
 		.stream_name = "Speech Probe_C",
 		.ignore_suspend = 1,
 	},
+	/* ALSA allows only 8 pcm devices with
+	static minor numbers check after LTE PO?*/
+#ifdef CONFIG_INCREASE_PCM_DEVICE
 	{
 		.name = "XGOLD_SPEECH_PROBE_D",
 		.stream_name = "Speech Probe_D",
 		.ignore_suspend = 1,
 	},
-	/* ALSA allows only 8 pcm devices with
-	static minor numbers check after LTE PO?*/
-#ifdef CONFIG_INCREASE_PCM_DEVICE
 	{
 		.name = "XGOLD_SPEECH_PROBE_E",
 		.stream_name = "Speech Probe_E",
@@ -185,9 +185,16 @@ static struct snd_soc_dai_link xgold_dai[] = {
 		.name = "XGOLD_SPEECH_PROBE_F",
 		.stream_name = "Speech Probe_F",
 		.ignore_suspend = 1,
-	}
+	},
 #endif
 #endif
+	/* PCM2 front end device */
+	{
+		.name = "XGOLD_PCM2",
+		.stream_name = "PCM Audio 2",
+		.init = xgold_snd_init,
+		.ignore_suspend = 1,
+	},
 };
 
 /* Audio machine driver */
@@ -236,7 +243,8 @@ static int xgold_mc_probe(struct platform_device *pdev)
 		for (i = 0; i < xgold_snd_card.num_links; i++) {
 			dai_link = &xgold_snd_card.dai_link[i];
 
-			if (!strcmp(dai_link->stream_name, "PCM Audio")) {
+			if (!strncmp(dai_link->stream_name, "PCM Audio",
+				strlen("PCM Audio"))) {
 				dai_link->cpu_of_node =
 					dai_link->platform_of_node =
 					of_parse_phandle(np, "intel,pcm-audio",
@@ -290,7 +298,8 @@ static int xgold_mc_probe(struct platform_device *pdev)
 			dai_link->codec_of_node = codec_of_node;
 			dai_link->codec_dai_name = codec_dai_name;
 
-			if (!strcmp(dai_link->stream_name, "PCM Audio"))
+			if (!strncmp(dai_link->stream_name, "PCM Audio",
+				strlen("PCM Audio")))
 				dai_link->cpu_of_node =
 					dai_link->platform_of_node =
 					of_parse_phandle(np, "intel,pcm-audio",
