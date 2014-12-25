@@ -54,7 +54,7 @@ struct xgold_audio {
 	/* FIXME: union */
 	struct xgold_audio_stream audio_stream[NR_STREAM];
 	struct xgold_dma_pcm_stream audio_dma_stream[NR_STREAM];
-	enum xgold_pcm_stream_type stream_type;
+	enum xgold_pcm_stream_type stream_type[MAX_PCM_DEVICE_NUMBER][2];
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_sleep;
