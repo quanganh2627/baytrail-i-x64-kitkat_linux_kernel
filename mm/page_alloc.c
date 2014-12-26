@@ -1552,7 +1552,7 @@ struct page *buffered_rmqueue(struct zone *preferred_zone,
 	int cold = !!(gfp_flags & __GFP_COLD);
 
 again:
-	if (likely(order == 0)) {
+	if (likely(order == 0) && !(gfp_flags & GFP_PAGE_CACHE)) {
 		struct per_cpu_pages *pcp;
 		struct list_head *list;
 
@@ -2728,6 +2728,8 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET;
 	struct mem_cgroup *memcg = NULL;
 
+	gfp_allowed_mask |= GFP_PAGE_CACHE;
+
 	gfp_mask &= gfp_allowed_mask;
 
 	lockdep_trace_alloc(gfp_mask);
@@ -2736,6 +2738,24 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 
 	if (should_fail_alloc_page(gfp_mask, order))
 		return NULL;
+
+#ifdef CONFIG_CMA
+	if (gfp_mask & GFP_PAGE_CACHE) {
+		int nr_free = global_page_state(NR_FREE_PAGES)
+				- totalreserve_pages;
+		int free_cma = global_page_state(NR_FREE_CMA_PAGES);
+
+		/*
+		 * Use CMA memory as page cache iff system is under
+		 * memory pressure and free cma is big enough (>= 28M)
+		 */
+		if ((nr_free - free_cma) <= (16 * 1024 * 1024 / PAGE_SIZE)
+			&& free_cma >= (28 * 1024 * 1024 / PAGE_SIZE)
+			&& total_swap_pages > 0) {
+			migratetype = MIGRATE_CMA;
+		}
+	}
+#endif
 
 	/*
 	 * Check the zones suitable for the gfp_mask contain at least one
