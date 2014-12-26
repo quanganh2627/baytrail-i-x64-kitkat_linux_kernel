@@ -113,6 +113,25 @@
                 pm,state-D3 = "disable";
         };
 #endif
+ 
+#ifdef CONFIG_INPUT_SENSORS_MPU6500
+        mpu6500 {
+                compatible = "invensense,mpu6500";
+                reg = < 0x68 >;
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&gyroscope_default_pins>;
+                pinctrl-1 = <&gyroscope_sleep_pins>;
+                pinctrl-2 = <&gyroscope_inactive_pins>;
+                intel,axis-map = < 0 1 2 >;
+                intel,negate = < 0 0 0 >;
+                intel,poll-interval = < 100 >;
+                intel,full-scale = < 2000 >;
+                pm,class-name = "mpu6500_class";
+                pm,user-name = "gyroscope";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+        };
+#endif
 
 
 #endif
