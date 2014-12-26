@@ -792,4 +792,11 @@ config INPUT_SENSORS_MPU6500
 	  If you say yes here you get support for InvenSense's
 	  Accelerometer and Gyroscope sensor.
 
+config INPUT_MXC6225XC
+	tristate "MEMSIC MXC6225XC 2-Axis Accelerometer"
+	depends on I2C
+	help
+	  Say Y here to use the 2-Axis Accelerometer MXC6225XC
+	  from MEMSIC.
+
 endif

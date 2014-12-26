@@ -157,6 +157,25 @@
         };
 #endif
 
+#ifdef CONFIG_INPUT_MXC6225XC
+	mxc622x {
+		compatible = "memsic,mxc622x";
+		reg = < 0x15 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "mxc622x_acc_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
 
 #endif
 #endif
