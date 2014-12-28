@@ -68,7 +68,7 @@ struct ft5x0x_ts_data {
 	struct delayed_work pen_event_work;
 	struct workqueue_struct *ts_workqueue;
 	spinlock_t btn_lock;
-	spinlock_t en_lock;
+	struct mutex en_lock;
 	int btn_active;
 	int enable;
 };
@@ -289,10 +289,9 @@ static int ft5x0x_ts_power_off(struct i2c_client *client)
 	struct ft5x0x_ts_data *ft5x0x_ts = i2c_get_clientdata(client);
 	struct ft5x0x_ts_platform_data *ft5x06_pdata =
 		client->dev.platform_data;
-	unsigned long flags = 0;
 	int ret = 0;
 
-	spin_lock_irqsave(&ft5x0x_ts->en_lock, flags);
+	mutex_lock(&ft5x0x_ts->en_lock);
 	if (!ft5x0x_ts->enable)
 		goto out;
 
@@ -312,7 +311,7 @@ static int ft5x0x_ts_power_off(struct i2c_client *client)
 		ft5x0x_ts->enable = 0;
 
 out:
-	spin_unlock_irqrestore(&ft5x0x_ts->en_lock, flags);
+	mutex_unlock(&ft5x0x_ts->en_lock);
 
 	return ret;
 }
@@ -322,10 +321,9 @@ static int ft5x0x_ts_power_on(struct i2c_client *client)
 	struct ft5x0x_ts_data *ft5x0x_ts = i2c_get_clientdata(client);
 	struct ft5x0x_ts_platform_data *ft5x06_pdata =
 		client->dev.platform_data;
-	unsigned long flags = 0;
 	int ret = 0;
 
-	spin_lock_irqsave(&ft5x0x_ts->en_lock, flags);
+	mutex_lock(&ft5x0x_ts->en_lock);
 	if (ft5x0x_ts->enable)
 		goto out;
 
@@ -344,7 +342,7 @@ static int ft5x0x_ts_power_on(struct i2c_client *client)
 	}
 
 out:
-	spin_unlock_irqrestore(&ft5x0x_ts->en_lock, flags);
+	mutex_unlock(&ft5x0x_ts->en_lock);
 
 	return ret;
 }
@@ -995,7 +993,7 @@ static int ft5x0x_ts_probe(struct i2c_client *client,
 	}
 
 	spin_lock_init(&ft5x0x_ts->btn_lock);
-	spin_lock_init(&ft5x0x_ts->en_lock);
+	mutex_init(&ft5x0x_ts->en_lock);
 	ft5x0x_ts->btn_active = 0;
 	ft5x0x_ts->enable = 1;
 
