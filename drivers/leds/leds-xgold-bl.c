@@ -25,6 +25,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <sofia/vmm_pmic.h>
+#include <sofia/board_id.h>
 #include "leds-pmic.h"
 
 #define TRUE 1
@@ -53,12 +54,10 @@
 #define PMIC_LED_CFG_DOWN	0x04
 
 /* LED BL Normal */
-#define SCU_K2_VAL	0x143
 #define SCU_K1MAX_VAL	0x120
 #define SCU_K2MAX_VAL	0xFFFF
 #define SCU_LED_UP	0x10104
 #define SCU_LED_DOWN	0x200
-#define SCU_SAFE_LED_UP	0x12
 
 /* LED BL LPBL */
 #define SCU_K4_VAL		0xFF
@@ -70,6 +69,9 @@
 #define SCU_LED_UP_CMP_200mv	0x10116
 
 #define XGOLD_LED_USE_SAFE_CTRL		BIT(0)
+
+static u32 SCU_k2_val;
+static u32 SCU_safe_led_up;
 
 #define BL_MODE_ON	\
 	do { \
@@ -88,14 +90,14 @@
 			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CTRL_REG,\
 					PMIC_LED_CTRL_UP);\
 		} else {\
-			val = (SCU_K2_VAL*100)/intensity; \
+			val = (SCU_k2_val*100)/intensity; \
 			led_write32(mmio_base, LED_CTRL, SCU_LED_DOWN); \
 			led_write32(mmio_base, LED_K2_CONTROL, val); \
 			led_write32(mmio_base, LED_K1MAX, SCU_K1MAX_VAL); \
 			led_write32(mmio_base, LED_K2MAX, SCU_K2MAX_VAL); \
 			if (pdata->flags & XGOLD_LED_USE_SAFE_CTRL) \
 				led_write32(mmio_base, SAFE_LED_CTRL,\
-						SCU_SAFE_LED_UP);\
+						SCU_safe_led_up);\
 			led_write32(mmio_base, LED_CTRL, SCU_LED_UP); \
 		} \
 	} while (0);
@@ -447,6 +449,17 @@ static int xgold_led_bl_probe(struct platform_device *pdev)
 	}
 
 	nbl = pdev->dev.of_node;
+
+	if (sofia_board_is(BOARD_SOFIA3G_MRD_7S) ||
+		sofia_board_is(BOARD_SOFIA3G_MRD_5S)) {
+		dev_info(&pdev->dev, "MRD7/5 Backlight hw config\n");
+		SCU_k2_val = 0xDC;
+		SCU_safe_led_up = 0x0A;
+	} else {
+		dev_info(&pdev->dev, "SVB Backlight hw config\n");
+		SCU_k2_val = 0x143;
+		SCU_safe_led_up = 0x12;
+	}
 
 	led_bl->init = xgold_led_bl_cbinit;
 	led_bl->exit = xgold_led_bl_cbexit;
