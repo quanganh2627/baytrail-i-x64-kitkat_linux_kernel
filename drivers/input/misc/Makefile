@@ -79,3 +79,6 @@ obj-$(CONFIG_INPUT_KIONIX_ACCEL)        += kionix_accel.o
 obj-$(CONFIG_INPUT_LTR559)              += ltr559.o
 obj-$(CONFIG_INPUT_SENSORS_MPU6500)	+= mpu6500.o
 obj-$(CONFIG_INPUT_MXC6225XC)           += mxc622x.o
+obj-$(CONFIG_INPUT_BMA2X2)              += bstclass.o
+obj-$(CONFIG_INPUT_BMA2X2)              += bma2x2.o
+

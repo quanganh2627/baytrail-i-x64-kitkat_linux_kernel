@@ -799,4 +799,16 @@ config INPUT_MXC6225XC
 	  Say Y here to use the 2-Axis Accelerometer MXC6225XC
 	  from MEMSIC.
 
+config INPUT_BMA2X2
+    tristate "Bosch Accelerometer Sensor"
+        depends on I2C 
+        help
+          Say Y here to use the bma250e Accelerometer Sensor.
+          from Bosch.
+
+          To compile this driver as a module, choose M here: the module
+          will be called bma2x2.
+
+
+
 endif
