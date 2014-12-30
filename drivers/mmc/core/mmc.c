@@ -1286,25 +1286,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	}
 
 	/*
-	 * Enable Background Operations (if supported)
-	 */
-	if (card->ext_csd.bkops) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				 EXT_CSD_BKOPS_EN, 1, 0);
-		if (err && err != -EBADMSG)
-			goto free_card;
-		if (err) {
-			pr_warn("%s: Enabling Background Operations failed\n",
-				   mmc_hostname(card->host));
-			err = 0;
-		} else {
-			card->ext_csd.bkops_en = 1;
-		}
-	}
-
-
-
-	/*
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
 	 */
