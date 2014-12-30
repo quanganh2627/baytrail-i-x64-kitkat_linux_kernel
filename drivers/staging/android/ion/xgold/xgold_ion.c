@@ -292,6 +292,8 @@ static struct ion_platform_data *xgold_ion_of(struct device_node *node)
 	struct ion_platform_heap *myheap;
 	u32 array[2];
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return -ENOMEM;
 
 	pdata->nr = of_get_child_count(node);
 again:
@@ -349,6 +351,8 @@ int xgold_ion_probe(struct platform_device *pdev)
 	}
 
 	heaps = kzalloc(sizeof(struct ion_heap *) * pdata->nr, GFP_KERNEL);
+	if (!heaps)
+		return -ENOMEM;
 
 	idev = ion_device_create(xgold_ion_ioctl);
 	if (IS_ERR_OR_NULL(idev)) {
