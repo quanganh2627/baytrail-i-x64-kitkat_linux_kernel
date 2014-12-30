@@ -128,13 +128,13 @@
 				intel,GPU-qos-settings = <
 					0x1C88 0x0      /* prio */
 					0x1C8C 0x1      /* mode limiter */
-					0x1C90 0x400    /* bandwidth */
-					0x1C94 0x1EC    /* saturation */
+					0x1C90 0xFFF    /* bandwidth */
+					0x1C94 0x3FF    /* saturation */
 					0x1C98 0x5>;    /* QoSEn */
 
 				intel,DCC2-qos-settings = <
 					0x1E08 0xE      /* prio */
-					0x1E0C 0x0      /* mode fixed */
+					0x1E0C 0x3      /* mode fixed */
 					0x1E10 0x9F     /* bandwidth */
 					0x1E14 0x90     /* saturation */
 					0x1E18 0x5>;    /* QoSEn */
@@ -165,8 +165,8 @@
 				intel,GPU-qos-settings = <
 					0x1C88 0x0      /* prio */
 					0x1C8C 0x1      /* mode limiter */
-					0x1C90 0x400    /* bandwidth */
-					0x1C94 0x1EC    /* saturation */
+					0x1C90 0xFFF    /* bandwidth */
+					0x1C94 0x3FF    /* saturation */
 					0x1C98 0x5>;    /* QoSEn */
 
 				intel,DCC2-qos-settings = <
