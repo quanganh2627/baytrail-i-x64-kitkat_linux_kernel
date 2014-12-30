@@ -275,7 +275,6 @@ static void xgold_sdhci_of_init(struct sdhci_host *host)
 		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
 
 	host->mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
-	host->mmc->caps2 |= MMC_CAP2_PACKED_CMD;
 }
 
 static struct sdhci_ops xgold_sdhci_ops = {
