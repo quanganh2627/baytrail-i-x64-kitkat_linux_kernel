@@ -19,6 +19,9 @@
 #include <linux/gfp.h>
 #include <linux/pci.h>
 #include <linux/kmemleak.h>
+#include <linux/delay.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
 
 #include <asm/proto.h>
 #include <asm/dma.h>
@@ -128,6 +131,7 @@ static void *__dma_alloc(struct device *dev, size_t size,
 	struct page *page;
 	unsigned int count = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	dma_addr_t addr;
+	int retried = 0;
 
 	dma_mask = dma_alloc_coherent_mask(dev, flag);
 
@@ -137,6 +141,23 @@ again:
 	/* CMA can be used only in the context which permits sleeping */
 	if (flag & __GFP_WAIT)
 		page = dma_alloc_from_contiguous(dev, count, get_order(size));
+
+	if (!page && !retried && (flag & __GFP_WAIT)) {
+		int tmp_lmk_threshold[6] = {0, 0, 0, 0, 0, 32000};
+
+		temp_adjust_lmk_minfree(tmp_lmk_threshold);
+		drop_slab();
+		iterate_supers(drop_pagecache_sb, NULL);
+		msleep(200);
+		compact_nodes();
+		retried = 1;
+		goto again;
+	}
+
+	if (retried)
+		pr_debug("__dma_alloc: we %s after aggressive reclaiming!\n",
+			(page ? "Succeed" : "Still Fail"));
+
 	/* fallback */
 	if (!page)
 		page = alloc_pages_node(dev_to_node(dev), flag, get_order(size));
