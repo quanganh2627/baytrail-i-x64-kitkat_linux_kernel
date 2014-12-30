@@ -56,6 +56,7 @@ static int lowmem_minfree[6] = {
 	16 * 1024,	/* 64MB */
 };
 static int lowmem_minfree_force[6] = {0,};
+static int lowmem_minfree_force_bak[6] = {0,};
 static int lowmem_minfree_size = 4;
 
 static unsigned long lowmem_deathpending_timeout;
@@ -65,6 +66,31 @@ static unsigned long lowmem_deathpending_timeout;
 		if (lowmem_debug_level >= (level))	\
 			pr_info(x);			\
 	} while (0)
+
+static void restore_minfree_force(struct work_struct *work)
+{
+	int i;
+
+	for (i = 0; i < 6; i++)
+		lowmem_minfree_force[i] = lowmem_minfree_force_bak[i];
+}
+
+static DECLARE_DELAYED_WORK(restore_lmk_minfree_work, restore_minfree_force);
+#define MINFREE_RESTORE_WAITTIME	15
+
+void temp_adjust_lmk_minfree(int *new_val)
+{
+	int i;
+
+	for (i = 0; i < 6; i++) {
+		lowmem_minfree_force_bak[i] = lowmem_minfree_force[i];
+		if (new_val[i])
+			lowmem_minfree_force[i] = new_val[i];
+	}
+
+	schedule_delayed_work(&restore_lmk_minfree_work,
+		round_jiffies_relative(MINFREE_RESTORE_WAITTIME * HZ));
+}
 
 static unsigned long lowmem_count(struct shrinker *s,
 				  struct shrink_control *sc)
