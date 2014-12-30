@@ -38,6 +38,7 @@
 #include <asm/spid.h>
 
 #define PCI_LBPC 0xf4 /* legacy/combination backlight modes */
+#define BLC_POLARITY	0x10000000
 
 void
 intel_fixed_panel_mode(struct drm_display_mode *fixed_mode,
@@ -885,12 +886,64 @@ static const struct backlight_ops intel_panel_bl_ops = {
 	.get_brightness = intel_panel_get_brightness,
 };
 
+void setup_vlv_backlight_reg(struct drm_i915_private *dev_priv)
+{
+	u32 duty_cycle = 0, mod_freq = 0, value = 0;
+
+	if (I915_READ(BLC_PWM_CTL2) == 0) {
+		if (dev_priv->vbt.backlight.active_low_pwm)
+			value = value | BLC_POLARITY;
+		else
+			value = value & (~BLC_POLARITY);
+		value = value | BLM_PWM_ENABLE;
+		I915_WRITE(BLC_PWM_CTL2, value);
+	}
+
+	if (I915_READ(BLC_PWM_CTL) == 0) {
+		/*
+		 * PWM stream is represented in terms of 25MHz S0IX clocks
+		 * multiplied by 16.
+		 * TODO: For valleyview system either hraw or s0ix can be used.
+		 * yet to finalise on hraw or si0x.
+		 */
+		if (dev_priv->vbt.backlight.pwm_freq_hz) {
+			mod_freq = (25 * 1000 * 1000)/
+				(dev_priv->vbt.backlight.pwm_freq_hz * 16);
+		}
+
+		/*
+		 * This Formulae will Scale the Backlight Brightness Value to
+		 * the Scale of 255
+		 */
+		duty_cycle = (mod_freq *
+			dev_priv->vbt.backlight.brightness_level) / 255;
+
+		/*
+		 * Program the Modulation Frequency i.e BacklightFrequency in
+		 * the first Upper 16 bits and BacklightDutyCycle in the Lower
+		 * 16 bits
+		 */
+		mod_freq = (mod_freq & 0xFFFF);
+		mod_freq = (mod_freq << 16) | (duty_cycle & 0xFFFF);
+		if (mod_freq)
+			I915_WRITE(BLC_PWM_CTL, mod_freq);
+		else
+			DRM_ERROR("unable to intialize from vbt, check ..\n");
+
+	}
+}
+
 int intel_panel_setup_backlight(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct backlight_properties props;
 	unsigned long flags;
+	if (IS_VALLEYVIEW(dev)
+	    && ((I915_READ(BLC_PWM_CTL2) == 0 || I915_READ(BLC_PWM_CTL) == 0))
+	    && dev_priv->vbt.backlight.is_inverter_type_pwm) {
+		setup_vlv_backlight_reg(dev_priv);
+	}
 
 	intel_panel_init_backlight(dev);
 

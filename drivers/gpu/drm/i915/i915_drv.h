@@ -1217,6 +1217,12 @@ struct intel_vbt_target_res {
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
+	struct {
+		u16 pwm_freq_hz;
+		bool active_low_pwm;
+		u8 brightness_level;
+		bool is_inverter_type_pwm;
+	} backlight;
 
 	/* Feature bits */
 	unsigned int int_tv_support:1;
