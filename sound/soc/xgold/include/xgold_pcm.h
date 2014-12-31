@@ -20,6 +20,8 @@
 #ifndef __XGOLD_PCM_H__
 #define __XGOLD_PCM_H__
 
+#define XGOLD_PCM_MAGIC_NUMBER 0xF0E1D2C3
+
 enum xgold_pcm_stream_type {
 	STREAM_PLAY = 0,
 	STREAM_PLAY2,
@@ -42,6 +44,7 @@ struct xgold_pcm {
 };
 
 struct xgold_runtime_data {
+	unsigned int magic_number;
 	struct xgold_pcm *pcm;
 	struct snd_pcm_substream *stream;
 	enum xgold_pcm_stream_type stream_type;

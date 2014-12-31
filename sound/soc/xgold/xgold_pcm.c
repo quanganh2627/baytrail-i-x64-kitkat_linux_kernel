@@ -489,6 +489,12 @@ void xgold_dsp_pcm_dma_play_handler(void *dev)
 		return;
 	}
 
+	if (xrtd->magic_number != XGOLD_PCM_MAGIC_NUMBER) {
+		xgold_err("%s: wrong MAGIC_NUMBER 0x%x !!\n",
+			__func__, xrtd->magic_number);
+		return;
+	}
+
 	spin_lock(&xrtd->lock);
 	xgold_pcm = xrtd->pcm;
 	if (!xgold_pcm || !xrtd->stream || !xrtd->stream->runtime ||
@@ -658,7 +664,7 @@ static int xgold_pcm_open(struct snd_pcm_substream *substream)
 			goto out;
 		}
 
-		if (!xgold_pcm->dma_mode)
+		if (!xgold_pcm->dma_mode) {
 			if (xrtd->stream_type == STREAM_PLAY)
 				register_dsp_audio_lisr_cb(
 					DSP_LISR_CB_PCM_PLAYER,
@@ -669,6 +675,7 @@ static int xgold_pcm_open(struct snd_pcm_substream *substream)
 					DSP_LISR_CB_PCM_PLAYER_A,
 					xgold_dsp_pcm_play_handler,
 					(void *)xrtd);
+		}
 	} else {
 		snd_soc_set_runtime_hwparams(substream, &xgold_pcm_record_cfg);
 
@@ -713,6 +720,7 @@ static int xgold_pcm_open(struct snd_pcm_substream *substream)
 	}
 
 	xrtd->pcm = xgold_pcm;
+	xrtd->magic_number = XGOLD_PCM_MAGIC_NUMBER;
 	spin_lock_init(&xrtd->lock);
 	runtime->private_data = xrtd;
 
@@ -744,7 +752,7 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 	xgold_pcm = xrtd->pcm;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		if (!xgold_pcm->dma_mode)
+		if (!xgold_pcm->dma_mode) {
 			if (xrtd->stream_type == STREAM_PLAY)
 				register_dsp_audio_lisr_cb(
 					DSP_LISR_CB_PCM_PLAYER,
@@ -755,6 +763,7 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 					DSP_LISR_CB_PCM_PLAYER_A,
 					NULL,
 					NULL);
+		}
 	} else if (xrtd->stream_type == HW_PROBE_A)
 		register_dsp_audio_lisr_cb(
 			DSP_LISR_CB_HW_PROBE_A,
@@ -780,6 +789,8 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 		ops->set_controls(DSP_AUDIO_POWER_REQ,
 		&power_state);
 #endif
+
+	xrtd->magic_number = 0;
 
 	kfree(xrtd);
 
