@@ -809,6 +809,13 @@ config INPUT_BMA2X2
           To compile this driver as a module, choose M here: the module
           will be called bma2x2.
 
+config INPUT_KMX61G
+	tristate "Kionix KMX61G Accelerometer & Magnetic"
+	depends on I2C && INPUT
+	help
+	  Say Y here if you have an KMX61G chip.
 
+
+ 
 
 endif
