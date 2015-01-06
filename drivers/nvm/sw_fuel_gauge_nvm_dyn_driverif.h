@@ -73,13 +73,14 @@
 
 /** @brief
  * Structure for holding NVM data for software fuel gauge calibration point
+ * Any change to this structure, same change will have to be done in
+ * nvm userspace
  */
 typedef struct {
   S32 cc_charge_mc;
   S32 cc_discharge_mc;
   S32 cc_balanced_mc;
   S16 cc_error_mc;
-  U16 checksum;
   long long rtc_time_sec;
   S16 soc_permil;
   S16 soc_error_permil;
@@ -87,7 +88,7 @@ typedef struct {
   S16 qmax_n_minus_2_err_permil;
   U16 qmax_n_minus_1;
   S16 qmax_n_minus_1_err_permil;
-  U16 reserved;	/* This slot is not getting saved in NVM after reboot */
+  U16 checksum;
 } T_SOC_CAL_PNT_NVM;
 
 /* This type shall be included in nvm_cfg.h by the storage team for software fuel gauge module */

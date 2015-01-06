@@ -120,7 +120,6 @@ static bool sw_fuel_gauge_nvm_init(void)
 		.cc_discharge_mc = 0,
 		.cc_balanced_mc = 0,
 		.cc_error_mc = 0,
-		.checksum = -1,
 		.rtc_time_sec = 0,
 		.soc_permil = 0,
 		.soc_error_permil = 0,
@@ -128,7 +127,7 @@ static bool sw_fuel_gauge_nvm_init(void)
 		.qmax_n_minus_2_err_permil = 0,
 		.qmax_n_minus_1 = 0,
 		.qmax_n_minus_1_err_permil = 0,
-		.reserved = -1,
+		.checksum = -1,
 	};
 
 	if (!sw_fuel_gauge_nvm_is_initialized()) {
@@ -175,7 +174,6 @@ static bool sw_fuel_gauge_nvm_read_group_if_valid(
 		.cc_discharge_mc = 0,
 		.cc_balanced_mc = 0,
 		.cc_error_mc = 0,
-		.checksum = -1,
 		.rtc_time_sec = 0,
 		.soc_permil = 0,
 		.soc_error_permil = 0,
@@ -183,7 +181,7 @@ static bool sw_fuel_gauge_nvm_read_group_if_valid(
 		.qmax_n_minus_2_err_permil = 0,
 		.qmax_n_minus_1 = 0,
 		.qmax_n_minus_1_err_permil = 0,
-		.reserved = -1,
+		.checksum = -1,
 	};
 
 	if (!sw_fuel_gauge_nvs.sw_fuel_gauge_nvs_up) {
@@ -344,7 +342,6 @@ static bool sw_fuel_gauge_nvm_store_last_calibration_point(
 		.cc_discharge_mc = p_last_soc_cal->cc_down_mc,
 		.cc_balanced_mc = p_last_soc_cal->cc_balanced_mc,
 		.cc_error_mc = 0,
-		.checksum = 0,
 		.rtc_time_sec = (long long) p_last_soc_cal->rtc_time_sec,
 		.soc_permil = p_last_soc_cal->soc_permil,
 		.soc_error_permil = p_last_soc_cal->soc_error_permil,
@@ -352,7 +349,7 @@ static bool sw_fuel_gauge_nvm_store_last_calibration_point(
 		.qmax_n_minus_2_err_permil = 0,
 		.qmax_n_minus_1 = p_last_soc_cal->full_battery_cap_mah,
 		.qmax_n_minus_1_err_permil = 0,
-		.reserved = 0,
+		.checksum = 0,
 	};
 
 	if (!sw_fuel_gauge_nvs.sw_fuel_gauge_nvs_up) {
