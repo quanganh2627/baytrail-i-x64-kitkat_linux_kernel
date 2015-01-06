@@ -111,6 +111,8 @@ threshold comparator */
 			((IBAT_LONG_TERM_AVERAGE_PERIOD_SECS\
 			* IBAT_LONG_TERM_AVERAGE_ERROR_MARGIN_PERCENT) / 100))
 
+#define SUSPEND_POLLING_PERIOD_SECS				(3600)
+
 #define SYSFS_INPUT_VAL_LEN					(1)
 
 /* Macro to trace and log debug event and data. */
@@ -1278,6 +1280,12 @@ static int sw_fuel_gauge_hal_suspend(struct device *dev)
 	(void)dev;
 
 	disable_irq(sw_fuel_gauge_hal_instance.irq);
+	/* update wake up alarm while suspending */
+	alarm_cancel(&sw_fuel_gauge_hal_instance.
+				ibat_long_term_average_polling_atimer);
+	SET_ALARM_TIMER(&sw_fuel_gauge_hal_instance.
+				ibat_long_term_average_polling_atimer,
+				SUSPEND_POLLING_PERIOD_SECS);
 	/* Nothing to do here except logging */
 	SW_FUEL_GAUGE_HAL_DEBUG_NO_PARAM(SW_FUEL_GAUGE_DEBUG_HAL_SUSPEND);
 	return 0;
@@ -1292,6 +1300,11 @@ static int sw_fuel_gauge_hal_resume(struct device *dev)
 {
 	/* Unused parameter */
 	(void)dev;
+
+	/* restore alarm polling period */
+	alarm_cancel(&sw_fuel_gauge_hal_instance.
+				ibat_long_term_average_polling_atimer);
+	sw_fuel_gauge_hal_process_timer_and_irq_work(0);
 
 	enable_irq(sw_fuel_gauge_hal_instance.irq);
 	/* Nothing to do here */
