@@ -83,3 +83,6 @@ obj-$(CONFIG_INPUT_BMA2X2)              += bstclass.o
 obj-$(CONFIG_INPUT_BMA2X2)              += bma2x2.o
 obj-$(CONFIG_INPUT_KMX61G)              += kmx61.o
 obj-$(CONFIG_INPUT_LIS3DSH)             += lis3dsh_acc.o
+obj-$(CONFIG_INPUT_BMG160)              += bmg160.o
+obj-$(CONFIG_INPUT_BMG160)              += bmg160_driver.o
+

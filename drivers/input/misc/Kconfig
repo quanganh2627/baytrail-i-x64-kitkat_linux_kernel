@@ -822,6 +822,13 @@ config INPUT_LIS3DSH
           Say Y here to use the LIS3DSH Accelerometer Sensor.
           from STM.
  
+config INPUT_BMG160
+    tristate "Bosch Gyroscope Sensor"
+        depends on I2C 
+        help
+          Say Y here to use the bmg160 Gyroscope Sensor.
+          from Bosch.
+
  
 
 endif
