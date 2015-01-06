@@ -1,4 +1,4 @@
 #define SOFIA3G_ES21
 /* do not enable MRD5S_512 specific camera module until we all switch to that board */
-/* #define MRD5S_OV5648 */
+#define MRD5S_OV5648
 #include "SF_3G-mrd5s.dts"
