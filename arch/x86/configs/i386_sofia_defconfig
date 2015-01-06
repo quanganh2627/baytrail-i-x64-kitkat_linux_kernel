@@ -1529,6 +1529,7 @@ CONFIG_INPUT_LSM303DLHC_MAG=y
 # CONFIG_INPUT_MXC6225XC is not set
 # CONFIG_INPUT_BMA2X2 is not set
 # CONFIG_INPUT_KMX61G is not set
+# CONFIG_INPUT_LIS3DSH is not set
 #
 # Hardware I/O ports
 #

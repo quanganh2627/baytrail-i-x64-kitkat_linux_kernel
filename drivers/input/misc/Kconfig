@@ -815,7 +815,13 @@ config INPUT_KMX61G
 	help
 	  Say Y here if you have an KMX61G chip.
 
-
+config INPUT_LIS3DSH
+    tristate "STM Accelerometer Sensor"
+        depends on I2C 
+        help
+          Say Y here to use the LIS3DSH Accelerometer Sensor.
+          from STM.
+ 
  
 
 endif
