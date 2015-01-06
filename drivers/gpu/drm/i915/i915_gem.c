@@ -1456,7 +1456,7 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 	/* keep the check under struct_mutex to avoid sync problem */
 	if (dev_priv->pm.shutdown_in_progress) {
-		ret = -EINVAL;
+		ret = 0;
 		goto unlock;
 	}
 
