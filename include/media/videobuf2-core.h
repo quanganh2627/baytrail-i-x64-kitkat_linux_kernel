@@ -318,6 +318,7 @@ struct v4l2_fh;
  * @done_wq:	waitqueue for processes waiting for buffers ready to be dequeued
  * @alloc_ctx:	memory type/allocator-specific contexts for each plane
  * @streaming:	current streaming state
+ * @error:	a fatal error occurred on the queue
  * @fileio:	file io emulator internal data, used only if emulator is active
  */
 struct vb2_queue {
@@ -350,6 +351,7 @@ struct vb2_queue {
 	unsigned int			plane_sizes[VIDEO_MAX_PLANES];
 
 	unsigned int			streaming:1;
+	unsigned int			error:1;
 
 	struct vb2_fileio_data		*fileio;
 };
@@ -369,6 +371,7 @@ int vb2_prepare_buf(struct vb2_queue *q, struct v4l2_buffer *b);
 int __must_check vb2_queue_init(struct vb2_queue *q);
 
 void vb2_queue_release(struct vb2_queue *q);
+void vb2_queue_error(struct vb2_queue *q);
 
 int vb2_qbuf(struct vb2_queue *q, struct v4l2_buffer *b);
 int vb2_expbuf(struct vb2_queue *q, struct v4l2_exportbuffer *eb);

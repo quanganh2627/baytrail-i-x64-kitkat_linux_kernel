@@ -621,6 +621,7 @@ extern int uvc_dequeue_buffer(struct uvc_video_queue *queue,
 		struct v4l2_buffer *v4l2_buf, int nonblocking);
 extern int uvc_queue_enable(struct uvc_video_queue *queue, int enable);
 extern void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect);
+extern void uvc_queue_error(struct uvc_video_queue *queue);
 extern struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 		struct uvc_buffer *buf);
 extern int uvc_queue_mmap(struct uvc_video_queue *queue,

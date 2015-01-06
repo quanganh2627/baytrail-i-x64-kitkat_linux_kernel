@@ -230,6 +230,13 @@ int uvc_queue_mmap(struct uvc_video_queue *queue, struct vm_area_struct *vma)
 	return ret;
 }
 
+void uvc_queue_error(struct uvc_video_queue *queue)
+{
+	mutex_lock(&queue->mutex);
+	vb2_queue_error(&queue->queue);
+	mutex_unlock(&queue->mutex);
+}
+
 #ifndef CONFIG_MMU
 unsigned long uvc_queue_get_unmapped_area(struct uvc_video_queue *queue,
 		unsigned long pgoff)

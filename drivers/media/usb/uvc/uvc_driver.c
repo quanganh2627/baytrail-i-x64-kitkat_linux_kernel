@@ -1925,11 +1925,17 @@ error:
 static void uvc_disconnect(struct usb_interface *intf)
 {
 	struct uvc_device *dev = usb_get_intfdata(intf);
+	struct uvc_streaming *stream;
 
 	/* Set the USB interface data to NULL. This can be done outside the
 	 * lock, as there's no other reader.
 	 */
 	usb_set_intfdata(intf, NULL);
+
+	list_for_each_entry(stream, &dev->streams, list) {
+		if (stream->intf == intf)
+			uvc_queue_error(&stream->queue);
+	}
 
 	if (intf->cur_altsetting->desc.bInterfaceSubClass ==
 	    UVC_SC_VIDEOSTREAMING)
