@@ -1114,8 +1114,8 @@ static int cif_isp20_img_src_select_strm_fmt(
 		CIF_ISP20_CID_VBLANKING, &vblanking);
 	if (IS_ERR_VALUE(ret))
 		goto err;
-
-	dev->isp_dev.v_blanking_us = vblanking;
+	if (vblanking != 0)
+		dev->isp_dev.v_blanking_us = vblanking;
 
 	return 0;
 err:
