@@ -1984,7 +1984,7 @@ static int kxcjk1013_suspend(struct device *dev)
 
 	dev_dbg(dev, "%s: suspend\n", KIONIX_ACCEL_NAME);
 	if (atomic_read(&acceld->accel_enabled))
-		atomic_set(&acceld->on_before_suspend, 0);
+		atomic_set(&acceld->on_before_suspend, 1);
 
 	err = kionix_accel_disable(acceld);
 	kionix_accel_power_off(acceld);
