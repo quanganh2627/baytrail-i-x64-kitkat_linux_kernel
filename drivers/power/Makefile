@@ -56,6 +56,7 @@ obj-$(CONFIG_CHARGER_MAX8997)	+= max8997_charger.o
 obj-$(CONFIG_CHARGER_MAX8998)	+= max8998_charger.o
 obj-$(CONFIG_CHARGER_BQ2415X)	+= bq2415x_charger.o bat_driver_hal.o bq2415x_charger_i2c.o bq24158_charger_data.o
 obj-$(CONFIG_CHARGER_BQ24296)	+= bq24296_charger.o bat_driver_hal.o bq24296_charger_data.o
+obj-$(CONFIG_CHARGER_RT9455)	+= rt9455_charger.o bat_driver_hal.o rt9455_charger_i2c.o rt9455_charger_data.o
 obj-$(CONFIG_CHARGER_BQ24190)	+= bq24190_charger.o
 obj-$(CONFIG_CHARGER_BQ24735)	+= bq24735-charger.o
 obj-$(CONFIG_SW_FUEL_GAUGE)	+= sw_fuel_gauge.o sw_fuel_gauge_nvs.o ag620_sw_fuel_gauge_hal.o brown_out_driver.o pmic_bat_driver_hal.o bat_driver_hal.o dummy_bat_fitted_driver_hal.o bprofile_dts_parser.o

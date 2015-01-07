@@ -14,6 +14,23 @@
                 pinctrl-3 = < &chgreset_agold_active_pins >;
         };
 #endif
+#ifdef CONFIG_CHARGER_RT9455
+        bat:battery {
+                compatible = "intel,rt9455_charger";
+                reg = < 0x22 >;
+                interrupts = < 0 1 >;
+                interrupt-parent = < &bat>;
+                #interrupt-cells = < 1 >;
+                interrupt-map = < 0 &ag620_pmu ABB_PMU_CI XGOLD_IRQ_TYPE_NONE
+				  1 &ag620_pmu ABB_PMU_CSTAT XGOLD_IRQ_TYPE_NONE>;
+		interrupt-names = "chrg_int", "chrg_det";
+                pinctrl-names = "default", "sleep", "inactive", "active";
+                pinctrl-0 = < &chgreset_agold_default_pins >;
+                pinctrl-1 = < &chgreset_agold_sleep_pins >;
+                pinctrl-2 = < &chgreset_agold_inactive_pins >;
+                pinctrl-3 = < &chgreset_agold_active_pins >;
+        };
+#endif
 #endif
 
 #ifdef SOFIA3G_CATALOG_MRD7S_CHARGER
