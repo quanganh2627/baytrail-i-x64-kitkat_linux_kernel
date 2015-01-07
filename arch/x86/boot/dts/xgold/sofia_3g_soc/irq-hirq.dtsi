@@ -24,7 +24,10 @@ hirq:hirq-interrupt-controller {
                 < 0 IRQ_TYPE_DEFAULT >, /* SPCU_T1HIGH_INT = 520 */
 		< 0 IRQ_TYPE_DEFAULT >, /* RTC_ALARM = 521 */
 		< 0 IRQ_TYPE_DEFAULT >, /* CPU_CLK_CHANGE_INT = 522 */
-		< 0 IRQ_TYPE_DEFAULT >; /* MODEM_DVFS_INT = 523 */
+		< 0 IRQ_TYPE_DEFAULT >, /* MODEM_DVFS_INT = 523 */
+		< 0 IRQ_TYPE_DEFAULT >, /* VM_VERIFY_INT = 524 */
+		< 0 IRQ_TYPE_DEFAULT >, /* SPCU_T2LOW_INT = 525 */
+		< 0 IRQ_TYPE_DEFAULT >; /* SPCU_T2HIGH_INT = 526 */
 	intel,hirq_offset = <512>;
 };
 #endif
