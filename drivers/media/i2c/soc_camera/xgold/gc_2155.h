@@ -2564,7 +2564,7 @@ static struct gc_mbus_fmt gc2155_mbus_formats[] = {
 
 /* GC2155 stream_on and stream_off reg sequences */
 static struct gc_register gc2155_stream_on[] = {
-	{ GC_8BIT, 0xfe, 0x30 },
+	/*{ GC_8BIT, 0xfe, 0x20 },*/
 	{ GC_8BIT, 0xfe, 0x03 },
 	{ GC_8BIT, 0x10, 0x95 },
 	{ GC_8BIT, 0xfe, 0x00 },
@@ -2572,7 +2572,7 @@ static struct gc_register gc2155_stream_on[] = {
 };
 
 static struct gc_register gc2155_stream_off[] = {
-	{ GC_8BIT, 0xfe, 0x30 },
+	{ GC_8BIT, 0xfe, 0x20 },
 	{ GC_8BIT, 0xfe, 0x03 },
 	{ GC_8BIT, 0x10, 0x81 },
 	{ GC_8BIT, 0xfe, 0x00 },
