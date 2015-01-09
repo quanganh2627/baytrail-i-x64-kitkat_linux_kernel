@@ -92,6 +92,26 @@
 
 static struct ov_camera_module ov5648;
 
+#define BG_Ratio_Typical  0x163
+#define RG_Ratio_Typical  0x17c
+
+struct ov5648_otp_struct {
+		int otp_en;
+		int flag;
+		u32 module_integrator_id;
+		u32 lens_id;
+		u32 rg_ratio;
+		u32 bg_ratio;
+		u32 user_data[2];
+		u32 light_rg;
+		u32 light_bg;
+		int R_gain;
+		int G_gain;
+		int B_gain;
+};
+
+static struct ov5648_otp_struct *otp_ptr;
+
 /* ======================================================================== */
 /* Base sensor configs */
 /* ======================================================================== */
@@ -1456,12 +1476,356 @@ static int ov5648_s_ext_ctrls(struct ov_camera_module *cam_mod,
 }
 
 /*--------------------------------------------------------------------------*/
+/* index: index of otp group. (1, 2, 3)
+ * return: 0,
+ */
+static int read_otp(struct ov_camera_module *cam_mod,
+	    int index)
+{
+	int i;
+	u16 temp;
+	/* read otp into buffer */
+	if (index == 1) {
+		/* read otp --Bank 0 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x0f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d05, &((*otp_ptr).module_integrator_id));
+		(*otp_ptr).module_integrator_id =
+			(*otp_ptr).module_integrator_id & 0x7f;
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d06, &((*otp_ptr).lens_id));
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d0b, &temp);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d07, &((*otp_ptr).rg_ratio));
+		(*otp_ptr).rg_ratio =
+			((*otp_ptr).rg_ratio<<2) + ((temp>>6) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d08, &((*otp_ptr).bg_ratio));
+		(*otp_ptr).bg_ratio =
+			((*otp_ptr).bg_ratio<<2) + ((temp>>4) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0c, &((*otp_ptr).light_rg));
+		(*otp_ptr).light_rg =
+			((*otp_ptr).light_rg<<2) + ((temp>>2) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0d, &((*otp_ptr).light_bg));
+		(*otp_ptr).light_bg =
+			((*otp_ptr).light_bg<<2) + (temp & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d09, &((*otp_ptr).user_data[0]));
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0a, &((*otp_ptr).user_data[1]));
+	} else if (index == 2) {
+		/* read otp --Bank 0 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x0f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0e, &((*otp_ptr).module_integrator_id));
+		(*otp_ptr).module_integrator_id =
+			(*otp_ptr).module_integrator_id & 0x7f;
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0f, &((*otp_ptr).lens_id));
+		/* read otp --Bank 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x1f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d04, &temp);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d00, &((*otp_ptr).rg_ratio));
+		(*otp_ptr).rg_ratio =
+			((*otp_ptr).rg_ratio<<2) + ((temp>>6) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d01, &((*otp_ptr).bg_ratio));
+		(*otp_ptr).bg_ratio =
+			((*otp_ptr).bg_ratio<<2) + ((temp>>4) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d05, &((*otp_ptr).light_rg));
+		(*otp_ptr).light_rg =
+			((*otp_ptr).light_rg<<2) + ((temp>>2) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d06, &((*otp_ptr).light_bg));
+		(*otp_ptr).light_bg =
+			((*otp_ptr).light_bg<<2) + (temp & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d02, &((*otp_ptr).user_data[0]));
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d03, &((*otp_ptr).user_data[1]));
+	} else if (index == 3) {
+		/* read otp --Bank 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x1f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d07, &((*otp_ptr).module_integrator_id));
+		(*otp_ptr).module_integrator_id =
+			(*otp_ptr).module_integrator_id & 0x7f;
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d08, &((*otp_ptr).lens_id));
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d0d, &temp);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d09, &((*otp_ptr).rg_ratio));
+		(*otp_ptr).rg_ratio =
+			((*otp_ptr).rg_ratio<<2) + ((temp>>6) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0a, &((*otp_ptr).bg_ratio));
+		(*otp_ptr).bg_ratio =
+			((*otp_ptr).bg_ratio<<2) + ((temp>>4) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0e, &((*otp_ptr).light_rg));
+		(*otp_ptr).light_rg =
+			((*otp_ptr).light_rg<<2) + ((temp>>2) & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0f, &((*otp_ptr).light_bg));
+		(*otp_ptr).light_bg =
+			((*otp_ptr).light_bg<<2) + (temp & 0x03);
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0b, &((*otp_ptr).user_data[0]));
+		ov_camera_module_read_reg(cam_mod, 1,
+			0x3d0c, &((*otp_ptr).user_data[1]));
+	}
+	/* clear otp buffer */
+	for (i = 0; i < 16; i++)
+		ov_camera_module_write_reg(cam_mod, 0x3d00 + i, 0x00);
+
+	return 0;
+}
+
+/*
+ *Camera driver need to load AWB calibration data
+ *stored in OTP and write to gain registers after
+ *initialization of register settings.
+ * index: index of otp group. (1, 2, 3)
+ * return: 0, group index is empty
+ *		1, group index has invalid data
+ *		2, group index has valid data
+ */
+static int check_otp(struct ov_camera_module *cam_mod, int index)
+{
+	int i;
+	int flag = 0, rg = 0, bg = 0;
+	if (index == 1) {
+		/* read otp --Bank 0 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x0f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d05, &flag);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d07, &rg);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d08, &bg);
+	} else if (index == 2) {
+		/* read otp --Bank 0 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x0f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d0e, &flag);
+
+		/* read otp --Bank 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x1f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d00, &rg);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d01, &bg);
+	} else if (index == 3) {
+		/* read otp --Bank 1 */
+		ov_camera_module_write_reg(cam_mod, 0x3d84, 0xc0);
+		ov_camera_module_write_reg(cam_mod, 0x3d85, 0x10);
+		ov_camera_module_write_reg(cam_mod, 0x3d86, 0x1f);
+		ov_camera_module_write_reg(cam_mod, 0x3d81, 0x01);
+		mdelay(5);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d07, &flag);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d09, &rg);
+		ov_camera_module_read_reg(cam_mod, 1, 0x3d0a, &bg);
+	}
+
+	flag = flag & 0x80;
+
+	/* clear otp buffer */
+	for (i = 0; i < 16; i++)
+		ov_camera_module_write_reg(cam_mod, 0x3d00 + i, 0x00);
+
+	if (flag) {
+		return 1;
+	} else {
+		if (rg == 0 && bg == 0)
+			return 0;
+		else
+			return 2;
+	}
+
+}
+
+/* R_gain, sensor red gain of AWB, 0x400 =1
+ * G_gain, sensor green gain of AWB, 0x400 =1
+ * B_gain, sensor blue gain of AWB, 0x400 =1
+ * return 0;
+ */
+static int ov5648_update_awb_gain(struct ov_camera_module *cam_mod)
+{
+	int R_gain = otp_ptr->R_gain;
+	int G_gain = otp_ptr->G_gain;
+	int B_gain = otp_ptr->B_gain;
+	if (R_gain > 0x400) {
+		ov_camera_module_write_reg(cam_mod, 0x5186, R_gain>>8);
+		ov_camera_module_write_reg(cam_mod, 0x5187, R_gain & 0x00ff);
+	}
+	if (G_gain > 0x400) {
+		ov_camera_module_write_reg(cam_mod, 0x5188, G_gain>>8);
+		ov_camera_module_write_reg(cam_mod, 0x5189, G_gain & 0x00ff);
+	}
+	if (B_gain > 0x400) {
+		ov_camera_module_write_reg(cam_mod, 0x518a, B_gain>>8);
+		ov_camera_module_write_reg(cam_mod, 0x518b, B_gain & 0x00ff);
+	}
+
+	return 0;
+}
+
+static int ov5648_otp_read(struct ov_camera_module *cam_mod)
+{
+	int ret = 0;
+	int temp = 0;
+	int i, otp_index;
+	u16 rg = 1, bg = 1;
+	int R_gain, G_gain, B_gain, G_gain_R, G_gain_B;
+
+	ov_camera_module_pr_debug(cam_mod, "\n");
+
+	if (otp_ptr != NULL) {
+		ov_camera_module_pr_debug(cam_mod, "OTP data loaded already\n");
+		return 0;
+	} else {
+		otp_ptr = kzalloc(sizeof(*otp_ptr), GFP_KERNEL);
+		if (!otp_ptr) {
+			ov_camera_module_pr_err(cam_mod, "otp alloc fail!\n");
+			return -ENOMEM;
+		}
+	}
+
+	ov_camera_module_write_reg(cam_mod, 0x0100, 1);
+
+	/* R/G and B/G of current camera module is read out from sensor OTP
+	 * check first OTP with valid data
+	 */
+	for (i = 1; i <= 3; i++) {
+		temp = check_otp(cam_mod, i);
+		if (temp == 2) {
+			otp_index = i;
+			break;
+		}
+	}
+	if (i > 3) {
+		/* no valid wb OTP data */
+		otp_ptr->otp_en = 0;
+		return 1;
+	}
+
+	read_otp(cam_mod, otp_index);
+
+	if (otp_ptr->light_rg == 0) {
+		/* no light source information in OTP */
+		rg = otp_ptr->rg_ratio;
+	} else {
+		/* light source information found in OTP */
+		rg = otp_ptr->rg_ratio * (otp_ptr->light_rg + 512) / 1024;
+	}
+	if (otp_ptr->light_bg == 0) {
+		/* no light source information in OTP */
+		bg = otp_ptr->bg_ratio;
+	} else {
+		/* light source information found in OTP */
+		bg = otp_ptr->bg_ratio * (otp_ptr->light_bg + 512) / 1024;
+	}
+
+	if (rg == 0)
+		rg = 1;
+	if (bg == 0)
+		bg = 1;
+
+	/*calculate G gain
+	 *0x400 = 1x gain
+	 */
+	if (bg < BG_Ratio_Typical) {
+		if (rg < RG_Ratio_Typical) {
+			/* current_otp.bg_ratio < BG_Ratio_typical &&
+			 * current_otp.rg_ratio < RG_Ratio_typical
+			 */
+			G_gain = 0x400;
+			B_gain = 0x400 * BG_Ratio_Typical / bg;
+			R_gain = 0x400 * RG_Ratio_Typical / rg;
+		} else {
+			/* current_otp.bg_ratio < BG_Ratio_typical &&
+			 * current_otp.rg_ratio >= RG_Ratio_typical
+			 */
+			R_gain = 0x400;
+			G_gain = 0x400 * rg / RG_Ratio_Typical;
+			B_gain = G_gain * BG_Ratio_Typical / bg;
+		}
+	} else {
+		if (rg < RG_Ratio_Typical) {
+			/* current_otp.bg_ratio >= BG_Ratio_typical &&
+			 * current_otp.rg_ratio < RG_Ratio_typical
+			 */
+			B_gain = 0x400;
+			G_gain = 0x400 * bg / BG_Ratio_Typical;
+			R_gain = G_gain * RG_Ratio_Typical / rg;
+		} else {
+			/* current_otp.bg_ratio >= BG_Ratio_typical &&
+			 * current_otp.rg_ratio >= RG_Ratio_typical
+			 */
+			G_gain_B = 0x400 * bg / BG_Ratio_Typical;
+			G_gain_R = 0x400 * rg / RG_Ratio_Typical;
+			if (G_gain_B > G_gain_R) {
+				B_gain = 0x400;
+				G_gain = G_gain_B;
+				R_gain = G_gain * RG_Ratio_Typical / rg;
+			} else {
+				R_gain = 0x400;
+				G_gain = G_gain_R;
+				B_gain = G_gain * BG_Ratio_Typical / bg;
+			}
+		}
+	}
+
+	otp_ptr->R_gain = R_gain;
+	otp_ptr->G_gain = G_gain;
+	otp_ptr->B_gain = B_gain;
+
+	ov_camera_module_write_reg(cam_mod, 0x0100, 0);
+
+	return ret;
+}
+
+
+/*--------------------------------------------------------------------------*/
 
 static int ov5648_start_streaming(struct ov_camera_module *cam_mod)
 {
 	int ret = 0;
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
+
+	/*apply otp data*/
+	if (otp_ptr != NULL && otp_ptr->otp_en == 1) {
+		ov_camera_module_pr_debug(cam_mod,
+					"apply otp data for ov5648...\n");
+		ov5648_update_awb_gain(cam_mod);
+	}
 
 	ret = ov5648_g_VTS(cam_mod, &cam_mod->vts_min);
 	if (IS_ERR_VALUE(ret)) {
@@ -1594,6 +1958,14 @@ static int __init ov5648_probe(
 		goto err;
 	}
 
+	ov_camera_module_s_power(&ov5648.sd, 1);
+
+	dev_info(&client->dev, "get otp data for r2a...\n");
+	if (!IS_ERR_VALUE(ov5648_otp_read(&ov5648)))
+		otp_ptr->otp_en = 1;
+
+	ov_camera_module_s_power(&ov5648.sd, 0);
+
 	dev_info(&client->dev, "probing successful\n");
 	return 0;
 
@@ -1616,6 +1988,9 @@ static int __exit ov5648_remove(
 	}
 
 	ov_camera_module_release(cam_mod);
+
+	if (otp_ptr != NULL)
+		kfree(otp_ptr);
 
 	dev_info(&client->dev, "removed\n");
 
