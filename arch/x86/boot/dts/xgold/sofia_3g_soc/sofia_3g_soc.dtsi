@@ -858,6 +858,10 @@
 						intel,reset-status = <8>;
 						intel,io-access-guest;
 					};
+
+					#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
+					/* don't need config keypad device on MRD7S/5S */
+					#else
 					keypad:keypad {
 						compatible = "intel,keypad";
 						#address-cells = < 0 >;
@@ -876,7 +880,7 @@
 						pm,state-D0 = "enable";
 						pm,state-D3 = "disable";
 					};
-
+					#endif
 				};
                                idi_per:idi_per {
 					compatible = "intel,idiper";
