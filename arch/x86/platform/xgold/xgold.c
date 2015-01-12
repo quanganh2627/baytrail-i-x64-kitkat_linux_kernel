@@ -190,6 +190,7 @@ static int __init xgold_init_machine(void)
 	int ret = 0;
 	XGOLD_ENTER;
 	xgold_soc_init();
+	set_sched_clock_stable();
 	XGOLD_EXIT;
 	return ret;
 }
