@@ -166,10 +166,10 @@
 				  82 /*chrg_term_ma*/
 				  2900 /*low_batt_mv*/
 				  60 /*disch_tmp_ul*/
-				  0xffffffec /*disch_tmp_ll (-20)*/
+				  0xfffffff6 /*disch_tmp_ll (-10)*/
 				  0 /*min_temp*/
 				  3 /*min_temp_restart*/
-				  42 /*max_temp_restart*/ >;
+				  47 /*max_temp_restart*/ >;
 
 	prof-standrd-cap_to_vbat_ocv = <
 		2912 3280 3438 3530 3595 3643 3672 3681 3685 3689
@@ -186,7 +186,7 @@
 
 	prof-standrd-ntemp_ranges = <1>;
 
-	prof-standrd-temp_range0 = < 45 /*max_temp*/
+	prof-standrd-temp_range0 = < 50 /*max_temp*/
 					     4350 /*full_chrg_vol*/
 					     1450 /*full_chrg_cur*/
 					     98 /*charging_res_cap*/
@@ -197,7 +197,7 @@
 };
 
 &fuel_gauge_hal {
-	sense_resistor_mohm = <22>;
+	sense_resistor_mohm = <20>;
 	gain_error_1_uc_per_mc = <30>;
 	gain_error_2_uc_per_mc = <30>;
 };
