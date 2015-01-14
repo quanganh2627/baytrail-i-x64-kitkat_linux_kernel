@@ -20,6 +20,8 @@
 #ifndef __XGOLD_PCM_H__
 #define __XGOLD_PCM_H__
 
+#define XGOLD_PCM_MAGIC_NUMBER 0xF0E1D2C3
+
 enum xgold_pcm_stream_type {
 	STREAM_PLAY = 0,
 	STREAM_PLAY2,

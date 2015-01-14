@@ -26,6 +26,7 @@
 #include <linux/of_address.h>
 #include <sofia/mv_svc_hypercalls.h>
 #include <sofia/vmm_pmic.h>
+#include <sofia/board_id.h>
 #include "leds-pmic.h"
 
 #define TRUE 1
@@ -54,12 +55,10 @@
 #define PMIC_LED_CFG_DOWN	0x04
 
 /* LED BL Normal */
-#define SCU_K2_VAL	0x143
 #define SCU_K1MAX_VAL	0x120
 #define SCU_K2MAX_VAL	0xFFFF
 #define SCU_LED_UP	0x10104
 #define SCU_LED_DOWN	0x200
-#define SCU_SAFE_LED_UP	0x12
 
 /* LED BL LPBL */
 #define SCU_K4_VAL		0xFF
@@ -73,6 +72,53 @@
 #define XGOLD_LED_USE_SAFE_CTRL		BIT(0)
 #define XGOLD_LED_USE_SECURE_IO_ACCESS	BIT(1)
 #define XGOLD_LED_USE_NATIVE_IO_ACCESS	BIT(2)
+
+static u32 SCU_k2_val;
+static u32 SCU_safe_led_up;
+
+#define BL_MODE_ON	\
+	do { \
+		if (pdata->pmic_bl) {\
+			val = (PMIC_K2_VAL * 100)/intensity; \
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_K1MAX_HIGH_REG,\
+					PMIC_K1MAX_HIGH);\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_K1MAX_LOW_REG,\
+					PMIC_K1MAX_LOW);\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_K2_HIGH_CTRL_REG,\
+					(val & 0xFF00) >> 8);\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_K2_LOW_CTRL_REG,\
+					(val & 0xFF));\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CFG_REG,\
+					PMIC_LED_CFG_UP);\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CTRL_REG,\
+					PMIC_LED_CTRL_UP);\
+		} else {\
+			val = (SCU_k2_val*100)/intensity; \
+			led_write32(mmio_base, LED_CTRL, SCU_LED_DOWN); \
+			led_write32(mmio_base, LED_K2_CONTROL, val); \
+			led_write32(mmio_base, LED_K1MAX, SCU_K1MAX_VAL); \
+			led_write32(mmio_base, LED_K2MAX, SCU_K2MAX_VAL); \
+			if (pdata->flags & XGOLD_LED_USE_SAFE_CTRL) \
+				led_write32(mmio_base, SAFE_LED_CTRL,\
+						SCU_safe_led_up);\
+			led_write32(mmio_base, LED_CTRL, SCU_LED_UP); \
+		} \
+	} while (0);
+
+#define SET_LCD_BL_ON BL_MODE_ON
+
+#define BL_MODE_OFF	\
+	do { \
+		if (pdata->pmic_bl) { \
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CFG_REG,\
+					PMIC_LED_CFG_DOWN);\
+			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CTRL_REG,\
+					PMIC_LED_CTRL_DOWN);\
+		} else {\
+			led_write32(mmio_base, LED_CTRL, SCU_LED_DOWN);\
+		} \
+	} while (0);
+#define SET_LCD_BL_OFF BL_MODE_OFF
 
 /*In micro secs*/
 #define DELAY_TIME_FOR_LED_CTRL_200MV 25
@@ -119,7 +165,7 @@ static int led_ctrl = SCU_LED_UP_CMP_100mv;
 
 static void led_write32(struct xgold_led_bl_device *, u16, u32);
 static inline void xgold_led_bl_on(struct xgold_led_bl_device *bl,
-								int intensity)
+			int intensity)
 {
 	int val;
 	if (bl->pmic_bl) {
@@ -137,14 +183,14 @@ static inline void xgold_led_bl_on(struct xgold_led_bl_device *bl,
 			vmm_pmic_reg_write(PMIC_BL_ADDR | LED_CTRL_REG,
 					PMIC_LED_CTRL_UP);
 	} else {
-			val = (SCU_K2_VAL*100)/intensity;
+			val = (SCU_k2_val * 100)/intensity;
 			led_write32(bl, LED_CTRL, SCU_LED_DOWN);
 			led_write32(bl, LED_K2_CONTROL, val);
 			led_write32(bl, LED_K1MAX, SCU_K1MAX_VAL);
 			led_write32(bl, LED_K2MAX, SCU_K2MAX_VAL);
 			if (bl->flags & XGOLD_LED_USE_SAFE_CTRL)
 				led_write32(bl, SAFE_LED_CTRL,
-						SCU_SAFE_LED_UP);
+						SCU_safe_led_up);
 			led_write32(bl, LED_CTRL, SCU_LED_UP);
 	}
 }
@@ -160,8 +206,6 @@ static inline void xgold_led_bl_off(struct xgold_led_bl_device *bl)
 		led_write32(bl, LED_CTRL, SCU_LED_DOWN);
 	}
 }
-
-
 
 #if !defined CONFIG_PLATFORM_DEVICE_PM_VIRT
 static int xgold_bl_set_pm_state(struct device *,
@@ -440,6 +484,17 @@ static int xgold_led_bl_probe(struct platform_device *pdev)
 	}
 
 	nbl = pdev->dev.of_node;
+
+	if (sofia_board_is(BOARD_SOFIA3G_MRD_7S) ||
+		sofia_board_is(BOARD_SOFIA3G_MRD_5S)) {
+		dev_info(&pdev->dev, "MRD7/5 Backlight hw config\n");
+		SCU_k2_val = 0xDC;
+		SCU_safe_led_up = 0x0A;
+	} else {
+		dev_info(&pdev->dev, "SVB Backlight hw config\n");
+		SCU_k2_val = 0x143;
+		SCU_safe_led_up = 0x12;
+	}
 
 	led_bl->init = xgold_led_bl_cbinit;
 	led_bl->exit = xgold_led_bl_cbexit;

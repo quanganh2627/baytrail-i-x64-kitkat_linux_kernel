@@ -44,41 +44,49 @@
 #define	xgold_debug(fmt, arg...) \
 		pr_debug("snd: speech: "fmt, ##arg)
 
-enum xgold_speech_probe_point_id{
-	PROBE_POINT_A,
-	PROBE_POINT_B,
-	PROBE_POINT_C,
-	PROBE_POINT_D,
-	PROBE_POINT_E,
-	PROBE_POINT_F,
-	PROBE_POINT_END
+enum xgold_speech_probe_point_id {
+        PROBE_POINT_A,
+        PROBE_POINT_B,
+        PROBE_POINT_C,
+        PROBE_POINT_D,
+        PROBE_POINT_E,
+        PROBE_POINT_F,
+        PROBE_POINT_END
 };
 
 enum xgold_speech_probe_lisr_id {
-	PROBE_A_STREAM_PLAY,
-	PROBE_A_STREAM_REC,
-	PROBE_B_STREAM_PLAY,
-	PROBE_B_STREAM_REC,
-	PROBE_C_STREAM_PLAY,
-	PROBE_C_STREAM_REC,
-	PROBE_D_STREAM_PLAY,
-	PROBE_D_STREAM_REC,
-	PROBE_E_STREAM_PLAY,
-	PROBE_E_STREAM_REC,
-	PROBE_F_STREAM_PLAY,
-	PROBE_F_STREAM_REC,
-	PROBE_POINT_STREAM_END
+        PROBE_A_STREAM_PLAY,
+        PROBE_A_STREAM_REC,
+        PROBE_B_STREAM_PLAY,
+        PROBE_B_STREAM_REC,
+        PROBE_C_STREAM_PLAY,
+        PROBE_C_STREAM_REC,
+        PROBE_D_STREAM_PLAY,
+        PROBE_D_STREAM_REC,
+        PROBE_E_STREAM_PLAY,
+        PROBE_E_STREAM_REC,
+        PROBE_F_STREAM_PLAY,
+        PROBE_F_STREAM_REC,
+        PROBE_POINT_STREAM_END
 };
 
 struct xgold_speech_probes_status {
-	bool active;
+        bool active;
+};
+
+struct xgold_audio_stream {
+	unsigned short *hwptr;
+	unsigned int hwptr_done;
+	unsigned int periods;
+	unsigned int period_size_bytes;
+	struct snd_pcm_substream *stream;
 };
 
 struct xgold_audio_speech_probe {
 	struct device *dev;
 	struct dsp_audio_device *dsp;
-	struct xgold_speech_probes_status
-		sp_status[PROBE_POINT_STREAM_END];
+        struct xgold_speech_probes_status
+                sp_status[PROBE_POINT_STREAM_END];
 };
 
 struct xgold_audio_speech_runtime_data {

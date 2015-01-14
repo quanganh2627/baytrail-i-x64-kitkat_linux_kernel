@@ -416,8 +416,9 @@ agold {
 			compatible = "intel,chgr_idi", "intel,idi,peripheral";
 #endif
 			#address-cells = < 0 >;
-			reg = < 0xE6500A00 0x10 >;
-			reg-names = "registers";
+			reg = < 0xE6500A00 0x10
+				0xE6501024 0x4 >;
+			reg-names = "registers", "pmu_c1_irqsm";
 #ifdef SF_3G_TAB
 			idi-peripheral-type = "intel,idi,bq2429x";
 #else

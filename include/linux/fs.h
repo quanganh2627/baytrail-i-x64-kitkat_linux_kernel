@@ -2106,6 +2106,10 @@ extern struct kmem_cache *names_cachep;
 
 extern void final_putname(struct filename *name);
 
+/* fs/drop_caches.c */
+extern void drop_pagecache_sb(struct super_block *sb, void *unused);
+extern void drop_slab(void);
+
 #define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
 #define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))
 #ifndef CONFIG_AUDITSYSCALL

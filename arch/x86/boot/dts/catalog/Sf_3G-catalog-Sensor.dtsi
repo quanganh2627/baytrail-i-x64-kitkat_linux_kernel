@@ -157,7 +157,109 @@
         };
 #endif
 
+#ifdef CONFIG_INPUT_MXC6225XC
+	mxc622x {
+		compatible = "memsic,mxc622x";
+		reg = < 0x15 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "mxc622x_acc_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
 
+#ifdef CONFIG_INPUT_BMA2X2
+        bma2x2_0 {
+         	compatible = "bosch,bma2x2";
+		reg = < 0x18 >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "bma2x2_acc_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+       };      	
+#endif
+#ifdef CONFIG_INPUT_KMX61G 
+	kmx61g {
+		compatible = "kionix,kmx61";
+		reg = < 0x0f >; /* to distinguish from the default*/
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "kmx61_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+	};
+#endif
+
+#ifdef CONFIG_INPUT_LIS3DSH
+        lis3dsh {
+         	compatible = "stm,lis3dsh_acc";
+		reg = < 0x1e >;
+		interrupt-parent = <&eint>;
+		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
+		intel,axis-map = < 1 0 2 >;
+		intel,negate = < 1 0 0 >;
+		intel,poll-interval = < 100 >;
+		pinctrl-names = "default", "sleep", "inactive";
+		pinctrl-0 = <&accel_default_pins>;
+		pinctrl-1 = <&accel_sleep_pins>;
+		pinctrl-2 = <&accel_inactive_pins>;
+		pm,class-name = "lis3dsh_acc_class";
+		pm,user-name = "accelerometer";
+		pm,state-D0 = "enable";
+		pm,state-D3 = "disable";
+       };      	
+#endif
+
+#ifdef CONFIG_INPUT_BMG160
+        bmg160 {
+         	compatible = "bosch,bmg160";
+		reg = < 0x69 >;
+
+                pinctrl-names = "default", "sleep", "inactive";
+                pinctrl-0 = <&gyroscope_default_pins>;
+                pinctrl-1 = <&gyroscope_sleep_pins>;
+                pinctrl-2 = <&gyroscope_inactive_pins>;
+                intel,axis-map = < 0 1 2 >;
+                intel,negate = < 0 0 0 >;
+                intel,poll-interval = < 100 >;
+                intel,full-scale = < 2000 >;
+                pm,class-name = "mpu6500_class";
+                pm,user-name = "gyroscope";
+                pm,state-D0 = "enable";
+                pm,state-D3 = "disable";
+ 
+
+       };      	
+#endif
+ 
+
+ 
 #endif
 #endif
 

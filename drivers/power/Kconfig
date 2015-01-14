@@ -428,6 +428,14 @@ config CHARGER_FAN54020
 	help
 	  Say Y here to enable support for fan54020 Charger.
 
+config CHARGER_RT9455
+	tristate "RT9455 battery charger driver"
+	depends on I2C
+	depends on IDI
+	help
+	  Say Y to include support for Richtek RT9455
+	  Battery Charger.
+
 config CHARGER_TPS65090
 	tristate "TPS65090 battery charger driver"
 	depends on MFD_TPS65090

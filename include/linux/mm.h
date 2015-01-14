@@ -1993,6 +1993,9 @@ unsigned long shrink_slab(struct shrink_control *shrink,
 			  unsigned long nr_pages_scanned,
 			  unsigned long lru_pages);
 
+/* lowmemorykiller.c */
+extern void temp_adjust_lmk_minfree(int *new_val);
+
 #ifndef CONFIG_MMU
 #define randomize_va_space 0
 #else
@@ -2072,6 +2075,8 @@ void __init setup_nr_node_ids(void);
 #else
 static inline void setup_nr_node_ids(void) {}
 #endif
+
+void compact_nodes(void);
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

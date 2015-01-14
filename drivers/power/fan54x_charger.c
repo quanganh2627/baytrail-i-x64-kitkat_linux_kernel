@@ -123,6 +123,8 @@ static enum power_supply_property fan54x_power_props[] = {
 	POWER_SUPPLY_PROP_INLMT,
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 };
 
 #ifdef SYSFS_FAKE_VBUS_SUPPORT
@@ -1650,6 +1652,7 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	bool wtd_expired;
 	u8 ic_info, vendor_info, pn_info, rev_info;
 	int ret;
+	int cnt = 0;
 
 	INIT_CHARGER_DEBUG_ARRAY(chrgr_dbg);
 
@@ -1744,9 +1747,9 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	the default voltage and current safety limits from being assumed.
 	The values written are the maximum values possible to allow freedom
 	of setting all required settings during runtime. */
-	if ((pn_info == 1 && rev_info != 0) || pn_info == 5) {
-		/* CC = 1450mA, CV = 4.40V */
-		ret = fan54x_attr_write(client, SAFETY_REG, 0x7A);
+	if (pn_info == 1 && rev_info != 0) {
+		/* FAN54020 */
+		ret = fan54x_attr_write(client, SAFETY_REG, 0xFF);
 		if (ret) {
 			pr_err("fan54x write SAFETY_REG error, ret = %d\n",
 								ret);
@@ -1756,8 +1759,23 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	}
 
 	if (pn_info == 5) {
-		pr_debug("setting VLOWV to 3.4v\n");
+		/* FAN54015: CC = 1450mA, CV = 4.40V */
+		while (cnt++ < 2) {
+			ret = fan54x_attr_write(client, SAFETY_REG, 0x7A);
+			if (ret) {
+				pr_err("fan54x write SAFETY_REG error, ret = %d\n",
+									ret);
+				ret = -ENODEV;
+				goto pre_fail;
+			}
+		}
+
 		ret = fan54x_attr_write(client, VLOWV, 0);
+		if (ret) {
+			pr_err("setting VLOWV to 3.4V failed\n");
+			ret = -ENODEV;
+			goto pre_fail;
+		}
 	}
 
 	/* Trigger charger watchdog to prevent expiry if the watchdog

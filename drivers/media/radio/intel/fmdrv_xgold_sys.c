@@ -82,6 +82,7 @@ struct fmtrx_int_ev_info {
 #define XGOLD_FMR_TRIG_EV	0
 #define TIMEOUT_CMD_COMPLETE	5000
 
+#define TIMEOUT_CMD_ACK	50 /* timeout for mini dsp to ack command */
 /*
 ** ============================================================================
 **
@@ -547,19 +548,17 @@ s32 fmr_sys_wait_for_event(enum fmtrx_trigger_events event_id)
 
 	switch (event_id) {
 	case FMR_IR_CMD_DONE:
-		rc = wait_event_interruptible_timeout(wait_msg,
-			(fmr_cmd_wait_event != XGOLD_FMR_WAIT_EV),
-			msecs_to_jiffies(TIMEOUT_CMD_COMPLETE));
-
+		rc = wait_event_timeout(wait_msg,
+			   (fmr_cmd_wait_event != XGOLD_FMR_WAIT_EV),
+			   (TIMEOUT_CMD_ACK * HZ));
 		if (rc)
 			fmr_cmd_wait_event = XGOLD_FMR_WAIT_EV;
 		break;
 
 	case FMR_IR_CMD2_DONE:
-		rc = wait_event_interruptible_timeout(wait_msg,
-			(fmr_cmd2_wait_event != XGOLD_FMR_WAIT_EV),
-			msecs_to_jiffies(TIMEOUT_CMD_COMPLETE));
-
+		rc = wait_event_timeout(wait_msg,
+			   (fmr_cmd2_wait_event != XGOLD_FMR_WAIT_EV),
+			   (TIMEOUT_CMD_ACK * HZ));
 		if (rc)
 			fmr_cmd2_wait_event = XGOLD_FMR_WAIT_EV;
 		break;
@@ -909,6 +908,7 @@ int fmr_sys_get_cfg(struct fmrx_cfg **cfg)
 		       &ext_lna_cfg_ext_ant, sizeof(struct fmrx_ext_lna_cfg));
 
 		rc = 0;
+		release_firmware(fw);
 	}
 
 	*cfg = rx_cfg;

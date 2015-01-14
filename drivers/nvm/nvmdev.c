@@ -681,28 +681,34 @@ static long nvmdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             index    = 0;
             ua_index = 0;
             /* identify the updated groups and read it */
-            do {
+            if (nvmdev_update > 0) do {
                 INFO("  index [%02d] nvmdev_update [%02d] ua_index[%d]\n", index, nvmdev_update, ua_index);
                 if (nvmdev_struct[index].update_count != 0) {
 			int ret;
+			int value;
 
                     /* Identify the type index and group index from nvmdev_struct index */
                     get_type_and_group_from_index(index, &type_index, &group_index);
 
                     /* Copy the group id and data to user-agent */
-                    (nvmdev_ioctl + ua_index)->group_id    = ((*(group_prop + type_index) + group_index)->group_id);
-                    (nvmdev_ioctl + ua_index)->no_of_bytes = ((*(group_prop + type_index) + group_index)->nof_bytes_mirror) - sizeof(T_NVM_VER_REV_LGT);
+		    value = (*(group_prop + type_index) + group_index)->group_id;
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->group_id, &value, sizeof(value));
+		    value = ((*(group_prop + type_index) + group_index)->nof_bytes_mirror) - sizeof(T_NVM_VER_REV_LGT);
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->no_of_bytes, &value, sizeof(value));
 
                     ret = copy_to_user((nvmdev_ioctl + ua_index)->data_ptr,                                                         \
                                         (&((*(group_prop + type_index) + group_index)->p_data[sizeof(T_NVM_VER_REV_LGT)])),   \
                                                 (((*(group_prop + type_index) + group_index)->nof_bytes_mirror) - sizeof(T_NVM_VER_REV_LGT)));
-			BUG_ON(ret);
-                    (nvmdev_ioctl + ua_index)->version  = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->version;
-                    (nvmdev_ioctl + ua_index)->revision = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->revision;
+		    WARN_ON(ret);
+		    value = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->version;
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->version, &value, sizeof(value));
+		    value = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->revision;
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->revision, &value, sizeof(value));
                     /* length can be ignore (as we have nof_bytes) */
-                    (nvmdev_ioctl + ua_index)->length   = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->nof_bytes - \
-                                                                                                                    sizeof(T_NVM_VER_REV_LGT);
-                    (nvmdev_ioctl + ua_index)->valid = 1;
+		    value = ((T_NVM_VER_REV_LGT*)(*(group_prop + type_index) + group_index)->p_data)->nof_bytes - sizeof(T_NVM_VER_REV_LGT);
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->length, &value, sizeof(value));
+		    value = 1;
+                    copy_to_user(&(nvmdev_ioctl + ua_index)->valid, &value, sizeof(value));
                     /* Update count processing */
                     INFO("  group_id update_count [0x%x][%05u]\n", ((*(group_prop + type_index) + group_index)->group_id), \
                                                                    nvmdev_struct[index].update_count);

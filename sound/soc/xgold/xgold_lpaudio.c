@@ -44,21 +44,30 @@
 
 #include "lpaudio.h"
 
-extern struct dma_async_tx_descriptor *
-	       (*lpaudio_dma_setup)(struct dma_chan *dmach);
-
 struct device *lpaudio_dev;
-static struct T_AUD_DSP_CMD_PCM_PLAY_PAR pcm_par = {
-	.mode = 0,
-	.rate = 8,
-};
 static phys_addr_t lpaudio_dmac_addr;
 static __iomem void *lpaudio_dmac_base;
 static int lpaudio_dmac_size;
 static struct dma_chan *lpaudio_dmach;
 static dma_addr_t lpaudio_dma_addr;
 static dma_addr_t lpaudio_workbuf_addr;
-static int lpaudio_enable_dma = 1;
+static int lpmp3_mode;
+struct lpaudio_ctrl_t *lpaudio_ctrl;
+
+int xgold_lpmp3_mode(void)
+{
+	return lpmp3_mode;
+}
+
+void xgold_lpmp3_enable(void)
+{
+	lpmp3_mode = 1;
+}
+
+void xgold_lpmp3_disable(void)
+{
+	lpmp3_mode = 0;
+}
 
 static void lpaudio_buf_prepare(void)
 {
@@ -71,24 +80,6 @@ static void lpaudio_buf_prepare(void)
 	page = alloc_pages(GFP_KERNEL, get_order(WORK_BUF_SIZE));
 	lpaudio_workbuf_addr = dma_map_page(NULL, page, 0,
 			WORK_BUF_SIZE, DMA_TO_DEVICE);
-}
-
-static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
-{
-	struct dma_async_tx_descriptor *desc;
-
-	memset(phys_to_virt(lpaudio_dma_addr), 0,
-				DMA_BLOCK_SIZE * DMA_BLOCK_NUM);
-	lpaudio_dmach = dmach;
-	desc = lpaudio_dmach->device->device_prep_dma_cyclic(
-				lpaudio_dmach,
-				lpaudio_dma_addr,
-				(DMA_BLOCK_SIZE * DMA_BLOCK_NUM),
-				DMA_BLOCK_SIZE,
-				DMA_SL_MEM_TO_MEM,
-				0,
-				NULL);
-	return desc;
 }
 
 static u32 lpaudio_find_dma(void)
@@ -111,40 +102,46 @@ static u32 lpaudio_find_dma(void)
 	return ret;
 }
 
+static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
+{
+	struct dma_async_tx_descriptor *desc;
+
+	dev_info(lpaudio_dev, "%s\n", __func__);
+	lpaudio_dmach = dmach;
+	desc = lpaudio_dmach->device->device_prep_dma_cyclic(
+				lpaudio_dmach,
+				lpaudio_dma_addr,
+				(DMA_BLOCK_SIZE * DMA_BLOCK_NUM),
+				DMA_BLOCK_SIZE,
+				DMA_SL_MEM_TO_MEM,
+				0,
+				NULL);
+	xgold_lpmp3_enable();
+	return desc;
+}
+
+static void dma_release(struct dma_chan *dmach)
+{
+	dev_info(lpaudio_dev, "%s\n", __func__);
+	xgold_lpmp3_disable();
+}
+
+static void dma_trigger(int start)
+{
+	dev_info(lpaudio_dev, "%s, %s\n", __func__, start ? "START" : "STOP");
+	if (start)
+		lpaudio_ctrl->dma_ptr = (u32 *)lpaudio_find_dma();
+	else
+		lpaudio_ctrl->dma_ptr = NULL;
+}
+
 static int lpaudio_stop(void)
 {
-#if 0
-	if (lpaudio_enable_dma)
-		dmaengine_terminate_all(lpaudio_dmach);
-	else {
-		pcm_par.setting = 0;
-		dsp_audio_cmd(
-				DSP_AUD_PCM1_PLAY,
-				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
-				(u16 *)&pcm_par);
-		dsp_audio_irq_deactivate(p_dsp_audio_dev, DSP_IRQ_1);
-	}
-#endif
 	return 0;
 }
 
 static int lpaudio_start(void)
 {
-#if 0
-	pcm_par.setting = 1;
-	if (lpaudio_enable_dma) {
-		dma_async_issue_pending(lpaudio_dmach);
-		pcm_par.req = 1; /*dma*/
-	} else {
-		pcm_par.req = 0; /*pio*/
-		dsp_audio_cmd(
-				DSP_AUD_PCM1_PLAY,
-				sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
-				(u16 *) &pcm_par);
-		dsp_audio_irq_activate(p_dsp_audio_dev,
-				DSP_IRQ_1);
-	}
-#endif
 	return 0;
 }
 
@@ -187,31 +184,10 @@ static int lpaudio_fs_mmap(struct file *file, struct vm_area_struct *vma)
 static long lpaudio_fs_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
-	unsigned short *shm;
 	u32 ret;
-	int i;
 
-	dev_dbg(lpaudio_dev, "%s: cmd: %d\n", __func__, cmd);
+	dev_dbg(lpaudio_dev, "%s: cmd: %x\n", __func__, cmd);
 	switch (cmd) {
-	/*
-	case LPAUDIO_IOCTRL_DSP_DL:
-		shm = (void *)dsp_get_audio_shmem_base_addr() +
-			OFFSET_SM_AUDIO_BUFFER_1_DL;
-		ret = (u32)shm;
-		break;
-	case LPAUDIO_IOCTRL_DSP_UL:
-		shm = (void *)dsp_get_audio_shmem_base_addr() +
-			OFFSET_SM_AUDIO_BUFFER_UL;
-		ret = (u32)shm;
-		break;
-	*/
-	case LPAUDIO_IOCTRL_DSP_PLAY:
-		pcm_par.setting = 2;
-		dsp_audio_cmd(
-			DSP_AUD_PCM1_PLAY,
-			sizeof(struct T_AUD_DSP_CMD_PCM_PLAY_PAR),
-			(u16 *) &pcm_par);
-		break;
 	case LPAUDIO_IOCTRL_DMAC:
 		ret = lpaudio_find_dma();
 		if (ret == 0)
@@ -243,10 +219,14 @@ static long lpaudio_fs_ioctl(struct file *file,
 	case LPAUDIO_IOCTRL_ENABLE:
 		dev_info(lpaudio_dev, "%s: enable lpaudio\n", __func__);
 		lpaudio_dma_setup = dma_setup;
+		lpaudio_dma_release = dma_release;
+		lpaudio_trigger = dma_trigger;
 		break;
 	case LPAUDIO_IOCTRL_DISABLE:
 		dev_info(lpaudio_dev, "%s: disable lpaudio\n", __func__);
 		lpaudio_dma_setup = NULL;
+		lpaudio_dma_release = NULL;
+		lpaudio_trigger = NULL;
 		break;
 	default:
 		return -EINVAL;
@@ -271,16 +251,12 @@ static ssize_t lpaudio_fs_write(struct file *file, const char __user *user_buf,
 		return -EINVAL;
 	if (!strcmp(cmd, "disable")) {
 		lpaudio_dma_setup = NULL;
+		lpaudio_dma_release = NULL;
 		dev_info(lpaudio_dev, "%s: disable lpaudio\n", __func__);
 	} else if (!strcmp(cmd, "enable")) {
 		lpaudio_dma_setup = dma_setup;
+		lpaudio_dma_release = dma_release;
 		dev_info(lpaudio_dev, "%s: ensable lpaudio\n", __func__);
-	} else if (!strcmp(cmd, "pio")) {
-		dev_info(lpaudio_dev, "%s: enable pio mode\n", __func__);
-		lpaudio_enable_dma = 0;
-	} else if (!strcmp(cmd, "dma")) {
-		dev_info(lpaudio_dev, "%s: enable dma mode\n", __func__);
-		lpaudio_enable_dma = 1;
 	} else {
 		dev_info(lpaudio_dev, "%s: unknown command\n", __func__);
 	}
@@ -316,6 +292,10 @@ static int lpaudio_probe(struct platform_device *pdev)
 	lpaudio_dmac_base = devm_ioremap(&pdev->dev,
 			lpaudio_dmac_addr, lpaudio_dmac_size);
 	lpaudio_buf_prepare();
+
+	lpaudio_ctrl = phys_to_virt(lpaudio_workbuf_addr);
+	lpaudio_ctrl->dma_ptr = 0;
+
 	misc_register(&lpaudio_misc_dev);
 	return 0;
 }

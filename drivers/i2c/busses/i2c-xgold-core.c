@@ -694,9 +694,41 @@ static irqreturn_t xgold_i2c_p_handler(void *dev)
 		/* End of transfer */
 		if (!data->cmd_err && data->state == XGOLD_I2C_RECEIVE &&
 			data->buf_len > 0 && !data->dmach) {
+			static int bus;
+			static unsigned long count;
+			static __u16 addr, len, flags;
 
-			i2c_debug("WARN : Flush RX FIFO %d bytes remaining\n",
+			i2c_debug("bus: %d slave:%x len:%d flags:%x WARN : Flush RX FIFO %d bytes remaining\n",
+				adap->nr,
+				data->msg->addr,
+				data->msg->len,
+				data->msg->flags,
 				data->buf_len);
+
+			/* WA */
+			if (bus == adap->nr && addr == data->msg->addr &&
+			    len == data->msg->len &&
+			    flags == data->msg->flags) {
+				count++;
+				if (count > 1000) {
+					i2c_err("bus:%d slave:%x len:%d flags:%x count:%ld WARN: Flush RX FIFO %d bytes remaining\n",
+						adap->nr,
+						data->msg->addr,
+						data->msg->len,
+						data->msg->flags,
+						count,
+						data->buf_len);
+					count = 0;
+					reg_write(I2C_P_IRQSC_TX_END_INTRS_CLR,
+					data->regs + I2C_P_IRQSC_OFFSET);
+				}
+			} else {
+				count = 0;
+				bus = adap->nr;
+				addr = data->msg->addr;
+				len = data->msg->len;
+				flags = data->msg->flags;
+			}
 
 			/*
 			 * WARNING: Due to race condition, it may happen that

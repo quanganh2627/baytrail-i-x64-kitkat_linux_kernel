@@ -12,5 +12,8 @@ menuconfig X86_INTEL_SOFIA
 config NKERNEL_DDI
 	bool
 
+config SOFIA_BOARD_ID
+        bool
+
 config MOBILEVISOR_VDRIVER
 	bool

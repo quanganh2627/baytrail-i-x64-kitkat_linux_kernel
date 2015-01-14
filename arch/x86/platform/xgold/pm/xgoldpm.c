@@ -34,6 +34,28 @@ int xgold_dev_pm_set_state(struct device *dev,
 	if (!new_state)
 		return -1; /* TODO: Return proper error */
 
+	if (xgold_lpmp3_mode()) {
+		if (!strcmp(dev->pm_data.pm_user->name, "dma8ch") &&
+			!strcmp(new_state->name, "disable")) {
+			return ret;
+		}
+		if (!strcmp(dev->pm_data.pm_user->name, "idi") &&
+			!strcmp(new_state->name, "disable")) {
+			return ret;
+		}
+		if (!strcmp(dev->pm_data.pm_user->name, "afe") &&
+			!strcmp(new_state->name, "disable")) {
+			pr_notice("lpmp3 pm: ignore afe change\n");
+			return ret;
+		}
+		if (!strcmp(dev->pm_data.pm_user->name, "dsp_audio") &&
+			(!strcmp(new_state->name, "disable") ||
+			!strcmp(new_state->name, "suspend"))) {
+			pr_notice("lpmp3 pm: ignore dsp change\n");
+			return ret;
+		}
+	}
+
 	if (!strcmp(dev->pm_data.pm_user->name, "chg") ||
 		!strcmp(dev->pm_data.pm_user->name, "bat") ||
 		!strcmp(dev->pm_data.pm_user->name, "ccd") ||

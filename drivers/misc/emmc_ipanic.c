@@ -1005,11 +1005,6 @@ static int match_dev_panic_part(struct device *dev, const void *data)
 
 	part = dev_to_part(dev);
 
-	if (part == NULL)
-		pr_info("part empty!\n");
-	else
-		pr_info("part_name=%s!\n", part->info->volname);
-
 	return part->info && part->info->volname &&
 		!strcmp(name, part->info->volname);
 }

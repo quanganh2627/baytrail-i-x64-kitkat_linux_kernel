@@ -152,25 +152,6 @@ static void sdhci_mask_irqs(struct sdhci_host *host, u32 irqs)
 	sdhci_clear_set_irqs(host, irqs, 0);
 }
 
-/*
- * add support for sdcard slot type which need detect pin logic is:
- * insert: low->high
- * remove: high->low
- */
-
-static u32 sdhci_get_present(struct sdhci_host *host)
-{
-	u32 present;
-	present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
-		SDHCI_CARD_PRESENT;
-#if defined(CONFIG_MMC_XGOLD_SDCARD_DETECT_POSITIVE)
-	if (host->mmc->index == 1)
-		present ^= SDHCI_CARD_PRESENT;
-#endif
-
-	return present;
-}
-
 static void sdhci_set_card_detection(struct sdhci_host *host, bool enable)
 {
 	u32 present, irqs;
@@ -179,7 +160,8 @@ static void sdhci_set_card_detection(struct sdhci_host *host, bool enable)
 	    (host->mmc->caps & MMC_CAP_NONREMOVABLE))
 		return;
 
-	present = sdhci_get_present(host);
+	present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
+			      SDHCI_CARD_PRESENT;
 	irqs = present ? SDHCI_INT_CARD_REMOVE : SDHCI_INT_CARD_INSERT;
 
 	if (enable)
@@ -205,7 +187,8 @@ static void sdhci_reset(struct sdhci_host *host, u8 mask)
 	u8 ctrl;
 
 	if (host->quirks & SDHCI_QUIRK_NO_CARD_NO_RESET) {
-		if (!(sdhci_get_present(host)))
+		if (!(sdhci_readl(host, SDHCI_PRESENT_STATE) &
+			SDHCI_CARD_PRESENT))
 			return;
 	}
 
@@ -1411,7 +1394,8 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
 			present = 1;
 		else
-			present = sdhci_get_present(host);
+			present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
+					SDHCI_CARD_PRESENT;
 	}
 
 	if (!present || host->flags & SDHCI_DEVICE_DEAD) {
@@ -1670,7 +1654,7 @@ static int sdhci_do_get_cd(struct sdhci_host *host)
 		return !!gpio_cd;
 
 	/* Host native card detect */
-	return !!(sdhci_get_present(host));
+	return !!(sdhci_readl(host, SDHCI_PRESENT_STATE) & SDHCI_CARD_PRESENT);
 }
 
 static int sdhci_get_cd(struct mmc_host *mmc)
@@ -2531,7 +2515,9 @@ again:
 		mmc_hostname(host->mmc), intmask);
 
 	if (intmask & (SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE)) {
-		u32 present = sdhci_get_present(host);
+		u32 present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
+			      SDHCI_CARD_PRESENT;
+
 		/*
 		 * There is a observation on i.mx esdhc.  INSERT bit will be
 		 * immediately set again when it gets cleared, if a card is

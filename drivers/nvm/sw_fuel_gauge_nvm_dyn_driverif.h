@@ -73,6 +73,8 @@ extern "C" {
 
 /** @brief
  * Structure for holding NVM data for software fuel gauge calibration point
+ * Any change to this structure, same change will have to be done in
+ * nvm userspace
  */
 typedef struct {
 	S32 cc_charge_mc;

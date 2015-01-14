@@ -38,6 +38,7 @@
 #if defined(CONFIG_PM_SLEEP) || defined(CONFIG_PM_RUNTIME)
 #include <linux/pm_runtime.h>
 #endif
+#include <linux/xgold_noc.h>
 
 #include "dcc-core.h"
 #include "dcc-gra.h"
@@ -807,6 +808,8 @@ long dcc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		for (ovl_id = 0; ovl_id < DCC_OVERLAY_NUM; ovl_id++)
 			updt.ovls[ovl_id].fence_release = -1;
 
+		if (pdata->timeline_current == 0)
+			xgold_noc_qos_set("DCC2");
 		if (err == 0) {
 #ifdef CONFIG_SW_SYNC_USER
 			if (pdata->use_fences) {

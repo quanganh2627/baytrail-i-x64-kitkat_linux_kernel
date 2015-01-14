@@ -1496,7 +1496,7 @@ static int meas_ag620_resume(struct device *dev)
 
 const struct dev_pm_ops meas_ag620_pm = {
 	.suspend = meas_ag620_suspend,
-	.resume_early = meas_ag620_resume,
+	.resume = meas_ag620_resume,
 };
 
 static const struct idi_device_id idi_ids[] = {
