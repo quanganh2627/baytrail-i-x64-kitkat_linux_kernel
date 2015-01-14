@@ -311,7 +311,7 @@ static void oct_detect_off_flag(char *gadget_name)
 {
 	struct file *fp = NULL;
 	mm_segment_t old_fs;
-	int retry = 3;
+	int retry = 5;
 	OCT_DBG("oct_detect_off_flag[%s]", gadget_name);
 
 	while (!kthread_should_stop()&&retry>=0) {
@@ -731,10 +731,10 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
 }
 
 static int oct_offlog_send_init_at( void ){
-    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsystrace=0,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
+    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsystrace=1,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
 }
 
 
