@@ -1,3 +1,4 @@
+#define SOFIA_SECURED_VMM_ACCESS
 #undef PREFERRED_LOCAL_APIC_USE
 #undef BOOST_LOCAL_APIC_USE
 	cpus {
@@ -130,8 +131,8 @@
 				intel,GPU-qos-settings = <
 					0x1C88 0x0      /* prio */
 					0x1C8C 0x1      /* mode limiter */
-					0x1C90 0x120    /* bandwidth */
-					0x1C94 0x90     /* saturation */
+					0x1C90 0xFFF    /* bandwidth */
+					0x1C94 0x3FF    /* saturation */
 					0x1C98 0x5>;    /* QoSEn */
 
 				intel,DCC2-qos-settings = <
@@ -197,6 +198,7 @@
 
 				probe,offset = < 0x1000 >;
 
+				#include "xgold/sofia_3g_soc/NoC.dtsi"
 			};
 
 			l2_noc {
@@ -397,6 +399,7 @@
 #if defined(SOFIA_SECURED_VMM_ACCESS)
 						 intel,vmm-secured-access;
 #endif
+						intel,rpm_enabled = < 1 >;
 						/* QUIRK_CAP_CLOCK_BASE_BROKEN: bit 25 + QUIRKS2_HOST_PRESET_VALUE_BROKEN: bit 3 + LED_BROKEN: bit 14*/
 						intel,quirks = < 0x2000000 0x4008 >;
 						intel,is_8_bits = < 1 >;
@@ -427,13 +430,14 @@
 						reg = < 0xE1400000 0x100000 >;
 					        clocks = <&clk_sdmmc>, <&clk_ahb_per1_sdmmc>;
 						clock-names = "clk_core", "clk_ahb";
-						interrupts = < 0 1>;
+						interrupts = < 0 1 2>;
 						interrupt-parent = <&sd>;
 						#interrupt-cells = < 1 >;
 						interrupt-map = <
 							0 &pic SDMMC_INT IRQ_TYPE_DEFAULT
-							1 &eint EINT_SDMMC_DETECT XGOLD_IRQ_TYPE_EDGE_BOTH >;
-						interrupt-names = "host", "wake";
+							1 &eint EINT_SDMMC_DETECT XGOLD_IRQ_TYPE_EDGE_BOTH
+							2 &eint EINT_EXI8 XGOLD_IRQ_TYPE_EDGE_BOTH >;
+						interrupt-names = "host", "wake", "eint";
 						vqmmc-supply = <&lmmc1>;
 						intel,max_clock = <96000000>;
 						intel,min_clock = <203125>;
@@ -442,6 +446,7 @@
 #if defined(SOFIA_SECURED_VMM_ACCESS)
 						intel,vmm-secured-access;
 #endif
+						intel,rpm_enabled = < 1 >;
 						/* QUIRK2_HOST_PRESET_VAL_BROKEN: bit3 */
 						/* QUIRK2_DISABLE_UHS: bit17 */
 						intel,quirks = < 0 0x4008 >;
@@ -456,7 +461,7 @@
 							pm,class-name = "sdhci_class";
 							pm,user-name = "usd";
 							pm,state-D0 = "high_perf";
-							pm,state-D0i2 = "high_perf";
+							pm,state-D0i2 = "mid_perf";
 							pm,state-D3 = "disable";
 						};
 					};
@@ -664,10 +669,10 @@
 						interrupt-names = "core";
 						dr_mode = "otg";
 						g_use_dma;
-						g_rx_fifo_size = < 1680 >;
+						g_rx_fifo_size = < 1744 >;
 						g_np_tx_fifo_size = < 32 >;
 						g_tx_fifo_size = < 512 512 512 512
-								   512 128 64 64
+								   512 64 64 64
 								   64 32 32 7
 								   3 3 3 >;
 					};
@@ -870,9 +875,9 @@
 						compatible = "intel,xgold-reset";
 						reg = <0xE4801000 0xC>;
 						#reset-cells = <1>;
-						intel,reset-set = <0>;
-						intel,reset-clear = <4>;
-						intel,reset-status = <8>;
+						intel,reset-wo = <0>;
+						intel,reset-wc = <4>;
+						intel,reset-ro = <8>;
 #if defined(SOFIA_SECURED_VMM_ACCESS)
 						intel,vmm-secured-access;
 #endif
@@ -881,9 +886,9 @@
 						compatible = "intel,xgold-reset";
 						reg = <0xE4801010 0xC>;
 						#reset-cells = <1>;
-						intel,reset-set = <0>;
-						intel,reset-clear = <4>;
-						intel,reset-status = <8>;
+						intel,reset-wo = <0>;
+						intel,reset-wc = <4>;
+						intel,reset-ro = <8>;
 #if defined(SOFIA_SECURED_VMM_ACCESS)
 						intel,vmm-secured-access;
 #endif

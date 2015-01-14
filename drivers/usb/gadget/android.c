@@ -98,7 +98,7 @@ struct android_dev {
 	bool sw_connected;
 	struct work_struct work;
 	char ffs_aliases[256];
-	unsigned short ffs_string_ids;
+	u8 reset_string_id;
 };
 
 static struct class *android_class;
@@ -152,20 +152,6 @@ static struct usb_configuration android_config_driver = {
 	.MaxPower	= 500, /* 500ma */
 };
 
-static void android_gstring_cleanup(struct android_dev *dev)
-{
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct usb_gadget_string_container *uc, *tmp;
-
-	list_for_each_entry_safe(uc, tmp, &cdev->gstrings, list) {
-		list_del(&uc->list);
-		kfree(uc);
-	}
-	/* reserve unfreed string ids */
-	cdev->next_string_id = ARRAY_SIZE(strings_dev) +
-		dev->ffs_string_ids - 1;
-}
-
 static void android_work(struct work_struct *data)
 {
 	struct android_dev *dev = container_of(data, struct android_dev, work);
@@ -216,7 +202,6 @@ static void android_disable(struct android_dev *dev)
 		/* Cancel pending control requests */
 		usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
 		usb_remove_config(cdev, &android_config_driver);
-		android_gstring_cleanup(dev);
 	}
 }
 
@@ -433,7 +418,6 @@ static int functionfs_ready_callback(struct ffs_data *ffs)
 	config->instances++;
 	config->data = ffs;
 	config->opened = true;
-	dev->ffs_string_ids = ffs->strings_count;
 
 	if (config->enabled)
 		android_enable(dev);
@@ -455,7 +439,6 @@ static void functionfs_closed_callback(struct ffs_data *ffs)
 	--config->instances;
 	config->opened = false;
 	config->data = NULL;
-	dev->ffs_string_ids = 0;
 
 	mutex_unlock(&dev->mutex);
 }
@@ -705,7 +688,7 @@ rndis_function_bind_config(struct android_usb_function *f,
 		struct usb_configuration *c)
 {
 	struct rndis_function_config *rndis = f->config;
-	struct f_rndis *rndis_func = func_to_rndis(rndis->f_rndis);
+	struct f_rndis *rndis_func;
 	struct f_rndis_opts *rndis_opts;
 	struct eth_dev *dev;
 	int ret;
@@ -714,6 +697,8 @@ rndis_function_bind_config(struct android_usb_function *f,
 		pr_err("%s: rndis_pdata\n", __func__);
 		return -1;
 	}
+
+	rndis_func = func_to_rndis(rndis->f_rndis);
 
 	pr_info("%s MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
 		rndis_func->ethaddr[0], rndis_func->ethaddr[1],
@@ -1349,6 +1334,12 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 
 	sscanf(buff, "%d", &enabled);
 	if (enabled && !dev->enabled) {
+		/* reset cdev->next_string_id to dev->reset_string_id
+		 * because "android_usb" driver is working and its
+		 * string descriptor numbers have been allocated
+		 */
+		cdev->next_string_id = dev->reset_string_id;
+
 		/*
 		 * Update values in composite driver's copy of
 		 * device descriptor.
@@ -1534,6 +1525,7 @@ static int android_bind(struct usb_composite_dev *cdev)
 		return id;
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
+	dev->reset_string_id = id;
 
 	usb_gadget_set_selfpowered(gadget);
 	dev->cdev = cdev;

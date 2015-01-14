@@ -1,14 +1,15 @@
+#define SOFIA_SECURED_VMM_ACCESS
 agold {
 	#address-cells = <1>;
 	#size-cells = <1>;
 	ranges;
 	compatible = "intel,abb";
 
-	reg = <0xE6200000 0x02000000>,
-		<0xE6600000 0x100000>,
-		<0xE6A00000 0x100000>;
+	reg = 	<0xE6600000 0x100000>,
+		<0xE6A00000 0x100000>,
+		<0xE6500000 0x100000>;
 
-	reg-names = "abb", "idi", "scu";
+	reg-names = "idi", "scu", "pmu";
 
 	interrupt-parent = <&abb>;
 	interrupts =	<ABB_IDIABB_ERR_SRQ0	XGOLD_IRQ_TYPE_NONE>,
@@ -33,8 +34,7 @@ agold {
 		compatible = "intel,xgold-reset";
 		reg = <0xE6A00100 0x4>;
 		#reset-cells = <1>;
-		intel,reset-set = <0>;
-		intel,reset-status = <0>;
+		intel,reset-rw = <0>;
 #if defined(SOFIA_SECURED_VMM_ACCESS)
 		intel,vmm-secured-access;
 #endif
@@ -68,7 +68,11 @@ agold {
 		intel,gpio-direction-out = < 1>;
 		intel,gpio-output = < 0x20C 9 1>;
 		intel,gpio-input = < 0x40C 9 1>;
+#if defined(SOFIA_3GR_GARNET_EVB)
+                intel,gpiochip-base = <107>;
+#else
 		intel,gpiochip-base = <94>;
+#endif
 		intel,gpiochip-id = <1>;
 		intel,gpiochip-num = <45>;
 #if defined(SOFIA_SECURED_VMM_ACCESS)
@@ -199,7 +203,6 @@ agold {
 			resets = <&abb_rst 0x16>;
 			reset-names = "aferst";
 			intel,scu-phys = <&ABB_scu>;
-			intel,cgu-phys = <&ABB_cgu>;
 			intel,afe,id = "AG620";
 			idi-channels = < 5 >;
 
@@ -607,9 +610,9 @@ agold {
 			idi-id-subdevice = <0xA>;
 			idi-channels = < 15 >;
 			#address-cells = < 0 >;
-			reg = < 0xE6500C00 0x4
-				0xE6501038 0x4 >;
-			reg-names = "pmu_bat_det", "pmu_c0_fs";
+			reg = < 0xE6500000 0x2000>;
+			reg-names = "pmu";
+
 			interrupts = < 0 >;
 			interrupt-parent = <&bat_hal>;
 			#interrupt-cells = < 1 >;
@@ -629,10 +632,8 @@ agold {
 			idi-id-subdevice = <0xD>;
 			idi-channels = < 15 >;
 			#address-cells = < 0 >;
-			reg = < 0xE6500C20 0x4
-				0xE6500C04 0x4
-				0xE6500C10 0x4 >;
-			reg-names = "pmu_bat_uv_det", "pmu_bat_superv", "pmu_bat_superv_wr";
+			reg = < 0xE6500000 0x2000 >;
+			reg-names = "pmu";
 			pm,class-name = "generic_class";
 			pm,user-name = "bnt";
 			pm,state-D0 = "enable";
@@ -667,6 +668,7 @@ agold {
 			#address-cells = < 0 >;
 			reg = <0xE6501400 0x8>;
 			reg-names = "vibra-registers";
+			intel,vmm-secured-access;
 		};
 	};
 };

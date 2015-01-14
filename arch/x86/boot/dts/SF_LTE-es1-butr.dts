@@ -10,6 +10,7 @@
 
 	#include "xgold/sofia_lte_soc/sofia_lte_soc.dtsi"
 	#include "xgold/sofia_lte_soc/irq.dtsi"
+	#include "xgold/mobilevisor/mobilevisor.dtsi"
 	#include "xgold/pmic/sofia_lte.dtsi"
 	#include "xgold/sofia_lte_soc/clock-es1.dtsi"
 	#include "xgold/sofia_lte_soc/device-pm-reg.dtsi"
@@ -246,12 +247,15 @@
 		pinctrl-1 = <&cam1_function_B_sleep_pins>;
 		pinctrl-2 = <&cam1_function_B_inactive_pins>;
 
-		intel,pd-gpio = <&xgold_pmx_gpio 108 0>;
+		intel,pd-gpio = <&xgold_pmx_gpio 118 0>;
 		/*intel,pd-gpio_1v2 = <&xgold_pmx_gpio 68 0>;*/
 		intel,pd-gpio_1v2;
 		intel,pd-gpio-is_active_low;
-	/*	intel,flash-gpio = <&xgold_pmx_gpio 37 0>;
-		intel,torch-gpio = <&xgold_pmx_gpio 38 0>;*/
+		intel,rst-gpio = <&xgold_pmx_gpio 120 0>;
+		intel,rst-gpio-is_active_low;
+		intel,flash-gpio = <&xgold_pmx_gpio 9 0>;
+		intel,torch-gpio = <&xgold_pmx_gpio 112 0>;
+		intel.flash-driver = "SGM3141";
 
 		pm,class-name = "generic_class";
 		pm,user-name = "ext_prim_cam";
@@ -285,8 +289,8 @@
 #endif
 #ifndef RECOVERY_KERNEL
 	camera1: camera-module@1 {
-		compatible = "omnivision,ov9740-v4l2-i2c-subdev";
-		reg = < 0x10 >;
+		compatible = "omnivision,ov5648-v4l2-i2c-subdev";
+		reg = < 0x34 >;
 		device_type = "v4l2-i2c-subdev";
 
 		pinctrl-names = "default", "sleep", "inactive";
@@ -295,6 +299,9 @@
 		pinctrl-2 = <&cam2_function_B_inactive_pins>;
 
 		intel,pd-gpio = <&xgold_pmx_gpio 111 0>;
+		intel,pd-gpio-is_active_low;
+		intel,rst-gpio = <&xgold_pmx_gpio 121 0>;
+		intel,rst-gpio-is_active_low;
 
 		pm,class-name = "generic_class";
 		pm,user-name = "ext_sec_cam";
@@ -383,18 +390,19 @@
 	};
 
 	accelerometer {
-		compatible = "st,lsm303dlhc_acc";
-		reg = < 0x19 >;
+		compatible = "kionix,kionix_accel";
+		reg = < 0x0E >;
 		interrupt-parent = <&eint>;
 		interrupts = < EINT_EXI2 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
 		intel,axis-map = < 0 1 2 >;
 		intel,negate = < 0 0 0 >;
-		intel,poll-interval = < 100 >;
+		intel,poll-interval = < 200 >;
+		intel,irq-use-drdy = < 1 >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&accel_default_pins>;
 		pinctrl-1 = <&accel_sleep_pins>;
 		pinctrl-2 = <&accel_inactive_pins>;
-		pm,class-name = "lsm303dlhc_acc_class";
+		pm,class-name = "kionix_accel_class";
 		pm,user-name = "ext_accelerometer";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
@@ -416,8 +424,6 @@
 	gyroscope {
 		compatible = "st,l3gd20_gyr";
 		reg = < 0x6a >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI7 XGOLD_IRQ_TYPE_EDGE_RISING >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&gyroscope_default_pins>;
 		pinctrl-1 = <&gyroscope_sleep_pins>;
@@ -460,7 +466,7 @@
 	keypad,columns = <0 1 2>;
 	linux,keymap = <
 		0x00000073	/* KEY_VOLUMEUP */
-		0x00010066	/* KEY_HOME */
+		0x000100D4	/* KEY_CAMERA */
 		0x00020000	/* KEY_RESERVED */
 		0x00030000	/* KEY_RESERVED */
 		0x00040000	/* KEY_RESERVED */
@@ -511,4 +517,4 @@
 };
 #endif
 
-#include "xgold/sofia_lte_soc/pinctrl-sf_lte-svb.dtsi"
+#include "xgold/sofia_lte_soc/pinctrl-sf_lte-butr.dtsi"

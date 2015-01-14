@@ -9,10 +9,13 @@
 
 	#include "xgold/sofia_3gr_soc/sofia_3gr_soc.dtsi"
 	#include "xgold/sofia_3gr_soc/irq.dtsi"
+	#include "xgold/mobilevisor/mobilevisor.dtsi"
 	#include "xgold/sofia_3gr_soc/clock-es1.dtsi"
 	#include "xgold/sofia_3gr_soc/regulator.dtsi"
 	#include "xgold/sofia_3gr_soc/device-pm-reg.dtsi"
 	#include "xgold/pmic/granite.dtsi"
+	#include "xgold/sofia_3gr_soc/cpufreq.dtsi"
+
 	chosen {
 	};
 
@@ -50,6 +53,8 @@
 #endif
 		cma-heap {
 			memory-region = <&cma_default_region>;
+		};
+		system-heap {
 		};
 	};
 
@@ -371,6 +376,7 @@
 &vop {
 	status = "okay";
 	rockchip,fb-win-map = <FB_DEFAULT_ORDER>;
+	pm,state-D0 = "low_perf";
 };
 
 &lvds {

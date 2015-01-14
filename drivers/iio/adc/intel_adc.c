@@ -254,6 +254,9 @@ enum adc_states {
  * @ocv_performed_count:	Number of OCV measurements performed so far.
  * @meas_again_error_cnt:	Number of measurements EAGAIN errors so far.
  * @meas_io_error_cnt:		Number of measurements EIO errors so far.
+ * @lock:			Spin lock used to protect critical sections
+ *				when modifying device state data.
+ * @suspended:			TRUE=Device is suspended, otherwise not.
  */
 struct adc_manager_data {
 	bool keep_running;
@@ -296,6 +299,8 @@ struct adc_manager_data {
 		/* Number of measurements that ended up in EIO error so far */
 		uint meas_io_error_cnt;
 	} stats;
+	spinlock_t lock;
+	bool suspended;
 };
 
 /*  Enum for ADC debug events */
@@ -322,7 +327,9 @@ enum adc_debug_event {
 	ADC_MEAS_AUTOSCALING_DONE,
 	ADC_TIMEOUT,
 	ADC_OCV_RESCHEDULE,
-	ADC_OCV_MEASUREMENT_FAILED
+	ADC_OCV_MEASUREMENT_FAILED,
+	ADC_SUSPEND,
+	ADC_RESUME
 };
 
 
@@ -359,7 +366,8 @@ static struct adc_manager_data adc_manager = {
 	.keep_running = true,
 	.state = ADC_NOT_INITIALISED,
 	{[0 ... (ADC_MAX_NO_OF_CHANNELS - 1)] = {NULL, NULL} },
-	{ {[0 ... (ADC_MAX_NO_OF_CHANNELS - 1)] = NULL}, 0 }
+	{ {[0 ... (ADC_MAX_NO_OF_CHANNELS - 1)] = NULL}, 0 },
+	.suspended = false,
 };
 
 /* Array to collect debug data */
@@ -394,6 +402,7 @@ static const char *convert_to_iio_node_name(const char *src)
 
 	len	= strlen(src);
 	p = kmalloc(len, GFP_KERNEL);
+	BUG_ON(p == NULL);
 	strcpy(p, src);
 	dst = p;
 	len = len - strlen("_ADC");
@@ -533,6 +542,18 @@ static int intel_adc_set_power_mode(struct adc_hal_interface *p_hal_if,
 {
 	int halret = WNOTREQ;
 	enum adc_hal_power_mode current_power_mode;
+
+	/* Protect critical section when testing and modifying device
+	state data */
+	spin_lock(&adc_manager.lock);
+	if (adc_manager.suspended == true) {
+		spin_unlock(&adc_manager.lock);
+		intel_adc_dbg_printk("%s ADC in suspend\n", __func__);
+		return -EIO;
+	}
+
+	/* End of critical section */
+	spin_unlock(&adc_manager.lock);
 
 	/* Get current power mode */
 	BUG_ON((p_hal_if->get) (ADC_HAL_GET_POWER_MODE,
@@ -1473,7 +1494,7 @@ static int intel_adc_read_raw(struct iio_dev *iiodev,
 		return -ECHRNG;
 
 	switch (mask) {
-	case 0:	/* Channel read */{
+	case IIO_CHAN_INFO_RAW:	/* Channel read */{
 		struct adc_meas_instance meas_req;
 		struct adc_stm_mess mess;
 
@@ -1508,7 +1529,7 @@ static int intel_adc_read_raw(struct iio_dev *iiodev,
 				latest_adc_bias_na = meas_req.latest_result.na;
 		ret = meas_req.latest_result.error;
 		if (0 == ret)
-			ret = IIO_VAL_COMPOSITE;
+			ret = IIO_VAL_INT;
 
 			intel_adc_dbg_printk(
 				"Returning uv=%d, na=%d, error=%d\n",
@@ -1556,10 +1577,10 @@ static int intel_adc_iio_registration(struct device *pdev)
 	dev_set_drvdata(pdev, &adc_manager);
 
 	pdata->p_adc_iio_dev = iio_device_alloc(0);
-	if (IS_ERR(pdata->p_adc_iio_dev)) {
+	if (pdata->p_adc_iio_dev == NULL) {
 		ret = PTR_ERR(pdata->p_adc_iio_dev);
 		dev_err(pdev, "Error allocating IIO device: %d\n", ret);
-		goto error_exit;
+		goto error_device_alloc;
 	}
 
 	/* Dynamically create the list of channels. Allocate memory to hold
@@ -1567,19 +1588,19 @@ static int intel_adc_iio_registration(struct device *pdev)
 	pdata->p_adc_chan_spec = kcalloc(p_channel_info->nchan,
 						sizeof(struct iio_chan_spec),
 						GFP_KERNEL);
-	if (IS_ERR(pdata->p_adc_chan_spec)) {
+	if (pdata->p_adc_chan_spec == NULL) {
 		ret = PTR_ERR(pdata->p_adc_chan_spec);
 		dev_err(pdev, "Error allocating IIO channel specs: %d\n", ret);
-		goto error_exit;
+		goto error_adc_chan_alloc;
 	}
 	/* The IIO map is a NULL terminated list, allocate 1 extra structure
 	element. The last element is automatically set to NULL by kcalloc() */
 	pdata->p_iio_map = kcalloc(p_channel_info->nchan + 1,
 					sizeof(struct iio_map), GFP_KERNEL);
-	if (IS_ERR(pdata->p_iio_map)) {
+	if (pdata->p_iio_map == NULL) {
 		ret = PTR_ERR(pdata->p_iio_map);
 		dev_err(pdev, "Error allocating IIO channel map: %d\n", ret);
-		goto error_free_chan_spec;
+		goto error_iio_map_alloc;
 	}
 	/* Finally initialise the list of channels */
 	p_adc_chan_spec = &pdata->p_adc_chan_spec[0];
@@ -1617,18 +1638,25 @@ static int intel_adc_iio_registration(struct device *pdev)
 	/* Register IIO devices */
 	ret = iio_device_register(pdata->p_adc_iio_dev);
 	if (0 != ret)
-		goto error_exit;
+		goto error_iio_dev_reg;
 	/* Map IIO devices to inkernel channels */
 	ret = iio_map_array_register(pdata->p_adc_iio_dev, pdata->p_iio_map);
 	if (0 == ret)
 		return 0;
 
-	iio_device_free(pdata->p_adc_iio_dev);
+	iio_device_unregister(pdata->p_adc_iio_dev);
+
+error_iio_dev_reg:
 	kfree(pdata->p_iio_map);
-error_free_chan_spec:
+
+error_iio_map_alloc:
 	kfree(pdata->p_adc_chan_spec);
-error_exit:
-	dev_dbg(pdev, "ADC probe failed with error code %d\n", ret);
+
+error_adc_chan_alloc:
+	iio_device_free(pdata->p_adc_iio_dev);
+
+error_device_alloc:
+	pr_err("ADC iio registration failed with error code %d\n", ret);
 	return ret;
 }
 
@@ -1647,9 +1675,9 @@ static void intel_adc_iio_deregistration(struct device *pdev)
 		(struct intel_adc_hal_pdata *)pdev->platform_data;
 	iio_map_array_unregister(pdata->p_adc_iio_dev);
 	iio_device_unregister(pdata->p_adc_iio_dev);
-	iio_device_free(pdata->p_adc_iio_dev);
 	kfree(pdata->p_iio_map);
 	kfree(pdata->p_adc_chan_spec);
+	iio_device_free(pdata->p_adc_iio_dev);
 }
 
 static DEFINE_SPINLOCK(hal_list_lock);
@@ -1868,6 +1896,7 @@ static int __init intel_adc_probe(struct platform_device *p_platform_dev)
 
 	int ret = -EINVAL;
 	spin_lock_init(&adc_debug_data.lock);
+	spin_lock_init(&adc_manager.lock);
 
 	ret = kfifo_alloc(&st->adc_stm_fifo, ADC_STM_FIFO_DEPTH, GFP_KERNEL);
 	if (ret)
@@ -1922,6 +1951,66 @@ static int __exit intel_adc_remove(struct platform_device *p_platform_dev)
 
 }
 
+/**
+ * intel_adc_suspend() - Called when the system is attempting to suspend.
+ * @dev		[in] Pointer to the device.(not used)
+ * returns	0
+ */
+static int intel_adc_suspend(struct device *dev)
+{
+	/* Unused parameter */
+	(void)dev;
+
+	/* Protect critical section when testing and modifying device state
+	data */
+	spin_lock(&adc_manager.lock);
+
+	/* No measurement ongoing - allow suspend. */
+	adc_manager.suspended = true;
+
+	/* End of critical section */
+	spin_unlock(&adc_manager.lock);
+
+	/* Do debug data logging */
+	ADC_DEBUG_DATA_LOG(ADC_SUSPEND,
+				adc_manager.state,
+				0,
+				NULL, 0,
+				0, 0, 0);
+
+	return 0;
+}
+
+/**
+ * intel_adc_resume() - Called when the system is resuming from suspend.
+ * @dev		[in] Pointer to the device.(not used)
+ * returns	0
+ */
+static int intel_adc_resume(struct device *dev)
+{
+	/* Unused parameter */
+	(void)dev;
+
+	/* Update suspend flag used to tell whether operations on device are
+	allowed */
+	adc_manager.suspended = false;
+
+	/* Do debug data logging */
+	ADC_DEBUG_DATA_LOG(ADC_RESUME,
+				adc_manager.state,
+				0,
+				NULL, 0,
+				0, 0, 0);
+
+	return 0;
+}
+
+
+const struct dev_pm_ops intel_adc_pm = {
+	.suspend = intel_adc_suspend,
+	.resume = intel_adc_resume,
+};
+
 static const struct of_device_id adc_of_match[] = {
 	{
 	 .compatible = "intel,adc",
@@ -1936,6 +2025,7 @@ static struct platform_driver intel_adc_driver = {
 		.name = DRIVER_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(adc_of_match),
+		.pm = &intel_adc_pm,
 	},
 	.probe = intel_adc_probe,
 	.remove = intel_adc_remove,

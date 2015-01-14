@@ -44,11 +44,7 @@ eint:eint-interrupt-controller {
 	intel,virq,6 = <1>; /* EXT_INT6 */
 #endif
 	intel,virq,7 = <1>; /* EXT_INT7 */
-#if defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 	intel,virq,8 = <0>; /* EXT_INT8 */
-#else
-	intel,virq,8 = <1>; /* EXT_INT8 */
-#endif
 	intel,virq,9 = <1>; /* EXT_INT9 */
 	intel,virq,10 = <1>; /* EXT_INT10 */
 #ifdef SOFIA3G_ES2_TAB_SVB
@@ -71,6 +67,7 @@ eint:eint-interrupt-controller {
 	intel,virq,26 = <1>; /* DRXS */
 	intel,virq,27 = <1>; /* WDT0 */
 	intel,virq,28 = <1>; /* WDT1 */
+	intel,preack,8 = <1>; /* EXT_INT8 */
 	intel,preack,20 = <1>; /* USIF1_WK */
 	intel,mask,0 = < 0x2150 0 1 >; /* EXT_INT0 */
 	intel,mask,1 = < 0x2150 1 1 >; /* EXT_INT1 */

@@ -191,7 +191,7 @@ static int mali_platform_memory_layout(struct mali_gpu_device_data *gpu_data)
 	struct property *prop;
 	const __be32 *p;
 	unsigned int val;
-	u32 array[2];
+	u32 array[2] = {0, 0};
 	struct device_node *ngraphics =
 		of_find_matching_node(NULL, xgold_graphics_of_match);
 
@@ -217,20 +217,20 @@ static int mali_platform_memory_layout(struct mali_gpu_device_data *gpu_data)
 		}
 	}
 
-	if (!use_fbapi || (length != 2)) {
-		mali_dbg("Framebuffer memory region not defined\n");
-		gpu_data->fb_start = 0;
-		gpu_data->fb_size = 0;
-	}
-
-	/* protected memory (secvm) */
-	ret = of_property_read_u32_array(ngraphics, "intel,prot-mem", array, 2);
-	if (ret && ret != -EINVAL) {
-		/* property was specified, error occurred while reading */
-		mali_err("could not read prot-mem property, err=%d", ret);
-	} else {
-		gpu_data->fb_start = array[0];
-		gpu_data->fb_size = array[1];
+	/* protected memory (secvm)
+	 * only considered if FB not set */
+	if ((array[0] == 0) && (array[1] == 0)) {
+		ret = of_property_read_u32_array(
+				ngraphics, "intel,prot-mem", array, 2);
+		if (ret && ret != -EINVAL) {
+			/* property was specified, error
+			 * occurred while reading */
+			mali_err("could not read prot-mem property, err=%d",
+					ret);
+		} else {
+			gpu_data->fb_start = array[0];
+			gpu_data->fb_size = array[1];
+		}
 	}
 
 	/* dedicated memory */
@@ -341,24 +341,30 @@ int mali_platform_device_init(struct platform_device *pdev)
 		return -1;
 	}
 
-	/* Use AMR DVFS with 500ms intervall */
-	plf_data.gpu_data->control_interval = 500;
-	plf_data.gpu_data->set_freq = mali_gpu_set_clock_step;
-	plf_data.gpu_data->get_clock_info = mali_report_gpu_clock_info;
-	plf_data.gpu_data->get_freq = mali_gpu_get_clock_step;
-
-	mali_dev_pm.dvfs_wq = alloc_ordered_workqueue("mali_setting_clock_wq",
-		WQ_NON_REENTRANT);
-	if (mali_dev_pm.dvfs_wq == 0) {
-		mali_err("Unable to create workqueue for dvfs\n");
-		return -1;
-	}
-
-	/* Runtime resume after probe will switch things on */
+#if defined(CONFIG_PM_RUNTIME)
+	/* Runtime resume will switch things on */
 	mali_dev_pm.curr_pm_state = MALI_PLF_PM_STATE_D3;
 	mali_dev_pm.resume_pm_state = GPU_INITIAL_PM_STATE;
-	mali_dev_pm.req_clock_index = mali_dev_pm.resume_pm_state - 1;
 
+	/* Need to set GPU QoS on bootup */
+	restore_gpu_qos = true;
+#else
+	mali_dev_pm.curr_pm_state = GPU_MAX_PM_STATE;
+	mali_dev_pm.resume_pm_state = GPU_MAX_PM_STATE;
+
+	ret = platform_device_pm_set_state(pdev,
+		mali_dev_pm.pm_states[mali_dev_pm.curr_pm_state]);
+	if (ret < 0) {
+		mali_err("Device pm set state failed (%d)\n", ret);
+		return ret;
+	}
+
+	/* Need to set GPU QoS on bootup */
+	xgold_noc_qos_set("GPU");
+	mali_dbg("Set GPU QoS\n");
+#endif
+
+	mali_dev_pm.req_clock_index = mali_dev_pm.resume_pm_state - 1;
 	mali_dev_pm.pdev = pdev;
 
 	ret = mali_platform_memory_layout(plf_data.gpu_data);
@@ -381,15 +387,26 @@ int mali_platform_device_init(struct platform_device *pdev)
 		return ret;
 	}
 
+	/* Use AMR DVFS with 500ms intervall */
+	plf_data.gpu_data->control_interval = 500;
+	plf_data.gpu_data->set_freq = mali_gpu_set_clock_step;
+	plf_data.gpu_data->get_clock_info = mali_report_gpu_clock_info;
+	plf_data.gpu_data->get_freq = mali_gpu_get_clock_step;
+
+	mali_dev_pm.dvfs_wq = alloc_ordered_workqueue("mali_setting_clock_wq",
+		WQ_NON_REENTRANT);
+	if (mali_dev_pm.dvfs_wq == 0) {
+		mali_err("Unable to create workqueue for dvfs\n");
+		return -1;
+	}
+
 	ret = platform_device_add_data(pdev, &xgold_mali_gpu_data,
 		sizeof(xgold_mali_gpu_data));
 	if (ret) {
 		mali_err("Device platform_device_add_data\n");
+		destroy_workqueue(mali_dev_pm.dvfs_wq);
 		return ret;
 	}
-
-	/* Need to set GPU QoS on bootup */
-	restore_gpu_qos = true;
 
 #if defined(CONFIG_PM_RUNTIME)
 	pm_runtime_set_autosuspend_delay(&(pdev->dev), 1000);

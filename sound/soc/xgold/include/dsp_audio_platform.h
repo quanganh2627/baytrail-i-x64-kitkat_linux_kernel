@@ -115,10 +115,14 @@ struct dsp_audio_device {
 	struct list_head node;
 };
 
+struct dsp_platform_control_data {
+	int dsp_keep_powered;
+};
+
 /* TODO  add device instances for SBA/FBA */
 struct dsp_common_data {
-	int native_mode;
 	int rst_done;
+	struct dsp_platform_control_data control_priv;
 	struct dsp_ops *ops;
 	struct device *fba_dev;
 	unsigned pcm_offset[2];
@@ -153,7 +157,8 @@ struct dsp_audio_device *of_dsp_register_client(
 		struct device *, struct device_node *);
 int dsp_pcm_play(struct dsp_audio_device *, enum xgold_pcm_stream_type,
 		unsigned int, unsigned int, bool);
-int dsp_pcm_rec(struct dsp_audio_device *, unsigned int, unsigned int, bool);
+int dsp_pcm_rec(struct dsp_audio_device *, unsigned int, unsigned int, bool,
+		unsigned int path_select);
 int dsp_pcm_feed(struct dsp_audio_device *, enum xgold_pcm_stream_type,
 		unsigned int, unsigned int);
 int dsp_pcm_stop(struct dsp_audio_device *, enum xgold_pcm_stream_type);

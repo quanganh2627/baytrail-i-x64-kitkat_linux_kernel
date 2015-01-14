@@ -9,6 +9,7 @@ struct xgold_mmc_pdata {
 	unsigned int min_clock;
 	unsigned int tap_values[MAX_MODES];
 	int irq_wk;
+	int irq_eint;
 	void __iomem *tap_reg;
 	unsigned int tap_values2[MAX_MODES];
 	void __iomem *tap_reg2;
@@ -30,6 +31,9 @@ struct xgold_mmc_pdata {
 	struct device_pm_platdata *pm_platdata_clock_ctrl;
 	struct regulator *regulator;
 #endif
+	bool rpm_enabled;
+	s32 irq_is_disable;
+	spinlock_t irq_lock;
 };
 
 

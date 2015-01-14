@@ -10,6 +10,7 @@
 
 	#include "xgold/sofia_3g_soc/sofia_3g_soc.dtsi"
 	#include "xgold/sofia_3g_soc/irq.dtsi"
+	#include "xgold/mobilevisor/mobilevisor.dtsi"
 	#include "xgold/sofia_3g_soc/clock-es2.dtsi"
 	#include "xgold/sofia_3g_soc/regulator.dtsi"
 	#include "xgold/sofia_3g_soc/device-pm-reg.dtsi"
@@ -58,6 +59,7 @@
 		compatible = "intel,led-bl";
 		reg = <0xE6501800 0x154>;
 		intel,flags-use-safe-ctrl;
+		intel,vmm-secured-access;
 		pm,class-name = "bl_class";
 		pm,user-name = "bl";
 		pm,state-D0 = "enable";
@@ -322,8 +324,6 @@
 	accelerometer {
 		compatible = "st,lsm303dlhc_acc";
 		reg = < 0x19 >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI12 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
 		intel,axis-map = < 0 1 2 >;
 		intel,negate = < 0 0 0 >;
 		intel,poll-interval = < 100 >;
@@ -379,14 +379,12 @@
 	gyroscope {
 		compatible = "st,l3gd20_gyr";
 		reg = < 0x6a >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI1 XGOLD_IRQ_TYPE_EDGE_RISING >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&gyroscope_default_pins>;
 		pinctrl-1 = <&gyroscope_sleep_pins>;
 		pinctrl-2 = <&gyroscope_inactive_pins>;
-		intel,axis-map = < 1 0 2 >; /* spec is wrong, x and y are interchanged */
-		intel,negate = < 1 0 0 >;
+		intel,axis-map = < 0 1 2 >;
+		intel,negate = < 0 0 0 >;
 		intel,poll-interval = < 100 >;
 		intel,full-scale = < 2000 >;
 		pm,class-name = "l3gd20_class";

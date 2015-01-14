@@ -1237,9 +1237,6 @@ int cif_isp20_pltfrm_pinctrl_set_state(
 	int ret = 0;
 	struct cif_isp20_pltfrm_data *pdata = dev_get_platdata(dev);
 
-	if (IS_ERR_OR_NULL(pdata->pinctrl))
-		return 0;
-
 	cif_isp20_pltfrm_pr_dbg(dev,
 		"set pinctrl state to %d\n", pinctrl_state);
 
@@ -1249,6 +1246,9 @@ int cif_isp20_pltfrm_pinctrl_set_state(
 		ret = -EINVAL;
 		goto err;
 	}
+	if (IS_ERR_OR_NULL(pdata->pinctrl))
+		return 0;
+
 
 	switch (pinctrl_state) {
 	case CIF_ISP20_PINCTRL_STATE_SLEEP:
@@ -1443,36 +1443,6 @@ const char *cif_isp20_pltfrm_dev_string(
 	struct device *dev)
 {
 	return dev_driver_string(dev);
-}
-
-void cif_isp20_pltfrm_event_init(
-	struct device *dev,
-	wait_queue_head_t *event)
-{
-	init_waitqueue_head(event);
-}
-
-void cif_isp20_pltfrm_event_clear(
-	struct device *dev,
-	wait_queue_head_t *event)
-{
-}
-
-void cif_isp20_pltfrm_event_signal(
-	struct device *dev,
-	wait_queue_head_t *event)
-{
-	wake_up_interruptible(event);
-}
-
-int cif_isp20_pltfrm_event_wait_timeout(
-	struct device *dev,
-	wait_queue_head_t *event,
-	bool condition,
-	unsigned long timeout_us)
-{
-	return wait_event_interruptible_timeout(
-		*event, condition, (timeout_us * HZ) / 1000000);
 }
 
 struct device *cif_isp20_pltfrm_get_img_src_device(

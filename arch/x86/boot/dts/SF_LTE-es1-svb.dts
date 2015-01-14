@@ -10,6 +10,7 @@
 
 	#include "xgold/sofia_lte_soc/sofia_lte_soc.dtsi"
 	#include "xgold/sofia_lte_soc/irq.dtsi"
+	#include "xgold/mobilevisor/mobilevisor.dtsi"
 	#include "xgold/pmic/sofia_lte.dtsi"
 	#include "xgold/sofia_lte_soc/clock-es1.dtsi"
 	#include "xgold/sofia_lte_soc/device-pm-reg.dtsi"
@@ -375,8 +376,6 @@
 	accelerometer {
 		compatible = "st,lsm303dlhc_acc";
 		reg = < 0x19 >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI2 XGOLD_IRQ_TYPE_LEVEL_HIGH >;
 		intel,axis-map = < 0 1 2 >;
 		intel,negate = < 0 0 0 >;
 		intel,poll-interval = < 100 >;
@@ -406,8 +405,6 @@
 	gyroscope {
 		compatible = "st,l3gd20_gyr";
 		reg = < 0x6a >;
-		interrupt-parent = <&eint>;
-		interrupts = < EINT_EXI7 XGOLD_IRQ_TYPE_EDGE_RISING >;
 		pinctrl-names = "default", "sleep", "inactive";
 		pinctrl-0 = <&gyroscope_default_pins>;
 		pinctrl-1 = <&gyroscope_sleep_pins>;

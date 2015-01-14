@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/mmc/host.h>
+#include <linux/pm_runtime.h>
 #include "sdhci-pltfm.h"
 #include "sdhci-of-imc.h"
 #include <linux/of_address.h>
@@ -226,11 +227,15 @@ static void xgold_sdhci_of_suspend(struct sdhci_host *host)
 {
 	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
 	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
+#ifdef CONFIG_PM_RUNTIME
+	if (host->runtime_suspended)
+		pm_runtime_resume(&pdev->dev);
+#endif
 	if (device_may_wakeup(&pdev->dev)) {
 		enable_irq_wake(mmc_pdata->irq_wk);
 		enable_irq(mmc_pdata->irq_wk);
 	}
-/* TODO: called before sleep commands for card... should not stop clock ! */
+	/* TODO: called before sleep commands for card... should not stop clock ! */
 #if 0
 	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
 	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
@@ -247,8 +252,13 @@ static void xgold_sdhci_of_resume(struct sdhci_host *host)
 	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
 	if (device_may_wakeup(&pdev->dev)) {
 		disable_irq_wake(mmc_pdata->irq_wk);
-		disable_irq(mmc_pdata->irq_wk);
+		disable_irq_nosync(mmc_pdata->irq_wk);
 	}
+#ifdef CONFIG_PM_RUNTIME
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+#endif
 #if 0
 	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
 	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
@@ -260,9 +270,77 @@ static void xgold_sdhci_of_resume(struct sdhci_host *host)
 }
 
 #endif
+#ifdef CONFIG_PM_RUNTIME
+static void xgold_cd_irq_disable(struct xgold_mmc_pdata *pd)
+{
+	unsigned long irqflags;
+
+	spin_lock_irqsave(&pd->irq_lock, irqflags);
+	if (!pd->irq_is_disable) {
+		pd->irq_is_disable = 1;
+		disable_irq_nosync(pd->irq_eint);
+	}
+	spin_unlock_irqrestore(&pd->irq_lock, irqflags);
+}
+
+static void xgold_cd_irq_enable(struct xgold_mmc_pdata *pd)
+{
+	unsigned long irqflags = 0;
+
+	spin_lock_irqsave(&pd->irq_lock, irqflags);
+	if (pd->irq_is_disable) {
+		enable_irq(pd->irq_eint);
+		pd->irq_is_disable = 0;
+	}
+	spin_unlock_irqrestore(&pd->irq_lock, irqflags);
+}
+
+
+static void xgold_sdhci_of_runtime_suspend(struct sdhci_host *host)
+{
+	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
+	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
+	xgold_sdhci_set_pinctrl_state(&pdev->dev, mmc_pdata->pins_sleep);
+#if defined CONFIG_PLATFORM_DEVICE_PM && defined CONFIG_PLATFORM_DEVICE_PM_VIRT
+	if (device_state_pm_set_state_by_name(&mmc_pdata->dev,
+			mmc_pdata->pm_platdata_clock_ctrl->pm_state_D0i2_name))
+		dev_err(&pdev->dev, "set pm state D0i2 during runtime suspend failed !\n");
+#endif
+	if (mmc_pdata->irq_eint)
+		xgold_cd_irq_enable(mmc_pdata);
+}
+
+static void xgold_sdhci_of_runtime_resume(struct sdhci_host *host)
+{
+	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
+	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
+
+	if (mmc_pdata->irq_eint)
+		xgold_cd_irq_disable(mmc_pdata);
+
+	xgold_sdhci_set_pinctrl_state(&pdev->dev, mmc_pdata->pins_default);
+#if defined CONFIG_PLATFORM_DEVICE_PM && defined CONFIG_PLATFORM_DEVICE_PM_VIRT
+	if (device_state_pm_set_state_by_name(&mmc_pdata->dev,
+			mmc_pdata->pm_platdata_clock_ctrl->pm_state_D0_name))
+		dev_err(&pdev->dev, "set pm state D0 during runtime resume  failed !\n");
+#endif
+}
+
+#endif
+
+bool xgold_sdhci_is_rpm_enabled(struct device_node *np)
+{
+	u32 rpm_enabled;
+	if (!of_property_read_u32(np, "intel,rpm_enabled", &rpm_enabled))
+		return !!rpm_enabled;
+	return 0;
+}
+
+
 static void xgold_sdhci_of_init(struct sdhci_host *host)
 {
 	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
+	struct xgold_mmc_pdata *mmc_pdata = pdev->dev.platform_data;
 	struct device_node *np = pdev->dev.of_node;
 	unsigned int bits;
 
@@ -276,6 +354,22 @@ static void xgold_sdhci_of_init(struct sdhci_host *host)
 		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
 
 	host->mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
+
+	mmc_pdata->rpm_enabled = xgold_sdhci_is_rpm_enabled(np);
+	pr_info("sdhci: %s, rpm = %d\n", dev_name(&pdev->dev),
+						mmc_pdata->rpm_enabled);
+	/* enable runtime pm support per slot */
+	if (mmc_pdata->rpm_enabled) {
+		pm_runtime_put_noidle(&pdev->dev);
+		pm_runtime_allow(&pdev->dev);
+		pm_runtime_enable(&pdev->dev);
+		pm_runtime_set_autosuspend_delay(&pdev->dev, 50);
+		pm_runtime_use_autosuspend(&pdev->dev);
+		pm_suspend_ignore_children(&pdev->dev, 1);
+		/*host->mmc->caps |= MMC_CAP_RUNTIME_RESUME |
+			MMC_CAP_AGGRESSIVE_PM;*/
+	}
+
 }
 
 static struct sdhci_ops xgold_sdhci_ops = {
@@ -286,6 +380,10 @@ static struct sdhci_ops xgold_sdhci_ops = {
 #ifdef CONFIG_PM
 	.platform_suspend = xgold_sdhci_of_suspend,
 	.platform_resume = xgold_sdhci_of_resume,
+#ifdef CONFIG_PM_RUNTIME
+	.platform_runtime_suspend = xgold_sdhci_of_runtime_suspend,
+	.platform_runtime_resume = xgold_sdhci_of_runtime_resume,
+#endif
 #endif
 	.platform_init = xgold_sdhci_of_init,
 };
@@ -301,6 +399,21 @@ static irqreturn_t xgold_detect(int irq, void *dev_id)
 	pr_info("%s: SD card inserted\n", __func__);
 	return IRQ_HANDLED;
 }
+static irqreturn_t xgold_eint_detect(int irq, void *dev_id)
+{
+	struct platform_device *pdev = dev_id;
+	struct xgold_mmc_pdata *mmc_pdata =
+		(struct xgold_mmc_pdata *)pdev->dev.platform_data;
+	struct sdhci_host *host = platform_get_drvdata(pdev);
+	pr_info("%s: SD card removed/inserted during runtime suspend\n",
+								__func__);
+	if (mmc_pdata->irq_eint)
+		xgold_cd_irq_disable(mmc_pdata);
+
+	tasklet_schedule(&host->card_tasklet);
+	return IRQ_HANDLED;
+}
+
 
 /*
  * Get intel,io-access property if any from dts
@@ -320,7 +433,7 @@ static int xgold_sdhci_probe(struct platform_device *pdev)
 	void __iomem *scu_base;
 	u32 offset;
 	void __iomem *corereg;
-	int it_wk, i;
+	int it_wk, i, it_eint;
 #if defined CONFIG_PLATFORM_DEVICE_PM && defined CONFIG_PLATFORM_DEVICE_PM_VIRT
 	struct device_node *pm_node;
 #endif
@@ -338,6 +451,7 @@ static int xgold_sdhci_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "no address base for tap values\n");
 
 	mmc_pdata->io_master = xgold_sdhci_get_io_master(np);
+
 	if (mmc_pdata->io_master == SCU_IO_ACCESS_BY_LNX)
 		scu_base = devm_ioremap(&pdev->dev, res.start,
 				resource_size(&res));
@@ -484,12 +598,33 @@ static int xgold_sdhci_probe(struct platform_device *pdev)
 				mmc_pdata->irq_wk, ret);
 			return -1;
 		}
-		disable_irq(mmc_pdata->irq_wk);
+		disable_irq_nosync(mmc_pdata->irq_wk);
 	}
+
+	spin_lock_init(&mmc_pdata->irq_lock);
+	it_eint = of_property_match_string(np, "interrupt-names",
+					 "eint");
+	if (it_eint > 0) {
+		mmc_pdata->irq_eint = irq_of_parse_and_map(np, it_eint);
+		ret = devm_request_irq(&pdev->dev, mmc_pdata->irq_eint,
+			xgold_eint_detect,
+			IRQF_SHARED | IRQF_NO_SUSPEND, "eint_int", pdev);
+		if (ret != 0) {
+			dev_err(&pdev->dev,
+				"setup irq%d failed with ret = %d\n",
+				mmc_pdata->irq_eint, ret);
+			return -1;
+		}
+		xgold_cd_irq_disable(mmc_pdata);
+	} else
+		mmc_pdata->irq_eint = 0;
+
+
 	/* quirks */
 	sdhci_xgold_pdata.quirks |= quirktab[0];
 	sdhci_xgold_pdata.quirks2 |= quirktab[1];
 	ret = sdhci_pltfm_register(pdev, &sdhci_xgold_pdata, 0);
+
 err_end:
 	return ret;
 }
@@ -537,6 +672,16 @@ static struct device_state_pm_state *xgold_sdhci_ctrl_get_initial_state(
 
 static int xgold_sdhci_remove(struct platform_device *pdev)
 {
+	struct xgold_mmc_pdata *mmc_pdata =
+		(struct xgold_mmc_pdata *)pdev->dev.platform_data;
+	if (mmc_pdata && mmc_pdata->rpm_enabled) {
+		pm_runtime_forbid(&pdev->dev);
+		pm_runtime_get_noresume(&pdev->dev);
+		pm_runtime_disable(&pdev->dev);
+	} else {
+		pr_err("platform data not found.\n");
+		return -EINVAL;
+	}
 	return sdhci_pltfm_unregister(pdev);
 }
 
