@@ -205,7 +205,8 @@ void mv_gal_init(struct vmm_shared_data *data)
 	/* register XIRQ handler */
 #ifdef __KERNEL__
 	if (request_irq
-		(VECT_XIRQ, mv_gal_xirq_handler, 0, "xirq_handers", NULL)) {
+		(VECT_XIRQ, mv_gal_xirq_handler, IRQF_NO_SUSPEND,
+		 "xirq_handers", NULL)) {
 		pr_err("Reqest IRQ VECT_XIRQ failed!\n");
 	}
 #else
