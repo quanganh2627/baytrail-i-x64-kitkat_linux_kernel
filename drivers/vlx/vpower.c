@@ -170,6 +170,7 @@ ePRH_RETURN_T vpower_call_prh(uint32_t user_id,
 {
 	ePRH_RETURN_T retval;
 	struct vpower_data *vpower;
+	enum vmm_pm_opcode pm_opcode_save;
 
 #ifdef CONFIG_VPOWER_STUB
 	return PRH_OK;
@@ -197,6 +198,9 @@ ePRH_RETURN_T vpower_call_prh(uint32_t user_id,
 
 	reinit_completion(&prh_sync_complete);
 
+	pm_opcode_save = pm_opcode;
+	if (((preempt_count() & ~PREEMPT_ACTIVE) != 0))
+		pm_opcode = PM_PRH_SET_PER_MODE;
 	retval = mv_svc_pm_control(pm_opcode , user_id, per_id, 0);
 	if (retval)
 		pr_err("%s: Error(%i) arguments (%#x, %#x, %#x)\n",
@@ -206,6 +210,7 @@ fail:
 	put_cpu_var(percpu_vpower);
 	if ((retval == 0) && (pm_opcode == PM_PRH_SET_PER_MODE_ASYNC))
 		wait_for_completion(&prh_sync_complete);
+	pm_opcode = pm_opcode_save;
 	mutex_unlock(&call_mutex);
 
 	/* return the actual prh ret value from backend */
