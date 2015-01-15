@@ -706,14 +706,14 @@ static struct gc_table_map gc0310_hflip_tables[] = {
 
 /* GC0310 scene mode settings */
 static struct gc_register gc0310_night_mode_on_table[] = {
-	{GC_8BIT, 0xfe, 0x01},
+	{GC_8BIT, 0xfe, 0x00},
 	{GC_8BIT, GC0310_REG_MAX_AEC, 0x60},
 	{GC_TOK_TERM, 0, 0},
 };
 
 /* Normal scene mode */
 static struct gc_register gc0310_night_mode_off_table[] = {
-	{GC_8BIT, 0xfe, 0x01},
+	{GC_8BIT, 0xfe, 0x00},
 	{GC_8BIT, GC0310_REG_MAX_AEC, 0x40},
 	{GC_TOK_TERM, 0, 0},
 };
