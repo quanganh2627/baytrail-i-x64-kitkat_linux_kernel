@@ -702,7 +702,7 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     mm_segment_t oldfs;
     struct file *filp;
     unsigned int writed = 0;
-#define AT_CMD_LEN 64
+#define AT_CMD_LEN 254
     char readbuf[AT_CMD_LEN] = {0};
     unsigned int wait_ms= 200;
     unsigned int max_wait_times = 5;
@@ -730,7 +730,7 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     set_fs(oldfs);
 }
 
-static int oct_offlog_send_init_at( void ){
+static void oct_offlog_send_init_at( void ){
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
@@ -969,10 +969,14 @@ static int oct_thread(void *param)
 			}
 			else if (oct_out_path == OCT_PATH_FILE)
 			{
+				dma_sync_single_for_cpu(NULL, phy_base_addr +
+					oct_read_ptr, num_bytes,
+					DMA_FROM_DEVICE);
 				/* call subscribed function to forward data */
 					oct_write_data_to_file((char *)
 					(&((char *)oct_ext_rbuff_ptr)[oct_read_ptr]),
 						num_bytes);
+
 //					OCT_DBG("Sent out %d bytes", num_bytes);
 			}
 		} else /* if no data available*/
