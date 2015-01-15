@@ -433,6 +433,24 @@ static bool sw_fuel_gauge_nvm_store_last_calibration_point(
 	return true;
 }
 
+bool sw_fuel_gauge_nvs_reset_calibration_point(void)
+{
+	T_NVM_RETURNCODE nvm_result = NVM_OK;
+	T_SOC_CAL_PNT_NVM fuel_gauge_cal_data = {0};
+	fuel_gauge_cal_data.checksum = -1;
+
+	nvm_result = nvm_write(NVM_DYN_SW_FUEL_GAUGE,
+		(u8 *) &fuel_gauge_cal_data, 0, sizeof(T_SOC_CAL_PNT_NVM));
+
+	if (NVM_OK != nvm_result) {
+		pr_err("NVM error: write failed. Result %d\n",
+			nvm_result);
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * sw_fuel_gauge_nvs_ready_callback -	Called by NVM on NVM state changes.
   *					In case that NVM is ready for read and

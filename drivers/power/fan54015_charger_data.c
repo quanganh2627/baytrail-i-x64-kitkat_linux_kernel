@@ -279,6 +279,16 @@ static int fan54015_calc_iocharge_regval(struct fan54x_charger *chrgr,
 	return i;
 }
 
+int disable_charger_fan54015(bool disable)
+{
+	u8 reg;
+	if (fan54015_chrgr_data.client == NULL)
+		return 0;
+	down(&fan54015_chrgr_data.prop_lock);
+	fan54x_attr_write(fan54015_chrgr_data.client, CHG_EN, disable);
+	up(&fan54015_chrgr_data.prop_lock);
+}
+
 static int fan54015_get_iocharge_val(int regval)
 {
 	return fan54015_iocharge_list[regval];

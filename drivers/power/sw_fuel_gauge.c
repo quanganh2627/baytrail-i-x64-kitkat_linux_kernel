@@ -1345,6 +1345,25 @@ static void sw_fuel_gauge_init_swfg(void)
  *					To be used if no NVM calibration
  *					data is present.
  */
+extern int disable_charger_fan54015(bool disable);
+
+#define VBAT_AVG_NUM 5
+static void get_vbat_without_charger(int *vbat)
+{
+	int vbat_sum = 0;
+	int vbat_temp = 0;
+	int cnt;
+	disable_charger_fan54015(1);
+	for (cnt = 0; cnt < VBAT_AVG_NUM; cnt++) {
+		BUG_ON(IIO_VAL_INT != iio_read_channel_processed(
+			sw_fuel_gauge_instance.vbat.p_iio_vbat_ocv,
+			&vbat_temp));
+		vbat_sum += vbat_temp;
+	}
+	disable_charger_fan54015(0);
+	*vbat = vbat_sum/VBAT_AVG_NUM;
+
+}
 static void sw_fuel_gauge_estimate_initial_capacity_and_error(void)
 {
 	struct soc_cal_point cc_data_now;
@@ -1356,7 +1375,8 @@ static void sw_fuel_gauge_estimate_initial_capacity_and_error(void)
 
 	/* Get timestamped coulomb counter values. */
 	sw_fuel_gauge_cc_read_current_data(&cc_data_now);
-
+	/* Make initial VBAT TYP measurement */
+	get_vbat_without_charger(&sw_fuel_gauge_instance.vbat.vbat_typ_mv);
 	/* Calculate capacity based on the initial VBAT_TYP
 	measurement. */
 	sw_fuel_gauge_calc_ocv_capacity_and_error(
@@ -1440,6 +1460,7 @@ static void sw_fuel_gauge_hardcode_initial_capacity_and_error(void)
 
 }
 
+extern bool sw_fuel_gauge_nvs_reset_calibration_point(void);
 /**
  * sw_fuel_gauge_calculate_nvm_capacity_and_error - Calculate the initial
  *					battery capacity and error then
@@ -1514,6 +1535,7 @@ static void sw_fuel_gauge_calculate_nvm_capacity_and_error(void)
 		/* No valid data in NVM -> fall back to calculate capacity
 		 *  based on the initial VBAT_TYP measurement. */
 		sw_fuel_gauge_estimate_initial_capacity_and_error();
+		sw_fuel_gauge_nvs_reset_calibration_point();
 	}
 
 	/* Finish the initialization and advance the state machine. */
