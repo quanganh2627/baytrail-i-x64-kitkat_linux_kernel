@@ -844,7 +844,6 @@ static void dcc_dsi_send_msglist(struct dcc_display *lcd,
 	struct display_msg *msg;
 
 	list_for_each_entry(msg, &msgs->list, list) {
-		mdelay(1);
 		DCC_DBG3("Sending command 0x%02x 0x%02x of length %d\n",
 		 msg->header, msg->type, msg->length);
 		dcc_dsi_send_cmd(lcd, msg);
