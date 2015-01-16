@@ -1652,6 +1652,7 @@ static void sw_fuel_gauge_bat_presence_report(
 		state machine will not be started, so this value will remain. */
 		p_bat->fitted_state = false;
 		p_bat->bat_id_type = BAT_ID_PSU;
+		sw_fuel_gauge_instance.properties.model_name = NULL;
 		sw_fuel_gauge_set_bat_properties(POWER_SUPPLY_CHARGE_MAX_MAH,
 						POWER_SUPPLY_TECHNOLOGY_UNKNOWN,
 						false);
@@ -1669,6 +1670,9 @@ static void sw_fuel_gauge_bat_presence_report(
 							p_bat->bat_id_type);
 
 		sw_fuel_gauge_calc_battery_values();
+
+		sw_fuel_gauge_instance.properties.model_name =
+						p_reported_model->model_name;
 
 		/* Set battery properties in power supply class */
 		sw_fuel_gauge_set_bat_properties(p_reported_model->capacity,

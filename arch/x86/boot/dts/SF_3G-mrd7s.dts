@@ -193,6 +193,8 @@
 					     4250 /*maint_chrg_vol_ul*/
 					     1450 /*maint_chrg_cur*/ >;
 
+	prof-standrd-model_name = "Sof70A";
+
 	nprofiles = <1>;
 };
 
