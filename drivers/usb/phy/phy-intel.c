@@ -354,6 +354,7 @@ static int intel_otg_suspend(struct intel_usbphy *iphy)
 
 	usb_enable_pll_en(iphy, false);
 
+	do_dwc_otg_core_init();
 	/* power off USB core, restore isolation */
 	ret = device_state_pm_set_state(iphy->dev,
 			iphy->pm_states[USB_PMS_DISABLE]);
@@ -401,6 +402,7 @@ static int intel_otg_resume(struct intel_usbphy *iphy)
 	usb_enable_reset(iphy, true, "usb");
 	usb_enable_reset(iphy, true, "bus");
 
+	do_dwc_otg_core_init();
 	/* power up USB core and PHY */
 	ret = device_state_pm_set_state(iphy->dev,
 			iphy->pm_states[USB_PMS_ENABLE]);

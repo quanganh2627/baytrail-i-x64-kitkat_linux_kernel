@@ -71,6 +71,13 @@
 
 static const char dwc_driver_name[] = "dwc_otg";
 
+dwc_otg_device_t *dwc_otg_device_priv = NULL;
+void do_dwc_otg_core_init(void)
+{
+	if (dwc_otg_device_priv)
+		dwc_otg_core_init(dwc_otg_device_priv->core_if);
+}
+
 extern int pcd_init(struct platform_device *_dev);
 extern int hcd_init(struct platform_device *_dev);
 
@@ -757,6 +764,7 @@ static int dwc_otg_driver_probe(struct platform_device *_dev)
 		goto fail;
 	}
 
+	dwc_otg_device_priv = dwc_otg_device;
 	/*
 	 * Initialize the DWC_otg core.
 	 */

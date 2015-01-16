@@ -214,3 +214,5 @@ struct usb_reset {
 	struct reset_control *reset;
 };
 
+extern void do_dwc_otg_core_init(void);
+
