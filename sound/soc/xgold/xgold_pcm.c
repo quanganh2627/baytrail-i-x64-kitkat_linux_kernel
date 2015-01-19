@@ -488,14 +488,14 @@ void xgold_dsp_pcm_dma_play_handler(void *dev)
 	struct xgold_pcm *xgold_pcm;
 	dma_addr_t dma_addr;
 
-	xgold_debug("%s\n", __func__);
-
 	if (!xrtd) {
 		xgold_err("%s: xgold runtime data is NULL!!\n", __func__);
 		return;
 	}
 
 	spin_lock(&xrtd->lock);
+	xgold_debug("%s\n", __func__);
+
 	xgold_pcm = xrtd->pcm;
 	if (!xgold_pcm || !xrtd->stream || !xrtd->stream->runtime ||
 			!xrtd->stream->runtime->dma_area) {
@@ -505,7 +505,7 @@ void xgold_dsp_pcm_dma_play_handler(void *dev)
 	}
 
 	if (!xrtd->dmach) {
-		xgold_debug("%s: dma stream is NULL\n", __func__);
+		xgold_debug("%s: dma channel is NULL\n", __func__);
 		spin_unlock(&xrtd->lock);
 		return;
 	}
@@ -527,9 +527,10 @@ void xgold_dsp_pcm_dma_play_handler(void *dev)
 
 	/* Restart the DMA tx for next data transfer i.e. after 20 ms */
 	dma_async_issue_pending(xrtd->dmach);
-	spin_unlock(&xrtd->lock);
 
 	xgold_debug("dma tx started\n");
+
+	spin_unlock(&xrtd->lock);
 }
 
 static void xgold_pcm_dma_submit(struct xgold_runtime_data *xrtd,
@@ -565,7 +566,7 @@ static void xgold_pcm_dma_submit(struct xgold_runtime_data *xrtd,
 			DMA_TO_DEVICE);
 
 	/* Prepare DMA slave sg */
-	if (lpaudio_dma_setup) {
+	if (lpaudio_dma_setup && STREAM_PLAY2 == xrtd->stream_type) {
 		desc = lpaudio_dma_setup(xrtd->dmach);
 	} else {
 		desc = dmaengine_prep_slave_sg(xrtd->dmach,
@@ -717,6 +718,7 @@ static int xgold_pcm_open(struct snd_pcm_substream *substream)
 	}
 
 	xrtd->pcm = xgold_pcm;
+	xrtd->magic_number = XGOLD_PCM_MAGIC_NUMBER;
 	spin_lock_init(&xrtd->lock);
 	runtime->private_data = xrtd;
 
@@ -734,9 +736,8 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 	struct xgold_runtime_data *xrtd = substream->runtime->private_data;
 	struct xgold_pcm *xgold_pcm;
 	int ret = 0;
-#if 0 /* BU_HACK DSP is always on at boot */
 	bool power_state = OFF;
-#endif
+
 	xgold_debug("XGOLD Closing pcm device\n");
 
 	if (!xrtd) {
@@ -779,16 +780,14 @@ static int xgold_pcm_close(struct snd_pcm_substream *substream)
 		ret = -EINVAL;
 	}
 
+	xrtd->magic_number = 0;
+
 	kfree(xrtd);
 
 	xgold_debug("%s: Requesting to suspend dsp\n", __func__);
-
-
-#if 0 /* BU_HACK DSP is always on at boot */
 	ret = xgold_pcm->dsp->p_dsp_common_data->
 		ops->set_controls(xgold_pcm->dsp,
-			DSP_AUDIO_POWER_REQ, &power_state);I
-#endif
+			DSP_AUDIO_POWER_REQ, &power_state);
 
 	return ret;
 }
@@ -838,6 +837,10 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 			xgold_pcm->dma_mode) {
 		spin_lock_irqsave(&xrtd->lock, flags);
+
+		/* request DMA shutdown */
+		xgold_debug("terminate all dma: %p\n", xrtd->dmach);
+		dmaengine_terminate_all(xrtd->dmach);
 
 		/* Release the DMA channel */
 		if (xrtd->dmach) {
@@ -1024,27 +1027,6 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 
 	case SNDRV_PCM_TRIGGER_STOP:
 		xgold_debug("%s: Trigger stop\n", __func__);
-
-#if 0
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			if (xgold_pcm->dma_mode) {
-				/* request DMA shutdown */
-				dmaengine_terminate_all(xrtd->dmach);
-			}
-
-			dsp_pcm_stop(dsp, xrtd->stream_type);
-		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
-			dsp_pcm_stop(dsp, STREAM_REC);
-		else { /* HW_PROBE_B || HW_PROBE_A */
-			dsp_pcm_stop(dsp, xrtd->stream_type);
-			dsp->p_dsp_common_data->ops->irq_deactivate(DSP_IRQ_3);
-		}
-#endif
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-				xgold_pcm->dma_mode) {
-			/* request DMA shutdown */
-			dmaengine_terminate_all(xrtd->dmach);
-		}
 
 		dsp_pcm_stop(dsp, xrtd->stream_type);
 

@@ -44,6 +44,7 @@ struct xgold_pcm {
 };
 
 struct xgold_runtime_data {
+	unsigned int magic_number;
 	struct xgold_pcm *pcm;
 	struct snd_pcm_substream *stream;
 	enum xgold_pcm_stream_type stream_type;
