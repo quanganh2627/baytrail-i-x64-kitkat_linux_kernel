@@ -26,7 +26,9 @@
 #include "dcc-display.h"
 #include "dcc-hwregs.h"
 #include "dcc-gra.h"
+#include <sofia/board_id.h>
 
+static int board_5s;
 /* DSI specification */
 /* Procssor-sourced Packet type: DSI_M (Master) */
 enum {
@@ -844,7 +846,8 @@ static void dcc_dsi_send_msglist(struct dcc_display *lcd,
 	struct display_msg *msg;
 
 	list_for_each_entry(msg, &msgs->list, list) {
-		mdelay(1);
+		if (board_5s)
+			mdelay(1);
 		DCC_DBG3("Sending command 0x%02x 0x%02x of length %d\n",
 		 msg->header, msg->type, msg->length);
 		dcc_dsi_send_cmd(lcd, msg);
@@ -986,6 +989,8 @@ int dcc_dsi_probe(struct dcc_display *lcd)
 	lcd->get_rate = dcc_dsi_get_rate;
 	lcd->frame_prepare = dcc_dsi_frame_prepare;
 	lcd->frame_wfe = dcc_dsi_frame_wfe;
+	if (sofia_board_is(BOARD_SOFIA3G_MRD_5S))
+		board_5s = 1;
 
 	return 0;
 }
