@@ -1048,7 +1048,7 @@
 			sleep-out {
 				intel,cmd-type = <0x05>;
 				intel,cmd-data = <0x11>;
-				intel,cmd-delay = <120>;
+				intel,cmd-delay = <200>;
 				intel,cmd-lp = <1>;
 			};
 			display-on {
@@ -1092,7 +1092,7 @@
 			sleep-out {
 				intel,cmd-type = <0x05>;
 				intel,cmd-data = <0x11>;
-				intel,cmd-delay = <120>;
+				intel,cmd-delay = <200>;
 				intel,cmd-lp = <1>;
 			};
 			display-on {
