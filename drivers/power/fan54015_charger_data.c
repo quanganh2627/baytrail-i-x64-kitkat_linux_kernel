@@ -154,20 +154,31 @@ struct charger_attrmap fan54015_charger_attr_map[ATTR_MAX] = {
 	[IO_LEVEL] = {"io_level", BITS, REG_SP_CHARGER, IO_LEVEL_O, IO_LEVEL_M},
 };
 
-static int fan54015_enable_charger(struct fan54x_charger *chrgr, bool enable)
+static int fan54015_enable_charging(struct fan54x_charger *chrgr, bool enable)
 {
 	int ret;
+
+		/* enabling and disabling charger based on HZ bit,
+		 * so keeping the CE bit to default value always.
+		 */
+
+		ret = fan54x_attr_write(chrgr->client, CHG_EN, 0);
+		if (ret)
+			return ret;
 
 	if (enable) {
 		/* In case when CE or HZ bit is set,
 		 * we have to manually clear it to enable charger again.
 		 * No need to set the bit when disabling charger.
 		 */
-		ret = fan54x_attr_write(chrgr->client, CHG_EN, 0);
+
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 0);
 		if (ret)
 			return ret;
 
-		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 0);
+	} else if (!enable) {
+		/* set HZ bit to disable charging*/
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 1);
 		if (ret)
 			return ret;
 	}
@@ -325,7 +336,7 @@ struct fan54x_charger fan54015_chrgr_data = {
 
 	.attrmap = fan54015_charger_attr_map,
 	.configure_chip = fan54015_configure_chip,
-	.enable_charger = fan54015_enable_charger,
+	.enable_charging = fan54015_enable_charging,
 	.get_charger_state = fan54015_get_charger_state,
 	.calc_iocharge_regval = fan54015_calc_iocharge_regval,
 	.get_iocharge_val = fan54015_get_iocharge_val,
