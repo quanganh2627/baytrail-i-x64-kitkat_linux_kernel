@@ -27,7 +27,6 @@
 #include <linux/debugfs.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <linux/io.h>
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
 #include <linux/pinctrl/consumer.h>
@@ -1395,7 +1394,7 @@ static irqreturn_t fan54x_charger_chgint_cb(int irq, void *dev)
 {
 	struct fan54x_charger *chrgr = dev;
 
-	pr_debug("%s\n", __func__);
+	pr_info("%s\n", __func__);
 
 	unfreezable_bh_schedule(&chrgr->chgint_bh);
 
@@ -1434,7 +1433,7 @@ static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 	int ret;
 
 
-	if (!chrgr->ctrl_io || !chrgr->ididev)
+	if (!chrgr->ididev)
 		return -EINVAL;
 
 	pm_state_en =
@@ -1462,7 +1461,8 @@ static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 		return -EIO;
 	}
 
-	regval = ioread32(CHARGER_CONTROL(chrgr->ctrl_io));
+	ret = idi_client_ioread(chrgr->ididev,
+			CHARGER_CONTROL(chrgr->ctrl_io_res->start), &regval);
 
 	/* ChargerIRQEdge - CHARGER_CONTROL_CIEDG_FALLING */
 	regval &= ~(CHARGER_CONTROL_CIEDG_M << CHARGER_CONTROL_CIEDG_O);
@@ -1490,18 +1490,28 @@ static int fan54x_configure_pmu_regs(struct fan54x_charger *chrgr)
 	regval |= (CHARGER_CONTROL_IRQ_DEBOUNCE_DISABLE <<
 						CHARGER_CONTROL_CIDBT_O);
 
-	iowrite32(regval, CHARGER_CONTROL(chrgr->ctrl_io));
+	ret = idi_client_iowrite(chrgr->ididev,
+			CHARGER_CONTROL(chrgr->ctrl_io_res->start), regval);
 
 	/* charger control WR strobe */
-	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
-					CHARGER_CONTROL_WR(chrgr->ctrl_io));
-	iowrite32((1 << CHARGER_CONTROL_WR_WS_O),
-					CHARGER_CONTROL_WR(chrgr->ctrl_io));
+	ret = idi_client_iowrite(chrgr->ididev,
+			CHARGER_CONTROL_WR(chrgr->ctrl_io_res->start),
+			BIT(CHARGER_CONTROL_WR_WS_O));
+
+	/* This second triggering of the write strobe is intentional
+	 * to make sure CHARGER_CTRL value is propagated to HW properly
+	 */
+	ret = idi_client_iowrite(chrgr->ididev,
+			CHARGER_CONTROL_WR(chrgr->ctrl_io_res->start),
+			BIT(CHARGER_CONTROL_WR_WS_O));
 
 	/* Set CHGRST ball to low for MRD P1 (FAN54015) */
 	/* charger WR */
-	if (chrgr->pn == 5)
-		iowrite32((1 << CHARGER_WR_WS_O), CHARGER_WR(chrgr->ctrl_io));
+	if (chrgr->pn == 5) {
+		ret = idi_client_iowrite(chrgr->ididev,
+			CHARGER_CONTROL_WR(chrgr->ctrl_io_res->start),
+			BIT(CHARGER_WR_WS_O));
+	}
 
 	ret = idi_set_power_state(chrgr->ididev, pm_state_dis, false);
 
@@ -1718,10 +1728,6 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 	chrgr->otg_handle = otg_handle;
-
-	/* Wait for fan5420 idi device to map io */
-	if (chrgr->ctrl_io == NULL)
-		BUG();
 
 	/*
 	 * Get interrupt from device tree
@@ -1954,23 +1960,17 @@ static int __exit fan54x_i2c_remove(struct i2c_client *client)
 }
 
 static void idi_init(struct fan54x_charger *chrgr,
-			void *__iomem ctrl_io,
+			struct resource *ctrl_io_res,
 			struct idi_peripheral_device *ididev)
 {
-	chrgr->ctrl_io = ctrl_io;
+	chrgr->ctrl_io_res = ctrl_io_res;
 	chrgr->ididev = ididev;
-}
-
-static void idi_remove(struct fan54x_charger *chrgr)
-{
-	iounmap(chrgr->ctrl_io);
 }
 
 static int fan54x_idi_probe(struct idi_peripheral_device *ididev,
 					const struct idi_device_id *id)
 {
 	struct resource *res;
-	void __iomem *ctrl_io;
 	int ret = 0;
 
 	spin_lock_init(&chrgr_dbg.lock);
@@ -1986,16 +1986,9 @@ static int fan54x_idi_probe(struct idi_peripheral_device *ididev,
 		return -EINVAL;
 	}
 
-	ctrl_io = ioremap(res->start, resource_size(res));
-
-	if (!ctrl_io) {
-		pr_err("mapping PMU's Charger registers failed!\n");
-		return -EINVAL;
-	}
-
 	/* HACK: chargers sharing same IDI device ID */
-	idi_init(&fan54020_chrgr_data, ctrl_io, ididev);
-	idi_init(&fan54015_chrgr_data, ctrl_io, ididev);
+	idi_init(&fan54020_chrgr_data, res, ididev);
+	idi_init(&fan54015_chrgr_data, res, ididev);
 
 	ret = idi_device_pm_set_class(ididev);
 	if (ret) {
@@ -2011,9 +2004,6 @@ static int __exit fan54x_idi_remove(struct idi_peripheral_device *ididev)
 {
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_IDI_REMOVE, 0, 0);
 	pr_info("%s\n", __func__);
-
-	idi_remove(&fan54020_chrgr_data);
-	idi_remove(&fan54015_chrgr_data);
 
 	return 0;
 }

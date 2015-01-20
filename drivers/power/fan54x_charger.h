@@ -227,7 +227,7 @@ struct fan54x_charger {
 
 	struct delayed_work charging_work;
 	struct delayed_work boost_work;
-	void __iomem *ctrl_io;
+	struct resource *ctrl_io_res;
 	struct usb_phy *otg_handle;
 
 	struct power_supply usb_psy;
