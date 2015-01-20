@@ -4,10 +4,10 @@
 		intel,display-dpi= <295 295>;
 
 		/* MIPI-DSI video mode settings */
-		intel,display-vid-hfp-hs-bytes = <192>;
-		intel,display-vid-hbp-hs-bytes = <192>;
-		intel,display-vid-hsa-hs-bytes = <24>;
-		intel,display-vid-vfp-lines = <20>;
+		intel,display-vid-hfp-hs-bytes = <162>;
+		intel,display-vid-hbp-hs-bytes = <162>;
+		intel,display-vid-hsa-hs-bytes = <30>;
+		intel,display-vid-vfp-lines = <14>;
 		intel,display-vid-vbp-lines = <16>;
 		intel,display-vid-vsa-lines = <4>;
 
