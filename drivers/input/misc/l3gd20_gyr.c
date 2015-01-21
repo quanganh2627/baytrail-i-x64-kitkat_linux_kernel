@@ -86,6 +86,8 @@
 #define SENSITIVITY_500_DENOMINATOR     10
 #define SENSITIVITY_2000_DENOMINATOR    1
 
+#define POWER_ON_DELAY_MS 400
+
 #define CTRL_REG1	(0x20)    /* CTRL REG1 */
 #define CTRL_REG2	(0x21)    /* CTRL REG2 */
 #define CTRL_REG3	(0x22)    /* CTRL_REG3 */
@@ -279,6 +281,9 @@ struct l3gd20_gyr_status {
 	struct hrtimer hr_timer;
 	ktime_t ktime;
 	struct work_struct polling_task;
+	/* power on time */
+	struct timeval tv_begin;
+	struct timeval tv_end;
 };
 
 static int l3gd20_gyr_i2c_read(struct l3gd20_gyr_status *stat, u8 *buf,
@@ -515,6 +520,7 @@ static int l3gd20_gyr_get_data(struct l3gd20_gyr_status *stat,
 	u8 gyro_out[6] = { 0 };
 	/* y,p,r hardware data */
 	s32 hw_d[3] = { 0 };
+	long delta_ms = 0;
 
 	gyro_out[0] = (AXISDATA_REG);
 
@@ -542,6 +548,19 @@ static int l3gd20_gyr_get_data(struct l3gd20_gyr_status *stat,
 		   : (hw_d[stat->pdata->axis_map_y]));
 	data->z = ((stat->pdata->negate_z) ? (-hw_d[stat->pdata->axis_map_z])
 		   : (hw_d[stat->pdata->axis_map_z]));
+	/* when gyro just poweron, first 200+ms data are abnormal */
+	if (timeval_to_ns(&stat->tv_begin) != 0) {
+		do_gettimeofday(&stat->tv_end);
+		delta_ms =
+			(stat->tv_end.tv_sec - stat->tv_begin.tv_sec) * 1000
+			+ (stat->tv_end.tv_usec - stat->tv_begin.tv_usec)
+			/ 1000;
+		if (delta_ms < POWER_ON_DELAY_MS) {
+			data->x = data->y = data->z = 0;
+			return 0;
+		}
+		memset(&stat->tv_begin, 0, sizeof(struct timeval));
+	}
 
 	 dev_dbg(&stat->client->dev, "gyro_out: x = %d, y = %d, z = %d\n",
 		data->x, data->y, data->z);
@@ -631,7 +650,7 @@ static int l3gd20_gyr_device_power_on(struct l3gd20_gyr_status *stat)
 			return err;
 		}
 	}
-
+	do_gettimeofday(&stat->tv_begin);
 	return 0;
 }
 
