@@ -896,14 +896,14 @@ static int memory_debugfs_open(struct inode *inode, struct file *file)
 
 static ssize_t pid_memory_used_read(struct file *filp, char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	static char *buf;
-	size_t r, ret;
-	buf = kzalloc(8192, GFP_KERNEL);
-	r = mem_cal_dbg_s(buf);
+        static char *buf;
+        size_t r, ret;
+        buf = kzalloc(8192, GFP_KERNEL);
+        r = mem_cal_dbg_s(buf);
 
-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
-	kfree(buf);
-	return ret;
+        ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
+        kfree(buf);
+        return ret;
 }
 
 static const struct file_operations memory_usage_fops = {

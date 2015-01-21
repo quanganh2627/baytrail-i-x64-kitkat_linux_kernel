@@ -116,6 +116,8 @@ static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
 				DMA_SL_MEM_TO_MEM,
 				0,
 				NULL);
+	memset(phys_to_virt(lpaudio_dma_addr), 0,
+			DMA_BLOCK_SIZE * DMA_BLOCK_NUM);
 	xgold_lpmp3_enable();
 	return desc;
 }

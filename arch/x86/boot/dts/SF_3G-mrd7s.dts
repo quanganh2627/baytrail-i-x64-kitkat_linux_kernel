@@ -162,10 +162,10 @@
 				  82 /*chrg_term_ma*/
 				  2900 /*low_batt_mv*/
 				  60 /*disch_tmp_ul*/
-				  0xffffffec /*disch_tmp_ll (-20)*/
+				  0xfffffff6 /*disch_tmp_ll (-10)*/
 				  0 /*min_temp*/
 				  3 /*min_temp_restart*/
-				  42 /*max_temp_restart*/ >;
+				  47 /*max_temp_restart*/ >;
 
 	prof-standrd-cap_to_vbat_ocv = <
 		2912 3280 3438 3530 3595 3643 3672 3681 3685 3689
@@ -182,12 +182,14 @@
 
 	prof-standrd-ntemp_ranges = <1>;
 
-	prof-standrd-temp_range0 = < 45 /*max_temp*/
+	prof-standrd-temp_range0 = < 50 /*max_temp*/
 					     4350 /*full_chrg_vol*/
 					     1450 /*full_chrg_cur*/
 					     98 /*charging_res_cap*/
 					     4250 /*maint_chrg_vol_ul*/
 					     1450 /*maint_chrg_cur*/ >;
+
+	prof-standrd-model_name = "Sof70A";
 
 	nprofiles = <1>;
 };
@@ -464,36 +466,6 @@
 	pinctrl-1 = <&emmc_sleep_pins>;
 	pinctrl-2 = <&emmc_inactive_pins>;
 
-};
-
-&keypad {
-	pinctrl-names = "default", "sleep", "inactive";
-	pinctrl-0 = <&kp_default_pins>;
-	pinctrl-1 = <&kp_sleep_pins>;
-	pinctrl-2 = <&kp_inactive_pins>;
-	keypad,num-rows = <3>;
-	keypad,num-columns = <8>;
-	keypad,rows = <0 2>;
-	keypad,columns = <0 1 2>;
-	linux,keymap = <0x00000073	/* KEY_VOLUMEUP */
-			0x00010066	/* KEY_HOME */
-			0x00020000	/* KEY_RESERVED */
-			0x00030000	/* KEY_RESERVED */
-			0x00040000	/* KEY_RESERVED */
-			0x00050000	/* KEY_RESERVED */
-			0x00060000	/* KEY_RESERVED */
-			0x00070000	/* KEY_RESERVED */
-			0x01000000	/* KEY_RESERVED */
-			0x01010000	/* KEY_RESERVED */
-			0x01020000	/* KEY_RESERVED */
-			0x01030000	/* KEY_RESERVED */
-			0x01040000	/* KEY_RESERVED */
-			0x01050000	/* KEY_RESERVED */
-			0x01060000	/* KEY_RESERVED */
-			0x01070000	/* KEY_RESERVED */
-			0x02000072	/* KEY_VOLUMEDOWN */
-			0x02010000	/* KEY_RESERVED */
-			0x02020000>;	/* KEY_RESERVED */
 };
 
 #ifndef RECOVERY_KERNEL

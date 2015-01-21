@@ -20,11 +20,15 @@
 #endif
 
 #define HIRQ_VTIMER 4
-/* 5 */
-/* 6 */
-/* 7 */
-/* 8 */
+#define HIRQ_SPCU_T0LOW 5
+#define HIRQ_SPCU_T0HIGH 6
+#define HIRQ_SPCU_T1LOW 7
+#define HIRQ_SPCU_T1HIGH 8
 #define HIRQ_RTC_ALARM 9
 #define HIRQ_CPU_CLK_CHANGE 10
 #define HIRQ_MODEM_DVFS 11
+/*12*/
+#define HIRQ_SPCU_T2LOW 13
+#define HIRQ_SPCU_T2HIGH 14
+
 #endif /* _HIRQ_IRQ_H */

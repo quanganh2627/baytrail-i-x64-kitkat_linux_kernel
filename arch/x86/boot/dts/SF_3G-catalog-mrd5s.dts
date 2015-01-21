@@ -3,6 +3,7 @@
 //#define SOFIA3G_CATALOG_MRD5S_SENSOR
 //#define SOFIA3G_CATALOG_MRD5S_CHARGER
 //#define SOFIA3G_CATALOG_MRD5S_TOUCH
+//#define SOFIA3G_CATALOG_MRD5S_DISPLAY
 #include "xgold/sofia_3g_soc/irq.h"
 
 / {
@@ -83,7 +84,9 @@
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
 	};
-
+#ifdef SOFIA3G_CATALOG_MRD5S_DISPLAY
+		#include "catalog/Sf_3G-catalog-Display.dtsi"
+#else
 	graphics {
 		compatible = "intel,graphics";
 		intel,gpu-shared-mem = <0x20000000>;
@@ -95,6 +98,8 @@
 #else
 		intel,dcc-use-fences = <1>;
 		intel,dcc-mem = < 0x00400000 >;
+		intel,prot-mem = < 0x30800000 0xB800000>;
+
 #endif
 		intel,display-fps = <60>;
 		intel,display-ramless = <1>;
@@ -128,6 +133,7 @@
 				intel,display-if-phy-lp_tx_vref = <31>;
 		};
 	};
+#endif
 
 #ifndef RECOVERY_KERNEL
 	sound:sound {
@@ -212,7 +218,7 @@
 };
 
 &fuel_gauge_hal {
-	sense_resistor_mohm = <22>;
+	sense_resistor_mohm = <20>;
 	gain_error_1_uc_per_mc = <30>;
 	gain_error_2_uc_per_mc = <30>;
 };
@@ -428,7 +434,7 @@
 		pinctrl-0 = <&accel_default_pins>;
 		pinctrl-1 = <&accel_sleep_pins>;
 		pinctrl-2 = <&accel_inactive_pins>;
-		pm,class-name = "lsm303dlhc_acc_class";
+		pm,class-name = "kxcjk1013_class";
 		pm,user-name = "accelerometer";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
@@ -561,36 +567,6 @@
 	pinctrl-1 = <&emmc_sleep_pins>;
 	pinctrl-2 = <&emmc_inactive_pins>;
 
-};
-
-&keypad {
-	pinctrl-names = "default", "sleep", "inactive";
-	pinctrl-0 = <&kp_default_pins>;
-	pinctrl-1 = <&kp_sleep_pins>;
-	pinctrl-2 = <&kp_inactive_pins>;
-	keypad,num-rows = <3>;
-	keypad,num-columns = <8>;
-	keypad,rows = <0 2>;
-	keypad,columns = <0 1 2>;
-	linux,keymap = <0x00000073	/* KEY_VOLUMEUP */
-			0x00010066	/* KEY_HOME */
-			0x00020000	/* KEY_RESERVED */
-			0x00030000	/* KEY_RESERVED */
-			0x00040000	/* KEY_RESERVED */
-			0x00050000	/* KEY_RESERVED */
-			0x00060000	/* KEY_RESERVED */
-			0x00070000	/* KEY_RESERVED */
-			0x01000000	/* KEY_RESERVED */
-			0x01010000	/* KEY_RESERVED */
-			0x01020000	/* KEY_RESERVED */
-			0x01030000	/* KEY_RESERVED */
-			0x01040000	/* KEY_RESERVED */
-			0x01050000	/* KEY_RESERVED */
-			0x01060000	/* KEY_RESERVED */
-			0x01070000	/* KEY_RESERVED */
-			0x02000072	/* KEY_VOLUMEDOWN */
-			0x02010000	/* KEY_RESERVED */
-			0x02020000>;	/* KEY_RESERVED */
 };
 
 #ifndef RECOVERY_KERNEL

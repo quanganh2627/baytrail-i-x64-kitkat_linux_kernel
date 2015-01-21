@@ -842,13 +842,13 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 		xgold_debug("terminate all dma: %p\n", xrtd->dmach);
 		dmaengine_terminate_all(xrtd->dmach);
 
+		if (lpaudio_dma_release &&
+				STREAM_PLAY2 == xrtd->stream_type)
+			lpaudio_dma_release(xrtd->dmach);
+		
 		/* Release the DMA channel */
 		if (xrtd->dmach) {
-			if (lpaudio_dma_release &&
-				STREAM_PLAY2 == xrtd->stream_type)
-				lpaudio_dma_release(xrtd->dmach);
-			else
-				dma_release_channel(xrtd->dmach);
+			dma_release_channel(xrtd->dmach);
 			xrtd->dmach = NULL;
 		}
 
@@ -989,6 +989,10 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 				dsp->p_dsp_common_data->
 					ops->irq_activate(DSP_IRQ_1);
 
+			if (lpaudio_trigger
+					&& STREAM_PLAY2 == xrtd->stream_type)
+				lpaudio_trigger(1);
+
 			dsp_pcm_play(dsp, xrtd->stream_type,
 					substream->runtime->channels,
 					substream->runtime->rate,
@@ -1027,6 +1031,12 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 
 	case SNDRV_PCM_TRIGGER_STOP:
 		xgold_debug("%s: Trigger stop\n", __func__);
+
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			if (lpaudio_trigger
+					&& STREAM_PLAY2 == xrtd->stream_type)
+				lpaudio_trigger(0);
+		}
 
 		dsp_pcm_stop(dsp, xrtd->stream_type);
 

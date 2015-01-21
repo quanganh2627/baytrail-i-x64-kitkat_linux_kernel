@@ -23,6 +23,7 @@
 #include <linux/version.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
+#include <linux/sched.h>
 
 #ifdef CONFIG_X86
 #include <asm/cacheflush.h>
@@ -93,74 +94,73 @@ static struct mali_mem_os_allocator {
 #endif
 };
 
-
 typedef struct {
-	pid_t pid;
-	char comm[TASK_COMM_LEN];
-	size_t alloc;
+        pid_t pid;
+        char comm[TASK_COMM_LEN];
+        size_t alloc;
 } mem_cal;
 
 typedef enum {
-	alloc = 1,
-	free  = 2,
+        alloc = 1,
+        free  = 2,
 } mem_opt;
 
 static mem_cal mem_cal_dbg[1024] = {[0 ... 1023] = {.pid = -1}};
 
 static void mem_cal_dbg_f(mem_opt opt, mali_mem_allocation *descriptor, size_t size)
 {
-	int i;
-	pid_t pid = current->pid;
+        int i;
+        pid_t pid = current->pid;
 
-	if (opt == alloc) {
-		descriptor->pid = pid;
-		for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
-			if (mem_cal_dbg[i].pid == pid) {
-				mem_cal_dbg[i].alloc += size;
-				break;
-			} else if (mem_cal_dbg[i].pid == -1) {
-				mem_cal_dbg[i].pid = pid;
-				memcpy(mem_cal_dbg[i].comm, current->comm, TASK_COMM_LEN);
-				mem_cal_dbg[i].alloc += size;
-				break;
-			}
-			if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
-				pr_err("%s line:%d\n", __func__, __LINE__);
-		}
-	} else if (opt == free) {
-		for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
-			if (mem_cal_dbg[i].pid == descriptor->pid) {
-				mem_cal_dbg[i].alloc -= size;
-				break;
-			}
-			if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
-				pr_err("%s line:%d\n", __func__, __LINE__);
-		}
-	}
+        if (opt == alloc) {
+                descriptor->pid = pid;
+                for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+                        if (mem_cal_dbg[i].pid == pid) {
+                                mem_cal_dbg[i].alloc += size;
+                                break;
+                        } else if (mem_cal_dbg[i].pid == -1) {
+                                mem_cal_dbg[i].pid = pid;
+                                memcpy(mem_cal_dbg[i].comm, current->comm, TASK_COMM_LEN);
+                                mem_cal_dbg[i].alloc += size;
+                                break;
+                        }
+                        if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
+                                pr_err("%s line:%d\n", __func__, __LINE__);
+                }
+        } else if (opt == free) {
+                for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+                        if (mem_cal_dbg[i].pid == descriptor->pid) {
+                                mem_cal_dbg[i].alloc -= size;
+                                break;
+                        }
+                        if (i == ARRAY_SIZE(mem_cal_dbg) - 1)
+                                pr_err("%s line:%d\n", __func__, __LINE__);
+                }
+        }
 }
 
 size_t mem_cal_dbg_s(char *buf)
 {
-	int i;
-	size_t len = 0;
+        int i;
+        size_t len = 0;
 
-	len += snprintf(buf + len, 65536 - len,
-			"\t======================================\n");
-	for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
-//		if (mem_cal_dbg[i].pid != -1 && mem_cal_dbg[i].alloc)
-		if (mem_cal_dbg[i].pid != -1)
-			len += snprintf(buf + len, 65536 -len,
-				"\tpid:[%6u] [%16s] memory:%8u KB\n",
-				mem_cal_dbg[i].pid,
-				mem_cal_dbg[i].comm,
-				mem_cal_dbg[i].alloc / 1024
-			);
-		else
-			break;
-	}
-	len += snprintf(buf + len, 65536 - len,
-			"\t======================================\n");
-	return len;
+        len += snprintf(buf + len, 65536 - len,
+                        "\t======================================\n");
+        for (i = 0; i < ARRAY_SIZE(mem_cal_dbg); i++) {
+//              if (mem_cal_dbg[i].pid != -1 && mem_cal_dbg[i].alloc)
+                if (mem_cal_dbg[i].pid != -1)
+                        len += snprintf(buf + len, 65536 -len,
+                                "\tpid:[%6u] [%16s] memory:%8u KB\n",
+                                mem_cal_dbg[i].pid,
+                                mem_cal_dbg[i].comm,
+                                mem_cal_dbg[i].alloc / 1024
+                        );
+                else
+                        break;
+        }
+        len += snprintf(buf + len, 65536 - len,
+                        "\t======================================\n");
+        return len;
 }
 
 static void mali_mem_os_free(mali_mem_allocation *descriptor)
@@ -279,6 +279,7 @@ static int mali_mem_os_alloc_pages(mali_mem_allocation *descriptor, u32 size)
 	}
 
 	mem_cal_dbg_f(alloc, descriptor, page_count * _MALI_OSK_MALI_PAGE_SIZE);
+
 	atomic_add(page_count, &mali_mem_os_allocator.allocated_pages);
 
 	if (MALI_OS_MEMORY_KERNEL_BUFFER_SIZE_IN_PAGES > mali_mem_os_allocator.pool_count) {
@@ -386,13 +387,12 @@ mali_mem_allocation *mali_mem_os_alloc(u32 mali_addr, u32 size, struct vm_area_s
 	err = mali_mem_os_mali_map(descriptor, session); /* Map on Mali */
 	if (0 != err) goto mali_map_failed;
 
-
 	err = mali_mem_os_cpu_map(descriptor, vma); /* Map on CPU */
 	if (0 != err) goto cpu_map_failed;
 
-	_mali_osk_mutex_signal(session->memory_lock);
+	//pr_debug("success allocate OS %dK\n", size/1024);
 
-	pr_debug("success allocate OS %dK\n", size/1024);
+	_mali_osk_mutex_signal(session->memory_lock);
 	return descriptor;
 
 cpu_map_failed:

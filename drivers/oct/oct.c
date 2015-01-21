@@ -311,7 +311,7 @@ static void oct_detect_off_flag(char *gadget_name)
 {
 	struct file *fp = NULL;
 	mm_segment_t old_fs;
-	int retry = 3;
+	int retry = 5;
 	OCT_DBG("oct_detect_off_flag[%s]", gadget_name);
 
 	while (!kthread_should_stop()&&retry>=0) {
@@ -702,7 +702,7 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     mm_segment_t oldfs;
     struct file *filp;
     unsigned int writed = 0;
-#define AT_CMD_LEN 64
+#define AT_CMD_LEN 254
     char readbuf[AT_CMD_LEN] = {0};
     unsigned int wait_ms= 200;
     unsigned int max_wait_times = 5;
@@ -730,11 +730,11 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     set_fs(oldfs);
 }
 
-static int oct_offlog_send_init_at( void ){
-    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
-    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsystrace=0,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
+static void oct_offlog_send_init_at( void ){
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
+//    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
+    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsystrace=1,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
 }
 
 
@@ -969,10 +969,14 @@ static int oct_thread(void *param)
 			}
 			else if (oct_out_path == OCT_PATH_FILE)
 			{
+				dma_sync_single_for_cpu(NULL, phy_base_addr +
+					oct_read_ptr, num_bytes,
+					DMA_FROM_DEVICE);
 				/* call subscribed function to forward data */
 					oct_write_data_to_file((char *)
 					(&((char *)oct_ext_rbuff_ptr)[oct_read_ptr]),
 						num_bytes);
+
 //					OCT_DBG("Sent out %d bytes", num_bytes);
 			}
 		} else /* if no data available*/

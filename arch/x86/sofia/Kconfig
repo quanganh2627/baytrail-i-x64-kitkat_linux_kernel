@@ -17,3 +17,11 @@ config SOFIA_BOARD_ID
 
 config MOBILEVISOR_VDRIVER
 	bool
+
+menuconfig SOFIA_LOWMEM_DEV
+	bool "Sofia low memory version of device"
+	default n
+	depends on X86_INTEL_SOFIA
+	help
+	Select this if the target sofia platform
+	only has limited memory

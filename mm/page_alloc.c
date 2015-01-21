@@ -2739,7 +2739,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	if (should_fail_alloc_page(gfp_mask, order))
 		return NULL;
 
-#ifdef CONFIG_CMA
+#if defined(CONFIG_CMA) && defined(CONFIG_SOFIA_LOWMEM_DEV)
 	if (gfp_mask & GFP_PAGE_CACHE) {
 		int nr_free = global_page_state(NR_FREE_PAGES)
 				- totalreserve_pages;

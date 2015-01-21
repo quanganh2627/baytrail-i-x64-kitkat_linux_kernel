@@ -3075,6 +3075,8 @@ CONFIG_RESET_CONTROLLER=y
 #
 CONFIG_OCT=y
 # CONFIG_GATOR is not set
+# CONFIG_GATOR_MALI_4XXMP is not set
+# CONFIG_GATOR_MALI_MIDGARD is not set
 
 #
 # Firmware Drivers

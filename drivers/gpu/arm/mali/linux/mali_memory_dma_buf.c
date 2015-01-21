@@ -17,7 +17,6 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/mutex.h>
-
 #include <linux/delay.h>
 
 #include "mali_ukk.h"
@@ -70,7 +69,6 @@ static void mali_dma_buf_release(struct mali_dma_buf_attachment *mem)
 void mali_mem_dma_buf_release(mali_mem_allocation *descriptor)
 {
 	struct mali_dma_buf_attachment *mem = descriptor->dma_buf.attachment;
-
 
 	mali_dma_buf_release(mem);
 }

@@ -595,7 +595,7 @@ agold {
 
 		meas_thermal {
 			compatible = "intel,meas_thermal";
-			intel,thermal-names = "pmictemp", "systemtemp";
+			intel,thermal-names = "pmictemp", "skin0";
 			intel,sensor-names = "PMICTEMP_SENSOR", "SYSTEMP0_SENSOR";
 		};
 

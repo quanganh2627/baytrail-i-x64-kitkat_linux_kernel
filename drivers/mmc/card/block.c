@@ -2474,7 +2474,12 @@ static int _mmc_blk_suspend(struct mmc_card *card)
 
 static void mmc_blk_shutdown(struct mmc_card *card)
 {
-	_mmc_blk_suspend(card);
+	struct mmc_host *mmc = card->host;
+
+	mmc_claim_host(mmc);
+	mmc_cache_ctrl(mmc, 0);
+	mmc_release_host(mmc);
+
 }
 
 #ifdef CONFIG_PM

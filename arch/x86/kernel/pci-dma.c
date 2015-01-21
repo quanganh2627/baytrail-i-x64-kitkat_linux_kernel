@@ -131,7 +131,9 @@ static void *__dma_alloc(struct device *dev, size_t size,
 	struct page *page;
 	unsigned int count = PAGE_ALIGN(size) >> PAGE_SHIFT;
 	dma_addr_t addr;
+#ifdef CONFIG_SOFIA_LOWMEM_DEV
 	int retried = 0;
+#endif
 
 	dma_mask = dma_alloc_coherent_mask(dev, flag);
 
@@ -142,6 +144,11 @@ again:
 	if (flag & __GFP_WAIT)
 		page = dma_alloc_from_contiguous(dev, count, get_order(size));
 
+	/* fallback */
+	if (!page)
+		page = alloc_pages_node(dev_to_node(dev), flag, get_order(size));
+
+#ifdef CONFIG_SOFIA_LOWMEM_DEV
 	if (!page && !retried && (flag & __GFP_WAIT)) {
 		int tmp_lmk_threshold[6] = {0, 0, 0, 0, 0, 32000};
 
@@ -155,12 +162,10 @@ again:
 	}
 
 	if (retried)
-		pr_debug("__dma_alloc: we %s after aggressive reclaiming!\n",
+		pr_debug("__dma_alloc: We %s after aggressive reclaiming!\n",
 			(page ? "Succeed" : "Still Fail"));
+#endif
 
-	/* fallback */
-	if (!page)
-		page = alloc_pages_node(dev_to_node(dev), flag, get_order(size));
 	if (!page)
 		return NULL;
 

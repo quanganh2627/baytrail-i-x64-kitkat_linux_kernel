@@ -2898,13 +2898,19 @@ Function:
 Input:
     h: early_suspend struct.
 Output:
-    None.
+    0: Success; other: Failure.
+    Please be careful that wrong ret value would cause runtime pm failure.
 *******************************************************/
 static int goodix_ts_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 
-	return gtp_ts_power_off(client);
+	int result = gtp_ts_power_off(client);
+
+	if (result < 0)
+		return -1;
+	else
+		return 0;
 }
 
 /*******************************************************
@@ -2913,13 +2919,19 @@ Function:
 Input:
     h: early_suspend struct.
 Output:
-    None.
+    0: Success; other: Failure.
+    Please be careful that wrong ret value would cause runtime pm failure.
 *******************************************************/
 static int goodix_ts_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 
-	return gtp_ts_power_on(client);
+	int result = gtp_ts_power_on(client);
+
+	if (result < 0)
+		return -1;
+	else
+		return 0;
 }
 #endif
 
