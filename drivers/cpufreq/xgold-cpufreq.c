@@ -345,7 +345,7 @@ static struct freq_attr *xgold_cpufreq_attr[] = {
 	NULL,
 };
 static struct cpufreq_driver xgold_cpufreq_driver = {
-	.flags = CPUFREQ_STICKY,
+	.flags = CPUFREQ_STICKY | CPUFREQ_HAVE_GOVERNOR_PER_POLICY,
 	.verify = xgold_cpufreq_verify,
 	.target = xgold_cpufreq_target,
 	.get = xgold_cpufreq_get,
