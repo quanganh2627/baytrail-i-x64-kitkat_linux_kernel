@@ -95,6 +95,12 @@ static struct ov_camera_module ov5648;
 #define BG_Ratio_Typical  0x163
 #define RG_Ratio_Typical  0x17c
 
+#define OV5648_FLIP 0x16
+#define OV5648_MIRROR 0x6
+
+#define OV5648_FLIP_REG                      0x3820
+#define OV5648_MIRROR_REG                      0x3821
+
 struct ov5648_otp_struct {
 		int otp_en;
 		int flag;
@@ -897,15 +903,14 @@ static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[]
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b01, 0x40},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b02, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b03, 0xf0},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
 };
 
 static struct ov_camera_module_config ov5648_configs[] = {
 	{
 		.name    = "1296x736_30fps",
 		.frm_fmt = {
-			.width  = 1280,
-			.height = 720,
+			.width  = 1296,
+			.height = 736,
 			.code   = V4L2_MBUS_FMT_SBGGR10_1X10
 		},
 		.frm_intrvl = {
@@ -1085,6 +1090,86 @@ static int ov5648_write_aec(struct ov_camera_module *cam_mod)
 		ov_camera_module_pr_err(cam_mod,
 			"failed with error (%d)\n", ret);
 	}
+	return ret;
+}
+
+/*--------------------------------------------------------------------------*/
+static int ov5648_flip(struct ov_camera_module *cam_mod)
+{
+	int ret = -EAGAIN;
+
+	if (cam_mod->state == OV_CAMERA_MODULE_SW_STANDBY &&
+			cam_mod->update_config == true) {
+		u32 reg_val;
+
+		ret = ov_camera_module_read_reg(cam_mod, 1,
+						OV5648_MIRROR_REG, &reg_val);
+
+		if (!IS_ERR_VALUE(ret)) {
+			/*check if mirrored already*/
+			if ((reg_val & OV5648_MIRROR) == OV5648_MIRROR) {
+				if (cam_mod->hflip)
+					reg_val &= ~OV5648_MIRROR;
+				else
+					reg_val |= OV5648_MIRROR;
+
+			} else {
+				if (cam_mod->hflip)
+					reg_val |= OV5648_MIRROR;
+				else
+					reg_val &= ~OV5648_MIRROR;
+			}
+
+				ret = ov_camera_module_write_reg(cam_mod,
+							OV5648_MIRROR_REG,
+							reg_val);
+
+				if (IS_ERR_VALUE(ret))
+					ov_camera_module_pr_err(cam_mod,
+							"fail to update mirror reg!\n");
+
+		} else
+			ov_camera_module_pr_err(cam_mod,
+							"fail to check mirror reg!\n");
+
+		ret = ov_camera_module_read_reg(cam_mod, 1,
+						OV5648_FLIP_REG, &reg_val);
+
+		if (!IS_ERR_VALUE(ret)) {
+			/*check if flipped already*/
+			if ((reg_val & OV5648_FLIP) == OV5648_FLIP) {
+				if (cam_mod->vflip)
+					reg_val &= ~OV5648_FLIP;
+				else
+					reg_val |= OV5648_FLIP;
+
+		} else {
+			if (cam_mod->vflip)
+				reg_val |= OV5648_FLIP;
+			else
+				reg_val &= ~OV5648_FLIP;
+		}
+
+		ret = ov_camera_module_write_reg(cam_mod,
+						OV5648_FLIP_REG,
+						reg_val);
+
+		if (IS_ERR_VALUE(ret))
+			ov_camera_module_pr_err(cam_mod,
+						"fail to update flip reg!\n");
+
+		} else
+			ov_camera_module_pr_err(cam_mod,
+						"fail to check flip reg!\n");
+
+	} else
+		ret = 0;
+
+
+	if (IS_ERR_VALUE(ret))
+		ov_camera_module_pr_err(cam_mod,
+					"failed with error (%d)\n", ret);
+
 	return ret;
 }
 
@@ -1436,6 +1521,10 @@ static int ov5648_s_ctrl(struct ov_camera_module *cam_mod, u32 ctrl_id)
 		case V4L2_CID_FLASH_LED_MODE:
 			/* nothing to be done here */
 			break;
+		case V4L2_CID_HFLIP:
+		case V4L2_CID_VFLIP:
+			ret = ov5648_flip(cam_mod);
+			break;
 		default:
 			ret = -EINVAL;
 			break;
@@ -1483,7 +1572,7 @@ static int read_otp(struct ov_camera_module *cam_mod,
 	    int index)
 {
 	int i;
-	u16 temp;
+	u32 temp;
 	/* read otp into buffer */
 	if (index == 1) {
 		/* read otp --Bank 0 */
@@ -1837,9 +1926,14 @@ static int ov5648_start_streaming(struct ov_camera_module *cam_mod)
 		goto err;
 	}
 
+	ret = ov5648_flip(cam_mod);
+	if (IS_ERR_VALUE(ret))
+		goto err;
+
 	if (IS_ERR_VALUE(ov_camera_module_write_reg(cam_mod, 0x0100, 1))) {
 		goto err;
 	}
+
 	return 0;
 
 err:
