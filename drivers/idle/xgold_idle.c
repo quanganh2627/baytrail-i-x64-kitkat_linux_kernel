@@ -19,6 +19,7 @@
 #include <linux/notifier.h>
 #include <linux/clockchips.h>
 #include <linux/of.h>
+#include <linux/cpu.h>
 #ifdef CONFIG_X86_INTEL_XGOLD
 #include <asm/irqflags.h>
 #else
@@ -59,10 +60,12 @@ static int xgold_enter_idle(struct cpuidle_device *dev,
 	struct xgold_cpuidle_state *xg_idle = &xgold_cpuidle_states[index];
 	struct vmm_shared_data *data = mv_gal_get_shared_data();
 
+	idle_notifier_call_chain(IDLE_START);
 	mv_svc_vm_enter_idle(data->pal_shared_mem_data, xg_idle->id);
 	native_safe_halt();
 	/* back to active */
 	mv_svc_vm_enter_idle(data->pal_shared_mem_data, XGOLD_CPUIDLE_ACTIVE);
+	idle_notifier_call_chain(IDLE_END);
 
 	return index;
 }
