@@ -62,9 +62,9 @@
 
 #define SYSFS_INPUT_VAL_LEN (1)
 
-struct dma_async_tx_descriptor *(*lpaudio_dma_setup)(struct dma_chan *dmach);
-void (*lpaudio_trigger)(int start);
-void (*lpaudio_dma_release)(struct dma_chan *dmach);
+struct dma_async_tx_descriptor *(*lpmp3_dma_setup)(struct dma_chan *dmach);
+void (*lpmp3_trigger)(int start);
+void (*lpmp3_dma_release)(struct dma_chan *dmach);
 
 #define SM_AUDIO_BUFFER_DL_SAMPLES 240
 /* SHM can store 5 ms data, it is 960 bytes
@@ -566,8 +566,8 @@ static void xgold_pcm_dma_submit(struct xgold_runtime_data *xrtd,
 			DMA_TO_DEVICE);
 
 	/* Prepare DMA slave sg */
-	if (lpaudio_dma_setup && STREAM_PLAY2 == xrtd->stream_type) {
-		desc = lpaudio_dma_setup(xrtd->dmach);
+	if (lpmp3_dma_setup && STREAM_PLAY2 == xrtd->stream_type) {
+		desc = lpmp3_dma_setup(xrtd->dmach);
 	} else {
 		desc = dmaengine_prep_slave_sg(xrtd->dmach,
 			xrtd->dma_sgl,
@@ -838,13 +838,14 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 			xgold_pcm->dma_mode) {
 		spin_lock_irqsave(&xrtd->lock, flags);
 
+		if (lpmp3_dma_release &&
+				STREAM_PLAY2 == xrtd->stream_type)
+			lpmp3_dma_release(xrtd->dmach);
+
 		/* request DMA shutdown */
 		xgold_debug("terminate all dma: %p\n", xrtd->dmach);
 		dmaengine_terminate_all(xrtd->dmach);
 
-		if (lpaudio_dma_release &&
-				STREAM_PLAY2 == xrtd->stream_type)
-			lpaudio_dma_release(xrtd->dmach);
 		
 		/* Release the DMA channel */
 		if (xrtd->dmach) {
@@ -989,9 +990,9 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 				dsp->p_dsp_common_data->
 					ops->irq_activate(DSP_IRQ_1);
 
-			if (lpaudio_trigger
+			if (lpmp3_trigger
 					&& STREAM_PLAY2 == xrtd->stream_type)
-				lpaudio_trigger(1);
+				lpmp3_trigger(1);
 
 			dsp_pcm_play(dsp, xrtd->stream_type,
 					substream->runtime->channels,
@@ -1033,9 +1034,9 @@ static int xgold_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		xgold_debug("%s: Trigger stop\n", __func__);
 
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			if (lpaudio_trigger
+			if (lpmp3_trigger
 					&& STREAM_PLAY2 == xrtd->stream_type)
-				lpaudio_trigger(0);
+				lpmp3_trigger(0);
 		}
 
 		dsp_pcm_stop(dsp, xrtd->stream_type);

@@ -1,5 +1,5 @@
-lpaudio:lpaudio {
-	compatible = "intel,xgold-lpaudio";
+lpmp3:lpmp3{
+	compatible = "intel,xgold-lpmp3";
 	reg = <0xE0100000 0x1000>;
 };
 

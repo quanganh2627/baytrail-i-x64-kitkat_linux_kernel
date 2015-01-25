@@ -37,7 +37,7 @@
 #include "dsp_audio_platform.h"
 #include "dsp_audio_driverif.h"
 #include "aud_lib_dsp_internal.h"
-
+#include "sofia/lpmp3.h"
 
 #define MAX_DSP_CMD_LEN_BYTES		0x70
 #define PROP_DSP_INT_IMSC		"intel,dsp-imsc"
@@ -1881,6 +1881,9 @@ static int dsp_audio_suspend(struct device *dev)
 	struct dsp_audio_device *dsp_dev;
 	xgold_debug("-->%s\n", __func__);
 
+	if (xgold_lpmp3_mode())
+		return 0;
+
 	dsp_dev = dev_get_drvdata(dev);
 
 	ret = device_state_pm_set_state_by_name(dev,
@@ -1902,6 +1905,9 @@ static int dsp_audio_resume(struct device *dev)
 
 	struct dsp_audio_device *dsp_dev;
 	xgold_debug("-->%s\n", __func__);
+
+	if (xgold_lpmp3_mode())
+		return 0;
 
 	dsp_dev = dev_get_drvdata(dev);
 
