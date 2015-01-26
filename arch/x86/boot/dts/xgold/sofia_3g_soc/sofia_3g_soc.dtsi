@@ -870,7 +870,6 @@
 						intel,stat-reg = <0xba4>;
 					};
 #if defined(SOFIA3G_ES21)
-/*
 					spcu_thermal2{
 						compatible = "intel,spcu-thermal";
 						reg = <0xE4700000 0x1000>;
@@ -883,7 +882,6 @@
 						intel,ctrl-reg = <0xb8c>;
 						intel,stat-reg = <0xba8>;
 					};
-*/
 #endif
 					dbb_rst1:reset-controller1 {
 						compatible = "intel,xgold-reset";
