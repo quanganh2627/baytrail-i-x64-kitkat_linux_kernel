@@ -1057,9 +1057,6 @@ static int kionix_accel_grp4_standby(struct kionix_accel_driver *acceld)
 {
 	int err;
 
-	if (acceld->accel_drdy == 0)
-		cancel_delayed_work_sync(&acceld->accel_work);
-
 	err = i2c_smbus_write_byte_data(acceld->client,
 			ACCEL_GRP4_CTRL_REG1, 0);
 	if (err < 0)
@@ -1085,12 +1082,10 @@ static void kionix_accel_grp4_report_accel_data(struct kionix_accel_driver
 		if (atomic_read(&acceld->accel_enable_resume) > 0) {
 			loop = KIONIX_I2C_RETRY_COUNT;
 			while (loop) {
-				mutex_lock(&input_dev->mutex);
 				err = kionix_i2c_read(acceld->client,
 						ACCEL_GRP4_XOUT_L,
 						(u8 *)accel_data.accel_data_s16,
 						6);
-				mutex_unlock(&input_dev->mutex);
 				if (err < 0) {
 					loop--;
 					mdelay(KIONIX_I2C_RETRY_TIMEOUT);
@@ -1325,12 +1320,16 @@ static void kionix_accel_work(struct work_struct *work)
 		container_of((struct delayed_work *) work,
 				struct kionix_accel_driver, accel_work);
 
-	if (acceld->accel_drdy == 0)
+	mutex_lock(&acceld->input_dev->mutex);
+
+	/* acceld->accel_enabled flag is checked before do work */
+	if (acceld->accel_drdy == 0 && atomic_read(&acceld->accel_enabled) > 0)
 		queue_delayed_work(acceld->accel_workqueue,
 				&acceld->accel_work,
 				acceld->poll_delay);
-
 	acceld->kionix_accel_report_accel_data(acceld);
+
+	mutex_unlock(&acceld->input_dev->mutex);
 }
 
 static void kionix_accel_update_direction(struct kionix_accel_driver
@@ -1535,8 +1534,6 @@ static ssize_t kionix_accel_set_enable(struct device *dev,
 	unsigned long enable;
 	int err = 0;
 
-	/* flush on-executing worker to avoid stuck on mutex */
-	flush_delayed_work(&acceld->accel_work);
 	/* Lock the device to prevent races with open/close (and itself) */
 	mutex_lock(&input_dev->mutex);
 
