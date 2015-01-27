@@ -221,7 +221,7 @@ uint32_t mv_ipc_mbox_get_info(char *name,
 		handler_name = kmalloc(MBOX_IRQ_HANDLER_NAME_SIZE, GFP_KERNEL);
 		snprintf(handler_name, MBOX_IRQ_HANDLER_NAME_SIZE,
 			 "mb-%s-%s-%d", name, instance_name, i);
-		request_irq(irq_event, mbox_event_handler, 0,
+		request_irq(irq_event, mbox_event_handler, IRQF_NO_SUSPEND,
 			    handler_name, &(db_entry->event_info_array[i]));
 	}
 
