@@ -493,6 +493,12 @@ void xgold_dsp_pcm_dma_play_handler(void *dev)
 		return;
 	}
 
+	if (xrtd->magic_number != XGOLD_PCM_MAGIC_NUMBER) {
+		xgold_err("%s: wrong MAGIC_NUMBER 0x%x !!\n",
+			__func__, xrtd->magic_number);
+		return;
+	}
+
 	spin_lock(&xrtd->lock);
 	xgold_debug("%s\n", __func__);
 
@@ -832,23 +838,28 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 	if (!xrtd)
 		return snd_pcm_lib_free_pages(substream);
 
+	if (xrtd->magic_number != XGOLD_PCM_MAGIC_NUMBER) {
+		xgold_err("%s: wrong MAGIC_NUMBER 0x%x !!\n",
+			__func__, xrtd->magic_number);
+		return -EINVAL;
+	}
+
 	xgold_pcm = xrtd->pcm;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-			xgold_pcm->dma_mode) {
+		xgold_pcm != NULL && xgold_pcm->dma_mode) {
 		spin_lock_irqsave(&xrtd->lock, flags);
 
-		if (lpmp3_dma_release &&
-				STREAM_PLAY2 == xrtd->stream_type)
-			lpmp3_dma_release(xrtd->dmach);
-
-		/* request DMA shutdown */
-		xgold_debug("terminate all dma: %p\n", xrtd->dmach);
-		dmaengine_terminate_all(xrtd->dmach);
-
-		
-		/* Release the DMA channel */
 		if (xrtd->dmach) {
+			if (lpmp3_dma_release &&
+				STREAM_PLAY2 == xrtd->stream_type)
+				lpmp3_dma_release(xrtd->dmach);
+
+			/* request DMA shutdown */
+			xgold_debug("terminate all dma: %p\n", xrtd->dmach);
+			dmaengine_terminate_all(xrtd->dmach);
+
+			/* Release the DMA channel */
 			dma_release_channel(xrtd->dmach);
 			xrtd->dmach = NULL;
 		}
