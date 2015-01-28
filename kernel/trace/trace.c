@@ -312,7 +312,7 @@ int tracing_is_enabled(void)
  * to not have to wait for all that output. Anyway this can be
  * boot time and run time configurable.
  */
-#define TRACE_BUF_SIZE_DEFAULT	1441792UL /* 16384 * 88 (sizeof(entry)) */
+#define TRACE_BUF_SIZE_DEFAULT	441792UL /* 16384 * 88 (sizeof(entry)) */
 
 static unsigned long		trace_buf_size = TRACE_BUF_SIZE_DEFAULT;
 
@@ -6442,8 +6442,9 @@ trace_printk_seq(struct trace_seq *s)
 	/* should be zero ended, but we are paranoid. */
 	s->buffer[s->len] = 0;
 
-	printk(KERN_TRACE "%s", s->buffer);
-
+#ifdef CONFIG_INTEL_FTRACE_CONSOLE
+	ftrace_reserved_buffer_write(s->buffer, s->len);
+#endif
 	trace_seq_init(s);
 }
 
@@ -6559,7 +6560,9 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 
 		trace_printk_seq(&iter.seq);
 	}
-
+#ifdef CONFIG_INTEL_FTRACE_CONSOLE
+	ftrace_reserved_buffer_write("last ftrace,check log is full\n", 30);
+#endif
 	if (!cnt)
 		printk(KERN_TRACE "   (ftrace buffer empty)\n");
 	else

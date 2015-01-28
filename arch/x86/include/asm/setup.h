@@ -69,6 +69,13 @@ extern void x86_xgold_early_setup(void);
 static inline void x86_xgold_early_setup(void) { }
 #endif
 
+
+#ifdef CONFIG_INTEL_FTRACE_CONSOLE
+extern void ram_consle_reserve_memory(void);
+#else
+static inline void ram_consle_reserve_memory(void){ }
+#endif/* !CONFIG_INTEL_MID_RAM_CONSOLE*/
+
 #ifndef _SETUP
 
 /*
