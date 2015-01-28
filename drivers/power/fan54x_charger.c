@@ -917,7 +917,7 @@ static int fan54x_charger_set_property(struct power_supply *psy,
 		chrgr->state.inlmt = value_set;
 		if (value_set > chrgr->max_ibus_limit)
 			chrgr->state.max_cc =
-				fit_in_range(value_set, 0, chrgr->max_iocharge);
+				fit_in_range(value_set, 0, min(chrgr->throttle_values[chrgr->state.throttle], chrgr->max_iocharge));
 		break;
 
 	case POWER_SUPPLY_PROP_CONTINUE_CHARGING:
@@ -1222,7 +1222,7 @@ static void fan54x_chgdet_worker(struct work_struct *work)
 	down(&chrgr->prop_lock);
 
 	/* the CHGDET interrupt is configured as CONNECT only */
-	chrgr->enable_charging(chrgr, 1);
+	fan54x_enable_charging(chrgr, 1);
 	/* left for CHGINT to trigger other work */
 
 	up(&chrgr->prop_lock);
