@@ -138,6 +138,7 @@ struct fan54x_state {
 	bool charging_enabled;
 	bool to_enable_boost;
 	bool boost_enabled;
+	int throttle;
 	unsigned int pok_b:1;
 	unsigned int ovp_flag:1;
 	unsigned int ovp_recov:1;
@@ -218,6 +219,8 @@ struct fan54x_charger {
 	int min_ibus_limit;
 	int default_cc;
 	int default_cv;
+	int *throttle_values;
+	int throttle_levels;
 
 	struct i2c_client *client;
 	struct idi_peripheral_device *ididev;
@@ -296,4 +299,3 @@ int fan54x_i2c_update_reg(struct i2c_client *client, u8 reg_addr,
 					u8 mask, int shift, u8 data);
 int fan54x_otg_notification_handler(struct notifier_block *nb,
 				unsigned long event, void *data);
-

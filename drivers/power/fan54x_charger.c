@@ -36,6 +36,7 @@
 #include <linux/idi/idi_bus.h>
 #include <linux/idi/idi_device_pm.h>
 #include <linux/usb/phy-intel.h>
+#include <linux/slab.h>
 
 #include <linux/time.h>
 #include <linux/wakelock.h>
@@ -124,6 +125,8 @@ static enum power_supply_property fan54x_power_props[] = {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 };
 
 #ifdef SYSFS_FAKE_VBUS_SUPPORT
@@ -749,8 +752,8 @@ static int fan54x_enable_charger(struct fan54x_charger *chrgr,
 		schedule_delayed_work(&chrgr->charging_work, CHRGR_WORK_DELAY);
 	} else {
 		/* Release Wake Lock to allow suspend during discharging */
-		wake_unlock(&chrgr->suspend_lock);
 		cancel_delayed_work(&chrgr->charging_work);
+		wake_unlock(&chrgr->suspend_lock);
 	}
 	return 0;
 }
@@ -759,10 +762,18 @@ static int fan54x_enable_charging(struct fan54x_charger *chrgr, bool enable)
 {
 	int ret;
 
+	if (!!enable == chrgr->state.charging_enabled)
+		return 0;
+
 	if (chrgr->enable_charging) {
-		ret = chrgr->enable_charging(chrgr, enable);
-		if (ret)
-			return ret;
+		/* 0mA charging current is implmeneted by setting HZ mode,
+		   so need to check max_cc before enable charging */
+		if (!enable || (enable && chrgr->state.max_cc)) {
+			ret = chrgr->enable_charging(chrgr, enable);
+			if (ret)
+				return ret;
+		} else
+			return -EINVAL;
 	}
 
 	return 0;
@@ -778,6 +789,7 @@ static int fan54x_charger_set_property(struct power_supply *psy,
 			i2c_get_clientdata(to_i2c_client(psy->dev->parent));
 
 	bool call_psy_changed = false;
+	union power_supply_propval v;
 
 	down(&chrgr->prop_lock);
 
@@ -817,11 +829,14 @@ static int fan54x_charger_set_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_CURRENT,
-								val->intval, 0);
+						  val->intval, 0);
 
 		fan54x_attr_write(chrgr->client, IO_LEVEL, 0);
 		value_to_set = fit_in_range(val->intval, 0,
-						chrgr->state.max_cc);
+									chrgr->state.inlmt);
+
+		if (value_to_set)
+			value_to_set = fit_in_range(value_to_set, chrgr->min_iocharge,chrgr->state.max_cc);
 
 		fan54x_set_iocharge(chrgr, value_to_set, &value_set, false);
 		if (value_set == chrgr->state.cc)
@@ -927,7 +942,28 @@ static int fan54x_charger_set_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
 		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_MAX_TEMP,
-								val->intval, 0);
+						  val->intval, 0);
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_SET_PROP_CHARGE_CONTROL_LIMIT,
+						  val->intval, 0);
+
+		chrgr->state.throttle = val->intval;
+		chrgr->state.max_cc = chrgr->throttle_values[val->intval];
+
+		up(&chrgr->prop_lock);
+
+		v.intval = !!chrgr->state.max_cc;
+		chrgr->current_psy->set_property(chrgr->current_psy,
+										 POWER_SUPPLY_PROP_ENABLE_CHARGING, &v);
+
+		v.intval = chrgr->state.max_cc;
+		chrgr->current_psy->set_property(chrgr->current_psy,
+										 POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, &v);
+
+		down(&chrgr->prop_lock);
+
 		break;
 
 	default:
@@ -1017,13 +1053,6 @@ static int fan54x_charger_get_property(struct power_supply *psy,
 								val->intval, 0);
 		break;
 
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		val->intval = 0;
-		CHARGER_DEBUG_DEV(
-			chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_CONTROL_LIMIT,
-								val->intval, 0);
-		break;
-
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = chrgr->model_name;
 		break;
@@ -1060,15 +1089,28 @@ static int fan54x_charger_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_TERM_CUR:
 		val->intval = chrgr->state.iterm;
 		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_TERM_CUR,
-								val->intval, 0);
+						  val->intval, 0);
 		break;
 
 	case POWER_SUPPLY_PROP_PRIORITY:
 		val->intval = 0;
 		CHARGER_DEBUG_DEV(chrgr_dbg, CHG_DBG_GET_PROP_PRIORITY,
-								val->intval, 0);
+						  val->intval, 0);
 		break;
 
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = chrgr->state.throttle;
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_CONTROL_LIMIT,
+						  val->intval, 0);
+
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = chrgr->throttle_levels-1;
+		CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_GET_PROP_CHARGE_CONTROL_LIMIT_MAX,
+						  val->intval, 0);
+
+		break;
 
 	default:
 		ret = -EINVAL;
@@ -1778,8 +1820,28 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	}
 	client->irq = chrgr->irq;
 
-	/* Setup the PMU registers. The charger IC reset line
-	is deasserted at this point. From this point onwards
+	if (of_property_read_u32(np, "throttle-levels", &chrgr->throttle_levels)) {
+		ret = -EINVAL;
+		pr_err("can't get throttle levels\n");
+		goto remap_fail;
+	}
+
+	chrgr->throttle_values = (int *)(kzalloc(sizeof(int)*chrgr->throttle_levels, GFP_KERNEL));
+	if (!chrgr->throttle_values) {
+		ret = -ENOMEM;
+		pr_err("alloc mem failed\n");
+		goto remap_fail;
+	}
+
+	if (of_property_read_u32_array(np, "throttle-values", chrgr->throttle_values, chrgr->throttle_levels)) {
+		ret = -EINVAL;
+		pr_err("can't get throttle values\n");
+		kfree(chrgr->throttle_values);
+		goto remap_fail;
+	}
+
+    /* Setup the PMU registers. The charger IC reset line
+	   is deasserted at this point. From this point onwards
 	the charger IC will act upon the values stored in its
 	registers instead of displaying default behaviour  */
 	ret = fan54x_configure_pmu_regs(chrgr);
@@ -1978,6 +2040,7 @@ static int __exit fan54x_i2c_remove(struct i2c_client *client)
 
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_REMOVE, 0, 0);
 
+	kfree(chrgr->throttle_values);
 	free_irq(client->irq, chrgr);
 	free_irq(chrgr->irq_chgdet, chrgr);
 	power_supply_unregister(&chrgr->usb_psy);

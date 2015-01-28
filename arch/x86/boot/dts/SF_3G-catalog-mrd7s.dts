@@ -437,6 +437,8 @@
 		pinctrl-1 = < &chgreset_agold_sleep_pins >;
 		pinctrl-2 = < &chgreset_agold_inactive_pins >;
 		pinctrl-3 = < &chgreset_agold_active_pins >;
+		throttle-levels = < 3 >;
+		throttle-values = < 1450 550 0 >;
 	};
 #endif
 };
