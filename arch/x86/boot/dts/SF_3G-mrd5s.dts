@@ -83,9 +83,15 @@
 		intel,display-preinit = <0>;
 		intel,display-if = <&mipi_dsi>;
 #ifdef SOFIA3G_MRD5S
+#ifdef MRD5S_OTM9605A
+		intel,display-if-rate = <438000000>;
+		lcd-supply = <&pm_lcd>;
+		/include/ "xgold/display/OTM9605A.dtsi"
+#else
 		intel,display-if-rate = <408000000>;
 		lcd-supply = <&pm_lcd>;
 		/include/ "xgold/display/OTM1284.dtsi"
+#endif
 #else
 		intel,display-if-rate = <390000000>;
 		/include/ "xgold/display/OTM1283.dtsi"
@@ -93,7 +99,11 @@
 		mipi_dsi:mipi-dsi {
 				intel,display-if-min = <104000000>;
 				intel,display-if-max = <550000000>;
+#ifdef MRD5S_OTM9605A
+				intel,display-if-nblanes = <2>;
+#else
 				intel,display-if-nblanes = <4>;
+#endif
 				intel,display-if-phy-pwup = <6>;
 				intel,display-if-phy-calib = <3>;
 				intel,display-if-phy-to_lp_hs_req = <24>;
