@@ -1171,6 +1171,21 @@ exit_boost:
 	return;
 }
 
+static void fan54x_chgdet_worker(struct work_struct *work)
+{
+	struct fan54x_charger *chrgr =
+		container_of(work, struct fan54x_charger, chgdet_work.work);
+
+	down(&chrgr->prop_lock);
+
+	/* the CHGDET interrupt is configured as CONNECT only */
+	chrgr->enable_charging(chrgr, 1);
+	/* left for CHGINT to trigger other work */
+
+	up(&chrgr->prop_lock);
+	return;
+}
+
 /**
  * fan54x_chgint_cb_work_func	function executed by
  *				fan54x_charger::chgint_cb_work work
@@ -1401,6 +1416,18 @@ static irqreturn_t fan54x_charger_chgint_cb(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t fan54x_charger_chgdet_cb(int irq, void *dev)
+{
+	struct fan54x_charger *chrgr = dev;
+
+	pr_debug("%s\n", __func__);
+
+	schedule_delayed_work(&chrgr->chgdet_work, 0);
+
+	return IRQ_HANDLED;
+}
+
+
 /**
  * fan54x_configure_pmu_irq - function configuring PMU's Charger status IRQ
  * @chrgr		[in] pointer to charger driver internal structure
@@ -1411,10 +1438,19 @@ static int fan54x_configure_pmu_irq(struct fan54x_charger *chrgr)
 
 	/* register callback with PMU for CHGINT irq */
 	ret = request_irq(chrgr->irq,
-		fan54x_charger_chgint_cb,
-			IRQF_NO_SUSPEND, FAN54x_NAME, chrgr);
+					  fan54x_charger_chgint_cb,
+					  IRQF_NO_SUSPEND, FAN54x_NAME, chrgr);
 	if (ret != 0) {
 		pr_err("Failed to register @PMU for GHGINT irq! ret=%d", ret);
+		return ret;
+	}
+
+	/* register callback with PMU for CHGDET irq */
+	ret = request_irq(chrgr->irq_chgdet,
+					  fan54x_charger_chgdet_cb,
+					  IRQF_NO_SUSPEND, FAN54x_NAME, chrgr);
+	if (ret != 0) {
+		pr_err("Failed to register @PMU for GHGDET irq! ret=%d", ret);
 		return ret;
 	}
 
@@ -1733,7 +1769,8 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 	 * Get interrupt from device tree
 	 */
 	chrgr->irq = irq_of_parse_and_map(np, 0);
-	if (!chrgr->irq) {
+	chrgr->irq_chgdet = irq_of_parse_and_map(np, 1);
+	if ((!chrgr->irq) || (!chrgr->irq_chgdet)) {
 		ret = -EINVAL;
 		pr_err("can't get irq\n");
 		goto remap_fail;
@@ -1796,6 +1833,7 @@ static int fan54x_i2c_probe(struct i2c_client *client,
 
 	INIT_DELAYED_WORK(&chrgr->charging_work, fan54x_charging_worker);
 	INIT_DELAYED_WORK(&chrgr->boost_work, fan54x_boost_worker);
+	INIT_DELAYED_WORK(&chrgr->chgdet_work, fan54x_chgdet_worker);
 
 	sema_init(&chrgr->prop_lock, 1);
 
@@ -1940,6 +1978,7 @@ static int __exit fan54x_i2c_remove(struct i2c_client *client)
 	CHARGER_DEBUG_REL(chrgr_dbg, CHG_DBG_I2C_REMOVE, 0, 0);
 
 	free_irq(client->irq, chrgr);
+	free_irq(chrgr->irq_chgdet, chrgr);
 	power_supply_unregister(&chrgr->usb_psy);
 	power_supply_unregister(&chrgr->ac_psy);
 	wake_lock_destroy(&chrgr->suspend_lock);
@@ -2029,6 +2068,7 @@ static int fan54x_suspend(struct device *dev)
 		if (device_may_wakeup(dev)) {
 			pr_info("fan: enable wakeirq\n");
 			enable_irq_wake(chrgr->irq);
+			enable_irq_wake(chrgr->irq_chgdet);
 		}
 		unfreezable_bh_suspend(&chrgr->chgint_bh);
 		unfreezable_bh_suspend(&chrgr->boost_op_bh);
@@ -2052,6 +2092,7 @@ static int fan54x_resume(struct device *dev)
 	if (device_may_wakeup(dev)) {
 		pr_info("fan: disable wakeirq\n");
 		disable_irq_wake(chrgr->irq);
+		disable_irq_wake(chrgr->irq_chgdet);
 	}
 
 	return 0;

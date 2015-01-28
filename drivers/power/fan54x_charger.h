@@ -227,6 +227,7 @@ struct fan54x_charger {
 
 	struct delayed_work charging_work;
 	struct delayed_work boost_work;
+	struct delayed_work chgdet_work;
 	struct resource *ctrl_io_res;
 	struct usb_phy *otg_handle;
 
@@ -248,6 +249,7 @@ struct fan54x_charger {
 	int fake_vbus;
 	struct fan54x_state state;
 	int irq;
+	int irq_chgdet;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_sleep;

@@ -510,10 +510,11 @@
 	bat:battery {
 		compatible = "intel,fan54015_charger";
 		reg = < 0x6a >;
-		interrupts = < 0 >;
+		interrupts = < 0 1 >;
 		interrupt-parent = < &bat>;
 		#interrupt-cells = < 1 >;
-		interrupt-map = < 0 &ag620_pmu ABB_PMU_CI XGOLD_IRQ_TYPE_NONE >; /* CI */
+		interrupt-map = < 0 &ag620_pmu ABB_PMU_CI XGOLD_IRQ_TYPE_NONE
+			      1  &ag620_pmu ABB_PMU_CSTAT XGOLD_IRQ_TYPE_NONE >;
 		pinctrl-names = "default", "sleep", "inactive", "active";
 		pinctrl-0 = < &chgreset_agold_default_pins >;
 		pinctrl-1 = < &chgreset_agold_sleep_pins >;
