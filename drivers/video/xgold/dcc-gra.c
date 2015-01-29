@@ -1086,6 +1086,8 @@ static int dcc_drawimage(struct dcc_drvdata *p,
 		swin->fmt = DCC_FMT_YUV444PACKED;
 	}
 
+	DCC_DBG1("[dbg] %s(): should not enter here\n", __func__);
+	dump_stack();
 	/* Compute scale ratio on X and Y axis */
 	if ((swin == NULL)
 	    && ((sarea->w != drect->w) || (sarea->h != drect->h))) {
@@ -1289,6 +1291,8 @@ int dcc_rq_convert(struct dcc_drvdata *p,
 	     rq->dx, rq->dy, rq->dfmt);
 
 	dcc_set_framebuffer(p, rq->dphys, rq->fbwidth);
+
+	DCC_DBG1("[dbg]%s(): call dcc_drawimage() \n", __func__);
 	dcc_drawimage(p, &sarea, NULL, &drect, rq->sphys, 0, rq->alpha);
 	return 0;
 }
@@ -1320,6 +1324,7 @@ int dcc_rq_update(struct dcc_drvdata *p, struct dcc_rect_t *ru,
 		     ru->w, ru->h, ru->phys, dcc_format_name(ru->fmt), rk.x,
 		     rk.y, rk.w, rk.h, dcc_format_name(rk.fmt));
 		dcc_set_framebuffer(p, ru->phys, ru->fbwidth);
+		DCC_DBG1("[dbg]%s(): call dcc_drawimage() \n", __func__);
 		dcc_setdrawimagedest(p, DCC_DEST_DRAW2DISP);
 		dcc_drawimage(p, &sarea, NULL, &rk, ru->phys, 0, 0xFF);
 		dcc_setdrawimagedest(p, DCC_DEST_DRAW2MEM);
@@ -1746,6 +1751,7 @@ int dcc_rq_resize(struct dcc_drvdata *p, struct dcc_rq_resize_t *rq)
 
 	dcc_flag_to_transparency(p, rq->flags, rq->alpha, rq->colorkey);
 
+	DCC_DBG1("[dbg]%s(): call dcc_drawimage() \n", __func__);
 	err =
 	    dcc_drawimage(p, &sarea, &swin, &drect, rq->sphys, rq->flags,
 			  rq->alpha);
