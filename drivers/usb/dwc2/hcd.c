@@ -2740,8 +2740,8 @@ static struct hc_driver dwc2_hc_driver = {
 	.hub_control = _dwc2_hcd_hub_control,
 	.clear_tt_buffer_complete = _dwc2_hcd_clear_tt_buffer_complete,
 
-	.bus_suspend = _dwc2_hcd_suspend,
-	.bus_resume = _dwc2_hcd_resume,
+	/*.bus_suspend = _dwc2_hcd_suspend,
+	.bus_resume = _dwc2_hcd_resume,*/
 };
 
 /*
