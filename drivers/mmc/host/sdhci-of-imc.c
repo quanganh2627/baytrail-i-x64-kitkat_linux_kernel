@@ -331,8 +331,10 @@ static void xgold_sdhci_of_runtime_resume(struct sdhci_host *host)
 bool xgold_sdhci_is_rpm_enabled(struct device_node *np)
 {
 	u32 rpm_enabled;
+#if 0 /* revert me, disable the sdhci rpm for sd card hotplug */
 	if (!of_property_read_u32(np, "intel,rpm_enabled", &rpm_enabled))
 		return !!rpm_enabled;
+#endif
 	return 0;
 }
 
