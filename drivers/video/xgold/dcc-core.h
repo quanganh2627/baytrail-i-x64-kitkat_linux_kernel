@@ -95,25 +95,25 @@
 #define DCC_DBG1(fmt, arg...) \
 { \
 	if (gradata->debug.level >= 1) \
-		pr_info(DCC_MODULE_NAME"[ ]: "  fmt, ##arg); \
+		pr_info(DCC_MODULE_NAME"[1]: "  fmt, ##arg); \
 }
 
 #define DCC_DBG2(fmt, arg...) \
 { \
 	if (gradata->debug.level >= 2) \
-		pr_info(DCC_MODULE_NAME"[ ]: "  fmt, ##arg); \
+		pr_info(DCC_MODULE_NAME"[2]: "  fmt, ##arg); \
 }
 
 #define DCC_DBG3(fmt, arg...) \
 { \
 	if (gradata->debug.level >= 3) \
-		pr_info(DCC_MODULE_NAME"[ ]: "  fmt, ##arg); \
+		pr_info(DCC_MODULE_NAME"[3]: "  fmt, ##arg); \
 }
 
 #define DCC_DBG4(fmt, arg...) \
 { \
 	if (gradata->debug.level >= 4) \
-		pr_info(DCC_MODULE_NAME"[ ]: "  fmt, ##arg); \
+		pr_info(DCC_MODULE_NAME"[4]: "  fmt, ##arg); \
 }
 
 
