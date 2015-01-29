@@ -119,7 +119,6 @@
 
 #define IS_DCC_FMT_YUV(_f_) (\
 		(_f_ == DCC_FMT_YUV422PACKED) |\
-		(_f_ == DCC_FMT_YUV422PACKED) |\
 		(_f_ == DCC_FMT_YUV420PLANAR) |\
 		(_f_ == DCC_FMT_YVU420PLANAR) |\
 		(_f_ == DCC_FMT_YUV422PLANAR) |\
