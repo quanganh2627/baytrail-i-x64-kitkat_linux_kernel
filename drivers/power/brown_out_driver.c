@@ -42,6 +42,7 @@
 #define BAT_UV_DET_BULVL_O	(1)
 #define BAT_UV_DET_BULVL_M	(0xf)
 #define BUV_DET_LEVEL_3050MV	(0xb)
+#define BUV_DET_LEVEL_2900MV    (0x8)
 
 /* Buv Enable */
 #define BAT_UV_DET_EBUV_O	(0)
@@ -186,7 +187,7 @@ static int __init brown_out_drv_probe(struct idi_peripheral_device *ididev,
 		(1 << BAT_UV_DET_ESSD_O) | (1 << BAT_UV_DET_EBUV_O);
 
 	bat_uv_det &= ~(BAT_UV_DET_BULVL_M << BAT_UV_DET_BULVL_O);
-	bat_uv_det |= (BUV_DET_LEVEL_3050MV << BAT_UV_DET_BULVL_O);
+	bat_uv_det |= (BUV_DET_LEVEL_2900MV << BAT_UV_DET_BULVL_O);
 
 	brown_out_pmu_iowrite(&bnt_drv_data, BAT_UV_DET_OFFSET, bat_uv_det);
 
