@@ -165,6 +165,7 @@ dcc_setsrcformat(struct dcc_drvdata *p,
 	} else {
 		dcc_err("%s l.%d: unsupported pixel format 0x%x",
 			__func__, __LINE__, srcfmt);
+		return -1;
 	}
 
 	gra_write_field(p, INR_DIF_IMG_SRC,
@@ -226,7 +227,7 @@ static int dcc_setsrcimage(struct dcc_drvdata *p,
 	return 0;
 }
 
-static void dcc_getcbcr_offsets(int *cb_off, int *cr_off, int fmt, int w, int h)
+static int dcc_getcbcr_offsets(int *cb_off, int *cr_off, int fmt, int w, int h)
 {
 	if (fmt == DCC_FMT_YUV420PLANAR) {	/* YUV 420 Planar or semi */
 		*cb_off = (w * h);
@@ -257,7 +258,9 @@ static void dcc_getcbcr_offsets(int *cb_off, int *cr_off, int fmt, int w, int h)
 	} else {
 		dcc_err("%s, l.%d: unsupported pixel format 0x%x", __func__,
 			__LINE__, fmt);
+		return -1;
 	}
+	return 0;
 }
 
 /**----------------------------------------------------------------------------
@@ -1072,6 +1075,7 @@ static int dcc_drawimage(struct dcc_drvdata *p,
 	uint32_t scalex = NO_RESCALING;
 	uint32_t scaley = NO_RESCALING;
 	unsigned int cr_off = 0, cb_off = 0;
+	int result = 0;
 
 	int convRGB2BGR = (sarea->fmt == DCC_FMT_BGR888)
 	    || (sarea->fmt == DCC_FMT_ABGR8888);
@@ -1093,20 +1097,29 @@ static int dcc_drawimage(struct dcc_drvdata *p,
 			scaley = scaling_factor_int(swin->h, drect->h);
 		}
 	} else {
-		dcc_err("swin is null\n");
+		dcc_err("(swin is null) and (sarea==drect)\n");
+		dcc_err("[dbg] sarea: %dx%d fmt:%x\n", sarea->w, sarea->h, sarea->fmt);
+		dcc_err("[dbg] drect: %dx%d fmt:%x f(%d, %d) flag:%x)\n", drect->w, drect->h, drect->fmt, drect->x, drect->y, drect->flags);
 	}
 
 	/* check constraints */
 	DCC_CHECK((srcaddr & 0x3) == 0,
 		  "src adress(0x%08x) is not dividable by 4 !!", srcaddr);
+
 	DCC_CHECK(scalex <= 0xFFFF, "scaleX factor(0x%08x) overflow !!",
 		  scalex);
 	DCC_CHECK(scaley <= 0xFFFF, "scaleY factor(0x%08x) overflow !!",
 		  scaley);
 
 	/* Compute Cr and Cb offsets if needed */
-	dcc_getcbcr_offsets(&cb_off, &cr_off, sarea->fmt, sarea->w, sarea->h);
-	dcc_setsrcformat(p, 0, sarea->fmt, drect->fmt, cr_off, cb_off);
+	result = dcc_getcbcr_offsets(&cb_off, &cr_off, sarea->fmt, sarea->w, sarea->h);
+	if (result == -1)
+		goto failed_bypass;
+
+	result = dcc_setsrcformat(p, 0, sarea->fmt, drect->fmt, cr_off, cb_off);
+	if (result == -1)
+		goto failed_bypass;
+
 	dcc_setsrcimage(p, sarea, swin, scalex, scaley);
 	if (flag & DCC_FLAG_DRAW2DISP) {
 		struct x_rect_t r;
@@ -1141,6 +1154,10 @@ static int dcc_drawimage(struct dcc_drvdata *p,
 		}
 	}
 	return 0;
+
+failed_bypass:
+	dcc_err("bypassed dcc_drawimage()\n");
+	return -1;
 }
 
 static int dcc_cfg_video(struct dcc_drvdata *p,
