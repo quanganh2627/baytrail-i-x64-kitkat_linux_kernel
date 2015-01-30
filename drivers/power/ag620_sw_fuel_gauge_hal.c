@@ -36,6 +36,7 @@
 #include <linux/power/battery_id.h>
 #include <linux/power_supply.h>
 #include <linux/wakelock.h>
+#include <linux/sched.h>
 
 #include <linux/power/sw_fuel_gauge_debug.h>
 #include <linux/power/sw_fuel_gauge_hal.h>
@@ -110,7 +111,10 @@ threshold comparator */
 			((IBAT_LONG_TERM_AVERAGE_PERIOD_SECS\
 			* IBAT_LONG_TERM_AVERAGE_ERROR_MARGIN_PERCENT) / 100))
 
-#define SUSPEND_POLLING_PERIOD_SECS				(3600)
+#define SUSPEND_POLLING_PERIOD_SECS1				(3600 * 4)
+#define SUSPEND_POLLING_PERIOD_SECS2				(3600)
+/* target power is ~12.75mW, that's ~3.35mA */
+#define TARGET_POWER						(3350)
 
 #define SYSFS_INPUT_VAL_LEN					(1)
 
@@ -267,6 +271,8 @@ static struct sw_fuel_gauge_hal_data sw_fuel_gauge_hal_instance;
 static struct sw_fuel_gauge_debug_data sw_fuel_gauge_hal_debug_data = {
 	.printk_logs_en = 0,
 };
+
+static int alarm_changed = 0;
 
 /**
  * sw_fuel_gauge_hal_get_coulomb_counts - Read the raw couloumb counter values.
@@ -585,6 +591,11 @@ static enum alarmtimer_restart sw_fuel_gauge_hal_polling_atimer_expired_cb(struc
 		(SW_FUEL_GAUGE_DEBUG_HAL_TIMER_EXPIRED);
 
 	(void)alrm;
+
+	/* if wakeup source is this alarm,
+	 * then no need touch it again while resuming
+	 */
+	alarm_changed = 0;
 
 	/* Schedule the SW Fuel Gauge work thread to execute the polling
 	function. */
@@ -1303,16 +1314,54 @@ static int __exit sw_fuel_gauge_hal_remove(struct idi_peripheral_device *ididev)
  */
 static int sw_fuel_gauge_hal_suspend(struct device *dev)
 {
+	int cap, vol;
+	unsigned long long now;
+	int alarm = SUSPEND_POLLING_PERIOD_SECS2;
 	/* Unused parameter */
 	(void)dev;
 
 	disable_irq(sw_fuel_gauge_hal_instance.irq);
-	/* update wake up alarm while suspending */
-	alarm_cancel(&sw_fuel_gauge_hal_instance.
+
+	now = sched_clock();
+	do_div(now, 1000000000);
+	/* FG need time to get accurate value */
+	if (now < 10 * 60)
+		goto out;
+
+	cap = get_bat_capacity();
+	if (cap > 0)
+		alarm = (cap / TARGET_POWER) * 3600;
+
+	vol = get_bat_voltage();
+	if (vol >= 3800) {
+		if (alarm > SUSPEND_POLLING_PERIOD_SECS1)
+			alarm = SUSPEND_POLLING_PERIOD_SECS1;
+		else if (alarm <= SUSPEND_POLLING_PERIOD_SECS2)
+			alarm = IBAT_LONG_TERM_AVERAGE_POLLING_PERIOD_SECS_ES2;
+	} else {
+		if (alarm > SUSPEND_POLLING_PERIOD_SECS1)
+			alarm = SUSPEND_POLLING_PERIOD_SECS1 * 70 / 100;
+		else if (alarm <= SUSPEND_POLLING_PERIOD_SECS2)
+			alarm = IBAT_LONG_TERM_AVERAGE_POLLING_PERIOD_SECS_ES2;
+		else
+			alarm = alarm * 50 / 100;
+	}
+
+	if (alarm < IBAT_LONG_TERM_AVERAGE_POLLING_PERIOD_SECS_ES2)
+		alarm = IBAT_LONG_TERM_AVERAGE_POLLING_PERIOD_SECS_ES2;
+	pr_info("%s: battery capacity: %dmAh, voltage: %dmV, alarm: %d secs\n",
+					__func__, cap / 1000, vol, alarm);
+	if (alarm != IBAT_LONG_TERM_AVERAGE_POLLING_PERIOD_SECS_ES2) {
+		/* update wake up alarm while suspending */
+		alarm_cancel(&sw_fuel_gauge_hal_instance.
 				ibat_long_term_average_polling_atimer);
-	SET_ALARM_TIMER(&sw_fuel_gauge_hal_instance.
+		SET_ALARM_TIMER(&sw_fuel_gauge_hal_instance.
 				ibat_long_term_average_polling_atimer,
-				SUSPEND_POLLING_PERIOD_SECS);
+				alarm);
+		alarm_changed = 1;
+	}
+
+out:
 	/* Nothing to do here except logging */
 	SW_FUEL_GAUGE_HAL_DEBUG_NO_PARAM(SW_FUEL_GAUGE_DEBUG_HAL_SUSPEND);
 	return 0;
@@ -1328,10 +1377,13 @@ static int sw_fuel_gauge_hal_resume(struct device *dev)
 	/* Unused parameter */
 	(void)dev;
 
-	/* restore alarm polling period */
-	alarm_cancel(&sw_fuel_gauge_hal_instance.
+	if (alarm_changed) {
+		/* restore alarm polling period */
+		alarm_cancel(&sw_fuel_gauge_hal_instance.
 				ibat_long_term_average_polling_atimer);
-	sw_fuel_gauge_hal_process_timer_and_irq_work(0);
+		sw_fuel_gauge_hal_process_timer_and_irq_work(0);
+		alarm_changed = 0;
+	}
 
 	enable_irq(sw_fuel_gauge_hal_instance.irq);
 	/* Nothing to do here */

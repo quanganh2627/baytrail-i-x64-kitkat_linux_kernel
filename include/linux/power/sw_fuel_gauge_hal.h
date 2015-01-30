@@ -242,6 +242,10 @@ struct sw_fuel_gauge_interface {
 	void (*enqueue)(fp_scheduled_function p_function, long param);
 };
 
+int get_bat_capacity(void);
+
+int get_bat_voltage(void);
+
 /**
  * sw_fuel_gauge_register_hal() - Register the supported operations and
  *				capabilities of the HAL with the SW Fuel Gauge.

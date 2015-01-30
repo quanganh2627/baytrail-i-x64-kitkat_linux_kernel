@@ -3338,6 +3338,28 @@ static struct platform_driver sw_fuel_gauge_driver = {
 	.remove	= sw_fuel_gauge_remove,
 };
 
+int get_bat_capacity(void)
+{
+	int capacity = -ENODATA;
+	struct power_supply_properties *p_properties =
+					&sw_fuel_gauge_instance.properties;
+	if (p_properties->capacity_valid)
+		capacity = p_properties->charge_now;
+
+	return capacity;
+}
+
+int get_bat_voltage(void)
+{
+	int vol = -ENODATA;
+	struct power_supply_properties *p_properties =
+					&sw_fuel_gauge_instance.properties;
+	if (p_properties->capacity_valid)
+		vol = p_properties->voltage_ocv / 1000;
+
+	return vol;
+}
+
 static int __init sw_fuel_gauge_init(void)
 {
 	/*
