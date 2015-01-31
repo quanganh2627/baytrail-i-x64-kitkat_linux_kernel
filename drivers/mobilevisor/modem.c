@@ -27,7 +27,11 @@
 #include <linux/proc_fs.h>
 #include <sofia/mv_gal.h>
 
+#ifdef CONFIG_SOFIA_LOWMEM_DEV
+#define NVM_ADDR_SHIFT	(0x1ED80000 - 0x1E000000)
+#else
 #define NVM_ADDR_SHIFT	(0x3D100000 - 0x3C000000)
+#endif
 #define SEC_PACK_SIZE 2048
 
 struct vmodem_drvdata {

@@ -40,11 +40,17 @@
 		};
 	};
 
+#if defined(LOW_MEM_512)
+	vmodem {
+		compatible = "intel,vmodem";
+		reg = < 0x1e000000 0x02000000 >;
+	};
+#else
 	vmodem {
 		compatible = "intel,vmodem";
 		reg = < 0x3c000000 0x04000000 >;
 	};
-
+#endif
 	ion {
 		compatible = "intel,ion";
 #ifndef RECOVERY_KERNEL
