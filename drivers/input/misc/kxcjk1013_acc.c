@@ -1793,9 +1793,9 @@ exit:
 	return (err < 0) ? err : count;
 }
 
-static DEVICE_ATTR(enable_device, 0666, kionix_accel_get_enable,
+static DEVICE_ATTR(enable_device, S_IRUGO|S_IWUSR, kionix_accel_get_enable,
 		kionix_accel_set_enable);
-static DEVICE_ATTR(pollrate_ms, 0666, kionix_accel_get_delay,
+static DEVICE_ATTR(pollrate_ms, S_IRUGO|S_IWUSR, kionix_accel_get_delay,
 		kionix_accel_set_delay);
 static DEVICE_ATTR(direct, S_IRUGO|S_IWUSR, kionix_accel_get_direct,
 		kionix_accel_set_direct);
