@@ -25,7 +25,14 @@ static u32 mali_control_timeout = 1000;
 
 void mali_control_timer_add(u32 timeout)
 {
-	_mali_osk_timer_add(mali_control_timer, _mali_osk_time_mstoticks(timeout));
+	if (unlikely(_mali_osk_timer_pending(mali_control_timer))) {
+		MALI_DEBUG_PRINT(1, ("mali_control_timer pending...\n"));
+		_mali_osk_timer_mod(mali_control_timer,
+				_mali_osk_time_mstoticks(timeout));
+	} else {
+		_mali_osk_timer_add(mali_control_timer,
+				_mali_osk_time_mstoticks(timeout));
+	}
 }
 
 static void mali_control_timer_callback(void *arg)
