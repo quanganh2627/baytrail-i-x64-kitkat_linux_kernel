@@ -1478,11 +1478,15 @@ exit:
 	return (err < 0) ? err : count;
 }
 
-static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR|S_IWUGO, kionix_accel_get_enable, kionix_accel_set_enable);
-static DEVICE_ATTR(delay, S_IRUGO|S_IWUSR|S_IWUGO, kionix_accel_get_delay, kionix_accel_set_delay);
-static DEVICE_ATTR(direct, S_IRUGO|S_IWUSR, kionix_accel_get_direct, kionix_accel_set_direct);
+static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR,
+	kionix_accel_get_enable, kionix_accel_set_enable);
+static DEVICE_ATTR(delay, S_IRUGO|S_IWUSR,
+	kionix_accel_get_delay, kionix_accel_set_delay);
+static DEVICE_ATTR(direct, S_IRUGO|S_IWUSR,
+	kionix_accel_get_direct, kionix_accel_set_direct);
 static DEVICE_ATTR(data, S_IRUGO, kionix_accel_get_data, NULL);
-static DEVICE_ATTR(cali, S_IRUGO|S_IWUSR, kionix_accel_get_cali, kionix_accel_set_cali);
+static DEVICE_ATTR(cali, S_IRUGO|S_IWUSR,
+	kionix_accel_get_cali, kionix_accel_set_cali);
 
 static struct attribute *kionix_accel_attributes[] = {
 	&dev_attr_enable.attr,
