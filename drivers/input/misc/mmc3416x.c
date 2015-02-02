@@ -509,8 +509,10 @@ static ssize_t attr_set_enable(struct device *dev,
 }
 
 static struct device_attribute attributes[] = {
-	__ATTR(pollrate_ms, 0666, attr_get_polling_rate, attr_set_polling_rate),
-	__ATTR(enable_device, 0666, attr_get_enable, attr_set_enable),
+	__ATTR(pollrate_ms, S_IRUGO|S_IWUSR,
+		attr_get_polling_rate, attr_set_polling_rate),
+	__ATTR(enable_device, S_IRUGO|S_IWUSR,
+		attr_get_enable, attr_set_enable),
 };
 
 static int create_sysfs_interfaces(struct device *dev)
@@ -904,7 +906,7 @@ static int mmc3416x_remove(struct i2c_client *client)
 	return 0;
 }
 
-static DEVICE_ATTR(read_mag, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(read_mag, S_IRUGO | S_IWUSR,
 		mmc3416x_fs_read, mmc3416x_fs_write);
 
 static const struct i2c_device_id mmc3416x_id[] = {
