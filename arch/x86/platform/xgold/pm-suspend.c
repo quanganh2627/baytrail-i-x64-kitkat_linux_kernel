@@ -45,6 +45,20 @@ int xgold_suspend_enter(suspend_state_t suspend_state)
 	return 0;
 }
 
+static int xgold_suspend_valid(suspend_state_t state)
+{
+	int ret = 0;
+
+	switch (state) {
+	case PM_SUSPEND_ON:
+	case PM_SUSPEND_MEM:
+		ret = 1;
+	break;
+	}
+
+	return ret;
+}
+
 void xgold_suspend_finish(void)
 {
 	if (x86_platform.restore_sched_clock_state)
@@ -54,7 +68,7 @@ void xgold_suspend_finish(void)
 static const struct platform_suspend_ops xgold_suspend_ops = {
 	.enter		= xgold_suspend_enter,
 	.finish		= xgold_suspend_finish,
-	.valid		= suspend_valid_only_mem,
+	.valid		= xgold_suspend_valid,
 };
 
 static int __init xgold_suspend_init(void)
