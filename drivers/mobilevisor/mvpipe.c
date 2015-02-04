@@ -27,6 +27,7 @@
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/poll.h>
+#include <linux/debugfs.h>
 
 #include <sofia/mv_gal.h>
 #include <sofia/mv_ipc.h>
@@ -36,18 +37,6 @@
 #define DEBUG_LEVEL_ERROR 1
 #define DEBUG_LEVEL_INFO  2
 #define MODULE_NAME "mvpipe"
-
-#define mvpipe_info(fmt, arg...) \
-	do { \
-		if (DEBUG_LEVEL >= DEBUG_LEVEL_INFO) \
-			pr_info(MODULE_NAME"[I]: "fmt, ##arg); \
-	} while (0)
-
-#define mvpipe_error(fmt, arg...) \
-	do { \
-		if (DEBUG_LEVEL >= DEBUG_LEVEL_ERROR) \
-			pr_info(MODULE_NAME"[E]: "fmt, ##arg); \
-	} while (0)
 
 enum mbox_status {
 	MBOX_DISCONNECTED,
@@ -133,6 +122,13 @@ struct mvpipe_event {
 	uint32_t reserved;
 };
 
+enum debug_log_type {
+    NONE_MIN_TYPE = 0,
+	DUMP_TRACE_TYPE,
+	DUMP_FTRACE_TYPE,
+    NONE_MAX_TYPE
+};
+
 struct mvpipe_instance {
 	char name[MAX_MBOX_INSTANCE_NAME_SIZE];
 	uint32_t token;
@@ -161,6 +157,8 @@ struct mvpipe_instance {
 	struct mvpipe_event *p_event;
 	struct mvpipe_ring *ring[2];
 
+    enum debug_log_type dump_type;
+    uint32_t dump_maxlen;
 };
 
 #define is_ring0_writer(dev) (dev->writer_id == 0)
@@ -168,6 +166,71 @@ struct mvpipe_instance {
 struct mvpipe_instance *mvpipes = NULL;
 uint32_t mvpipe_count;
 struct class *cl_ipc;
+
+static struct dentry *mvpipe_debug_root;
+static uint32_t debug_print_lev = 0;
+static uint32_t debug_print_type = 0;
+
+static int mvpipe_pr_info(char *fname,int line,struct mvpipe_instance *dev,uint32_t type,const char *fmt, ...)
+{
+        struct va_format vaf;
+        va_list args;
+        int r;
+
+        va_start(args, fmt);
+
+        vaf.fmt = fmt;
+        vaf.va = &args;
+        if(type == 1)
+        r = pr_info("[%s:%d][%s]%pV",fname,line,dev->name,&vaf);
+        else if(type == 2)
+        r = __trace_printk(_THIS_IP_,"[%s:%d][%s]%pV",fname,line,dev->name,&vaf);
+
+        va_end(args);
+
+        return r;
+}
+
+#define mvpipe_info(fmt, arg...) \
+	do { \
+		if ((debug_print_lev >= DEBUG_LEVEL_INFO) && (debug_print_type > 0 && debug_print_type <= 2)) \
+            mvpipe_pr_info(__func__,__LINE__,dev,debug_print_type,fmt, ##arg);  \
+	} while (0)
+
+#define mvpipe_error(fmt, arg...) \
+            do { \
+                mvpipe_pr_info(__func__,__LINE__,dev,1,fmt, ##arg);  \
+            } while (0)
+
+static void ftrace_dump_data(char *dev_name,enum debug_log_type dump_type,u8 is_out, const void *buf,size_t len,size_t maxlen)
+{
+	const u8 *ptr = buf;
+	int i, linelen, remaining = 0;
+	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
+	int rowsize = 16;
+	int groupsize = 1;
+	bool ascii = true;
+	int orig_len = len;
+
+	if(maxlen)
+	len = min(len,maxlen);
+
+	remaining = len;
+	for (i = 0; i < len; i += rowsize) {
+		linelen = min(remaining, rowsize);
+		remaining -= rowsize;
+
+		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
+				   linebuf, sizeof(linebuf), ascii);
+
+		if(dump_type == DUMP_FTRACE_TYPE)
+		trace_printk("[%s-%d-%s] %.4x: %s\n",dev_name,orig_len,is_out == 1 ? "-->" : "<--", i, linebuf);
+		else if(dump_type == DUMP_TRACE_TYPE)
+		pr_info("[%s-%d-%s] %.4x: %s\n",dev_name,orig_len,is_out == 1 ? "-->" : "<--", i, linebuf);
+	}
+
+}
+
 
 void mvpipe_close(struct mvpipe_instance *dev)
 {
@@ -334,6 +397,10 @@ ssize_t mvpipe_dev_read(struct file *filp, char __user *buf, size_t count,
 
 	mvpipe_info("mvpipe read out %d bytes\n", retval);
 	up(&dev->read_sem);
+
+	if((dev->dump_type > NONE_MIN_TYPE) && (dev->dump_type < NONE_MAX_TYPE) && (retval > 0))
+		ftrace_dump_data(dev->name,dev->dump_type,0, buf,retval,dev->dump_maxlen);
+
 	return retval;
 }
 
@@ -417,6 +484,10 @@ ssize_t mvpipe_dev_write(struct file *filp, const char __user *buf,
 
 	up(&dev->write_sem);
 	mvpipe_info("returning %d\n", retval);
+
+	if((dev->dump_type > NONE_MIN_TYPE) && (dev->dump_type < NONE_MAX_TYPE) && (retval > 0))
+		ftrace_dump_data(dev->name,dev->dump_type,1, buf,retval,dev->dump_maxlen);
+
 	return retval;
 }
 
@@ -585,6 +656,7 @@ void on_mvpipe_instance(char *instance_name, uint32_t instance_index,
 	struct mvpipe_instance *mvpipe;
 	uint32_t token;
 	uint32_t p_share_mem;
+	char tmp_buf[64] = {0x00};
 
 	dev_t mvpipe_dev;
 
@@ -685,18 +757,33 @@ void on_mvpipe_instance(char *instance_name, uint32_t instance_index,
 		mvpipe->p_event->handshake = mv_gal_os_id();
 
 		mv_mbox_set_online(mvpipe->token);
+
+        snprintf(tmp_buf, sizeof(tmp_buf), "%s_dump", instance_name);
+		debugfs_create_u32(tmp_buf, 0644, mvpipe_debug_root, &mvpipe->dump_type);
+
+        snprintf(tmp_buf, sizeof(tmp_buf), "%s_dump_len", instance_name);
+        debugfs_create_u32(tmp_buf, 0644, mvpipe_debug_root, &mvpipe->dump_maxlen);
+
+        mvpipe->dump_type = 0;
+        mvpipe->dump_maxlen = 0;
 	} else
 		panic("failed to init instance\n");
 }
 
 static int mvpipe_module_init(void)
 {
+    mvpipe_debug_root = debugfs_create_dir("mvpipe",NULL);
+    debugfs_create_u32("debug_print_lev", 0644, mvpipe_debug_root, &debug_print_lev);
+    debugfs_create_u32("debug_print_type", 0644, mvpipe_debug_root, &debug_print_type);
+
 	mv_ipc_mbox_for_all_instances("mvpipe", on_mvpipe_instance);
 	return 0;
 }
 
 static void mvpipe_module_exit(void)
 {
+	debugfs_remove(mvpipe_debug_root);
+	mvpipe_debug_root = NULL;
 }
 
 module_init(mvpipe_module_init);
