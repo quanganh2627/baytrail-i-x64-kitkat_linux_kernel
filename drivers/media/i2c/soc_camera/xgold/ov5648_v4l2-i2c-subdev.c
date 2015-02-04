@@ -534,6 +534,7 @@ static const struct ov_camera_module_reg ov5648_init_tab_1304_976_30fps_vfifo[] 
 
 static const struct ov_camera_module_reg ov5648_init_tab_1296_736_30fps_vfifo[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x301a, 0xf1},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3001, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3002, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3011, 0x02},
@@ -734,10 +735,14 @@ static const struct ov_camera_module_reg ov5648_init_tab_1296_736_30fps_vfifo[] 
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303b, 0x10}, //0x16;
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303c, 0x11},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303d, 0x20},
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
 };
 
 static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x301a, 0xf1},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3001, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3002, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3011, 0x02},
@@ -746,8 +751,8 @@ static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[]
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x301c, 0xd2},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3022, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3034, 0x1a},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3035, 0x21}, // 0x21 -> 0x41;
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3036, 0x61}, // 69},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3035, 0x21},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3036, 0x65},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3037, 0x03},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3038, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3039, 0x00},
@@ -812,8 +817,8 @@ static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[]
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0x98},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x0b},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x00},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x07},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0xc0},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x18},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3810, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x10},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3812, 0x00},
@@ -903,6 +908,8 @@ static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[]
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b01, 0x40},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b02, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b03, 0xf0},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
 };
 
 static struct ov_camera_module_config ov5648_configs[] = {
@@ -927,7 +934,7 @@ static struct ov_camera_module_config ov5648_configs[] = {
 			sizeof(ov5648_init_tab_1296_736_30fps_vfifo)
 			/
 			sizeof(ov5648_init_tab_1296_736_30fps_vfifo[0]),
-		.v_blanking_time_us    = 2000 /*empirically measured time*/
+		.v_blanking_time_us    = 11400 /*empirically measured time*/
 	},
 	{
 		.name    = "2592x1944_15fps",
@@ -950,7 +957,7 @@ static struct ov_camera_module_config ov5648_configs[] = {
 			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo)
 			/
 			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo[0]),
-		.v_blanking_time_us    = 2000 /*empirically measured time*/
+		.v_blanking_time_us    = 4100 /*empirically measured time*/
 	},
 };
 
@@ -1896,7 +1903,6 @@ static int ov5648_otp_read(struct ov_camera_module *cam_mod)
 	otp_ptr->B_gain = B_gain;
 
 	ov_camera_module_write_reg(cam_mod, 0x0100, 0);
-
 	return ret;
 }
 
@@ -1930,9 +1936,9 @@ static int ov5648_start_streaming(struct ov_camera_module *cam_mod)
 	if (IS_ERR_VALUE(ret))
 		goto err;
 
-	if (IS_ERR_VALUE(ov_camera_module_write_reg(cam_mod, 0x0100, 1))) {
+
+	if (IS_ERR_VALUE(ov_camera_module_write_reg(cam_mod, 0x301a, 0xf0)))
 		goto err;
-	}
 
 	return 0;
 
@@ -1950,7 +1956,8 @@ static int ov5648_stop_streaming(struct ov_camera_module *cam_mod)
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
 
-	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0);
+	/*ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0);*/
+	ret = ov_camera_module_write_reg(cam_mod, 0x301a, 0xf1);
 	if (IS_ERR_VALUE(ret)) {
 		goto err;
 	}
