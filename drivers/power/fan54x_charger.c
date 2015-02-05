@@ -102,6 +102,7 @@ static int fan54x_enable_charger(
 static int fan54x_enable_charging(
 			struct fan54x_charger *chrgr, bool enable);
 
+static void unfreezable_bh_schedule(struct unfreezable_bh_struct *bh);
 struct charger_debug_data chrgr_dbg = {
 	.printk_logs_en = 0,
 };
@@ -1226,6 +1227,7 @@ static void fan54x_chgdet_worker(struct work_struct *work)
 	/* left for CHGINT to trigger other work */
 
 	up(&chrgr->prop_lock);
+	unfreezable_bh_schedule(&chrgr->chgint_bh);
 	return;
 }
 
@@ -1463,7 +1465,7 @@ static irqreturn_t fan54x_charger_chgdet_cb(int irq, void *dev)
 {
 	struct fan54x_charger *chrgr = dev;
 
-	pr_debug("%s\n", __func__);
+	pr_info("%s\n", __func__);
 
 	schedule_delayed_work(&chrgr->chgdet_work, 0);
 
