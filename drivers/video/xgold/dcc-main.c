@@ -46,7 +46,7 @@
 #ifndef CONFIG_X86
 	#define ioremap_wc ioremap
 #endif
-
+#include <linux/earlysuspend.h>
 
 struct dcc_drvdata *gradata;
 
@@ -80,6 +80,9 @@ static struct device_state_pm_state dcc_pm_states[] = {
 
 DECLARE_DEVICE_STATE_PM_CLASS(dcc);
 #endif
+
+static int dcc_main_suspend(struct device *dev);
+static int dcc_main_resume(struct device *dev);
 
 #if !defined CONFIG_PLATFORM_DEVICE_PM_VIRT
 static int dcc_core_power_set(struct dcc_drvdata *pdata, int en)
@@ -892,9 +895,31 @@ const struct file_operations dcc_ops = {
 	.release = dcc_close,
 };
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void dcc_early_suspend(struct early_suspend *h)
+{
+	struct dcc_drvdata *pdata =
+		container_of(h, struct dcc_drvdata, es);
 
-static int dcc_main_suspend(struct device *dev);
-static int dcc_main_resume(struct device *dev);
+	dcc_main_suspend(pdata->dev);
+}
+
+static void dcc_late_resume(struct early_suspend *h)
+{
+	struct dcc_drvdata *pdata =
+		container_of(h, struct dcc_drvdata, es);
+
+	dcc_main_resume(pdata->dev);
+}
+
+void dcc_config_earlysuspend(struct dcc_drvdata *pdata)
+{
+	pdata->es.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
+	pdata->es.suspend = dcc_early_suspend;
+	pdata->es.resume = dcc_late_resume;
+	register_early_suspend(&pdata->es);
+}
+#endif
 
 int dcc_main_probe(struct platform_device *pdev)
 {
@@ -1036,6 +1061,9 @@ int dcc_main_probe(struct platform_device *pdev)
 	dcc_boot_info("Device driver loaded successfully [/dev/%s]\n",
 		 DCC_DRIVER_NAME);
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	dcc_config_earlysuspend(pdata);
+#endif
 	/* disable boot debug messages */
 	pdata->debug.boot = 0;
 	pdata->drv_state = DRV_DCC_ENABLED;
@@ -1194,7 +1222,9 @@ static struct platform_driver dcc_driver = {
 	.driver = {
 		   .name = DCC_MODULE_NAME,
 		   .owner = THIS_MODULE,
+#ifndef CONFIG_HAS_EARLYSUSPEND
 		   .pm = &dcc_driver_pm_ops,
+#endif
 		   .of_match_table = xgold_dcc_of_match,
 		   },
 };

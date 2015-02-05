@@ -43,6 +43,7 @@
 #include <android/sw_sync.h>
 #include <video/xgold-dcc.h>
 #include <linux/wakelock.h>
+#include <linux/earlysuspend.h>
 
 #define DCC_MODULE_NAME	"dcc"
 
@@ -277,6 +278,9 @@ struct dcc_drvdata {
 	struct kobject *kobj_mipidsi_phy;
 	int(*drv_suspend)(struct device *dev);
 	int(*drv_resume)(struct device *dev);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend es;
+#endif
 	struct delayed_work esd_work;  /* esd work_struct */
 	struct workqueue_struct *esd_wq; /* esd workqueue */
 	int esd_flag;
