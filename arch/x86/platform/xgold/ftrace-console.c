@@ -63,29 +63,14 @@ static struct resource ram_console_resources[] = {
 	},
 };
 
-static struct ram_console_platform_data ram_console_pdata;
-
-static struct platform_device ram_console_device = {
-	.name		= "ram_console",
-	.id		= -1,
-	.num_resources	= ARRAY_SIZE(ram_console_resources),
-	.resource	= ram_console_resources,
-	.dev		= {.platform_data = &ram_console_pdata,	},
-};
-
-
 /**
  * intel_mid_ram_console_register() - device_initcall to register ramconsole device
  */
 static int __init intel_mid_ram_console_register(void)
 {
 	int ret = 0;
-	size_t start;
-	size_t buffer_size;
-	void *buffer;
 	size_t ftrace_buffer_size;
 	void *ftrace_buffer;
-	const char *bootinfo = NULL;
 
 	pr_info("enter into intel_mid_ram_console_register\n");
 	ftrace_buffer_size = ram_console_resources[0].end -
@@ -98,8 +83,8 @@ static int __init intel_mid_ram_console_register(void)
 	}
 	ftrace_old_buffer_size = 0;
 	ftrace_reserved_buffer_init(ftrace_buffer, ftrace_buffer_size);
-	pr_info("ftrace_reserved_buffer:  ioreamp ok, ftrace_buffer %08x,
-		res->start %08x\n", ftrace_buffer,
+	pr_info("ftrace_reserved_buffer:  ioreamp ok, ftrace_buffer %08x, "
+			"res->start %08x\n", (unsigned int)ftrace_buffer,
 		ram_console_resources[0].start);
 
 	return ret;
@@ -175,7 +160,7 @@ ftrace_buffer->start equals ftrace_buffer->size
 	ftrace_buffer->size = 0;
 
 }
-static void ftrace_buffer_update(char *s, unsigned int count)
+static void ftrace_buffer_update(const char *s, unsigned int count)
 {
 	struct ftrace_reserved_buffer *buffer = ftrace_reserved_buffer;
 
@@ -199,7 +184,6 @@ ssize_t ftrace_reserved_buffer_write(const char *s, ssize_t count)
 		count -= rem;
 		buffer->start = 0;
 		buffer->size = ftrace_reserved_buffer_size;
-
 	}
 
 	ftrace_buffer_update(s, count);
@@ -212,8 +196,8 @@ ssize_t ftrace_reserved_buffer_write(const char *s, ssize_t count)
 EXPORT_SYMBOL_GPL(ftrace_reserved_buffer_write);
 
 ssize_t ftrace_reserved_buffer_read_old(struct file *filp,
-		const char __user *buf,
-		unsigned long len, loff_t *offset)
+		char __user *buf,
+		size_t len, loff_t *offset)
 {
 
 	ssize_t count;
