@@ -50,6 +50,8 @@
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
 
+#define IGNORE_SYSRQ_CRASH
+
 /* Whether we react on sysrq keys or just ignore them */
 static int __read_mostly sysrq_enabled = CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE;
 static bool __read_mostly sysrq_always_enabled;
@@ -134,6 +136,12 @@ static struct sysrq_key_op sysrq_unraw_op = {
 static void sysrq_handle_crash(int key)
 {
 	char *killer = NULL;
+
+#ifdef IGNORE_SYSRQ_CRASH
+	pr_err("Someone triggered crash to sysrq ... (ignore)\n");
+	dump_stack();
+	return;
+#endif
 
 	panic_on_oops = 1;	/* force panic */
 	wmb();
