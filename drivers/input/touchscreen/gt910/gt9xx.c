@@ -67,6 +67,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/io.h>
+#include <linux/earlysuspend.h>
 
 static const char *goodix_ts_name = "goodix-ts";
 static struct workqueue_struct *goodix_wq;
@@ -345,6 +346,31 @@ static struct attribute *gtp_ts_attributes[] = {
 static const struct attribute_group gtp_ts_attr_group = {
 	.attrs = gtp_ts_attributes,
 };
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void gtp_ts_early_suspend(struct early_suspend *h)
+{
+	struct goodix_ts_data *ts =
+		container_of(h, struct goodix_ts_data, es);
+
+	gtp_ts_power_off(ts->client);
+}
+
+static void gtp_ts_late_resume(struct early_suspend *h)
+{
+	struct goodix_ts_data *ts =
+		container_of(h, struct goodix_ts_data, es);
+
+	gtp_ts_power_on(ts->client);
+}
+
+void gtp_ts_config_earlysuspend(struct goodix_ts_data *ts)
+{
+	ts->es.suspend = gtp_ts_early_suspend;
+	ts->es.resume = gtp_ts_late_resume;
+	register_early_suspend(&ts->es);
+}
+#endif
 /*******************************************************
 Function:
     Read data from the i2c slave device.
@@ -2821,6 +2847,9 @@ static int goodix_ts_probe(struct i2c_client *client,
 	gtp_esd_switch(client, SWITCH_ON);
 #endif
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	gtp_ts_config_earlysuspend(ts);
+#endif
 	return 0;
 exit_sysfs_failed:
 exit_pm_class:
@@ -3172,7 +3201,9 @@ static struct i2c_driver goodix_ts_driver = {
 	.driver = {
 		.name     = GTP_I2C_NAME,
 		.owner    = THIS_MODULE,
+#ifndef CONFIG_HAS_EARLYSUSPEND
 		.pm       = &goodix_ts_pm,
+#endif
 	},
 };
 

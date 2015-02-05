@@ -34,7 +34,7 @@
 #include <linux/io.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
-
+#include <linux/earlysuspend.h>
 
 /****************************PART1:ON/OFF define****************************/
 #ifdef CONFIG_TOUCHSCREEN_GT915
@@ -163,7 +163,9 @@ struct goodix_ts_data {
 	u8 rqst_processing;
 	u8 is_950;
 #endif
-
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend es;
+#endif
 };
 
 extern u16 show_len;
