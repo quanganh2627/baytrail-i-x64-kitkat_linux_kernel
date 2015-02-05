@@ -38,6 +38,7 @@
 #include <linux/platform_device.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/earlysuspend.h>
 
 #define CONFIG_FT5X0X_MULTITOUCH 1
 
@@ -71,6 +72,9 @@ struct ft5x0x_ts_data {
 	struct mutex en_lock;
 	int btn_active;
 	int enable;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend es;
+#endif
 };
 
 static int const android_key[KEY_INDEX_MAX] = {
@@ -897,6 +901,31 @@ static int ft5x0x_ts_resume(struct device *dev)
 
 #endif /* CONFIG_PM */
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void ft5x0x_ts_early_suspend(struct early_suspend *h)
+{
+	struct ft5x0x_ts_data *ft5x0x_ts =
+		container_of(h, struct ft5x0x_ts_data, es);
+
+	ft5x0x_ts_power_off(ft5x0x_ts->client);
+}
+
+static void ft5x0x_ts_late_resume(struct early_suspend *h)
+{
+	struct ft5x0x_ts_data *ft5x0x_ts =
+		container_of(h, struct ft5x0x_ts_data, es);
+
+	ft5x0x_ts_power_on(ft5x0x_ts->client);
+}
+
+void ft5x0x_ts_config_earlysuspend(struct ft5x0x_ts_data *ft5x0x_ts)
+{
+	ft5x0x_ts->es.suspend = ft5x0x_ts_early_suspend;
+	ft5x0x_ts->es.resume = ft5x0x_ts_late_resume;
+	register_early_suspend(&ft5x0x_ts->es);
+}
+#endif
+
 static const struct dev_pm_ops ft5x0x_ts_pm = {
 	SET_SYSTEM_SLEEP_PM_OPS(ft5x0x_ts_suspend, ft5x0x_ts_resume)
 };
@@ -1060,6 +1089,9 @@ static int ft5x0x_ts_probe(struct i2c_client *client,
 		goto exit_input_register_device_failed;
 	}
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	ft5x0x_ts_config_earlysuspend(ft5x0x_ts);
+#endif
 	/* Register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &ft5x0x_ts_attr_group);
 	if (err)
@@ -1117,7 +1149,9 @@ static struct i2c_driver ft5x0x_ts_driver = {
 	.driver = {
 		.name = FT5X0X_NAME,
 		.owner = THIS_MODULE,
+#ifndef CONFIG_HAS_EARLYSUSPEND
 		.pm = &ft5x0x_ts_pm,
+#endif
 	},
 };
 
