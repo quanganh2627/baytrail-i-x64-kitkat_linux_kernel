@@ -2136,6 +2136,7 @@ static int fan54x_suspend(struct device *dev)
 		}
 		unfreezable_bh_suspend(&chrgr->chgint_bh);
 		unfreezable_bh_suspend(&chrgr->boost_op_bh);
+		unfreezable_bh_schedule(&chrgr->chgint_bh);
 		return 0;
 	}
 }
