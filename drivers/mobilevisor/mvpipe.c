@@ -159,6 +159,7 @@ struct mvpipe_instance {
 
     enum debug_log_type dump_type;
     uint32_t dump_maxlen;
+    uint32_t is_dbg;
 };
 
 #define is_ring0_writer(dev) (dev->writer_id == 0)
@@ -262,10 +263,16 @@ int mvpipe_dev_open(struct inode *inode, struct file *filp)
 	}
 
 	if (dev->open_count) {
-		mvpipe_error("Multiple open, open_count = %d!\n",
-			     dev->open_count);
 		up(&dev->open_sem);
-		return -ERESTARTSYS;
+        if(dev->is_dbg) {
+            dev->open_count++;
+            return 0;
+        }
+        else{
+            mvpipe_error("Multiple open, open_count = %d!\n",
+                     dev->open_count);
+            return -ERESTARTSYS;
+        }
 	}
 
 	dev->open_count++;
@@ -294,6 +301,14 @@ int mvpipe_dev_release(struct inode *inode, struct file *filp)
 
 	if (down_interruptible(&dev->open_sem))
 		return -ERESTARTSYS;
+
+    if(dev->is_dbg){
+        if (dev->open_count > 1){
+            dev->open_count--;
+            up(&dev->open_sem);
+            return 0;
+        }
+    }
 
 	if (get_pipe_status(dev) == MVPIPE_CLOSE) {
 		up(&dev->open_sem);
@@ -766,6 +781,14 @@ void on_mvpipe_instance(char *instance_name, uint32_t instance_index,
 
         mvpipe->dump_type = 0;
         mvpipe->dump_maxlen = 0;
+        
+#ifdef CONFIG_DEBUG_AT_PORT
+        if(strstr(cmdline,"dbg"))
+            mvpipe->is_dbg = 1;
+        else
+            mvpipe->is_dbg = 0;
+#endif
+        
 	} else
 		panic("failed to init instance\n");
 }
