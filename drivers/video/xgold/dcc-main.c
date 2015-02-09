@@ -618,7 +618,7 @@ static int dcc_fence_create(struct dcc_drvdata *pdata,
 	/* Create fd */
 	fd = get_unused_fd();
 	if (fd < 0) {
-		dcc_err("fence_fd not initialized\n");
+		dcc_err("err[%d]: fence_fd not initialized\n", fd);
 		sync_pt_free(point);
 		return -EINVAL;
 	}
@@ -813,22 +813,27 @@ long dcc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (err == 0) {
 #ifdef CONFIG_SW_SYNC_USER
 			if (pdata->use_fences) {
-				updt.fence_retire =
-					dcc_fence_create(pdata,
+				int fence = 0;
+				fence = dcc_fence_create(pdata,
 						pdata->timeline_current);
+				updt.fence_retire = (fence > 0) ? fence: -1;
 				if (updt.back.phys &&
-					(!DCC_UPDATE_NOBG_GET(updt.flags)))
-					updt.back.fence_release =
-						dcc_fence_create(pdata,
+					(!DCC_UPDATE_NOBG_GET(updt.flags))) {
+					fence = dcc_fence_create(pdata,
 						pdata->timeline_current);
+					updt.back.fence_release =
+							(fence > 0) ? fence: -1;
+				}
 				for (ovl_id = 0;
 					ovl_id < DCC_OVERLAY_NUM; ovl_id++) {
 					struct dcc_layer_ovl *l =
 						&updt.ovls[ovl_id];
-					if (l->phys)
-						l->fence_release =
-							dcc_fence_create(pdata,
+					if (l->phys) {
+						fence = dcc_fence_create(pdata,
 						pdata->timeline_current);
+						l->fence_release =
+							(fence > 0) ? fence: -1;
+					}
 				}
 			}
 #endif
