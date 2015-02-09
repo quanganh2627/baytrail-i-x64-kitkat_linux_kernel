@@ -1385,7 +1385,7 @@ static int unfreezable_bh_create(struct unfreezable_bh_struct *bh,
 
 	/* Create private, single-threaded workqueue instead of using one of
 	the system predefined workqueues to reduce latency */
-	bh->wq = create_singlethread_workqueue(wq_name);
+	bh->wq = create_freezable_workqueue(wq_name);
 
 	if (NULL == bh->wq)
 		return -ENOMEM;
