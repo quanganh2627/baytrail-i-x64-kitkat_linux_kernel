@@ -175,7 +175,7 @@
 	prof-standrd = < POWER_SUPPLY_TECHNOLOGY_LION /*battery_type*/
 				  3000 /*capacity*/
 				  4350 /*voltage_max*/
-				  82 /*chrg_term_ma*/
+				  107 /*chrg_term_ma*/
 				  2900 /*low_batt_mv*/
 				  60 /*disch_tmp_ul*/
 				  0xfffffff6 /*disch_tmp_ll (-10)*/
