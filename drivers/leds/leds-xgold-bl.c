@@ -485,10 +485,13 @@ static int xgold_led_bl_probe(struct platform_device *pdev)
 
 	nbl = pdev->dev.of_node;
 
-	if (sofia_board_is(BOARD_SOFIA3G_MRD_7S) ||
-		sofia_board_is(BOARD_SOFIA3G_MRD_5S)) {
+	if (sofia_board_is(BOARD_SOFIA3G_MRD_7S)) {
 		dev_info(&pdev->dev, "MRD7/5 Backlight hw config\n");
 		SCU_k2_val = 0xDC;
+		SCU_safe_led_up = 0x0A;
+	} else if (sofia_board_is(BOARD_SOFIA3G_MRD_5S)) {
+		dev_info(&pdev->dev, "MRD5 Backlight hw config\n");
+		SCU_k2_val = 0x12C;
 		SCU_safe_led_up = 0x0A;
 	} else {
 		dev_info(&pdev->dev, "SVB Backlight hw config\n");

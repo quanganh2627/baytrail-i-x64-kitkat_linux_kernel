@@ -661,12 +661,12 @@
 			};
 			cabc-ui-mode{
 				intel,cmd-type = <0x15>;
-				intel,cmd-data = <0x55 0x01>;
+				intel,cmd-data = <0x55 0x00>;
 				intel,cmd-lp = <1>;
 			};
 			max-brightness{
 				intel,cmd-type = <0x15>;
-				intel,cmd-data = <0x51 0xF0>;
+				intel,cmd-data = <0x51 0xFF>;
 				intel,cmd-lp = <1>;
 			};
 			min-brightness{
