@@ -1155,6 +1155,17 @@ static void fan54x_set_boost(struct work_struct *work)
 	down(&chrgr->prop_lock);
 
 	if (on) {
+		/* Save HZ status */
+		ret = fan54x_attr_read(chrgr->client, HZ_MODE,
+					&chrgr->state.hz_status);
+		if (ret)
+			goto exit_boost;
+
+		/* Set hz status to 0 if it's enabled */
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 0);
+		if (ret)
+			goto exit_boost;
+
 		/* Enable boost regulator */
 		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 1);
 		if (ret)
@@ -1205,6 +1216,13 @@ static void fan54x_set_boost(struct work_struct *work)
 		ret = fan54x_attr_write(chrgr->client, OTG_EN, 0);
 		if (ret)
 			pr_err("%s: fail to disable otg pin\n", __func__);
+
+		/* Restore HZ status */
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE,
+					chrgr->state.hz_status);
+
+		if (ret)
+			pr_err("%s: fail to restore hz status\n", __func__);
 	}
 
 exit_boost:
