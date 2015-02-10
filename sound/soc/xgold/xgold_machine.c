@@ -150,14 +150,6 @@ static struct snd_soc_dai_link xgold_dai[] = {
 		.stream_name = "XGOLD_HW_PROBE_B",
 		.ignore_suspend = 1,
 	},
-	/* PCM2 front end device */
-	{
-		.name = "XGOLD_PCM2",
-		.stream_name = "PCM Audio 2",
-		.init = xgold_snd_init,
-		.ignore_suspend = 1,
-	},
-
 #ifdef CONFIG_SND_SOC_XGOLD_SPEECH_PROBE
 	/* Speech probe front end devices */
 	{
@@ -195,6 +187,13 @@ static struct snd_soc_dai_link xgold_dai[] = {
 	},
 #endif
 #endif
+	/* PCM2 front end device */
+	{
+		.name = "XGOLD_PCM2",
+		.stream_name = "PCM Audio 2",
+		.init = xgold_snd_init,
+		.ignore_suspend = 1,
+	}
 };
 
 /* Audio machine driver */
