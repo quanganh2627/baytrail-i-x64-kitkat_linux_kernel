@@ -138,6 +138,7 @@ struct fan54x_state {
 	bool charging_enabled;
 	bool to_enable_boost;
 	bool boost_enabled;
+	u8 hz_status;
 	int throttle;
 	unsigned int pok_b:1;
 	unsigned int ovp_flag:1;
