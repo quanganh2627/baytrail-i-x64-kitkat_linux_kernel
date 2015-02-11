@@ -5084,6 +5084,9 @@ int cif_isp20_s_ctrl(
 			return -EINVAL;
 		}
 		dev->config.isp_config.ie_config.effect = val;
+		dev->isp_dev.ie_en = true;
+		dev->isp_dev.ie_config.effect = val;
+		dev->isp_dev.isp_param_ie_update_needed = true;
 		break;
 	case CIF_ISP20_CID_JPEG_QUALITY:
 		if ((u32)val > 100) {
