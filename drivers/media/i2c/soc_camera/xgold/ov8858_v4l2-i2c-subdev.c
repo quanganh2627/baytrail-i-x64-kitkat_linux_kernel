@@ -1232,6 +1232,12 @@ static const struct ov_camera_module_reg OV8858_init_tab_1632_1224_30fps[] = {
 	/*Adapt module orientation*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x06},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x40},
+
+	/*Adjust vblanking > 3ms*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x94},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x030d, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x2b},
 };
 
 static const struct ov_camera_module_reg OV8858_init_tab_1632_918_30fps[] = {
@@ -1642,7 +1648,7 @@ static struct ov_camera_module_config OV8858_configs[] = {
 			sizeof(OV8858_init_tab_1632_1224_30fps)
 			/
 			sizeof(OV8858_init_tab_1632_1224_30fps[0]),
-		.v_blanking_time_us = 2610
+		.v_blanking_time_us = 4700
 	},
 	{
 		.name = "3264x2448_15fps",
