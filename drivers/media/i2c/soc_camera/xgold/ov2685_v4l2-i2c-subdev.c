@@ -362,7 +362,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_2MP_15fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0xb0},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x06},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0xa4},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x0c},/*0x05*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x0e},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x08},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x08},
@@ -646,7 +646,6 @@ static int ov2685_g_timings(struct ov_camera_module *cam_mod,
 {
 	int ret = 0;
 	u32 reg_val;
-
 	if (IS_ERR_OR_NULL(cam_mod->active_config))
 		goto err;
 
@@ -1072,8 +1071,8 @@ static int ov2685_start_streaming(struct ov_camera_module *cam_mod)
 	int ret = 0;
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
-
-	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 1);
+	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0x01);
+	ret |= ov_camera_module_write_reg(cam_mod, 0x301c, 0xf0);
 	if (IS_ERR_VALUE(ret))
 		goto err;
 
@@ -1089,10 +1088,9 @@ err:
 static int ov2685_stop_streaming(struct ov_camera_module *cam_mod)
 {
 	int ret = 0;
-
 	ov_camera_module_pr_debug(cam_mod, "\n");
-
-	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0);
+	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0x01);
+	ret |= ov_camera_module_write_reg(cam_mod, 0x301c, 0xf4);
 	if (IS_ERR_VALUE(ret))
 		goto err;
 
