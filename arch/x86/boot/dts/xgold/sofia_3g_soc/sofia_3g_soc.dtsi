@@ -124,8 +124,6 @@
 				stat,3 = "GPU";
 #if defined (SOFIA3G_ES2) || defined (SOFIA3G_MRD7S) || defined (SOFIA3G_MRD5S)
 				stat,4 = "DCC2";
-				stat,5 = "CIF";
-				stat,6 = "VPU";
 #endif
 
 #if defined(SOFIA3G_ES21)
