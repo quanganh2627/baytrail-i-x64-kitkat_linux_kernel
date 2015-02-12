@@ -841,7 +841,7 @@ static void intel_chg_detect_work(struct work_struct *w)
 	struct intel_usbphy *iphy
 			= container_of(w, struct intel_usbphy, chg_work.work);
 	struct usb_phy *phy = &iphy->phy;
-	bool is_dcd = false, tmout = 0, vout;
+	bool is_dcd = false, vout;
 	unsigned long delay;
 
 	dev_dbg(phy->dev, "chg detection work\n");
@@ -853,6 +853,7 @@ static void intel_chg_detect_work(struct work_struct *w)
 
 		iphy->chg_state = USB_CHG_STATE_WAIT_FOR_DCD;
 		iphy->dcd_time = 0;
+		iphy->tmout = 0;
 		delay = CHG_DCD_POLL_TIME;
 		break;
 	case USB_CHG_STATE_WAIT_FOR_DCD:
@@ -860,9 +861,9 @@ static void intel_chg_detect_work(struct work_struct *w)
 		/*  0 -> DCD detected */
 		is_dcd = !usb_fsvplus_status(iphy);
 		iphy->dcd_time += CHG_DCD_POLL_TIME;
-		tmout = iphy->dcd_time >= CHG_DCD_TIMEOUT;
+		iphy->tmout = iphy->dcd_time >= CHG_DCD_TIMEOUT;
 		/* stage 2 */
-		if (is_dcd || tmout) {
+		if (is_dcd || iphy->tmout) {
 			/* stage 4 */
 			/* Turn off DCD circuitry */
 			intel_chg_enable_dcd(iphy, false);
@@ -886,7 +887,7 @@ static void intel_chg_detect_work(struct work_struct *w)
 				USB_CHG_STATE_DETECTED;
 			delay = 0;
 		} else if (!vout) {
-			if (tmout)
+			if (iphy->tmout)
 				/* floating charger found */
 				iphy->chg_type =
 					POWER_SUPPLY_CHARGER_TYPE_NONE;
