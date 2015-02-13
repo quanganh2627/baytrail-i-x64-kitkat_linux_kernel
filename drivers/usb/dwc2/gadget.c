@@ -568,11 +568,6 @@ static void s3c_hsotg_start_req(struct dwc2_hsotg *hsotg,
 	length = ureq->length - ureq->actual;
 	dev_dbg(hsotg->dev, "ureq->length:%d ureq->actual:%d\n",
 		ureq->length, ureq->actual);
-	if (0)
-		dev_dbg(hsotg->dev,
-			"REQ buf %p len %d dma %pad noi=%d zp=%d snok=%d\n",
-			ureq->buf, length, &ureq->dma,
-			ureq->no_interrupt, ureq->zero, ureq->short_not_ok);
 
 	maxreq = get_ep_limit(hs_ep);
 	if (length > maxreq) {
@@ -733,6 +728,59 @@ dma_error:
 	return -EIO;
 }
 
+static int s3c_hsotg_handle_unaligned_buf_start(struct dwc2_hsotg *hsotg,
+	struct s3c_hsotg_ep *hs_ep, struct s3c_hsotg_req *hs_req)
+{
+	void *req_buf = hs_req->req.buf;
+
+	/* If dma is not being used or buffer is aligned */
+	if (!using_dma(hsotg) || !((long)req_buf & 3))
+		return 0;
+
+	WARN_ON(hs_req->saved_req_buf);
+
+	dev_dbg(hsotg->dev, "%s: %s: buf=%p lenght=%d\n", __func__,
+			hs_ep->ep.name, req_buf, hs_req->req.length);
+
+	hs_req->req.buf = kmalloc(hs_req->req.length, GFP_ATOMIC);
+	if (!hs_req->req.buf) {
+		hs_req->req.buf = req_buf;
+		dev_err(hsotg->dev,
+			"%s: unable to allocate memory for bounce buffer\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	/* Save actual buffer */
+	hs_req->saved_req_buf = req_buf;
+
+	if (hs_ep->dir_in)
+		memcpy(hs_req->req.buf, req_buf, hs_req->req.length);
+	return 0;
+}
+
+static void s3c_hsotg_handle_unaligned_buf_complete(struct dwc2_hsotg *hsotg,
+	struct s3c_hsotg_ep *hs_ep, struct s3c_hsotg_req *hs_req)
+{
+	/* If dma is not being used or buffer was aligned */
+	if (!using_dma(hsotg) || !hs_req->saved_req_buf)
+		return;
+
+	dev_dbg(hsotg->dev, "%s: %s: status=%d actual-lenght=%d\n", __func__,
+		hs_ep->ep.name, hs_req->req.status, hs_req->req.actual);
+
+	/* Copy data from bounce buffer on successful out transfer */
+	if (!hs_ep->dir_in && !hs_req->req.status)
+		memcpy(hs_req->saved_req_buf, hs_req->req.buf,
+							hs_req->req.actual);
+
+	/* Free bounce buffer */
+	kfree(hs_req->req.buf);
+
+	hs_req->req.buf = hs_req->saved_req_buf;
+	hs_req->saved_req_buf = NULL;
+}
+
 static int s3c_hsotg_ep_queue(struct usb_ep *ep, struct usb_request *req,
 			      gfp_t gfp_flags)
 {
@@ -740,6 +788,7 @@ static int s3c_hsotg_ep_queue(struct usb_ep *ep, struct usb_request *req,
 	struct s3c_hsotg_ep *hs_ep = our_ep(ep);
 	struct dwc2_hsotg *hs = hs_ep->parent;
 	bool first;
+	int ret;
 
 	dev_dbg(hs->dev, "%s: req %p: %d@%p, noi=%d, zero=%d, snok=%d\n",
 		ep->name, req, req->length, req->buf, req->no_interrupt,
@@ -750,9 +799,13 @@ static int s3c_hsotg_ep_queue(struct usb_ep *ep, struct usb_request *req,
 	req->actual = 0;
 	req->status = -EINPROGRESS;
 
+	ret = s3c_hsotg_handle_unaligned_buf_start(hs, hs_ep, hs_req);
+	if (ret)
+		return ret;
+
 	/* if we're using DMA, sync the buffers as necessary */
 	if (using_dma(hs)) {
-		int ret = s3c_hsotg_map_dma(hs, hs_ep, req);
+		ret = s3c_hsotg_map_dma(hs, hs_ep, req);
 		if (ret)
 			return ret;
 	}
@@ -835,6 +888,32 @@ static struct s3c_hsotg_ep *ep_from_windex(struct dwc2_hsotg *hsotg,
 		return NULL;
 
 	return ep;
+}
+
+/**
+ * s3c_hsotg_set_test_mode - Enable usb Test Modes
+ * @hsotg: The driver state.
+ * @testmode: requested usb test mode
+ * Enable usb Test Mode requested by the Host.
+ */
+static int s3c_hsotg_set_test_mode(struct dwc2_hsotg *hsotg, int testmode)
+{
+	int dctl = readl(hsotg->regs + DCTL);
+
+	dctl &= ~DCTL_TSTCTL_MASK;
+	switch (testmode) {
+	case TEST_J:
+	case TEST_K:
+	case TEST_SE0_NAK:
+	case TEST_PACKET:
+	case TEST_FORCE_EN:
+		dctl |= testmode << DCTL_TSTCTL_SHIFT;
+		break;
+	default:
+		return -EINVAL;
+	}
+	writel(dctl, hsotg->regs + DCTL);
+	return 0;
 }
 
 /**
@@ -957,7 +1036,7 @@ static struct s3c_hsotg_req *get_ep_head(struct s3c_hsotg_ep *hs_ep)
 }
 
 /**
- * s3c_hsotg_process_req_featire - process request {SET,CLEAR}_FEATURE
+ * s3c_hsotg_process_req_feature - process request {SET,CLEAR}_FEATURE
  * @hsotg: The device state
  * @ctrl: USB control request
  */
@@ -971,19 +1050,48 @@ static int s3c_hsotg_process_req_feature(struct dwc2_hsotg *hsotg,
 	struct s3c_hsotg_ep *ep;
 	int ret;
 	bool halted;
+	u32 recip;
+	u32 wValue;
+	u32 wIndex;
 
 	dev_dbg(hsotg->dev, "%s: %s_FEATURE\n",
 		__func__, set ? "SET" : "CLEAR");
 
-	if (ctrl->bRequestType == USB_RECIP_ENDPOINT) {
-		ep = ep_from_windex(hsotg, le16_to_cpu(ctrl->wIndex));
+	wValue = le16_to_cpu(ctrl->wValue);
+	wIndex = le16_to_cpu(ctrl->wIndex);
+	recip = ctrl->bRequestType & USB_RECIP_MASK;
+
+	switch (recip) {
+	case USB_RECIP_DEVICE:
+		switch (wValue) {
+		case USB_DEVICE_TEST_MODE:
+			if ((wIndex & 0xff) != 0)
+				return -EINVAL;
+			if (!set)
+				return -EINVAL;
+
+			hsotg->test_mode = wIndex >> 8;
+			ret = s3c_hsotg_send_reply(hsotg, ep0, NULL, 0);
+			if (ret) {
+				dev_err(hsotg->dev,
+					"%s: failed to send reply\n", __func__);
+				return ret;
+			}
+			break;
+		default:
+			return -ENOENT;
+		}
+		break;
+
+	case USB_RECIP_ENDPOINT:
+		ep = ep_from_windex(hsotg, wIndex);
 		if (!ep) {
 			dev_dbg(hsotg->dev, "%s: no endpoint for 0x%04x\n",
-				__func__, le16_to_cpu(ctrl->wIndex));
+				__func__, wIndex);
 			return -ENOENT;
 		}
 
-		switch (le16_to_cpu(ctrl->wValue)) {
+		switch (wValue) {
 		case USB_ENDPOINT_HALT:
 			halted = ep->halted;
 
@@ -1010,16 +1118,22 @@ static int s3c_hsotg_process_req_feature(struct dwc2_hsotg *hsotg,
 					hs_req = ep->req;
 					ep->req = NULL;
 					list_del_init(&hs_req->queue);
-					hs_req->req.complete(&ep->ep,
-							     &hs_req->req);
+					if (hs_req->req.complete) {
+						spin_unlock(&hsotg->lock);
+						hs_req->req.complete(&ep->ep,
+								&hs_req->req);
+						spin_lock(&hsotg->lock);
+					}
 				}
 
 				/* If we have pending request, then start it */
-				restart = !list_empty(&ep->queue);
-				if (restart) {
-					hs_req = get_ep_head(ep);
-					s3c_hsotg_start_req(hsotg, ep,
-							    hs_req, false);
+				if (!ep->req) {
+					restart = !list_empty(&ep->queue);
+					if (restart) {
+						hs_req = get_ep_head(ep);
+						s3c_hsotg_start_req(hsotg, ep,
+								hs_req, false);
+					}
 				}
 			}
 
@@ -1028,9 +1142,10 @@ static int s3c_hsotg_process_req_feature(struct dwc2_hsotg *hsotg,
 		default:
 			return -ENOENT;
 		}
-	} else
-		return -ENOENT;  /* currently only deal with endpoint */
-
+		break;
+	default:
+		return -ENOENT;
+	}
 	return 1;
 }
 
@@ -1222,7 +1337,12 @@ static void s3c_hsotg_program_zlp(struct dwc2_hsotg *hsotg,
 	u32 epctl_reg = hs_ep->dir_in ? DIEPCTL(index) : DOEPCTL(index);
 	u32 epsiz_reg = hs_ep->dir_in ? DIEPTSIZ(index) : DOEPTSIZ(index);
 
-	dev_dbg(hsotg->dev, "Sending zero-length packet on ep%d\n", index);
+	if (hs_ep->dir_in)
+		dev_dbg(hsotg->dev, "Sending zero-length packet on ep%d\n",
+									index);
+	else
+		dev_dbg(hsotg->dev, "Receiving zero-length packet on ep%d\n",
+									index);
 
 	writel(DXEPTSIZ_MC(1) | DXEPTSIZ_PKTCNT(1) |
 			DXEPTSIZ_XFERSIZE(0), hsotg->regs +
@@ -1270,6 +1390,8 @@ static void s3c_hsotg_complete_request(struct dwc2_hsotg *hsotg,
 
 	if (hs_req->req.status == -EINPROGRESS)
 		hs_req->req.status = result;
+
+	s3c_hsotg_handle_unaligned_buf_complete(hsotg, hs_ep, hs_req);
 
 	hs_ep->req = NULL;
 	list_del_init(&hs_req->queue);
@@ -1327,7 +1449,7 @@ static void s3c_hsotg_rx_data(struct dwc2_hsotg *hsotg, int ep_idx, int size)
 		u32 epctl = readl(hsotg->regs + DOEPCTL(ep_idx));
 		int ptr;
 
-		dev_warn(hsotg->dev,
+		dev_dbg(hsotg->dev,
 			 "%s: FIFO %d bytes on ep%d but no req (DXEPCTl=0x%08x)\n",
 			 __func__, size, ep_idx, epctl);
 
@@ -1506,8 +1628,7 @@ static void s3c_hsotg_handle_rx(struct dwc2_hsotg *hsotg)
 	size = grxstsr & GRXSTS_BYTECNT_MASK;
 	size >>= GRXSTS_BYTECNT_SHIFT;
 
-	if (1)
-		dev_dbg(hsotg->dev, "%s: GRXSTSP=0x%08x (%d@%d)\n",
+	dev_dbg(hsotg->dev, "%s: GRXSTSP=0x%08x (%d@%d)\n",
 			__func__, grxstsr, size, epnum);
 
 	switch ((status & GRXSTS_PKTSTS_MASK) >> GRXSTS_PKTSTS_SHIFT) {
@@ -1725,6 +1846,16 @@ static void s3c_hsotg_complete_in(struct dwc2_hsotg *hsotg,
 	if (hs_ep->index == 0 && hsotg->ep0_state == DWC2_EP0_STATUS_IN) {
 		dev_dbg(hsotg->dev, "zlp packet sent\n");
 		s3c_hsotg_complete_request(hsotg, hs_ep, hs_req, 0);
+		if (hsotg->test_mode) {
+			int ret;
+			ret = s3c_hsotg_set_test_mode(hsotg, hsotg->test_mode);
+			if (ret < 0) {
+				dev_dbg(hsotg->dev, "Invalide Test #%d\n",
+						hsotg->test_mode);
+				s3c_hsotg_stall_ep0(hsotg);
+				return;
+			}
+		}
 		s3c_hsotg_enqueue_setup(hsotg);
 		return;
 	}
@@ -1996,30 +2127,23 @@ static void s3c_hsotg_irq_enumdone(struct dwc2_hsotg *hsotg)
  * @hsotg: The device state.
  * @ep: The endpoint the requests may be on.
  * @result: The result code to use.
- * @force: Force removal of any current requests
  *
  * Go through the requests on the given endpoint and mark them
  * completed with the given result code.
  */
 static void kill_all_requests(struct dwc2_hsotg *hsotg,
 			      struct s3c_hsotg_ep *ep,
-			      int result, bool force)
+			      int result)
 {
 	struct s3c_hsotg_req *req, *treq;
 	unsigned size;
 
-	list_for_each_entry_safe(req, treq, &ep->queue, queue) {
-		/*
-		 * currently, we can't do much about an already
-		 * running request on an in endpoint
-		 */
+	ep->req = NULL;
 
-		if (ep->req == req && ep->dir_in && !force)
-			continue;
-
+	list_for_each_entry_safe(req, treq, &ep->queue, queue)
 		s3c_hsotg_complete_request(hsotg, ep, req,
 					   result);
-	}
+
 	if (!hsotg->dedicated_fifos)
 		return;
 	size = (readl(hsotg->regs + DTXFSTS(ep->index)) & 0xffff) * 4;
@@ -2043,14 +2167,15 @@ void s3c_hsotg_disconnect(struct dwc2_hsotg *hsotg)
 		return;
 
 	hsotg->connected = 0;
+	hsotg->test_mode = 0;
 
 	for (ep = 0; ep < hsotg->num_of_eps; ep++) {
 		if (hsotg->eps_in[ep])
 			kill_all_requests(hsotg, hsotg->eps_in[ep],
-						-ESHUTDOWN, true);
+								-ESHUTDOWN);
 		if (hsotg->eps_out[ep])
 			kill_all_requests(hsotg, hsotg->eps_out[ep],
-						-ESHUTDOWN, true);
+								-ESHUTDOWN);
 	}
 
 	call_gadget(hsotg, disconnect);
@@ -2146,9 +2271,13 @@ static int s3c_hsotg_corereset(struct dwc2_hsotg *hsotg)
  *
  * Issue a soft reset to the core, and await the core finishing it.
  */
-void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg)
+void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg,
+						bool is_usb_reset)
 {
-	s3c_hsotg_corereset(hsotg);
+	u32 val;
+
+	if (!is_usb_reset)
+		s3c_hsotg_corereset(hsotg);
 
 	/*
 	 * we must now enable ep0 ready for host detection and then
@@ -2156,14 +2285,16 @@ void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg)
 	 */
 
 	/* set the PLL on, remove the HNP/SRP and set the PHY */
+	val = (hsotg->phyif == GUSBCFG_PHYIF8) ? 9 : 5;
 	writel(hsotg->phyif | GUSBCFG_TOUTCAL(7) |
-	       (0x5 << 10), hsotg->regs + GUSBCFG);
+	       (val << GUSBCFG_USBTRDTIM_SHIFT), hsotg->regs + GUSBCFG);
 
 	s3c_hsotg_init_fifo(hsotg);
 
-	__orr32(hsotg->regs + DCTL, DCTL_SFTDISCON);
+	if (!is_usb_reset)
+		__orr32(hsotg->regs + DCTL, DCTL_SFTDISCON);
 
-	writel(1 << 18 | DCFG_DEVSPD_HS,  hsotg->regs + DCFG);
+	writel(DCFG_EPMISCNT(1) | DCFG_DEVSPD_HS,  hsotg->regs + DCFG);
 
 	/* Clear any pending OTG interrupts */
 	writel(0xffffffff, hsotg->regs + GOTGINT);
@@ -2232,9 +2363,11 @@ void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg)
 	s3c_hsotg_ctrl_epint(hsotg, 0, 0, 1);
 	s3c_hsotg_ctrl_epint(hsotg, 0, 1, 1);
 
-	__orr32(hsotg->regs + DCTL, DCTL_PWRONPRGDONE);
-	udelay(10);  /* see openiboot */
-	__bic32(hsotg->regs + DCTL, DCTL_PWRONPRGDONE);
+	if (!is_usb_reset) {
+		__orr32(hsotg->regs + DCTL, DCTL_PWRONPRGDONE);
+		udelay(10);  /* see openiboot */
+		__bic32(hsotg->regs + DCTL, DCTL_PWRONPRGDONE);
+	}
 
 	dev_dbg(hsotg->dev, "DCTL=0x%08x\n", readl(hsotg->regs + DCTL));
 
@@ -2263,8 +2396,10 @@ void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg)
 		readl(hsotg->regs + DOEPCTL0));
 
 	/* clear global NAKs */
-	writel(DCTL_CGOUTNAK | DCTL_CGNPINNAK | DCTL_SFTDISCON,
-	       hsotg->regs + DCTL);
+	val = DCTL_CGOUTNAK | DCTL_CGNPINNAK;
+	if (!is_usb_reset)
+		val |= DCTL_SFTDISCON;
+	__orr32(hsotg->regs + DCTL, val);
 
 	/* must be at-least 3ms to allow bus to see disconnect */
 	mdelay(3);
@@ -2355,10 +2490,9 @@ irq_retry:
 				       msecs_to_jiffies(200))) {
 
 				kill_all_requests(hsotg, hsotg->eps_out[0],
-							  -ECONNRESET, true);
+							  -ECONNRESET);
 
-				s3c_hsotg_core_init_disconnected(hsotg);
-				s3c_hsotg_core_connect(hsotg);
+				s3c_hsotg_core_init_disconnected(hsotg, true);
 			}
 		}
 	}
@@ -2643,7 +2777,7 @@ static int s3c_hsotg_ep_disable(struct usb_ep *ep)
 	s3c_hsotg_ctrl_epint(hsotg, hs_ep->index, hs_ep->dir_in, 0);
 
 	/* terminate all requests with shutdown */
-	kill_all_requests(hsotg, hs_ep, -ESHUTDOWN, true);
+	kill_all_requests(hsotg, hs_ep, -ESHUTDOWN);
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 	return 0;
@@ -2836,6 +2970,7 @@ static void s3c_hsotg_phy_disable(struct dwc2_hsotg *hsotg)
  */
 static void s3c_hsotg_init(struct dwc2_hsotg *hsotg)
 {
+	u32 trdtim;
 	/* unmask subset of endpoint interrupts */
 
 	writel(DIEPMSK_TIMEOUTMSK | DIEPMSK_AHBERRMSK |
@@ -2851,12 +2986,6 @@ static void s3c_hsotg_init(struct dwc2_hsotg *hsotg)
 	/* Be in disconnected state until gadget is registered */
 	__orr32(hsotg->regs + DCTL, DCTL_SFTDISCON);
 
-	if (0) {
-		/* post global nak until we're ready */
-		writel(DCTL_SGNPINNAK | DCTL_SGOUTNAK,
-		       hsotg->regs + DCTL);
-	}
-
 	/* setup fifos */
 
 	dev_dbg(hsotg->dev, "GRXFSIZ=0x%08x, GNPTXFSIZ=0x%08x\n",
@@ -2866,8 +2995,10 @@ static void s3c_hsotg_init(struct dwc2_hsotg *hsotg)
 	s3c_hsotg_init_fifo(hsotg);
 
 	/* set the PLL on, remove the HNP/SRP and set the PHY */
-	writel(GUSBCFG_PHYIF16 | GUSBCFG_TOUTCAL(7) | (0x5 << 10),
-	       hsotg->regs + GUSBCFG);
+	trdtim = (hsotg->phyif == GUSBCFG_PHYIF8) ? 9 : 5;
+	writel(hsotg->phyif | GUSBCFG_TOUTCAL(7) |
+		(trdtim << GUSBCFG_USBTRDTIM_SHIFT),
+		hsotg->regs + GUSBCFG);
 
 	if (using_dma(hsotg))
 		__orr32(hsotg->regs + GAHBCFG, GAHBCFG_DMA_EN);
@@ -2927,7 +3058,7 @@ static int s3c_hsotg_udc_start(struct usb_gadget *gadget,
 
 	spin_lock_irqsave(&hsotg->lock, flags);
 	s3c_hsotg_init(hsotg);
-	s3c_hsotg_core_init_disconnected(hsotg);
+	s3c_hsotg_core_init_disconnected(hsotg, false);
 	hsotg->enabled = 0;
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
@@ -3019,6 +3150,7 @@ static int s3c_hsotg_pullup(struct usb_gadget *gadget, int is_on)
 	if (is_on) {
 		clk_enable(hsotg->clk);
 		hsotg->enabled = 1;
+		s3c_hsotg_core_init_disconnected(hsotg, false);
 		s3c_hsotg_core_connect(hsotg);
 	} else {
 		s3c_hsotg_core_disconnect(hsotg);
@@ -3044,8 +3176,8 @@ static int s3c_hsotg_vbus_session(struct usb_gadget *gadget, int is_active)
 
 	if (is_active) {
 		/* Kill any ep0 requests as controller will be reinitialized */
-		kill_all_requests(hsotg, hsotg->eps_out[0], -ECONNRESET, true);
-		s3c_hsotg_core_init_disconnected(hsotg);
+		kill_all_requests(hsotg, hsotg->eps_out[0], -ECONNRESET);
+		s3c_hsotg_core_init_disconnected(hsotg, false);
 		if (hsotg->enabled)
 			s3c_hsotg_core_connect(hsotg);
 	} else {
@@ -3152,7 +3284,7 @@ static int s3c_hsotg_hw_cfg(struct dwc2_hsotg *hsotg)
 	/* check hardware configuration */
 
 	cfg = readl(hsotg->regs + GHWCFG2);
-	hsotg->num_of_eps = (cfg >> 10) & 0xF;
+	hsotg->num_of_eps = (cfg >> GHWCFG2_NUM_DEV_EP_SHIFT) & 0xF;
 	/* Add ep0 */
 	hsotg->num_of_eps++;
 
@@ -3183,10 +3315,10 @@ static int s3c_hsotg_hw_cfg(struct dwc2_hsotg *hsotg)
 	}
 
 	cfg = readl(hsotg->regs + GHWCFG3);
-	hsotg->fifo_mem = (cfg >> 16);
+	hsotg->fifo_mem = (cfg >> GHWCFG3_DFIFO_DEPTH_SHIFT);
 
 	cfg = readl(hsotg->regs + GHWCFG4);
-	hsotg->dedicated_fifos = (cfg >> 25) & 1;
+	hsotg->dedicated_fifos = (cfg >> GHWCFG4_DED_FIFO_SHIFT) & 1;
 
 	dev_info(hsotg->dev, "EPs: %d, %s fifos, %d entries in SPRAM\n",
 		 hsotg->num_of_eps,
@@ -3211,8 +3343,8 @@ static void s3c_hsotg_dump(struct dwc2_hsotg *hsotg)
 		 readl(regs + DCFG), readl(regs + DCTL),
 		 readl(regs + DIEPMSK));
 
-	dev_info(dev, "GAHBCFG=0x%08x, 0x44=0x%08x\n",
-		 readl(regs + GAHBCFG), readl(regs + 0x44));
+	dev_info(dev, "GAHBCFG=0x%08x, GHWCFG1=0x%08x\n",
+		 readl(regs + GAHBCFG), readl(regs + GHWCFG1));
 
 	dev_info(dev, "GRXFSIZ=0x%08x, GNPTXFSIZ=0x%08x\n",
 		 readl(regs + GRXFSIZ), readl(regs + GNPTXFSIZ));
@@ -3246,6 +3378,103 @@ static void s3c_hsotg_dump(struct dwc2_hsotg *hsotg)
 		 readl(regs + DVBUSDIS), readl(regs + DVBUSPULSE));
 #endif
 }
+
+/**
+ * testmode_write - debugfs: change usb test mode
+ * @seq: The seq file to write to.
+ * @v: Unused parameter.
+ *
+ * This debugfs entry modify the current usb test mode.
+ */
+static ssize_t testmode_write(struct file *file, const char __user *ubuf, size_t
+		count, loff_t *ppos)
+{
+	struct seq_file		*s = file->private_data;
+	struct dwc2_hsotg	*hsotg = s->private;
+	unsigned long		flags;
+	u32			testmode = 0;
+	char			buf[32];
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
+		return -EFAULT;
+
+	if (!strncmp(buf, "test_j", 6))
+		testmode = TEST_J;
+	else if (!strncmp(buf, "test_k", 6))
+		testmode = TEST_K;
+	else if (!strncmp(buf, "test_se0_nak", 12))
+		testmode = TEST_SE0_NAK;
+	else if (!strncmp(buf, "test_packet", 11))
+		testmode = TEST_PACKET;
+	else if (!strncmp(buf, "test_force_enable", 17))
+		testmode = TEST_FORCE_EN;
+	else
+		testmode = 0;
+
+	spin_lock_irqsave(&hsotg->lock, flags);
+	s3c_hsotg_set_test_mode(hsotg, testmode);
+	spin_unlock_irqrestore(&hsotg->lock, flags);
+	return count;
+}
+
+/**
+ * testmode_show - debugfs: show usb test mode state
+ * @seq: The seq file to write to.
+ * @v: Unused parameter.
+ *
+ * This debugfs entry shows which usb test mode is currently enabled.
+ */
+static int testmode_show(struct seq_file *s, void *unused)
+{
+	struct dwc2_hsotg *hsotg = s->private;
+	unsigned long flags;
+	int dctl;
+
+	spin_lock_irqsave(&hsotg->lock, flags);
+	dctl = readl(hsotg->regs + DCTL);
+	dctl &= DCTL_TSTCTL_MASK;
+	dctl >>= DCTL_TSTCTL_SHIFT;
+	spin_unlock_irqrestore(&hsotg->lock, flags);
+
+	switch (dctl) {
+	case 0:
+		seq_puts(s, "no test\n");
+		break;
+	case TEST_J:
+		seq_puts(s, "test_j\n");
+		break;
+	case TEST_K:
+		seq_puts(s, "test_k\n");
+		break;
+	case TEST_SE0_NAK:
+		seq_puts(s, "test_se0_nak\n");
+		break;
+	case TEST_PACKET:
+		seq_puts(s, "test_packet\n");
+		break;
+	case TEST_FORCE_EN:
+		seq_puts(s, "test_force_enable\n");
+		break;
+	default:
+		seq_printf(s, "UNKNOWN %d\n", dctl);
+	}
+
+	return 0;
+}
+
+static int testmode_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, testmode_show, inode->i_private);
+}
+
+static const struct file_operations testmode_fops = {
+	.owner		= THIS_MODULE,
+	.open		= testmode_open,
+	.write		= testmode_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
 
 /**
  * state_show - debugfs: show overall driver and device state.
@@ -3475,13 +3704,21 @@ static void s3c_hsotg_create_debug(struct dwc2_hsotg *hsotg)
 
 	/* create general state file */
 
-	hsotg->debug_file = debugfs_create_file("state", 0444, root,
+	hsotg->debug_file = debugfs_create_file("state", S_IRUGO, root,
 						hsotg, &state_fops);
 
 	if (IS_ERR(hsotg->debug_file))
 		dev_err(hsotg->dev, "%s: failed to create state\n", __func__);
 
-	hsotg->debug_fifo = debugfs_create_file("fifo", 0444, root,
+	hsotg->debug_testmode = debugfs_create_file("testmode",
+					S_IRUGO | S_IWUSR, root,
+					hsotg, &testmode_fops);
+
+	if (IS_ERR(hsotg->debug_testmode))
+		dev_err(hsotg->dev, "%s: failed to create testmode\n",
+				__func__);
+
+	hsotg->debug_fifo = debugfs_create_file("fifo", S_IRUGO, root,
 						hsotg, &fifo_fops);
 
 	if (IS_ERR(hsotg->debug_fifo))
@@ -3493,7 +3730,7 @@ static void s3c_hsotg_create_debug(struct dwc2_hsotg *hsotg)
 
 		ep = hsotg->eps_out[epidx];
 		if (ep) {
-			ep->debugfs = debugfs_create_file(ep->name, 0444,
+			ep->debugfs = debugfs_create_file(ep->name, S_IRUGO,
 							  root, ep, &ep_fops);
 
 			if (IS_ERR(ep->debugfs))
@@ -3507,7 +3744,7 @@ static void s3c_hsotg_create_debug(struct dwc2_hsotg *hsotg)
 
 		ep = hsotg->eps_in[epidx];
 		if (ep) {
-			ep->debugfs = debugfs_create_file(ep->name, 0444,
+			ep->debugfs = debugfs_create_file(ep->name, S_IRUGO,
 							  root, ep, &ep_fops);
 
 			if (IS_ERR(ep->debugfs))
@@ -3535,6 +3772,7 @@ static void s3c_hsotg_delete_debug(struct dwc2_hsotg *hsotg)
 	}
 
 	debugfs_remove(hsotg->debug_file);
+	debugfs_remove(hsotg->debug_testmode);
 	debugfs_remove(hsotg->debug_fifo);
 	debugfs_remove(hsotg->debug_root);
 }
@@ -3898,7 +4136,7 @@ int s3c_hsotg_resume(struct dwc2_hsotg *hsotg)
 		s3c_hsotg_phy_enable(hsotg);
 
 		spin_lock_irqsave(&hsotg->lock, flags);
-		s3c_hsotg_core_init_disconnected(hsotg);
+		s3c_hsotg_core_init_disconnected(hsotg, false);
 		if (hsotg->enabled)
 			s3c_hsotg_core_connect(hsotg);
 		spin_unlock_irqrestore(&hsotg->lock, flags);

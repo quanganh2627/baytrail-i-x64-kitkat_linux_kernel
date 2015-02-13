@@ -20,5 +20,7 @@ ifeq ($(CONFIG_X86_INTEL_XGOLD_EXPERIMENTAL),y)
 obj-$(CONFIG_SUSPEND) += pm-suspend.o
 endif
 
+obj-$(CONFIG_INTEL_FTRACE_CONSOLE) += ftrace-console.o
+
 obj-y += pm/
 obj-$(CONFIG_X86_INTEL_XGOLD) += xgold_pm_debug.o

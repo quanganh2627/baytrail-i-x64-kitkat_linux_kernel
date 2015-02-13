@@ -159,6 +159,9 @@ struct mvpipe_instance {
 
     enum debug_log_type dump_type;
     uint32_t dump_maxlen;
+    uint32_t is_dbg;
+
+	int ready_to_release;
 };
 
 #define is_ring0_writer(dev) (dev->writer_id == 0)
@@ -262,10 +265,16 @@ int mvpipe_dev_open(struct inode *inode, struct file *filp)
 	}
 
 	if (dev->open_count) {
-		mvpipe_error("Multiple open, open_count = %d!\n",
-			     dev->open_count);
 		up(&dev->open_sem);
-		return -ERESTARTSYS;
+        if(dev->is_dbg) {
+            dev->open_count++;
+            return 0;
+        }
+        else{
+            mvpipe_error("Multiple open, open_count = %d!\n",
+                     dev->open_count);
+            return -ERESTARTSYS;
+        }
 	}
 
 	dev->open_count++;
@@ -282,6 +291,8 @@ int mvpipe_dev_open(struct inode *inode, struct file *filp)
 	mvpipe_info("Open success!\n");
 	set_pipe_status(dev, MVPIPE_OPEN);
 
+	dev->ready_to_release = 0;
+
 	up(&dev->open_sem);
 
 	return 0;
@@ -294,6 +305,14 @@ int mvpipe_dev_release(struct inode *inode, struct file *filp)
 
 	if (down_interruptible(&dev->open_sem))
 		return -ERESTARTSYS;
+
+    if(dev->is_dbg){
+        if (dev->open_count > 1){
+            dev->open_count--;
+            up(&dev->open_sem);
+            return 0;
+        }
+    }
 
 	if (get_pipe_status(dev) == MVPIPE_CLOSE) {
 		up(&dev->open_sem);
@@ -313,8 +332,7 @@ int mvpipe_dev_release(struct inode *inode, struct file *filp)
 
 	/* wait until peer status is not OPEN */
 	wait_event_interruptible(dev->close_wait,
-				 get_peer_status(dev) != MVPIPE_OPEN ||
-				 dev->mbox_status != MBOX_CONNECTED);
+				dev->ready_to_release);
 
 	mvpipe_info("Release mvpipe successful!\n");
 	up(&dev->open_sem);
@@ -582,6 +600,7 @@ static void mvpipe_on_disconnect(uint32_t token, void *cookie)
 	mvpipe_close(dev);
 
 	/* unblock close wait */
+	dev->ready_to_release = 1;
 	wake_up_interruptible(&dev->close_wait);
 }
 
@@ -618,6 +637,7 @@ static void mvpipe_on_event(uint32_t token, uint32_t event_id, void *cookie)
 		case MVPIPE_OPENING:
 			if (get_pipe_status(dev) == MVPIPE_CLOSING) {
 				set_pipe_status(dev, MVPIPE_CLOSE);
+				dev->ready_to_release = 1;
 				wake_up_interruptible(&dev->close_wait);
 			}
 			/* send ACK */
@@ -626,6 +646,7 @@ static void mvpipe_on_event(uint32_t token, uint32_t event_id, void *cookie)
 		case MVPIPE_CLOSE:
 			if (get_pipe_status(dev) == MVPIPE_CLOSING) {
 				set_pipe_status(dev, MVPIPE_CLOSE);
+				dev->ready_to_release = 1;
 				wake_up_interruptible(&dev->close_wait);
 			}
 			break;
@@ -681,6 +702,7 @@ void on_mvpipe_instance(char *instance_name, uint32_t instance_index,
 	mvpipe->mbox_status = MBOX_DISCONNECTED;
 	mvpipe->writer_id = 0;
 	mvpipe->open_count = 0;
+	mvpipe->ready_to_release = 0;
 
 	if (alloc_chrdev_region(&mvpipe_dev, 0, 1, mvpipe->dev_name) < 0)
 		return;
@@ -766,6 +788,14 @@ void on_mvpipe_instance(char *instance_name, uint32_t instance_index,
 
         mvpipe->dump_type = 0;
         mvpipe->dump_maxlen = 0;
+        
+#ifdef CONFIG_DEBUG_AT_PORT
+        if(strstr(cmdline,"dbg"))
+            mvpipe->is_dbg = 1;
+        else
+            mvpipe->is_dbg = 0;
+#endif
+        
 	} else
 		panic("failed to init instance\n");
 }

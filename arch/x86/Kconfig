@@ -718,6 +718,10 @@ config SCHED_OMIT_FRAME_POINTER
 	  at the expense of slightly more scheduling overhead.
 
 	  If in doubt, say "Y".
+config INTEL_FTRACE_CONSOLE
+	bool "ftrace buffer console"
+	default n
+	depends on DEBUG_FS
 
 menuconfig HYPERVISOR_GUEST
 	bool "Linux guest support"

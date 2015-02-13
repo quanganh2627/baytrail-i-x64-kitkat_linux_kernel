@@ -158,10 +158,12 @@ struct s3c_hsotg_ep {
  * struct s3c_hsotg_req - data transfer request
  * @req: The USB gadget request
  * @queue: The list of requests for the endpoint this is queued for.
+ * @saved_req_buf: variable to save req.buf when bounce buffers are used.
  */
 struct s3c_hsotg_req {
 	struct usb_request      req;
 	struct list_head        queue;
+	void *saved_req_buf;
 };
 
 #if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
@@ -567,12 +569,14 @@ struct dwc2_hw_params {
  * @num_of_eps:         Number of available EPs (excluding EP0)
  * @debug_root:         Root directrory for debugfs.
  * @debug_file:         Main status file for debugfs.
+ * @debug_testmode:     Testmode status file for debugfs.
  * @debug_fifo:         FIFO status file for debugfs.
  * @ep0_reply:          Request used for ep0 reply.
  * @ep0_buff:           Buffer for EP0 reply data, if needed.
  * @ctrl_buff:          Buffer for EP0 control requests.
  * @ctrl_req:           Request for EP0 control packets.
  * @ep0_state:          EP0 control transfers state
+ * @test_mode:          USB test mode requested by the host
  * @last_rst:           Time of last reset
  * @eps:                The endpoints being supplied to the gadget framework
  * @g_using_dma:          Indicate if dma usage is enabled
@@ -610,6 +614,7 @@ struct dwc2_hsotg {
 
 	struct dentry *debug_root;
 	struct dentry *debug_file;
+	struct dentry *debug_testmode;
 	struct dentry *debug_fifo;
 
 	/* DWC OTG HW Release versions */
@@ -706,6 +711,7 @@ struct dwc2_hsotg {
 	void *ep0_buff;
 	void *ctrl_buff;
 	enum dwc2_ep0_state ep0_state;
+	u8 test_mode;
 
 	struct usb_gadget gadget;
 	unsigned int enabled:1;
@@ -993,7 +999,8 @@ extern int s3c_hsotg_remove(struct dwc2_hsotg *hsotg);
 extern int s3c_hsotg_suspend(struct dwc2_hsotg *dwc2);
 extern int s3c_hsotg_resume(struct dwc2_hsotg *dwc2);
 extern int dwc2_gadget_init(struct dwc2_hsotg *hsotg, int irq);
-extern void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2);
+extern void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2,
+		bool reset);
 extern void s3c_hsotg_core_connect(struct dwc2_hsotg *hsotg);
 extern void s3c_hsotg_disconnect(struct dwc2_hsotg *dwc2);
 #else
@@ -1005,7 +1012,8 @@ static inline int s3c_hsotg_resume(struct dwc2_hsotg *dwc2)
 { return 0; }
 static inline int dwc2_gadget_init(struct dwc2_hsotg *hsotg, int irq)
 { return 0; }
-static inline void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2) {}
+static inline void s3c_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2,
+		bool reset) {}
 static inline void s3c_hsotg_core_connect(struct dwc2_hsotg *hsotg) {}
 static inline void s3c_hsotg_disconnect(struct dwc2_hsotg *dwc2) {}
 #endif

@@ -119,6 +119,9 @@ struct ftrace_ops {
 
 extern int function_trace_stop;
 
+#ifdef CONFIG_INTEL_FTRACE_CONSOLE
+extern ssize_t ftrace_reserved_buffer_write(const char *buf, ssize_t len);
+#endif
 /*
  * Type of the current tracing.
  */

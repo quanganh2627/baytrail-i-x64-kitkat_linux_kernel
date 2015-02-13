@@ -1116,6 +1116,10 @@ void __init setup_arch(char **cmdline_p)
 			(max_pfn_mapped<<PAGE_SHIFT) - 1);
 #endif
 
+#ifdef CONFIG_INTEL_FTRACE_CONSOLE
+	ram_consle_reserve_memory();
+#endif
+
 	reserve_real_mode();
 
 	trim_platform_memory_ranges();

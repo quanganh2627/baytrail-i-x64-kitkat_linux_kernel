@@ -29,6 +29,7 @@
 #include <linux/idi/idi_interface.h>
 #include <linux/idi/idi_device_pm.h>
 #include <linux/power/battery_id.h>
+#include <linux/interrupt.h>
 
 /* Masks and offsets for BAT_UV_DET register bits */
 #define BAT_UV_DET_OFFSET	0xC20
@@ -38,11 +39,15 @@
 /* EnableSIMShutdown */
 #define BAT_UV_DET_ESSD_O	(24)
 
+/* BUV interrupt kind*/
+#define BAT_UV_DET_BUVLS	(6)
+#define BAT_UV_DET_EDGE		(0x1)
+
 /* BUV Detection Level */
 #define BAT_UV_DET_BULVL_O	(1)
 #define BAT_UV_DET_BULVL_M	(0xf)
 #define BUV_DET_LEVEL_3050MV	(0xb)
-#define BUV_DET_LEVEL_2900MV    (0x8)
+#define BUV_DET_LEVEL_3000MV	(0xa)
 
 /* Buv Enable */
 #define BAT_UV_DET_EBUV_O	(0)
@@ -76,6 +81,9 @@ struct brown_out_drv_data {
 	struct device_state_pm_state *pm_state_dis;
 
 	struct resource *pmu_res;
+	int buv_irq;
+	spinlock_t lock;
+	struct timer_list timer;
 };
 
 static struct brown_out_drv_data bnt_drv_data;
@@ -116,6 +124,33 @@ static void brown_out_pmu_iowrite(struct brown_out_drv_data *hal_data,
 		BUG();
 }
 
+static irqreturn_t bat_under_voltage_cb(int irq, void *dev)
+{
+	/*Disable the buv interrupt*/
+	u32 bat_uv_det;
+	bat_uv_det = brown_out_pmu_ioread(&bnt_drv_data, BAT_UV_DET_OFFSET);
+	bat_uv_det &= ~(1 << BAT_UV_DET_EBUV_O);
+	brown_out_pmu_iowrite(&bnt_drv_data, BAT_UV_DET_OFFSET, bat_uv_det);
+
+	/* Entering critical section */
+	spin_lock(&bnt_drv_data.lock);
+	pr_err("battery under volatage detected !\n");
+	mod_timer(&bnt_drv_data.timer,
+			jiffies + msecs_to_jiffies(1000));
+
+	/* Done updating critical section. */
+	spin_unlock(&bnt_drv_data.lock);
+	return IRQ_HANDLED;
+}
+
+static void bnt_drv_timer_cb(unsigned long param)
+{
+	/*Eanble buv interrupt*/
+	u32 bat_uv_det;
+	bat_uv_det = brown_out_pmu_ioread(&bnt_drv_data, BAT_UV_DET_OFFSET);
+	bat_uv_det |= (1 << BAT_UV_DET_EBUV_O);
+	brown_out_pmu_iowrite(&bnt_drv_data, BAT_UV_DET_OFFSET, bat_uv_det);
+}
 
 
 /**
@@ -127,6 +162,7 @@ static int __init brown_out_drv_probe(struct idi_peripheral_device *ididev,
 	struct resource *pmu_res;
 	u32 bat_uv_det, bat_supervision, bat_supervision_wr;
 	int ret;
+	struct resource *res;
 
 	/* Store platform device in static instance. */
 	bnt_drv_data.p_idi_device = ididev;
@@ -183,11 +219,12 @@ static int __init brown_out_drv_probe(struct idi_peripheral_device *ididev,
 	EBUV (BUVEnable) =enable */
 	bat_uv_det = brown_out_pmu_ioread(&bnt_drv_data, BAT_UV_DET_OFFSET);
 
-	bat_uv_det |= (1 << BAT_UV_DET_EPSD_O) |
-		(1 << BAT_UV_DET_ESSD_O) | (1 << BAT_UV_DET_EBUV_O);
+	bat_uv_det |=  (1 << BAT_UV_DET_EBUV_O);
+	bat_uv_det &= ~(1 << BAT_UV_DET_EPSD_O);
+	bat_uv_det &= ~(1 << BAT_UV_DET_ESSD_O);
 
 	bat_uv_det &= ~(BAT_UV_DET_BULVL_M << BAT_UV_DET_BULVL_O);
-	bat_uv_det |= (BUV_DET_LEVEL_2900MV << BAT_UV_DET_BULVL_O);
+	bat_uv_det |= (BUV_DET_LEVEL_3000MV << BAT_UV_DET_BULVL_O);
 
 	brown_out_pmu_iowrite(&bnt_drv_data, BAT_UV_DET_OFFSET, bat_uv_det);
 
@@ -225,6 +262,23 @@ static int __init brown_out_drv_probe(struct idi_peripheral_device *ididev,
 		pr_err("%s: setting PM state '%s' failed!\n", __FILE__,
 			bnt_drv_data.pm_state_dis->name);
 	}
+
+	/*init the spinlock and timer */
+	spin_lock_init(&bnt_drv_data.lock);
+	setup_timer(&bnt_drv_data.timer, bnt_drv_timer_cb, 0);
+
+	/*Configure the buv irq*/
+	res = idi_get_resource_byname(&ididev->resources,
+					IORESOURCE_IRQ, "buv");
+	bnt_drv_data.buv_irq = res->start;
+	if (!bnt_drv_data.buv_irq) {
+		pr_err("could not get buv interrupt\n");
+		ret = -EINVAL;
+		goto set_pm_state_fail;
+	}
+	BUG_ON(0 != request_irq(bnt_drv_data.buv_irq,
+		bat_under_voltage_cb,
+		0, "buv", NULL));
 
 	return 0;
 

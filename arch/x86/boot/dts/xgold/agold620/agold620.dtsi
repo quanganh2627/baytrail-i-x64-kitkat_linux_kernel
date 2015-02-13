@@ -635,6 +635,11 @@ agold {
 			#address-cells = < 0 >;
 			reg = < 0xE6500000 0x2000 >;
 			reg-names = "pmu";
+			interrupts = < 0 >;
+			#interrupt-cells = <1>;
+			interrupt-parent = <&brown_out>;
+			interrupt-map = < 0 &ag620_pmu ABB_PMU_BUV IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "buv";
 			pm,class-name = "generic_class";
 			pm,user-name = "bnt";
 			pm,state-D0 = "enable";

@@ -13,6 +13,10 @@
 #  along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+ifneq ($(TARGET_BUILD_VARIANT),user)
+ccflags-y += -DCONFIG_DEBUG_AT_PORT
+endif
+
 obj-$(CONFIG_MOBILEVISOR_VDRIVER_PIPE)      += mvpipe.o
 obj-$(CONFIG_MOBILEVISOR_VDRIVER_NVM)       += vnvm-be.o
 obj-$(CONFIG_MOBILEVISOR_VDRIVER_POWER)     += vpower.o

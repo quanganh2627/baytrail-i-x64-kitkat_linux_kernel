@@ -102,6 +102,7 @@ static int fan54x_enable_charger(
 static int fan54x_enable_charging(
 			struct fan54x_charger *chrgr, bool enable);
 
+static void unfreezable_bh_schedule(struct unfreezable_bh_struct *bh);
 struct charger_debug_data chrgr_dbg = {
 	.printk_logs_en = 0,
 };
@@ -1154,6 +1155,17 @@ static void fan54x_set_boost(struct work_struct *work)
 	down(&chrgr->prop_lock);
 
 	if (on) {
+		/* Save HZ status */
+		ret = fan54x_attr_read(chrgr->client, HZ_MODE,
+					&chrgr->state.hz_status);
+		if (ret)
+			goto exit_boost;
+
+		/* Set hz status to 0 if it's enabled */
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE, 0);
+		if (ret)
+			goto exit_boost;
+
 		/* Enable boost regulator */
 		ret = fan54x_attr_write(chrgr->client, BOOST_EN, 1);
 		if (ret)
@@ -1204,6 +1216,13 @@ static void fan54x_set_boost(struct work_struct *work)
 		ret = fan54x_attr_write(chrgr->client, OTG_EN, 0);
 		if (ret)
 			pr_err("%s: fail to disable otg pin\n", __func__);
+
+		/* Restore HZ status */
+		ret = fan54x_attr_write(chrgr->client, HZ_MODE,
+					chrgr->state.hz_status);
+
+		if (ret)
+			pr_err("%s: fail to restore hz status\n", __func__);
 	}
 
 exit_boost:
@@ -1226,6 +1245,7 @@ static void fan54x_chgdet_worker(struct work_struct *work)
 	/* left for CHGINT to trigger other work */
 
 	up(&chrgr->prop_lock);
+	unfreezable_bh_schedule(&chrgr->chgint_bh);
 	return;
 }
 
@@ -1347,18 +1367,6 @@ static void fan54x_chgint_cb_work_func(struct work_struct *work)
 		 chrgr->state.health != POWER_SUPPLY_HEALTH_UNKNOWN)
 				power_supply_changed(chrgr->current_psy);
 
-
-	/* when vbus is disconnected all registers are reseted (known HW bug)
-	therefore need to reconfigure the chip */
-	if (chrgr->state.vbus == VBUS_OFF && vbus_state_prev == VBUS_ON) {
-		chrgr->state.cc = chrgr->default_cc;
-		chrgr->state.cv = chrgr->default_cv;
-		ret = fan54x_configure_chip(
-					chrgr, chrgr->state.charging_enabled);
-		if (ret != 0)
-			goto fail;
-	}
-
 	/* If vbus status changed, then notify USB OTG */
 	if (chrgr->state.vbus != vbus_state_prev) {
 
@@ -1383,7 +1391,7 @@ static int unfreezable_bh_create(struct unfreezable_bh_struct *bh,
 
 	/* Create private, single-threaded workqueue instead of using one of
 	the system predefined workqueues to reduce latency */
-	bh->wq = create_singlethread_workqueue(wq_name);
+	bh->wq = create_freezable_workqueue(wq_name);
 
 	if (NULL == bh->wq)
 		return -ENOMEM;
@@ -1463,7 +1471,7 @@ static irqreturn_t fan54x_charger_chgdet_cb(int irq, void *dev)
 {
 	struct fan54x_charger *chrgr = dev;
 
-	pr_debug("%s\n", __func__);
+	pr_info("%s\n", __func__);
 
 	schedule_delayed_work(&chrgr->chgdet_work, 0);
 
