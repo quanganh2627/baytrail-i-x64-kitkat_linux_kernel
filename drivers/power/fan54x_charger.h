@@ -276,7 +276,7 @@ struct fan54x_charger {
 #define MAX_NR_OF_I2C_RETRIES 1
 #define CHRGR_WORK_DELAY (10*HZ)
 #define BOOST_WORK_DELAY (10*HZ)
-#define EVT_WAKELOCK_TIMEOUT (10*HZ)
+#define EVT_WAKELOCK_TIMEOUT (2*HZ)
 #define EVENTS_LOG_FILENAME "events_log"
 #define DBG_REGS_FILENAME "charger_regs"
 #define DBG_STATE_FILENAME "charger_state"
