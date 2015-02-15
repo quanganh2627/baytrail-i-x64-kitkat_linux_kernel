@@ -5287,11 +5287,47 @@ err:
 	return ret;
 }
 
+static enum v4l2_colorfx cif_isp20_ie2v4l2_colorfx(
+	u32 cif_isp20_image_effect)
+{
+	enum v4l2_colorfx colorfx;
+	switch (cif_isp20_image_effect) {
+	case CIF_ISP20_IE_SEPIA:
+		colorfx = V4L2_COLORFX_SEPIA;
+		break;
+	case CIF_ISP20_IE_BW:
+		colorfx = V4L2_COLORFX_BW;
+		break;
+	case CIF_ISP20_IE_NEGATIVE:
+		colorfx = V4L2_COLORFX_NEGATIVE;
+		break;
+	case CIF_ISP20_IE_EMBOSS:
+		colorfx = V4L2_COLORFX_EMBOSS;
+		break;
+	case CIF_ISP20_IE_SKETCH:
+		colorfx = V4L2_COLORFX_SKETCH;
+		break;
+	case CIF_ISP20_IE_NONE:
+		colorfx = V4L2_COLORFX_NONE;
+		break;
+	default:
+		cif_isp20_pltfrm_pr_err(NULL,
+			"unknown/unsupported isp20_image_effect %d\n",
+			cif_isp20_image_effect);
+		BUG();
+		break;
+	}
+	return colorfx;
+}
+
+
 int cif_isp20_s_ctrl(
 	struct cif_isp20_device *dev,
 	const enum cif_isp20_cid id,
 	int val)
 {
+	enum v4l2_colorfx colorfx;
+
 	cif_isp20_pltfrm_pr_dbg(NULL,
 		"id %d, val %d\n",
 		id, val);
@@ -5308,7 +5344,8 @@ int cif_isp20_s_ctrl(
 		}
 		dev->config.isp_config.ie_config.effect = val;
 		dev->isp_dev.ie_en = true;
-		dev->isp_dev.ie_config.effect = val;
+		colorfx = cif_isp20_ie2v4l2_colorfx(val);
+		dev->isp_dev.ie_config.effect = colorfx;
 		dev->isp_dev.isp_param_ie_update_needed = true;
 		break;
 	case CIF_ISP20_CID_JPEG_QUALITY:
