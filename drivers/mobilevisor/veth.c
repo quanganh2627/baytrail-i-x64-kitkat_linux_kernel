@@ -29,16 +29,13 @@
 #include <sofia/mv_ipc.h>
 #include <sofia/mv_hypercalls.h>
 
-#define DEBUG_LEVEL 1
+#include <linux/debugfs.h>
+
+#define DEBUG_LEVEL 2
 #define DEBUG_LEVEL_ERROR 1
 #define DEBUG_LEVEL_INFO  2
 #define MODULE_NAME "mveth"
 
-#define mveth_info(fmt, arg...) \
-	do { \
-		if (DEBUG_LEVEL >= DEBUG_LEVEL_INFO) \
-			pr_info(MODULE_NAME"[I]: "fmt, ##arg); \
-	} while (0)
 
 #define mveth_error(fmt, arg...) \
 	do { \
@@ -106,6 +103,13 @@ enum mveth_ring_status {
 	RING_STOP = 1
 };
 
+enum debug_log_type {
+	NONE_MIN_TYPE = 0,
+	DUMP_TRACE_TYPE,
+	DUMP_FTRACE_TYPE,
+	NONE_MAX_TYPE
+};
+
 /*
  * The communication relies on a data ring with RING_SIZE slots. The ring
  * descriptor and the data slots are all allocated in the same shared memory
@@ -158,6 +162,9 @@ struct mveth_instance {
 	/* Share mem struct */
 	struct mveth_event *p_event;
 	struct mveth_ring *ring[2];
+
+	enum debug_log_type dump_type;
+	uint32_t dump_maxlen;
 };
 
 #define RING_DESC_SIZE	    RING_ALIGN(sizeof(struct mveth_ring))
@@ -178,6 +185,66 @@ struct mveth_instance {
 #define get_peer_status(dev)    (dev->p_event->mveth_status[!dev->writer_id])
 
 #define is_ring0_writer(dev) (dev->writer_id == 0)
+
+static uint32_t debug_print_lev = 0;
+static uint32_t debug_print_type = 0;
+static struct dentry *mveth_debug_root;
+
+
+static int veth_pr_info(char *fname,int line,struct mveth_instance *dev,uint32_t type,const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+	int r;
+
+	va_start(args, fmt);
+
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	if(type == 1)
+	r = pr_info("[%s:%d][%s]%pV",fname,line,dev->name,&vaf);
+	else if(type == 2)
+	r = __trace_printk(_THIS_IP_,"[%s:%d][%s]%pV",fname,line,dev->name,&vaf);
+
+	va_end(args);
+
+	return r;
+}
+
+static void veth_dump_data(struct net_device *dev,size_t type, u8 is_out, const void *buf,size_t len,size_t maxlen)
+{
+	const u8 *ptr = buf;
+	int i, linelen, remaining = 0;
+	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
+	int rowsize = 16;
+	int groupsize = 1;
+	bool ascii = true;
+	int orig_len = len;
+
+	if(maxlen)
+	len = min(len,maxlen);
+
+	remaining = len;
+	for (i = 0; i < len; i += rowsize) {
+		linelen = min(remaining, rowsize);
+		remaining -= rowsize;
+
+		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
+				   linebuf, sizeof(linebuf), ascii);
+
+		if(type == 2)
+		trace_printk("[%s-%d-%s] %.4x: %s\n",dev->name,orig_len,is_out == 1 ? "-->" : "<--", i, linebuf);
+		else if(type == 1)
+		pr_info("[%s-%d-%s] %.4x: %s\n",dev->name,orig_len,is_out == 1 ? "-->" : "<--", i, linebuf);
+	}
+
+}
+
+#define mveth_info(fmt, arg...) \
+			do { \
+				if ((debug_print_lev >= DEBUG_LEVEL_INFO) && (debug_print_type > 0 && debug_print_type <= 2)) \
+					veth_pr_info(__func__,__LINE__,dev,debug_print_type,fmt, ##arg);	\
+			} while (0)
 
 #ifdef SAVE_ETH_HEADER
 unsigned int first_packet = 0;
@@ -269,6 +336,9 @@ static int mveth_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mveth_instance *mveth = netdev_priv(dev);
 	struct mveth_ring *wr_ring = mveth->ring[mveth->writer_id];
+
+	if ((mveth->dump_type > NONE_MIN_TYPE) && (mveth->dump_type < NONE_MAX_TYPE))
+	veth_dump_data(dev, mveth->dump_type,1, skb->data, skb->len, mveth->dump_maxlen);
 
 	/*
 	 * Peer OS Link is not ready, set link down
@@ -407,6 +477,9 @@ static irqreturn_t mveth_rx_hdl(struct mveth_instance *mveth)
 		 */
 		mveth->stats.rx_packets++;
 		mveth->stats.rx_bytes += skb->len;
+
+		if ((mveth->dump_type > NONE_MIN_TYPE) && (mveth->dump_type < NONE_MAX_TYPE))
+		veth_dump_data(netdev, mveth->dump_type,1, skb->data, skb->len, mveth->dump_maxlen);
 
 		netif_rx(skb);
 	}
@@ -659,6 +732,7 @@ void on_mveth_instance(char *instance_name, uint32_t instance_index,
 	uint32_t p_share_mem;
 	int res;
 	struct net_device *netdev;
+	char tmp_buf[64] = {0x00};
 
 	mveth_count = instance_count;
 
@@ -739,12 +813,26 @@ void on_mveth_instance(char *instance_name, uint32_t instance_index,
 		mveth_parse_mac_address(mveth, cmdline);
 		mveth->p_event->handshake = mv_gal_os_id();
 		mv_mbox_set_online(mveth->token);
+
+		snprintf(tmp_buf, sizeof(tmp_buf), "%s_dump", instance_name);
+		debugfs_create_u32(tmp_buf, 0644, mveth_debug_root, &mveth->dump_type);
+
+		snprintf(tmp_buf, sizeof(tmp_buf), "%s_dump_len", instance_name);
+		debugfs_create_u32(tmp_buf, 0644, mveth_debug_root, &mveth->dump_maxlen);
+
+		mveth->dump_type = 0;
+		mveth->dump_maxlen = 0;
+
 	} else
 		panic("failed to init instance\n");
 }
 
 static int __init mveth_module_init(void)
 {
+	mveth_debug_root = debugfs_create_dir("mveth",NULL);
+	debugfs_create_u32("debug_print_lev", 0644, mveth_debug_root, &debug_print_lev);
+	debugfs_create_u32("debug_print_type", 0644, mveth_debug_root, &debug_print_type);
+
 	pr_info("mveth: virtual Ethernet device driver 1.0.\n");
 	mv_ipc_mbox_for_all_instances("mveth", on_mveth_instance);
 	pr_info("virtual Ethernet device driver initialized\n");
@@ -768,6 +856,9 @@ static void mveth_module_cleanup(void)
 static void __exit mveth_module_exit(void)
 {
 	mveth_module_cleanup();
+
+	debugfs_remove(mveth_debug_root);
+	mveth_debug_root = NULL;
 }
 
 #ifdef MODULE
