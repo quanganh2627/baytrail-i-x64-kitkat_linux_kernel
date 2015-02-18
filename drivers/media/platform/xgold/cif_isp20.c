@@ -3780,21 +3780,6 @@ static int cif_isp20_mi_frame_end_async(
 				stream->curr_buf->ts = dev->curr_frame_time;
 				/*Inform the wait queue */
 				stream->curr_buf->state = VIDEOBUF_DONE;
-				if (!dev->config.jpeg_config.enable &&
-					(stream_id == CIF_ISP20_STREAM_MP)) {
-					stream->curr_buf->size =
-						(dev->config.mi_config.
-							mp.output.width << 16) |
-						dev->config.mi_config.
-							mp.output.height;
-				} else if (!dev->config.jpeg_config.enable &&
-					(stream_id == CIF_ISP20_STREAM_SP)) {
-					stream->curr_buf->size =
-						(dev->config.mi_config.
-							sp.output.width << 16) |
-						dev->config.mi_config.
-							sp.output.height;
-				}
 				wake_up(&stream->curr_buf->done);
 				stream->curr_buf = NULL;
 			} else
@@ -3910,21 +3895,6 @@ static int cif_isp20_mi_frame_end(
 			stream->curr_buf->ts = dev->curr_frame_time;
 			/*Inform the wait queue */
 			stream->curr_buf->state = VIDEOBUF_DONE;
-			if (!(dev->config.jpeg_config.enable)) {
-				if (stream_id == CIF_ISP20_STREAM_MP) {
-					stream->curr_buf->size =
-						(dev->config.mi_config.
-							mp.output.width << 16) |
-						dev->config.mi_config.
-							mp.output.height;
-				} else if (stream_id == CIF_ISP20_STREAM_SP) {
-					stream->curr_buf->size =
-						(dev->config.mi_config.
-							sp.output.width << 16) |
-						dev->config.mi_config.
-							sp.output.height;
-				}
-			}
 			wake_up(&stream->curr_buf->done);
 			stream->curr_buf = NULL;
 		}
