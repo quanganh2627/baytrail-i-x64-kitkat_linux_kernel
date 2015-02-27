@@ -823,7 +823,7 @@ static void intel_adc_stuck_measurement(unsigned long dummy)
 	}
 
 	/* Then throw an assert */
-	BUG();
+	WARN(1, "ADC measurement maybe abnormal\n");
 }
 
 /**
