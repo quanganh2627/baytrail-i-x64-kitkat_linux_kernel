@@ -5597,7 +5597,7 @@ int marvin_isp_isr(void *cntxt)
 		cif_ioread32(dev->config.base_addr + CIF_ISP_IMSC));
 
 	if (isp_mis & CIF_ISP_V_START) {
-		dev->isp_dev.frame_id += 2;
+		cifisp_v_start(&dev->isp_dev);
 		cif_iowrite32(CIF_ISP_V_START,
 		      dev->config.base_addr + CIF_ISP_ICR);
 	}
