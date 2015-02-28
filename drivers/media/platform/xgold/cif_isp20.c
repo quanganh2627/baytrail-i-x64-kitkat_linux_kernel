@@ -31,6 +31,13 @@
 #define MEASURE_VERTICAL_BLANKING
 */
 
+/*
+If this macro is defined, the asyncrhronised update (software update)
+is used to update CIF shadowed registers.
+Currently, we have issues with synchronized update in several cases,
+so we will use the software update.
+*/
+#define CIF_ISP_ALWAYS_ASYNC
 
 static int marvin_mipi_isr(
 	void *cntxt);
@@ -644,39 +651,6 @@ static u32 cif_isp20_calc_llength(
 		return width;
 }
 
-static int cif_isp20_get_target_frm_size(
-	struct cif_isp20_device *dev,
-	u32 *target_width,
-	u32 *target_height)
-{
-	if (dev->sp_stream.state >= CIF_ISP20_STATE_READY) {
-		if ((dev->mp_stream.state >= CIF_ISP20_STATE_READY) &&
-			(dev->config.mi_config.mp.output.width >
-			dev->config.mi_config.sp.output.width))
-			*target_width =
-				dev->config.mi_config.mp.output.width;
-		else
-			*target_width =
-				dev->config.mi_config.sp.output.width;
-		if ((dev->mp_stream.state >= CIF_ISP20_STATE_READY) &&
-			(dev->config.mi_config.mp.output.height >
-			dev->config.mi_config.sp.output.height))
-			*target_height =
-				dev->config.mi_config.mp.output.height;
-		else
-			*target_height =
-				dev->config.mi_config.sp.output.height;
-	} else if (dev->mp_stream.state >= CIF_ISP20_STATE_READY) {
-		*target_width = dev->config.mi_config.mp.output.width;
-		*target_height = dev->config.mi_config.mp.output.height;
-	} else {
-		cif_isp20_pltfrm_pr_err(dev->dev,
-			"cannot get target frame size, no path ready\n");
-		return -EFAULT;
-	}
-	return 0;
-}
-
 static void cif_isp20_save_mi_sp(
 	struct cif_isp20_device *dev,
 	struct cif_isp20_mi_state *state_storage)
@@ -1217,6 +1191,114 @@ static int cif_isp20_enable_yc_flt(
 }
 #endif
 
+/* This should only be called when configuring CIF
+	or at the frame end interrupt */
+static void cif_isp20_config_ism(struct cif_isp20_device *dev, bool async)
+{
+	const struct cif_isp20_ism_config *pconfig =
+		&(dev->config.isp_config.ism_config);
+
+	if (pconfig->ism_en) {
+		cif_isp20_pltfrm_pr_dbg(dev->dev, "%dx%d -> %dx%d@(%d,%d)\n",
+			dev->isp_dev.input_width,
+			dev->isp_dev.input_height,
+			pconfig->ism_params.h_size,
+			pconfig->ism_params.v_size,
+			pconfig->ism_params.h_offs,
+			pconfig->ism_params.v_offs);
+		cif_iowrite32(pconfig->ism_params.recenter,
+			dev->config.base_addr + CIF_ISP_IS_RECENTER);
+		cif_iowrite32(pconfig->ism_params.max_dx,
+			dev->config.base_addr + CIF_ISP_IS_MAX_DX);
+		cif_iowrite32(pconfig->ism_params.max_dy,
+			dev->config.base_addr + CIF_ISP_IS_MAX_DY);
+		cif_iowrite32(pconfig->ism_params.displace,
+			dev->config.base_addr + CIF_ISP_IS_DISPLACE);
+		cif_iowrite32(pconfig->ism_params.h_offs,
+			dev->config.base_addr + CIF_ISP_IS_H_OFFS);
+		cif_iowrite32(pconfig->ism_params.v_offs,
+			dev->config.base_addr + CIF_ISP_IS_V_OFFS);
+		cif_iowrite32(pconfig->ism_params.h_size,
+			dev->config.base_addr + CIF_ISP_IS_H_SIZE);
+		cif_iowrite32(pconfig->ism_params.v_size,
+			dev->config.base_addr + CIF_ISP_IS_V_SIZE);
+		cif_iowrite32OR(1,
+			dev->config.base_addr + CIF_ISP_IS_CTRL);
+		dev->config.isp_config.output.width =
+			dev->config.isp_config.ism_config.ism_params.h_size;
+		dev->config.isp_config.output.height =
+			dev->config.isp_config.ism_config.ism_params.v_size;
+	} else {
+		cif_iowrite32(pconfig->ism_params.recenter,
+			dev->config.base_addr + CIF_ISP_IS_RECENTER);
+		cif_iowrite32(pconfig->ism_params.max_dx,
+			dev->config.base_addr + CIF_ISP_IS_MAX_DX);
+		cif_iowrite32(pconfig->ism_params.max_dy,
+			dev->config.base_addr + CIF_ISP_IS_MAX_DY);
+		cif_iowrite32(pconfig->ism_params.displace,
+			dev->config.base_addr + CIF_ISP_IS_DISPLACE);
+		cif_iowrite32(0,
+			dev->config.base_addr + CIF_ISP_IS_H_OFFS);
+		cif_iowrite32(0,
+			dev->config.base_addr + CIF_ISP_IS_V_OFFS);
+		cif_iowrite32(dev->isp_dev.input_width,
+			dev->config.base_addr + CIF_ISP_IS_H_SIZE);
+		cif_iowrite32(dev->isp_dev.input_height,
+			dev->config.base_addr + CIF_ISP_IS_V_SIZE);
+		/* cif_iowrite32AND(0,
+			dev->config.base_addr + CIF_ISP_IS_CTRL); */
+		cif_iowrite32OR(1,
+			dev->config.base_addr + CIF_ISP_IS_CTRL);
+		dev->config.isp_config.output.width =
+			dev->isp_dev.input_width;
+		dev->config.isp_config.output.height =
+			dev->isp_dev.input_height;
+	}
+
+	if (async)
+		cif_iowrite32OR(CIF_ISP_CTRL_ISP_CFG_UPD,
+			dev->config.base_addr + CIF_ISP_CTRL);
+
+	cif_isp20_pltfrm_pr_dbg(dev->dev,
+		"\n  ISP_IS_H_OFFS %d/%d\n"
+		"  ISP_IS_V_OFFS %d/%d\n"
+		"  ISP_IS_H_SIZE %d/%d\n"
+		"  ISP_IS_V_SIZE %d/%d\n"
+		"  ISP_IS_RECENTER 0x%08x\n"
+		"  ISP_IS_MAX_DX %d\n"
+		"  ISP_IS_MAX_DY %d\n"
+		"  ISP_IS_DISPLACE 0x%08x\n"
+		"  ISP_IS_CTRL 0x%08x\n",
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_H_OFFS),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_H_OFFS_SHD),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_V_OFFS),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_V_OFFS_SHD),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_H_SIZE),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_H_SIZE_SHD),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_V_SIZE),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_V_SIZE_SHD),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_RECENTER),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_MAX_DX),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_MAX_DY),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_DISPLACE),
+		cif_ioread32(dev->config.base_addr +
+			CIF_ISP_IS_CTRL));
+
+	return;
+}
+
 static void cif_isp20_program_jpeg_tables(
 	struct cif_isp20_device *dev)
 {
@@ -1569,9 +1651,7 @@ static int cif_isp20_config_isp(
 	irq_mask |=
 		CIF_ISP_FRAME |
 		CIF_ISP_PIC_SIZE_ERROR |
-#ifdef MEASURE_VERTICAL_BLANKING
 		CIF_ISP_FRAME_IN |
-#endif
 		CIF_ISP_V_START;
 	cif_iowrite32(irq_mask,
 		dev->config.base_addr + CIF_ISP_IMSC);
@@ -1881,6 +1961,9 @@ static int cif_isp20_config_mi_mp(
 	cif_iowrite32_verify(dev->config.mi_config.mp.cr_size,
 		dev->config.base_addr + CIF_MI_MP_CR_SIZE_INIT, ~0x3);
 
+	cif_iowrite32_verify(0x303030,
+		dev->config.base_addr + CIF_MI_QOS_WRITE_MP, 0x3f3f3f);
+
 	mi_ctrl = cif_ioread32(dev->config.base_addr + CIF_MI_CTRL) |
 		CIF_MI_CTRL_MP_WRITE_FMT(writeformat) |
 		swap_cb_cr |
@@ -2080,6 +2163,10 @@ static int cif_isp20_config_mi_sp(
 		dev->config.base_addr + CIF_MI_SP_Y_PIC_HEIGHT, 0x3);
 	cif_iowrite32_verify(llength,
 		dev->config.base_addr + CIF_MI_SP_Y_LLENGTH, 0x3);
+
+	cif_iowrite32_verify(0x303030,
+		dev->config.base_addr + CIF_MI_QOS_WRITE_SP, 0x3f3f3f);
+
 
 	mi_ctrl = cif_ioread32(dev->config.base_addr + CIF_MI_CTRL) |
 		CIF_MI_CTRL_SP_WRITE_FMT(writeformat) |
@@ -2458,7 +2545,8 @@ static int cif_isp20_config_path(
 
 int cif_isp20_config_rsz(
 	struct cif_isp20_device *dev,
-	enum cif_isp20_stream_id stream_id)
+	enum cif_isp20_stream_id stream_id,
+	bool async)
 {
 	int ret;
 	u32 i;
@@ -2571,6 +2659,7 @@ int cif_isp20_config_rsz(
 		cif_isp20_pix_fmt_set_bpp(
 			rsz_output->pix_fmt, 16);
 	}
+
 	cif_isp20_pltfrm_pr_dbg(dev->dev,
 		"%s %s %dx%d -> %s %dx%d\n",
 		cif_isp20_stream_id_string(stream_id),
@@ -2694,9 +2783,11 @@ int cif_isp20_config_rsz(
 	cif_iowrite32(rsz_ctrl, rsz_ctrl_addr);
 
 	if (stream_id == CIF_ISP20_STREAM_MP) {
-		cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
-			dev->config.base_addr + CIF_MRSZ_CTRL);
+		if (async)
+			cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+				dev->config.base_addr + CIF_MRSZ_CTRL);
 		dev->config.mp_config.rsz_config.ycflt_adjust = false;
+		dev->config.mp_config.rsz_config.ism_adjust = false;
 		cif_isp20_pltfrm_pr_dbg(dev->dev,
 			"\n  MRSZ_CTRL 0x%08x/0x%08x\n"
 			"  MRSZ_SCALE_HY %d/%d\n"
@@ -2749,9 +2840,11 @@ int cif_isp20_config_rsz(
 			cif_ioread32(dev->config.base_addr +
 				CIF_MRSZ_PHASE_VC_SHD));
 	} else {
-		cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
-			dev->config.base_addr + CIF_SRSZ_CTRL);
+		if (async)
+			cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+				dev->config.base_addr + CIF_SRSZ_CTRL);
 		dev->config.sp_config.rsz_config.ycflt_adjust = false;
+		dev->config.sp_config.rsz_config.ism_adjust = false;
 		cif_isp20_pltfrm_pr_dbg(dev->dev,
 			"\n  SRSZ_CTRL 0x%08x/0x%08x\n"
 			"  SRSZ_SCALE_HY %d/%d\n"
@@ -2820,7 +2913,7 @@ static int cif_isp20_config_sp(
 
 	cif_isp20_pltfrm_pr_dbg(NULL, "\n");
 
-	ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_SP);
+	ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_SP, true);
 	if (IS_ERR_VALUE(ret))
 		goto err;
 	/* Work-around for SMS04982237
@@ -2849,7 +2942,7 @@ static int cif_isp20_config_mp(
 
 	cif_isp20_pltfrm_pr_dbg(NULL, "\n");
 
-	ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_MP);
+	ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_MP, true);
 	if (IS_ERR_VALUE(ret))
 		goto err;
 
@@ -2996,7 +3089,11 @@ static int cif_isp20_config_cif(
 					goto err;
 			}
 		} else
+#ifdef CIF_ISP_ALWAYS_ASYNC
+			dev->config.mi_config.async_updt = true;
+#else
 			dev->config.mi_config.async_updt = false;
+#endif
 
 		ret = cif_isp20_config_mipi(dev);
 		if (IS_ERR_VALUE(ret))
@@ -3005,6 +3102,13 @@ static int cif_isp20_config_cif(
 		ret = cif_isp20_config_isp(dev);
 		if (IS_ERR_VALUE(ret))
 			goto err;
+
+		cif_isp20_config_ism(dev, true);
+		dev->config.isp_config.ism_config.ism_update_needed = false;
+		if (stream_ids & CIF_ISP20_STREAM_SP)
+			dev->config.sp_config.rsz_config.ism_adjust = true;
+		if (stream_ids & CIF_ISP20_STREAM_MP)
+			dev->config.mp_config.rsz_config.ism_adjust = true;
 
 		cif_isp20_config_ie(dev);
 
@@ -3054,15 +3158,38 @@ static int cif_isp20_config_cif(
 			dev->config.sp_config.rsz_config.ycflt_adjust = true;
 	}
 
-	if (dev->config.sp_config.rsz_config.ycflt_adjust) {
-		ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_SP);
-		if (IS_ERR_VALUE(ret))
-			goto err;
+	if (dev->config.sp_config.rsz_config.ycflt_adjust ||
+		dev->config.sp_config.rsz_config.ism_adjust) {
+		if (dev->sp_stream.state == CIF_ISP20_STATE_READY) {
+			ret = cif_isp20_config_rsz(dev,
+				CIF_ISP20_STREAM_SP, true);
+			if (IS_ERR_VALUE(ret))
+				goto err;
+		} else {
+			/* Disable SRSZ if SP is not used */
+			cif_iowrite32(0, dev->config.base_addr + CIF_SRSZ_CTRL);
+			cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+				dev->config.base_addr + CIF_SRSZ_CTRL);
+			dev->config.sp_config.rsz_config.ycflt_adjust = false;
+			dev->config.sp_config.rsz_config.ism_adjust = false;
+		}
 	}
-	if (dev->config.mp_config.rsz_config.ycflt_adjust) {
-		ret = cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_MP);
-		if (IS_ERR_VALUE(ret))
-			goto err;
+
+	if (dev->config.mp_config.rsz_config.ycflt_adjust ||
+		dev->config.mp_config.rsz_config.ism_adjust) {
+		if (dev->mp_stream.state == CIF_ISP20_STATE_READY) {
+			ret = cif_isp20_config_rsz(dev,
+				CIF_ISP20_STREAM_MP, true);
+			if (IS_ERR_VALUE(ret))
+				goto err;
+		} else {
+			/* Disable MRSZ if MP is not used */
+			cif_iowrite32(0, dev->config.base_addr + CIF_MRSZ_CTRL);
+			cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+				dev->config.base_addr + CIF_MRSZ_CTRL);
+			dev->config.mp_config.rsz_config.ycflt_adjust = false;
+			dev->config.mp_config.rsz_config.ism_adjust = false;
+		}
 	}
 
 	if (dev->config.mi_config.async_updt)
@@ -3086,6 +3213,7 @@ static void cif_isp20_init_stream(
 	case CIF_ISP20_STREAM_SP:
 		stream = &dev->sp_stream;
 		dev->config.sp_config.rsz_config.ycflt_adjust = false;
+		dev->config.sp_config.rsz_config.ism_adjust = false;
 		dev->config.mi_config.sp.busy = false;
 		break;
 	case CIF_ISP20_STREAM_MP:
@@ -3096,6 +3224,7 @@ static void cif_isp20_init_stream(
 		dev->config.jpeg_config.enable = false;
 		dev->config.mi_config.raw_enable = false;
 		dev->config.mp_config.rsz_config.ycflt_adjust = false;
+		dev->config.mp_config.rsz_config.ism_adjust = false;
 		dev->config.mi_config.mp.busy = false;
 		break;
 	case CIF_ISP20_STREAM_DMA:
@@ -3115,6 +3244,8 @@ static void cif_isp20_init_stream(
 	stream->curr_buf = NULL;
 	stream->updt_cfg = false;
 	stream->stop = false;
+	stream->stall = false;
+
 	cif_isp20_pltfrm_event_clear(dev->dev, &stream->done);
 	stream->state = CIF_ISP20_STATE_INACTIVE;
 }
@@ -3306,8 +3437,6 @@ static int cif_isp20_update_mi_mp(
 					CIF_ISP20_STREAM_MP);
 				dev->config.mi_config.mp.curr_buff_addr =
 					dev->config.mi_config.mp.next_buff_addr;
-				cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
-					dev->config.base_addr + CIF_ISP_CTRL);
 			}
 		}
 	} else {
@@ -3342,9 +3471,6 @@ static int cif_isp20_update_mi_mp(
 			cif_isp20_mi_update_buff_addr(dev, CIF_ISP20_STREAM_MP);
 			dev->config.mi_config.mp.curr_buff_addr =
 				dev->config.mi_config.mp.next_buff_addr;
-			if (!dev->config.mi_config.async_updt)
-				cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
-					dev->config.base_addr + CIF_ISP_CTRL);
 		} else if (dev->config.mi_config.mp.next_buff_addr ==
 			CIF_ISP20_INVALID_BUFF_ADDR) {
 			cif_iowrite32AND_verify(~CIF_MI_MP_FRAME,
@@ -3389,9 +3515,6 @@ static int cif_isp20_update_mi_sp(
 		cif_isp20_mi_update_buff_addr(dev, CIF_ISP20_STREAM_SP);
 		dev->config.mi_config.sp.curr_buff_addr =
 			dev->config.mi_config.sp.next_buff_addr;
-		if (!dev->config.mi_config.async_updt)
-			cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
-				dev->config.base_addr + CIF_ISP_CTRL);
 	} else if ((dev->config.mi_config.sp.next_buff_addr ==
 		CIF_ISP20_INVALID_BUFF_ADDR))
 		cif_iowrite32AND_verify(~CIF_MI_SP_FRAME,
@@ -3655,6 +3778,21 @@ static int cif_isp20_mi_frame_end_async(
 				stream->curr_buf->ts = dev->curr_frame_time;
 				/*Inform the wait queue */
 				stream->curr_buf->state = VIDEOBUF_DONE;
+				if (!dev->config.jpeg_config.enable &&
+					(stream_id == CIF_ISP20_STREAM_MP)) {
+					stream->curr_buf->size =
+						(dev->config.mi_config.
+							mp.output.width << 16) |
+						dev->config.mi_config.
+							mp.output.height;
+				} else if (!dev->config.jpeg_config.enable &&
+					(stream_id == CIF_ISP20_STREAM_SP)) {
+					stream->curr_buf->size =
+						(dev->config.mi_config.
+							sp.output.width << 16) |
+						dev->config.mi_config.
+							sp.output.height;
+				}
 				wake_up(&stream->curr_buf->done);
 				stream->curr_buf = NULL;
 			} else
@@ -3739,16 +3877,17 @@ static int cif_isp20_mi_frame_end(
 	} else
 		BUG();
 
-	if (dev->config.mi_config.async_updt)
+	if (dev->config.mi_config.async_updt) {
 		return cif_isp20_mi_frame_end_async(
 			dev, stream, stream_id,
 			next_buff_addr, frame_done, y_base_addr);
+	}
 
 	if ((stream->next_buf == NULL) &&
 		!(dev->config.jpeg_config.enable &&
-		(stream_id == CIF_ISP20_STREAM_MP)))
+		(stream_id == CIF_ISP20_STREAM_MP))) {
 		stream->stall = true;
-	else if ((stream->next_buf != NULL) &&
+	} else if ((stream->next_buf != NULL) &&
 		(videobuf_to_dma_contig(stream->next_buf) !=
 			cif_ioread32(y_base_addr))) {
 		cif_isp20_pltfrm_pr_warn(dev->dev,
@@ -3769,6 +3908,21 @@ static int cif_isp20_mi_frame_end(
 			stream->curr_buf->ts = dev->curr_frame_time;
 			/*Inform the wait queue */
 			stream->curr_buf->state = VIDEOBUF_DONE;
+			if (!(dev->config.jpeg_config.enable)) {
+				if (stream_id == CIF_ISP20_STREAM_MP) {
+					stream->curr_buf->size =
+						(dev->config.mi_config.
+							mp.output.width << 16) |
+						dev->config.mi_config.
+							mp.output.height;
+				} else if (stream_id == CIF_ISP20_STREAM_SP) {
+					stream->curr_buf->size =
+						(dev->config.mi_config.
+							sp.output.width << 16) |
+						dev->config.mi_config.
+							sp.output.height;
+				}
+			}
 			wake_up(&stream->curr_buf->done);
 			stream->curr_buf = NULL;
 		}
@@ -3872,6 +4026,10 @@ static void cif_isp20_start_mi(
 			dev->config.base_addr + CIF_MI_IMSC, ~0);
 		cif_isp20_update_mi_mp(dev);
 	}
+
+	if (!dev->config.mi_config.async_updt)
+		cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
+			dev->config.base_addr + CIF_ISP_CTRL);
 }
 
 static void cif_isp20_stop_mi(
@@ -3910,18 +4068,20 @@ static void cif_isp20_stop_mi(
 		cif_iowrite32(CIF_MI_INIT_SOFT_UPD,
 			dev->config.base_addr + CIF_MI_INIT);
 	} else if (stop_mi_sp) {
+		cif_iowrite32AND_verify(~CIF_MI_SP_FRAME,
+			dev->config.base_addr + CIF_MI_IMSC, ~0);
 		cif_iowrite32(CIF_MI_SP_FRAME,
 			dev->config.base_addr + CIF_MI_ICR);
 		cif_iowrite32AND_verify(~CIF_MI_CTRL_SP_ENABLE,
 			dev->config.base_addr + CIF_MI_CTRL, ~0);
-		if ((dev->mp_stream.state == CIF_ISP20_STATE_STREAMING) &&
-			!dev->config.mi_config.async_updt)
-			cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
-				dev->config.base_addr + CIF_ISP_CTRL);
-		else
+		if ((dev->mp_stream.state != CIF_ISP20_STATE_STREAMING) ||
+			dev->config.mi_config.async_updt)
 			cif_iowrite32(CIF_MI_INIT_SOFT_UPD,
 				dev->config.base_addr + CIF_MI_INIT);
 	} else if (stop_mi_mp) {
+		cif_iowrite32AND_verify(~(CIF_MI_MP_FRAME |
+			CIF_JPE_STATUS_ENCODE_DONE),
+			dev->config.base_addr + CIF_MI_IMSC, ~0);
 		cif_iowrite32(CIF_MI_MP_FRAME |
 			CIF_JPE_STATUS_ENCODE_DONE,
 			dev->config.base_addr + CIF_MI_ICR);
@@ -3929,11 +4089,8 @@ static void cif_isp20_stop_mi(
 			CIF_MI_CTRL_JPEG_ENABLE |
 			CIF_MI_CTRL_RAW_ENABLE),
 			dev->config.base_addr + CIF_MI_CTRL, ~0);
-		if ((dev->sp_stream.state == CIF_ISP20_STATE_STREAMING) &&
-			!dev->config.mi_config.async_updt)
-			cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
-				dev->config.base_addr + CIF_ISP_CTRL);
-		else if (dev->sp_stream.state != CIF_ISP20_STATE_STREAMING)
+		if ((dev->sp_stream.state != CIF_ISP20_STATE_STREAMING) ||
+			dev->config.mi_config.async_updt)
 			cif_iowrite32(CIF_MI_INIT_SOFT_UPD,
 				dev->config.base_addr + CIF_MI_INIT);
 	}
@@ -4090,6 +4247,10 @@ static int cif_isp20_stop(
 			cif_isp20_stop_sp(dev);
 		cif_iowrite32AND_verify(~CIF_MI_SP_FRAME,
 			dev->config.base_addr + CIF_MI_IMSC, ~0);
+
+		cif_iowrite32(0, dev->config.base_addr + CIF_SRSZ_CTRL);
+		cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+			dev->config.base_addr + CIF_SRSZ_CTRL);
 	} else /* stop_mp */ {
 		if (!dev->config.mi_config.async_updt) {
 			local_irq_save(flags);
@@ -4101,6 +4262,10 @@ static int cif_isp20_stop(
 		cif_iowrite32AND_verify(~(CIF_MI_MP_FRAME |
 			CIF_JPE_STATUS_ENCODE_DONE),
 			dev->config.base_addr + CIF_MI_IMSC, ~0);
+
+		cif_iowrite32(0, dev->config.base_addr + CIF_MRSZ_CTRL);
+		cif_iowrite32OR(CIF_RSZ_CTRL_CFG_UPD,
+			dev->config.base_addr + CIF_MRSZ_CTRL);
 	}
 
 	if (stop_mp && (dev->mp_stream.state == CIF_ISP20_STATE_STREAMING))
@@ -4333,12 +4498,6 @@ static int cif_isp20_mi_isr(void *cntxt)
 		cif_iowrite32(CIF_MI_DMA_READY,
 			dev->config.base_addr + CIF_MI_ICR);
 	}
-	if (dev->config.mp_config.rsz_config.ycflt_adjust &&
-		((mi_mis & CIF_MI_MP_FRAME) || dev->mp_stream.first_frame))
-		(void)cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_MP);
-	if (dev->config.sp_config.rsz_config.ycflt_adjust &&
-		((mi_mis & CIF_MI_SP_FRAME) || dev->sp_stream.first_frame))
-		(void)cif_isp20_config_rsz(dev, CIF_ISP20_STREAM_SP);
 
 	/* In case two streams are active in asnychronous mode we have
 		to do a synchronised update */
@@ -4365,6 +4524,7 @@ static int cif_isp20_mi_isr(void *cntxt)
 		if (dev->config.mi_config.async_updt)
 			cif_iowrite32(CIF_MI_INIT_SOFT_UPD,
 				dev->config.base_addr + CIF_MI_INIT);
+
 		if ((dev->mp_stream.state == CIF_ISP20_STATE_STREAMING) &&
 			dev->mp_stream.curr_buf &&
 			dev->config.jpeg_config.enable)
@@ -4382,6 +4542,25 @@ static int cif_isp20_mi_isr(void *cntxt)
 				dev->mp_stream.curr_buf)
 				dev->config.mi_config.mp.busy = true;
 		}
+
+		if (dev->config.isp_config.ism_config.ism_update_needed) {
+			dev->config.mp_config.rsz_config.ism_adjust = true;
+			dev->config.sp_config.rsz_config.ism_adjust = true;
+			cif_isp20_config_ism(dev, false);
+		}
+
+		if ((dev->config.mp_config.rsz_config.ycflt_adjust ||
+			dev->config.mp_config.rsz_config.ism_adjust) &&
+			((mi_mis & CIF_MI_MP_FRAME) ||
+			dev->mp_stream.first_frame))
+			(void)cif_isp20_config_rsz(dev,
+				CIF_ISP20_STREAM_MP, true);
+		if ((dev->config.sp_config.rsz_config.ycflt_adjust ||
+			dev->config.sp_config.rsz_config.ism_adjust) &&
+			((mi_mis & CIF_MI_SP_FRAME) ||
+			dev->sp_stream.first_frame))
+			(void)cif_isp20_config_rsz(dev,
+				CIF_ISP20_STREAM_SP, true);
 	}
 
 	cif_iowrite32(~(CIF_MI_MP_FRAME |
@@ -4557,6 +4736,10 @@ int cif_isp20_streamoff(
 	if (streamoff_mp) {
 		dev->config.jpeg_config.enable = false;
 		dev->config.mi_config.raw_enable = false;
+		dev->config.mi_config.mp.output.width = 0;
+		dev->config.mi_config.mp.output.height = 0;
+		dev->config.mi_config.mp.output.pix_fmt =
+			CIF_UNKNOWN_FORMAT;
 		if (dev->mp_stream.state == CIF_ISP20_STATE_READY)
 			dev->mp_stream.state = CIF_ISP20_STATE_INACTIVE;
 	}
@@ -4564,6 +4747,13 @@ int cif_isp20_streamoff(
 		cif_isp20_stop_dma(dev);
 		if (dev->dma_stream.state == CIF_ISP20_STATE_READY)
 			dev->dma_stream.state = CIF_ISP20_STATE_INACTIVE;
+	}
+	if ((dev->dma_stream.state <= CIF_ISP20_STATE_INACTIVE) &&
+		(dev->mp_stream.state <= CIF_ISP20_STATE_INACTIVE) &&
+		(dev->sp_stream.state <= CIF_ISP20_STATE_INACTIVE)) {
+		dev->isp_dev.input_width = 0;
+		dev->isp_dev.input_height = 0;
+		dev->config.isp_config.ism_config.ism_en = 0;
 	}
 
 	return 0;
@@ -4949,6 +5139,39 @@ err:
 	return ret;
 }
 
+int cif_isp20_get_target_frm_size(
+	struct cif_isp20_device *dev,
+	u32 *target_width,
+	u32 *target_height)
+{
+	if (dev->sp_stream.state >= CIF_ISP20_STATE_READY) {
+		if ((dev->mp_stream.state >= CIF_ISP20_STATE_READY) &&
+			(dev->config.mi_config.mp.output.width >
+			dev->config.mi_config.sp.output.width))
+			*target_width =
+				dev->config.mi_config.mp.output.width;
+		else
+			*target_width =
+				dev->config.mi_config.sp.output.width;
+		if ((dev->mp_stream.state >= CIF_ISP20_STATE_READY) &&
+			(dev->config.mi_config.mp.output.height >
+			dev->config.mi_config.sp.output.height))
+			*target_height =
+				dev->config.mi_config.mp.output.height;
+		else
+			*target_height =
+				dev->config.mi_config.sp.output.height;
+	} else if (dev->mp_stream.state >= CIF_ISP20_STATE_READY) {
+		*target_width = dev->config.mi_config.mp.output.width;
+		*target_height = dev->config.mi_config.mp.output.height;
+	} else {
+		cif_isp20_pltfrm_pr_err(dev->dev,
+			"cannot get target frame size, no path ready\n");
+		return -EFAULT;
+	}
+	return 0;
+}
+
 int cif_isp20_calc_isp_cropping(
 	struct cif_isp20_device *dev,
 	u32 *width,
@@ -5084,6 +5307,9 @@ int cif_isp20_s_ctrl(
 			return -EINVAL;
 		}
 		dev->config.isp_config.ie_config.effect = val;
+		dev->isp_dev.ie_en = true;
+		dev->isp_dev.ie_config.effect = val;
+		dev->isp_dev.isp_param_ie_update_needed = true;
 		break;
 	case CIF_ISP20_CID_JPEG_QUALITY:
 		if ((u32)val > 100) {
@@ -5365,8 +5591,8 @@ int marvin_isp_isr(void *cntxt)
 				"CIF_ISP_PIC_SIZE_ERROR (0x%08x)",
 				isp_err);
 			cif_iowrite32(isp_err,
-				      dev->config.base_addr +
-				      CIF_ISP_ERR_CLR);
+				dev->config.base_addr +
+				CIF_ISP_ERR_CLR);
 		} else if ((isp_mis & CIF_ISP_DATA_LOSS)) {
 			/* Clear data_loss */
 			cif_iowrite32(CIF_ISP_DATA_LOSS,
@@ -5390,6 +5616,21 @@ int marvin_isp_isr(void *cntxt)
 		marvin_hw_restart(dev);
 	}
 
+	if (isp_mis & CIF_ISP_FRAME_IN) {
+		if (dev->config.isp_config.ism_config.ism_update_needed) {
+			dev->config.isp_config.
+				ism_config.ism_update_needed = false;
+			cif_iowrite32OR(CIF_ISP_CTRL_ISP_CFG_UPD,
+				dev->config.base_addr + CIF_ISP_CTRL);
+		}
+
+		cif_iowrite32(CIF_ISP_FRAME_IN,
+			dev->config.base_addr + CIF_ISP_ICR);
+		if (!dev->config.mi_config.async_updt)
+			cif_iowrite32OR(CIF_ISP_CTRL_ISP_GEN_CFG_UPD,
+				dev->config.base_addr + CIF_ISP_CTRL);
+	}
+
 	cifisp_isp_isr(&dev->isp_dev, isp_mis);
 
 	if (isp_mis & CIF_ISP_FRAME) {
@@ -5406,11 +5647,8 @@ int marvin_isp_isr(void *cntxt)
 		}
 
 		/* Clear Frame In (ISP) */
-		cif_iowrite32(CIF_ISP_FRAME
-			      | CIF_ISP_FRAME_IN
-			      | CIF_ISP_V_START
-			      | CIF_ISP_H_START,
-			      dev->config.base_addr + CIF_ISP_ICR);
+		cif_iowrite32(CIF_ISP_FRAME,
+			dev->config.base_addr + CIF_ISP_ICR);
 	}
 	return 0;
 }

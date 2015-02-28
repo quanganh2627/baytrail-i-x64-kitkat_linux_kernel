@@ -355,9 +355,6 @@ static void xgold_sdhci_of_init(struct sdhci_host *host)
 		bits == 1)
 		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
 
-	host->mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
-	host->mmc->caps2 |= MMC_CAP2_PACKED_CMD;
-
 	mmc_pdata->rpm_enabled = xgold_sdhci_is_rpm_enabled(np);
 	pr_info("sdhci: %s, rpm = %d\n", dev_name(&pdev->dev),
 						mmc_pdata->rpm_enabled);
