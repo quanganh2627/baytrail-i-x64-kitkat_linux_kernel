@@ -479,7 +479,7 @@ static irqreturn_t mveth_rx_hdl(struct mveth_instance *mveth)
 		mveth->stats.rx_bytes += skb->len;
 
 		if ((mveth->dump_type > NONE_MIN_TYPE) && (mveth->dump_type < NONE_MAX_TYPE))
-		veth_dump_data(netdev, mveth->dump_type,1, skb->data, skb->len, mveth->dump_maxlen);
+		veth_dump_data(netdev, mveth->dump_type,0, skb->data, skb->len, mveth->dump_maxlen);
 
 		netif_rx(skb);
 	}
