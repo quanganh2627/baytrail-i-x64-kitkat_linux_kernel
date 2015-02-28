@@ -2066,14 +2066,14 @@ static int kionix_accel_probe(struct i2c_client *client,
 
 	err = kionix_accel_power_on(acceld);
 	if (err < 0)
-		goto err_accel_pdata_exit;
+		goto err_accel_pdata_power_off;
 
 	err = kionix_verify(acceld);
 	if (err < 0) {
 		KMSGERR(&acceld->client->dev,
 				"%s: kionix_verify returned err = %d. Abort.\n",
 				__func__, err);
-		goto err_accel_pdata_exit;
+		goto err_accel_pdata_power_off;
 	}
 	/* Setup group specific configuration and function callback */
 	switch (err) {
