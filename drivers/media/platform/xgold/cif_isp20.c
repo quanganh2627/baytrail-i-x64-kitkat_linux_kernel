@@ -3019,6 +3019,8 @@ static void cif_isp20_config_ie(
 			"\n  IMG_EFF_CTRL 0x%08x\n",
 			cif_ioread32(dev->config.base_addr + CIF_IMG_EFF_CTRL));
 	} else {
+		cif_iowrite32AND(~CIF_IMG_EFF_CTRL_ENABLE,
+			dev->config.base_addr + CIF_IMG_EFF_CTRL);
 		cif_iowrite32AND(~CIF_ICCL_IE_CLK,
 			dev->config.base_addr + CIF_ICCL);
 		cif_isp20_pltfrm_pr_dbg(NULL,
@@ -5326,8 +5328,6 @@ int cif_isp20_s_ctrl(
 	const enum cif_isp20_cid id,
 	int val)
 {
-	enum v4l2_colorfx colorfx;
-
 	cif_isp20_pltfrm_pr_dbg(NULL,
 		"id %d, val %d\n",
 		id, val);
@@ -5343,10 +5343,7 @@ int cif_isp20_s_ctrl(
 			return -EINVAL;
 		}
 		dev->config.isp_config.ie_config.effect = val;
-		dev->isp_dev.ie_en = true;
-		colorfx = cif_isp20_ie2v4l2_colorfx(val);
-		dev->isp_dev.ie_config.effect = colorfx;
-		dev->isp_dev.isp_param_ie_update_needed = true;
+		cif_isp20_config_ie(dev);
 		break;
 	case CIF_ISP20_CID_JPEG_QUALITY:
 		if ((u32)val > 100) {
