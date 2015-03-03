@@ -1695,9 +1695,6 @@ static void cifisp_bp_en(const struct xgold_isp_dev *isp_dev)
 		break;
 	}
 
-	/* Enable the block */
-	new_control |= 1;
-
 	cifisp_iowrite32OR(new_control, CIF_ISP_BP_CTRL);
 }
 
