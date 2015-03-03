@@ -292,6 +292,7 @@ static int gc_probe(struct i2c_client *client,
 
 	dev->streaming = 0;
 	dev->power = 0;
+	dev->need_extra_delay = 1;
 
 	v4l2_i2c_subdev_init(&(dev->sd), client, &gc_ops);
 

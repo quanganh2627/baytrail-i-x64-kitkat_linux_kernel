@@ -903,6 +903,7 @@ int gc_set_streaming(struct v4l2_subdev *sd, int enable)
 		if (0 == dev->streaming) {
 			ret = 0;
 		} else {
+			s32 extra_delay = 20, exposure_time = 0;
 			pltfrm_camera_module_pr_debug(sd,
 				"Started writing stream-off regs.\n");
 			ret = __gc_program_ctrl_table(sd, GC_SETTING_STREAM, 0);
@@ -914,6 +915,20 @@ int gc_set_streaming(struct v4l2_subdev *sd, int enable)
 				dev->curr_res_table[dev->fmt_idx].fps)
 				mdelay(1000 /
 				dev->curr_res_table[dev->fmt_idx].fps + 1);
+
+			/* Need extra longer delay due to low fps, which is
+			   determined by the lightness, to avoid MIPI ERROR
+			   because of unclear HW limitations. */
+			if (__gc_g_exposure(sd, &exposure_time) == 0 &&
+				exposure_time > extra_delay) {
+				extra_delay = exposure_time;
+			}
+
+			if (dev->need_extra_delay) {
+				mdelay(extra_delay);
+				pltfrm_camera_module_pr_debug(sd,
+					"extra delay %d ms\n", extra_delay);
+			}
 
 			pltfrm_camera_module_pr_debug(sd,
 				"Writing stream-off regs done.\n");
@@ -1059,6 +1074,9 @@ int gc_s_mbus_fmt(struct v4l2_subdev *sd,
 	pltfrm_camera_module_pr_debug(sd, "Started writing res regs.\n");
 	ret = gc_write_reg_array(client, gc_mode_reg_table);
 	pltfrm_camera_module_pr_debug(sd, "Writing res regs done.\n");
+
+	/* need delay after profiling the new settings */
+	mdelay(15);
 
 	if (ret)
 		goto out;

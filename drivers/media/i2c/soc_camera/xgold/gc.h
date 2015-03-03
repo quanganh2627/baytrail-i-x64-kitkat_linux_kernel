@@ -251,10 +251,7 @@ struct gc_device {
 	int run_mode;
 	int vt_pix_clk_freq_mhz;
 	int fps_index;
-	u32 focus;
-	u16 coarse_itg;
-	u16 fine_itg;
-	u16 gain;
+	int need_extra_delay;
 	u16 pixels_per_line;
 	u16 lines_per_frame;
 	u8 fps;

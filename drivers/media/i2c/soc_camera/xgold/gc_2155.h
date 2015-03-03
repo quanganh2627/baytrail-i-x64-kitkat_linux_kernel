@@ -1566,7 +1566,7 @@ static struct gc_register gc2155_stream_on[] = {
 
 static struct gc_register gc2155_stream_off[] = {
 	{ GC_8BIT, 0xfe, 0x03 },
-	{ GC_8BIT, 0x10, 0x00 },
+	{ GC_8BIT, 0x10, 0x85 },
 	{ GC_8BIT, 0xfe, 0x00 },
 	{GC_TOK_TERM, 0, 0},
 };
