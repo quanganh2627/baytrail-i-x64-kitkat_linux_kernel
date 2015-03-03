@@ -1193,8 +1193,8 @@ struct atomisp_sensor_ae_bracketing_lut {
 #define ATOMISP_IOC_G_INVALID_FRAME_NUM \
 	_IOR('v', BASE_VIDIOC_PRIVATE + 44, unsigned int)
 
-#define ATOMISP_IOC_G_EFFECTIVE_RESOLUTION \
-	_IOR('v', BASE_VIDIOC_PRIVATE + 45, struct atomisp_resolution)
+#define ATOMISP_IOC_S_ARRAY_RESOLUTION \
+	_IOW('v', BASE_VIDIOC_PRIVATE + 45, struct atomisp_resolution)
 
 
 /*
