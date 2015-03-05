@@ -126,7 +126,7 @@ static inline bool __is_battery_full
 	algo_dbg_printk("%s:current=%ld pse_mod_bprof->chrg_term_ma =%ld voltage_now=%ld full_cond=%ld\n",
 		__func__, cur, iterm, volt * 100, (FULL_CV_MIN * cv));
 
-	return ((cur >= 0) && (cur <= iterm) &&
+	return ((cur > 0) && (cur <= iterm) &&
 	((volt * 100)  >= (FULL_CV_MIN * cv)));
 
 }

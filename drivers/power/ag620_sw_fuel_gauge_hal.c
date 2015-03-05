@@ -952,6 +952,10 @@ static int sw_fuel_gauge_hal_get(enum sw_fuel_gauge_hal_get_key key,
 		/* Return value of HW Ibat 1 second average current in mA. */
 		p_params->ibat_load_short_ma =
 			sw_fuel_gauge_hal_read_battery_current();
+		if (p_params->ibat_load_short_at_ocv_ma == 0) {
+			sw_fuel_gauge_hal_calc_long_ibat_average(&p_params->
+					ibat_load_short_at_ocv_ma);
+		}
 		break;
 
 	case SW_FUEL_GAUGE_HAL_GET_IBAT_LOAD_LONG_TERM_AVERAGE_AT_OCV:
