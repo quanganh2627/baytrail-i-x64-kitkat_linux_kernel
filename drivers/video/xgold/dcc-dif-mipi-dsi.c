@@ -989,8 +989,10 @@ int dcc_dsi_probe(struct dcc_display *lcd)
 	lcd->get_rate = dcc_dsi_get_rate;
 	lcd->frame_prepare = dcc_dsi_frame_prepare;
 	lcd->frame_wfe = dcc_dsi_frame_wfe;
-	if (sofia_board_is(BOARD_SOFIA3G_MRD_5S))
+	if (sofia_board_is(BOARD_SOFIA3G_MRD_5S) ||
+	    sofia_board_is(BOARD_SOFIA3G_MRD_5S_QB)) {
 		board_5s = 1;
+	}
 
 	return 0;
 }
