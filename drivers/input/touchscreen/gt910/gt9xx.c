@@ -1284,6 +1284,9 @@ void gtp_reset_guitar(struct i2c_client *client, s32 ms)
 	GTP_DEBUG_FUNC();
 	GTP_INFO("Guitar reset\n");
 
+	if (mutex_lock_interruptible(&ts->rst_mutex))
+		return;
+
 	/* here before GTP_INT_PORT gpio ops, we must
 	 * use pin_config_set change int function to gpio
 	 * otherwise error like Pin is not configured as GPIO
@@ -1310,8 +1313,10 @@ void gtp_reset_guitar(struct i2c_client *client, s32 ms)
 	GTP_GPIO_FREE(GTP_INT_PORT);
 
 #if GTP_COMPATIBLE_MODE
-	if (CHIP_TYPE_GT9F == ts->chip_type)
+	if (CHIP_TYPE_GT9F == ts->chip_type) {
+		mutex_unlock(&ts->rst_mutex);
 		return;
+	}
 
 #endif
 
@@ -1319,6 +1324,7 @@ void gtp_reset_guitar(struct i2c_client *client, s32 ms)
 #if GTP_ESD_PROTECT
 	gtp_init_ext_watchdog(client);
 #endif
+	mutex_unlock(&ts->rst_mutex);
 }
 
 #if GTP_GESTURE_WAKEUP
@@ -2742,6 +2748,7 @@ static int goodix_ts_probe(struct i2c_client *client,
 	spin_lock_init(&ts->irq_lock);          /*  2.6.39 later */
 	/*  ts->irq_lock = SPIN_LOCK_UNLOCKED;    2.6.39 & before */
 	mutex_init(&ts->en_mutex);          /*  2.6.39 later */
+	mutex_init(&ts->rst_mutex);          /*  2.6.39 later */
 	ts->enable = 1;
 #if GTP_ESD_PROTECT
 	ts->clk_tick_cnt = 2 * HZ;

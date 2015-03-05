@@ -124,6 +124,7 @@ struct gt9xx_ts_platform_data {
 struct goodix_ts_data {
 	spinlock_t irq_lock;
 	struct mutex en_mutex;
+	struct mutex rst_mutex;
 	struct i2c_client *client;
 	struct input_dev  *input_dev;
 	struct hrtimer timer;
