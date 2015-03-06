@@ -64,6 +64,8 @@ static struct device_type idi_peripheral = {
 
 struct bus_type idi_bus_type;
 
+bool bl_shutdown = false;
+extern void xgold_led_bl_shutdown(void);
 static void idi_scan_static_client(struct idi_controller_device *);
 static struct idi_peripheral_device *idi_verify_peripheral(struct device *);
 static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
@@ -399,6 +401,11 @@ static void idi_bus_shutdown(struct device *dev)
 	struct idi_client_driver *c_drv;
 
 	pr_debug("%s: device = %p\n", __func__, dev);
+
+	if (!bl_shutdown) {
+		xgold_led_bl_shutdown();
+		bl_shutdown = true;
+	}
 
 	if (((peripheral == NULL) && (client == NULL))
 					|| (dev->driver == NULL)) {

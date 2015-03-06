@@ -158,11 +158,16 @@ struct xgold_led_bl_device {
 
 static int led_ctrl = SCU_LED_UP_CMP_100mv;
 
+phys_addr_t led_phys_io_addr;
+void __iomem *led_mmio_base;
+unsigned long led_flags;
+
 /* Macros for power enable, disable */
 #define XG_PM_DISABLE		0x0
 #define XG_PM_ENABLE		0x1
 #define XG_PM_NOF_STATES	0x2
 
+void xgold_led_bl_shutdown(void);
 static void led_write32(struct xgold_led_bl_device *, u16, u32);
 static inline void xgold_led_bl_on(struct xgold_led_bl_device *bl,
 			int intensity)
@@ -547,6 +552,7 @@ static int xgold_led_bl_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "AGold BL using native access\n");
 		led_bl->flags |= XGOLD_LED_USE_NATIVE_IO_ACCESS;
 	}
+	led_flags = led_bl->flags;
 
 	led_bl->mmio_base = of_iomap(nbl, 0);
 	if (led_bl->mmio_base == NULL) {
@@ -555,12 +561,14 @@ static int xgold_led_bl_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto failed_free_mem;
 	}
+	led_mmio_base = led_bl->mmio_base;
 
 	if (of_address_to_resource(nbl, 0, &res)) {
 		ret = -EINVAL;
 		goto failed_unmap;
 	}
 	led_bl->phys_io_addr = res.start;
+	led_phys_io_addr = led_bl->phys_io_addr;
 
 	if (of_find_property(nbl, "intel,flags-use-safe-ctrl", NULL))
 		led_bl->flags |= XGOLD_LED_USE_SAFE_CTRL;
@@ -652,6 +660,25 @@ static int xgold_led_bl_resume(struct device *dev)
 #define xgold_led_bl_resume		NULL
 
 #endif /* CONFIG_PM */
+
+void xgold_led_bl_shutdown(void)
+{
+	int ret;
+	u32 reg_val;
+
+	if (led_flags & XGOLD_LED_USE_SECURE_IO_ACCESS) {
+		ret = mv_svc_reg_write_only(led_phys_io_addr + LED_CTRL,
+			SCU_LED_DOWN, 0xFFFFFFFF);
+		BUG_ON(ret);
+		mv_svc_reg_read(led_phys_io_addr + LED_CTRL,
+			&reg_val, 0xFFFFFFFF);
+	} else {
+		iowrite32(SCU_LED_DOWN, (char *)led_mmio_base + LED_CTRL);
+		reg_val = ioread32((char *)led_mmio_base + LED_CTRL);
+	}
+	pr_info("%s,flags:0x%x,led_ctrl:0x%x\n",
+		__func__, led_flags, reg_val);
+}
 
 static const struct dev_pm_ops xgold_led_bl_pm = {
 	.suspend = xgold_led_bl_suspend,
