@@ -29,6 +29,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/regulator/consumer.h>
+#include <video/mipi_display.h>
 
 #include "dcc-core.h"
 
@@ -638,12 +639,22 @@ int dcc_of_parse_display_cmd(struct platform_device *pdev,
 	struct property *prop;
 
 	cmd->flags = 0;
+
+	ret = of_property_read_u32(n, "intel,cmd-type", &val);
+	if (ret)
+		/* we don't care as this is an optional property */
+		cmd->type = 0;
+	else
+		cmd->type = val;
+
 	/* count array size */
 	cmd->length = 0;
 	of_property_for_each_u32(n, PROP_DISPLAY_CMDDATA, prop, p, val) {
 		cmd->length++;
 	};
-	cmd->length--; /* minus header byte */
+
+	if (cmd->type != MIPI_DSI_GENERIC_LONG_WRITE)
+		cmd->length--; /* minus header byte */
 
 	/* allocate data array if needed */
 	if (cmd->length > 0) {
@@ -657,8 +668,12 @@ int dcc_of_parse_display_cmd(struct platform_device *pdev,
 	}
 	cmd->name = n->name;
 
-	/* populate header+data */
-	i = -1;
+	if (cmd->type == MIPI_DSI_GENERIC_LONG_WRITE) {
+		i = 0;
+	} else {
+		/* populate header+data */
+		i = -1;
+	}
 	of_property_for_each_u32(n, PROP_DISPLAY_CMDDATA, prop, p, val) {
 		if (i == -1)
 			cmd->header = val;
@@ -666,14 +681,6 @@ int dcc_of_parse_display_cmd(struct platform_device *pdev,
 			cmd->datas[i] = val;
 		i++;
 	}
-
-	/* get cmd afterward delay */
-	ret = of_property_read_u32(n, "intel,cmd-type", &val);
-	if (ret)
-		/* we don't care as this is an optional property */
-		cmd->type = 0;
-	else
-		cmd->type = val;
 
 	/* get cmd afterward delay */
 	ret = of_property_read_u32(n, PROP_DISPLAY_CMDDELAY, &cmd->delay);

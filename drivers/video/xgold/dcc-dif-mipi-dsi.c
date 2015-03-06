@@ -223,12 +223,26 @@ static void dcc_mipidsi_send_long_packet_dma(struct dcc_display *lcd,
 	struct dcc_drvdata *pdata = m_to_dccdata(lcd, display);
 	unsigned char *data_msg = msg->datas;
 	unsigned int length = msg->length;
-	unsigned int dsihead =
-		BITFLDS(INR_DIF_DSIHEAD_CMD, msg->header) |
-		BITFLDS(INR_DIF_DSIHEAD_WCNT, msg->length+1) |
-		BITFLDS(INR_DIF_DSIHEAD_HEADER, msg->type);
+	unsigned int dsihead;
 
 	DCC_DBG4(" packet length = %d\n", length);
+
+	/* DCS command byte which will be sent as first data byte
+	   if the current header defines a DCS long write command */
+	if (msg->type == DSI_M_DCS_LONG_WRITE) {
+		/* populate header+data */
+		dsihead =
+			BITFLDS(INR_DIF_DSIHEAD_CMD, msg->header) |
+			BITFLDS(INR_DIF_DSIHEAD_WCNT, msg->length+1) |
+			BITFLDS(INR_DIF_DSIHEAD_HEADER, msg->type);
+	} else if (msg->type == DSI_M_GENERIC_LONG_WRITE) {
+		dsihead =
+			BITFLDS(INR_DIF_DSIHEAD_WCNT, msg->length) |
+			BITFLDS(INR_DIF_DSIHEAD_HEADER, msg->type);
+	} else {
+		DCC_DBG2(" error not supported packet type\n");
+	}
+
 #ifdef XG632_ES2_FIX
 	while (length > 0) {
 		int j = 0;
