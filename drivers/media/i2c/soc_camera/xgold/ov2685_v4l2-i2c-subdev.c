@@ -95,6 +95,7 @@ static const struct ov_camera_module_reg ov2685_initial_setting[] = {
 	/*1lanes, 30fps*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103 , 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_TIMEOUT, 0x0000, 0x01},
+
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3002 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3016 , 0x1c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3018 , 0x44},/*84,modify to 1lane*/
@@ -300,31 +301,31 @@ static const struct ov_camera_module_reg ov2685_initial_setting[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5505 , 0x05},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5506 , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5600 , 0x06},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5603 , 0x40},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5603 , 0x38}, /*saturation 0x40*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5604 , 0x20},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5609 , 0x20},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x560a , 0x80},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x560b , 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5800 , 0x03},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5801 , 0x1e},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5801 , 0x12},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5802 , 0x02},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5803 , 0x4c},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5804 , 0x29},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5803 , 0x38},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5804 , 0x2a},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5805 , 0x05},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5806 , 0x32},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5806 , 0x20},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5807 , 0x05},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5808 , 0x03},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5809 , 0x3c},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5809 , 0x2b},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580a , 0x02},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580b , 0x53},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580b , 0x40},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580c , 0x22},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580d , 0x05},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580e , 0x42},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x580f , 0x06},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5810 , 0x03},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5811 , 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5811 , 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5812 , 0x02},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5813 , 0x5c},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5813 , 0x44},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5814 , 0x1e},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5815 , 0x05},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5816 , 0x4a},
@@ -338,6 +339,14 @@ static const struct ov_camera_module_reg ov2685_initial_setting[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a03 , 0x4e},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a04 , 0x40},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3503 , 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5908 , 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5909 , 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590a , 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590b , 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590c , 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590d , 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590e , 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x590f , 0x00},
 
 };
 
@@ -366,7 +375,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_2MP_15fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0xb0},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x06},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0xa4},
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x0c},/*0x05*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},/*15fps*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x0e},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x08},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x08},
@@ -389,6 +398,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_2MP_15fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4008, 0x02},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4009, 0x09},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3082, 0x29},
+
 };
 
 static const struct ov_camera_module_reg ov2685_init_tab_720P_30fps[] = {
@@ -440,7 +450,7 @@ static const struct ov_camera_module_reg ov2685_init_tab_720P_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3082, 0x2c},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x03},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x34}, /*vblanking=4.2ms */
-
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a13, 0xf8},
 };
 
 static const struct ov_camera_module_reg ov2685_init_tab_VGA_30fps[] = {
@@ -489,7 +499,8 @@ static const struct ov_camera_module_reg ov2685_init_tab_VGA_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3a11, 0x84},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4008, 0x0 },
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4009, 0x3 },
-	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3082, 0x29 },
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3082, 0x29},
+
 
 };
 
@@ -834,73 +845,106 @@ static int ov2685_s_wb(struct ov_camera_module *cam_mod)
 	u32 value = cam_mod->wb_config.preset_id;
 	switch (value) {
 	case V4L2_WHITE_BALANCE_AUTO:
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
+
 		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf4);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+
 		break;
 
 	case V4L2_WHITE_BALANCE_MANUAL:
 	case V4L2_WHITE_BALANCE_INCANDESCENT:
-		/* Sunny */
-		/* start group 1 */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
 		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+#if 0
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xa9);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x08);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xcc);
+#else
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0x2c);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xd2);
+#endif
+		break;
+
+	case V4L2_WHITE_BALANCE_FLUORESCENT:
+		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+#if 0
 		/* R Gain */
-		ov_camera_module_write_reg(cam_mod, 0x5195, 0x07);
-		ov_camera_module_write_reg(cam_mod, 0x5196, 0x9c);
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xf3);
 		/* G Gain */
 		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
 		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
 		/* B Gain */
-		ov_camera_module_write_reg(cam_mod, 0x5199, 0x05);
-		ov_camera_module_write_reg(cam_mod, 0x519a, 0xf3);
-		/* end group 1 */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
-		/* launch group 1 */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
-		break;
-	case V4L2_WHITE_BALANCE_FLUORESCENT:
-		/* Home */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
-		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xd5);
+		/* FLUORESCENT_office 2 */
 		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
-		ov_camera_module_write_reg(cam_mod, 0x5196, 0x90);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xdf);
 		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
 		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
-		ov_camera_module_write_reg(cam_mod, 0x5199, 0x09);
-		ov_camera_module_write_reg(cam_mod, 0x519a, 0x20);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x82);
+		/* FLUORESCENT_meeting room */
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xb1);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xa4);
+
+#else
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x04); /*office 1*/
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xd4);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x07);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xa2);
+#endif
 		break;
 	case V4L2_WHITE_BALANCE_FLUORESCENT_H:
 	case V4L2_WHITE_BALANCE_HORIZON:
 	case V4L2_WHITE_BALANCE_DAYLIGHT:
-		/* Office */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
 		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
+#if 0
 		ov_camera_module_write_reg(cam_mod, 0x5195, 0x06);
-		ov_camera_module_write_reg(cam_mod, 0x5196, 0xb8);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0x98);
 		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
 		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
 		ov_camera_module_write_reg(cam_mod, 0x5199, 0x06);
-		ov_camera_module_write_reg(cam_mod, 0x519a, 0x5f);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0xc4);
+#else
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x05);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xc8);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x44);
+#endif
+
 		break;
 	case V4L2_WHITE_BALANCE_FLASH:
 	case V4L2_WHITE_BALANCE_CLOUDY:
-		/* Cloudy */
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x00);
 		ov_camera_module_write_reg(cam_mod, 0x5180, 0xf6);
-		ov_camera_module_write_reg(cam_mod, 0x5195, 0x07);
-		ov_camera_module_write_reg(cam_mod, 0x5196, 0xdc);
+#if 0
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0xa3);
+		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
+		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
+		ov_camera_module_write_reg(cam_mod, 0x5199, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x46);
+#else
+		ov_camera_module_write_reg(cam_mod, 0x5195, 0x06);
+		ov_camera_module_write_reg(cam_mod, 0x5196, 0x27);
 		ov_camera_module_write_reg(cam_mod, 0x5197, 0x04);
 		ov_camera_module_write_reg(cam_mod, 0x5198, 0x00);
 		ov_camera_module_write_reg(cam_mod, 0x5199, 0x05);
-		ov_camera_module_write_reg(cam_mod, 0x519a, 0xd3);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0x10);
-		ov_camera_module_write_reg(cam_mod, 0x3208, 0xa0);
+		ov_camera_module_write_reg(cam_mod, 0x519a, 0x9b);
+#endif
 		break;
 	case V4L2_WHITE_BALANCE_SHADE:
 	default:
@@ -1085,11 +1129,9 @@ static int ov2685_s_ext_ctrls(struct ov_camera_module *cam_mod,
 static int ov2685_start_streaming(struct ov_camera_module *cam_mod)
 {
 	int ret = 0;
-
 	ov_camera_module_pr_debug(cam_mod, "\n");
 
 	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0x01);
-	ret |= ov_camera_module_write_reg(cam_mod, 0x301c, 0xf0);
 
 	if (IS_ERR_VALUE(ret))
 		goto err;
@@ -1106,11 +1148,9 @@ err:
 static int ov2685_stop_streaming(struct ov_camera_module *cam_mod)
 {
 	int ret = 0;
-
 	ov_camera_module_pr_debug(cam_mod, "\n");
 
-	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0x01);
-	ret |= ov_camera_module_write_reg(cam_mod, 0x301c, 0xf4);
+	ret = ov_camera_module_write_reg(cam_mod, 0x0100, 0x00);
 
 	if (IS_ERR_VALUE(ret))
 		goto err;
