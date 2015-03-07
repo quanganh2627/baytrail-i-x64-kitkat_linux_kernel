@@ -556,36 +556,6 @@ cpuid4_cache_lookup_regs(int index, struct _cpuid4_info_regs *this_leaf)
 			  (ebx.split.coherency_line_size     + 1) *
 			  (ebx.split.physical_line_partition + 1) *
 			  (ebx.split.ways_of_associativity   + 1);
-
-	printk(KERN_INFO "Dumping Level%d cacheinfo via CPUID4:\n", eax.split.level);
-	printk(KERN_INFO "eax: %0#10x\t ebx: %0#10x\t ecx: %0#10x\n", eax, ebx, ecx);
-	printk(KERN_INFO "ecx.split.number_of_sets = %d\n", ecx.split.number_of_sets);
-	printk(KERN_INFO "ebx.split.coherency_line_size = %d\n", ebx.split.coherency_line_size);
-	printk(KERN_INFO "ebx.split.physical_line_partition = %d\n", ebx.split.physical_line_partition);
-	printk(KERN_INFO "ebx.split.ways_of_associativity = %d\n", ebx.split.ways_of_associativity);
-
-	switch (eax.split.type) {
-	case CACHE_TYPE_INST:
-		if (eax.split.level == 1) {
-			printk(KERN_INFO "L%d inst cache size is changed. Original was %d, now is %d.\n",
-					eax.split.level, this_leaf->size, 16*1024);
-			this_leaf->size = 16*1024;
-		} else
-			printk(KERN_INFO "L%d inst cache size is %d.", eax.split.level, this_leaf->size);
-		break;
-	case CACHE_TYPE_DATA:
-		if (eax.split.level == 1) {
-			printk(KERN_INFO "L%d data cache size is changed. Original was %d, now is %d.\n",
-					eax.split.level, this_leaf->size, 16*1024);
-			this_leaf->size = 16*1024;
-		} else
-			printk(KERN_INFO "L%d data cache size is %d.\n", eax.split.level, this_leaf->size);
-		break;
-	case CACHE_TYPE_UNIFIED:
-		printk(KERN_INFO "L%d unified cache size is %d.\n", eax.split.level, this_leaf->size);
-		break;
-	}
-
 	return 0;
 }
 
