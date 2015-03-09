@@ -58,6 +58,8 @@
 		reg = <0xE6501800 0x154>;
 		intel,flags-use-safe-ctrl;
 		intel,vmm-secured-access;
+		intel,scu-k2-val = < 0xdc >;
+		intel,scu-safe-led_up = < 0x0a >;
 		pm,class-name = "bl_class";
 		pm,user-name = "bl";
 		pm,state-D0 = "enable";
