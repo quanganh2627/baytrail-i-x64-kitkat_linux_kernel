@@ -507,6 +507,11 @@ int dcc_of_parse_dcc(struct platform_device *pdev, struct device_node *ndcc)
 	if (pdata->gpio_lcd_bias <= 0)
 		pdata->gpio_lcd_bias = 0;
 
+	of_property_read_u32(ndcc, "intel,board-mrd5s",
+			&pdata->display.board_mrd5s);
+	dev_info(&pdev->dev, "Sofia MRD board is %s\n",
+			pdata->display.board_mrd5s ? "mrd5s" : "mrd7s");
+
 	if (of_parse_phandle(ndcc, PROP_DISPLAY_GPIO_CD, 0)) {
 		pdata->gpio_cd = of_get_named_gpio_flags(ndcc,
 				PROP_DISPLAY_GPIO_CD, 0, NULL);
