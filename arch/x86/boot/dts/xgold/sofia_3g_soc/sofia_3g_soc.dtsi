@@ -495,6 +495,14 @@
 #ifdef SOFIA3G_MRD7S
 						intel,lcd-bias-en = <&xgold_pmx_gpio 7 0>;
 #endif
+
+#ifdef SOFIA3G_MRD7S
+						intel,board-mrd5s = < 0 >;
+#endif
+
+#ifdef SOFIA3G_MRD5S
+						intel,board-mrd5s = < 1 >;
+#endif
 						resets = < &dbb_rst1 18 >;
 						reset-names = "dcc";
 					};
