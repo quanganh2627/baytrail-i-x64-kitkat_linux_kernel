@@ -57,7 +57,7 @@
 /* LED BL Normal */
 #define SCU_K1MAX_VAL	0x120
 #define SCU_K2MAX_VAL	0xFFFF
-#define SCU_LED_UP	0x10104
+#define SCU_LED_UP	0x104
 #define SCU_LED_DOWN	0x200
 
 /* LED BL LPBL */
@@ -66,8 +66,8 @@
 #define SCU_LED_STBY_UP		0x303
 #define SCU_LED_STBY_DOWN	0x0
 
-#define SCU_LED_UP_CMP_100mv	0x10106
-#define SCU_LED_UP_CMP_200mv	0x10116
+#define SCU_LED_UP_CMP_100mv	0x106
+#define SCU_LED_UP_CMP_200mv	0x116
 
 #define XGOLD_LED_USE_SAFE_CTRL		BIT(0)
 #define XGOLD_LED_USE_SECURE_IO_ACCESS	BIT(1)
