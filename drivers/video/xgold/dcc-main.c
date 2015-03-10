@@ -39,7 +39,7 @@
 #include <linux/pm_runtime.h>
 #endif
 #include <linux/xgold_noc.h>
-
+#include <linux/gpio.h>
 #include "dcc-core.h"
 #include "dcc-gra.h"
 
@@ -807,9 +807,20 @@ long dcc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		updt.back.fence_release = -1;
 		for (ovl_id = 0; ovl_id < DCC_OVERLAY_NUM; ovl_id++)
 			updt.ovls[ovl_id].fence_release = -1;
-
-		if (pdata->timeline_current == 0)
+		if (pdata->timeline_current == 0) {
 			xgold_noc_qos_set("DCC2");
+			if (pdata->display.dif.u.dsi.te_enable) {
+				/* set TE to input */
+				if (gpio_request(pdata->gpio_esd_te, "esd_te")) {
+					printk("%s: request esd te gpio fail\n",__func__);
+					pdata->gpio_esd_te = 0;
+				} else {
+					gpio_direction_input(pdata->gpio_esd_te);
+					pdata->esd_flag = 0;
+					queue_delayed_work(pdata->esd_wq, &pdata->esd_work, (unsigned long)(msecs_to_jiffies(2000)));
+				}
+			}
+		}
 		if (err == 0) {
 #ifdef CONFIG_SW_SYNC_USER
 			if (pdata->use_fences) {
@@ -1051,7 +1062,6 @@ static int dcc_main_suspend(struct device *dev)
 	long long diffus = 0;
 	struct platform_device *pdev =
 		container_of(dev, struct platform_device, dev);
-
 	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 	if (!pdata)
 		return -1;
@@ -1101,7 +1111,6 @@ static int dcc_main_resume(struct device *dev)
 	long long diffus = 0;
 	struct platform_device *pdev =
 		container_of(dev, struct platform_device, dev);
-
 	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 	if (!pdata)
 		return -EINVAL;

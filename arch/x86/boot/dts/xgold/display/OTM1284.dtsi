@@ -12,6 +12,7 @@
 		intel,display-vid-vsa-lines = <4>;
 
 		intel,display-vid-mode = "pulses";
+		intel,display-te-mode = "enable";
 		intel,display-vid-id = <0>;
 		intel,display-vid-pixel = "24packed";
 		intel,display-vid-fill_buf_to = <0x1F>;
@@ -657,6 +658,11 @@
 			panel-init-seq-124 {
 				intel,cmd-type = <0x39>;
 				intel,cmd-data = <0xFF 0xFF 0xFF 0xFF>;
+				intel,cmd-lp = <1>;
+			};
+			te-on{
+				intel,cmd-type = <0x15>;
+				intel,cmd-data = <0x35 0x00>;
 				intel,cmd-lp = <1>;
 			};
 			cabc-ui-mode{
