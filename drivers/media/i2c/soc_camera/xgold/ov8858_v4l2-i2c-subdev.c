@@ -105,10 +105,53 @@ struct ov8858_otp_struct {
 
 
 static struct ov8858_otp_struct *otp_ptr;
+static bool is_probed;
 
 /* ======================================================================== */
 /* Base sensor configs */
 /* ======================================================================== */
+/*refined 3264x2448 setting*/
+static
+const struct ov_camera_module_reg OV8858_init_tab_3264_2448_15fps_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3769, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x376a, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x0c},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0xc0},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x09},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0x90},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x94},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x0a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x46},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382a, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x302b, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3830, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3836, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4000, 0xf1},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4001, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4022, 0x0c},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4023, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4025, 0x36},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4027, 0x37},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402a, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402b, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402e, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402f, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4600, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4601, 0x97},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382d, 0xff},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5901, 0x00},
+
+	/*Adapt module orientation*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x40},
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x030d, 0x0f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x2b},
+};
+
 static const struct ov_camera_module_reg OV8858_init_tab_3264_2448_15fps[] = {
 	/*global setting*/
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
@@ -888,6 +931,51 @@ struct ov_camera_module_reg OV8858_init_tab_3264_2448_15fps_R1A[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x40},
 };
 
+/*refined 1632x1224 setting*/
+static
+const struct ov_camera_module_reg OV8858_init_tab_1632_1224_30fps_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3769, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x376a, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0xc8},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x94},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x30},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x67},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382a, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x302b, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3830, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3836, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4000, 0xf1},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4001, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4022, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4023, 0xb9},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4025, 0x2a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4027, 0x2b},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402a, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402b, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402e, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402f, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4600, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4601, 0xcb},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382d, 0x7f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5901, 0x00},
+
+	/*Adapt module orientation*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x40},
+
+	/*Adjust vblanking > 3ms*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x94},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x030d, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x2b},
+};
+
 static const struct ov_camera_module_reg OV8858_init_tab_1632_1224_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x00},
@@ -1238,6 +1326,48 @@ static const struct ov_camera_module_reg OV8858_init_tab_1632_1224_30fps[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x94},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x030d, 0x10},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x2b},
+};
+
+/*refined 1632x918 setting*/
+static
+const struct ov_camera_module_reg OV8858_init_tab_1632_918_30fps_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3769, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x376a, 0x44},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0x96},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x94},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x30},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x67},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382a, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x302b, 0x01},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3830, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3836, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4000, 0xf1},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4001, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4022, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4023, 0xb9},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4025, 0x2a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4027, 0x2b},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402a, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402b, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402e, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x402f, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4600, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4601, 0xcb},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x382d, 0x7f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5901, 0x00},
+
+	/*Adapt module orientation*/
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x40},
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x030d, 0x0f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x15},
 };
 
 static const struct ov_camera_module_reg OV8858_init_tab_1632_918_30fps[] = {
@@ -1620,11 +1750,11 @@ static struct ov_camera_module_config OV8858_configs[] = {
 		.auto_exp_enabled = false,
 		.auto_gain_enabled = false,
 		.auto_wb_enabled = false,
-		.reg_table = (void *)OV8858_init_tab_1632_918_30fps,
+		.reg_table = (void *)OV8858_init_tab_1632_918_30fps_light,
 		.reg_table_num_entries =
-			sizeof(OV8858_init_tab_1632_918_30fps)
+			sizeof(OV8858_init_tab_1632_918_30fps_light)
 			/
-			sizeof(OV8858_init_tab_1632_918_30fps[0]),
+			sizeof(OV8858_init_tab_1632_918_30fps_light[0]),
 		.v_blanking_time_us = 10291
 	},
 	{
@@ -1643,11 +1773,11 @@ static struct ov_camera_module_config OV8858_configs[] = {
 		.auto_exp_enabled = false,
 		.auto_gain_enabled = false,
 		.auto_wb_enabled = false,
-		.reg_table = (void *)OV8858_init_tab_1632_1224_30fps,
+		.reg_table = (void *)OV8858_init_tab_1632_1224_30fps_light,
 		.reg_table_num_entries =
-			sizeof(OV8858_init_tab_1632_1224_30fps)
+			sizeof(OV8858_init_tab_1632_1224_30fps_light)
 			/
-			sizeof(OV8858_init_tab_1632_1224_30fps[0]),
+			sizeof(OV8858_init_tab_1632_1224_30fps_light[0]),
 		.v_blanking_time_us = 4700
 	},
 	{
@@ -1666,11 +1796,11 @@ static struct ov_camera_module_config OV8858_configs[] = {
 		.auto_exp_enabled = false,
 		.auto_gain_enabled = false,
 		.auto_wb_enabled = false,
-		.reg_table = (void *)OV8858_init_tab_3264_2448_15fps,
+		.reg_table = (void *)OV8858_init_tab_3264_2448_15fps_light,
 		.reg_table_num_entries =
-			sizeof(OV8858_init_tab_3264_2448_15fps)
+			sizeof(OV8858_init_tab_3264_2448_15fps_light)
 			/
-			sizeof(OV8858_init_tab_3264_2448_15fps[0]),
+			sizeof(OV8858_init_tab_3264_2448_15fps_light[0]),
 		.v_blanking_time_us = 5179
 	},
 };
@@ -2131,6 +2261,51 @@ int update_lenc(struct ov_camera_module *cam_mod)
 	return ret;
 }
 
+#ifdef DUMP_OTP
+int dump_otp(struct ov_camera_module *cam_mod)
+{
+	int temp = 0;
+	int ret = 0;
+	int i;
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5032,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5032: [0x%x]\n", __func__, temp);
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5033,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5033: [0x%x]\n", __func__, temp);
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5034,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5034: [0x%x]\n", __func__, temp);
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5035,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5035: [0x%x]\n", __func__, temp);
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5036,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5036: [0x%x]\n", __func__, temp);
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5037,
+						&temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5037: [0x%x]\n", __func__, temp);
+
+	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x5000, &temp);
+	ov_camera_module_pr_debug(cam_mod,
+		"@%s: 0x5000: [0x%x]\n", __func__, temp);
+
+	for (i = 0; i < 240; i++) {
+		ret |= ov_camera_module_read_reg(cam_mod, 1, (0x5800 + i),
+						&temp);
+		ov_camera_module_pr_debug(cam_mod,
+			"@%s: 0x%x: [0x%x]\n", __func__, (0x5800+i), temp);
+	}
+
+	return ret;
+}
+#endif
 
 /*--------------------------------------------------------------------------*/
 static int OV8858_start_streaming(struct ov_camera_module *cam_mod)
@@ -2138,7 +2313,7 @@ static int OV8858_start_streaming(struct ov_camera_module *cam_mod)
 	int ret = 0;
 
 	ov_camera_module_pr_debug(cam_mod, "\n");
-
+#if 0
 	/*apply otp data*/
 	if (otp_ptr != NULL && otp_ptr->otp_en == 1) {
 		ov_camera_module_pr_debug(cam_mod,
@@ -2146,6 +2321,10 @@ static int OV8858_start_streaming(struct ov_camera_module *cam_mod)
 		update_awb_gain(cam_mod);
 		update_lenc(cam_mod);
 	}
+#endif
+#ifdef DUMP_OTP
+	dump_otp(cam_mod);
+#endif
 	ret = OV8858_g_VTS(cam_mod, &cam_mod->vts_min);
 	if (IS_ERR_VALUE(ret))
 		goto err;
@@ -2500,6 +2679,27 @@ static int OV8858_check_camera_id(struct ov_camera_module *cam_mod)
 		goto err;
 	}
 
+	/*As this function check_camera_id will be invoked at power on stage,
+	*so add writing init_common setting and applying otp data here.
+	*No need to do this in probe stage.
+	*/
+	if (is_probed) {
+		ov_camera_module_write_reglist(cam_mod,
+			OV8858_init_tab_3264_2448_15fps,
+			ARRAY_SIZE(OV8858_init_tab_3264_2448_15fps));
+	}
+	/*apply otp data*/
+	if (otp_ptr != NULL && otp_ptr->otp_en == 1) {
+		ov_camera_module_pr_debug(cam_mod,
+					"apply otp data for R2A module...\n");
+		update_awb_gain(cam_mod);
+		update_lenc(cam_mod);
+
+#ifdef DUMP_OTP
+		dump_otp(cam_mod);
+#endif
+	}
+
 	ret |= ov_camera_module_read_reg(cam_mod, 1, 0x302a, &vid);
 	if (IS_ERR_VALUE(ret)) {
 		ov_camera_module_pr_err(cam_mod,
@@ -2594,7 +2794,7 @@ static int __init OV8858_probe(
 		if (!IS_ERR_VALUE(ov8858_otp_read(&OV8858)))
 			otp_ptr->otp_en = 1;
 	}
-
+	is_probed = true;
 	ov_camera_module_s_power(&OV8858.sd, 0);
 
 	dev_info(&client->dev, "probing successful\n");
@@ -2621,6 +2821,7 @@ static int __exit OV8858_remove(
 	if (otp_ptr != NULL)
 		kfree(otp_ptr);
 
+	is_probed = false;
 	dev_info(&client->dev, "removed\n");
 	return 0;
 }
