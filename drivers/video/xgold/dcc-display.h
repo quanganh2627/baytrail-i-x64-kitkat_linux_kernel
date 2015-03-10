@@ -137,6 +137,7 @@ struct dcc_display_if_mipi_dsi {
 	int video_pixel;
 	int bllp_time;
 	int line_time;
+	int te_enable;
 };
 
 struct dcc_display_if_mipi_dbi {

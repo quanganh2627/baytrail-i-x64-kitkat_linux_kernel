@@ -43,6 +43,31 @@ struct xgold_on_button_pdata {
 
 static uint16_t keycodes[] = { KEY_POWER };
 
+struct xgold_on_button_pdata *esd_data;
+
+void esd_on_button_pressed(void);
+void esd_on_button_released(void);
+
+void esd_on_button_pressed(void)
+{
+	if (esd_data->input_dev) {
+		input_report_key(esd_data->input_dev, KEY_POWER, 1);
+    printk("Power key pressed - event reported for %d, %d\n", KEY_POWER, 1);
+    input_sync(esd_data->input_dev);
+	}
+}
+
+void esd_on_button_released(void)
+{
+	if (esd_data->input_dev) {
+		input_report_key(esd_data->input_dev, KEY_POWER, 0);
+		printk("Power key released - event reported for %d, %d\n", KEY_POWER, 0);
+		input_sync(esd_data->input_dev);
+	}
+}
+
+
+
 static int32_t pmic_btn_init(struct device *dev)
 {
 	int32_t ret = 0;
@@ -361,7 +386,7 @@ static int32_t xgold_on_button_probe(struct platform_device *pdev)
 		goto fail_reg_input;
 	}
 	device_init_wakeup(&pdev->dev, true);
-
+	esd_data = data;
 	/* Do PMIC button init if compatible is there */
 	if (of_device_is_compatible(np, PROP_PMIC_ON_BUTTON)) {
 		if (pmic_btn_init(dev)) {

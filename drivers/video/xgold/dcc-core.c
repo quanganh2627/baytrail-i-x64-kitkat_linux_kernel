@@ -44,6 +44,10 @@
 	#define ioremap_wc ioremap
 #endif
 
+extern int dcc_hw_suspend_resume(struct device *dev);
+extern void esd_on_button_pressed(void);
+extern void esd_on_button_released(void);
+
 
 /* if FrameBuffer is in RGB32 888
  *  n    0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
@@ -159,6 +163,36 @@ static void end_of_frame_wq(struct work_struct *ws)
 	up(&pdata->update_sem);
 }
 
+static void esd_recovery_wq(struct work_struct *ws)
+{
+	struct dcc_drvdata *pdata = m_to_dccdata(ws, esd_work);
+	printk("%s,esd_te_gpio:0x%x\n", __func__, gpio_get_value(pdata->gpio_esd_te));
+
+	if (gpio_get_value(pdata->gpio_esd_te) == 0x01) {
+		mdelay(10);
+		if (gpio_get_value(pdata->gpio_esd_te) == 0x01)
+			pdata->esd_flag = 1;
+	}
+
+	if (pdata->esd_flag) {
+		wake_lock(&pdata->esd_suspend_lock);
+
+		esd_on_button_pressed();
+		mdelay(40);
+		esd_on_button_released();
+		msleep(500);
+		esd_on_button_pressed();
+		mdelay(40);
+		esd_on_button_released();
+
+		wake_unlock(&pdata->esd_suspend_lock);
+		pdata->esd_flag = 0;
+	}
+
+	queue_delayed_work(pdata->esd_wq, &pdata->esd_work, (unsigned long)(msecs_to_jiffies(2000)));
+
+}
+
 static inline int dcc_set_pinctrl_state(struct device *dev,
 		struct pinctrl_state *state)
 {
@@ -198,6 +232,7 @@ int dcc_core_probe(struct platform_device *pdev)
 
 	INIT_WORK(&pdata->vsync_work, vsync_wq);
 	INIT_WORK(&pdata->eof_work, end_of_frame_wq);
+	INIT_DELAYED_WORK(&pdata->esd_work, esd_recovery_wq);
 
 	/* Create workqueues */
 	pdata->vsync_wq = alloc_ordered_workqueue(
@@ -206,6 +241,8 @@ int dcc_core_probe(struct platform_device *pdev)
 		"eof_wq", WQ_NON_REENTRANT | WQ_HIGHPRI);
 	pdata->acq_wq = alloc_ordered_workqueue(
 		"acq_wq", WQ_NON_REENTRANT | WQ_HIGHPRI);
+	pdata->esd_wq = alloc_ordered_workqueue(
+		"esd_wq", WQ_NON_REENTRANT | WQ_HIGHPRI);
 
 	/* initialize some data fields */
 	pdata->overlay_status = 0;
@@ -237,6 +274,10 @@ int dcc_core_probe(struct platform_device *pdev)
 	dcc_boot_dbg("dedicated memory [0x%08x-0x%08x] remapped to 0x%08x\n",
 			pdata->mem.pbase, pdata->mem.size,
 			(unsigned)pdata->mem.vbase);
+
+	/* Set up the wake lock to prevent suspend between multiple register
+	accesses. */
+	wake_lock_init(&pdata->esd_suspend_lock, WAKE_LOCK_SUSPEND, "esd_wake_lock");
 
 	/* setup hardware: DCC*/
 	dcc_core_hwstart(pdata);
@@ -356,6 +397,8 @@ int dcc_core_remove(struct platform_device *pdev)
 	dma_free_writecombine(&pdev->dev, pdata->mem.size,
 			pdata->mem.vbase, pdata->mem.pbase);
 	pdata->mem.vbase = NULL;
+
+	wake_lock_destroy(&pdata->esd_suspend_lock);
 
 	return ret;
 }
