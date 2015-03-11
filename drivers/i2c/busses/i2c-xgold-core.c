@@ -36,6 +36,7 @@
 #include <linux/dmaengine.h>
 #include <linux/i2c.h>
 #include <linux/platform_data/i2c-xgold.h>
+#include <linux/gpio.h>
 
 #include "i2c-xgold.h"
 
@@ -1314,6 +1315,7 @@ static struct xgold_i2c_ops xgold_i2c_core_ops = {
 };
 
 #if defined CONFIG_PM
+#define GPIO_LCD_BIAS 7
 /*****************************************************************************
  * Function:... xgold_i2c_core_suspend()
  * Description:
@@ -1330,6 +1332,11 @@ static int xgold_i2c_core_suspend(struct device *dev)
 	xgold_i2c_hw_stop(data);
 
 	xgold_i2c_set_pinctrl_state(dev, platdata->pins_sleep);
+	if (1 == i2c_dev->adapter.nr) {
+		gpio_request(GPIO_LCD_BIAS, "gpio_lcd_bias");
+		gpio_set_value(GPIO_LCD_BIAS, 0);
+		gpio_free(GPIO_LCD_BIAS);
+	}
 
 	return ret;
 }

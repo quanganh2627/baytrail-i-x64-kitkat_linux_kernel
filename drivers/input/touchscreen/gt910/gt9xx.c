@@ -274,17 +274,18 @@ static int gtp_ts_power_on(struct i2c_client *client)
 		gtp_send_cfg(ts->client);
 	}
 
-	if (ts->use_irq)
-		gtp_irq_enable(ts);
-	else
-		hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
-
 	ts->enable++;
 	ts->gtp_is_suspend = 0;
 #if GTP_ESD_PROTECT
 	gtp_esd_switch(ts->client, SWITCH_ON);
 #endif
 out:
+	if (ts->use_irq)
+		gtp_irq_enable(ts);
+	else
+		hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
+
+
 	mutex_unlock(&ts->en_mutex);
 	return ret;
 }
@@ -352,7 +353,6 @@ static void gtp_ts_early_suspend(struct early_suspend *h)
 {
 	struct goodix_ts_data *ts =
 		container_of(h, struct goodix_ts_data, es);
-
 	gtp_ts_power_off(ts->client);
 }
 
@@ -816,6 +816,13 @@ static void goodix_ts_work_func(struct work_struct *work)
 	ts = container_of(work, struct goodix_ts_data, work);
 	if (ts->enter_update)
 		return;
+
+	if (!ts->enable) {
+		/*if (ts->use_irq)
+			gtp_irq_enable(ts);*/
+		return;
+	}
+
 #if GTP_GESTURE_WAKEUP
 	if (DOZE_ENABLED == doze_status) {
 		ret = gtp_i2c_read(i2c_connect_client, doze_buf, 3);
@@ -1440,6 +1447,7 @@ static s8 gtp_wakeup_sleep(struct goodix_ts_data *ts)
 
 	GTP_DEBUG_FUNC();
 
+	gtp_irq_disable(ts); /*Before wake up ts, disable touch interrupt*/
 #if GTP_COMPATIBLE_MODE
 	if (CHIP_TYPE_GT9F == ts->chip_type) {
 		u8 opr_buf[3] = {0x41, 0x80};
@@ -1530,6 +1538,7 @@ static s8 gtp_wakeup_sleep(struct goodix_ts_data *ts)
 	}
 #endif
 
+	gtp_irq_enable(ts);/* enable touch interrupt after power on done */
 	GTP_ERROR("GTP wakeup sleep failed.");
 	return ret;
 }

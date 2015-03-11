@@ -102,6 +102,7 @@ int dcc_display_setup(struct dcc_drvdata *pdata)
 	}
 	pdata->display_preinit = 0;
 	dcc_boot_dbg("Display_Interface loaded successfully!\n");
+
 	return 0;
 error:
 	dcc_err("Display setup failed\n");
@@ -114,7 +115,8 @@ int dcc_display_suspend(struct dcc_drvdata *pdata)
 	pdata->display.power_off(&pdata->display);
 	pdata->display.dif_stop(&pdata->display);
 	gpio_set_value(pdata->gpio_reset, 0);
-	gpio_set_value(pdata->gpio_lcd_bias, 0);
+	/*gpio_set_value(pdata->gpio_lcd_bias, 0);*/
+	/* Did not pull low of lcd bias to WA LDO wakeup */
 	gpio_free(pdata->gpio_reset);
 	gpio_free(pdata->gpio_lcd_bias);
 	return 0;
