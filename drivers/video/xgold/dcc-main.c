@@ -1083,6 +1083,9 @@ static int dcc_main_suspend(struct device *dev)
 	long long diffus = 0;
 	struct platform_device *pdev =
 		container_of(dev, struct platform_device, dev);
+
+	dev_info(dev, "%s\n", __func__);
+
 	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 	if (!pdata)
 		return -1;
@@ -1132,6 +1135,9 @@ static int dcc_main_resume(struct device *dev)
 	long long diffus = 0;
 	struct platform_device *pdev =
 		container_of(dev, struct platform_device, dev);
+
+	dev_info(dev, "%s\n", __func__);
+
 	pdata = (struct dcc_drvdata *)platform_get_drvdata(pdev);
 	if (!pdata)
 		return -EINVAL;

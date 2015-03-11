@@ -27,6 +27,7 @@
 #include <sofia/mv_svc_hypercalls.h>
 #include <sofia/vmm_pmic.h>
 #include <sofia/board_id.h>
+#include <linux/delay.h>
 #include "leds-pmic.h"
 
 #define TRUE 1
@@ -353,6 +354,7 @@ static int xgold_bl_set_clk(struct device *dev,
 			dev_err(dev, "%s Power On Failed\n", __func__);
 			return 0; /* ret; */
 		}
+#if 0
 retry:
 		spin_lock_irqsave(&bl->timer_lock, flags);
 		if (hrtimer_try_to_cancel(&bl->timer) < 0) {
@@ -363,6 +365,7 @@ retry:
 				US_TO_NS(DELAY_TIME_FOR_LED_CTRL_200MV),
 				HRTIMER_MODE_REL);
 		spin_unlock_irqrestore(&bl->timer_lock, flags);
+#endif
 	} else {
 		ret = device_state_pm_set_state_by_name(dev,
 			pm_platdata->pm_state_D3_name);
@@ -382,7 +385,7 @@ static int xgold_set_lcd_backlight(struct device *dev,
 	struct xgold_led_bl_device *pdata = dev_get_drvdata(dev);
 	unsigned long flags = 0;
 	dev_dbg(dev, "%s %d\n", __func__, intensity);
-
+	msleep(120);
 	intensity = SCALING_INTENSITY(intensity);
 	if (intensity) {
 		if (!pdata->pmic_bl)
