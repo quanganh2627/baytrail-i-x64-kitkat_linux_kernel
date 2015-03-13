@@ -1440,6 +1440,24 @@ static int meas_ag620_remove(struct idi_peripheral_device *ididev)
 	return 0;
 }
 
+static void meas_ag620_shutdown(struct idi_peripheral_device *ididev)
+{
+	int i;
+
+	/* Stop running timer */
+	(void)del_timer_sync(&meas_ag620_state.pd_timer);
+
+	/* wait until a measurement pending in meas_ag620_read_raw() */
+	for (i = 0; i < 100 && meas_ag620_state.meas_pending; i++) {
+		pr_warn("stop measurement on ADC running\n");
+		udelay(300);
+	}
+
+	meas_ag620_state.suspended = true;
+
+	return;
+}
+
 /**
  * meas_ag620_suspend() - Called when the system is attempting to suspend.
  * If a measurement is in progress EBUSY is returned to abort the suspend.
@@ -1519,6 +1537,7 @@ static struct idi_peripheral_driver meas_ag620_idiperdrv = {
 	.id_table = idi_ids,
 	.probe = meas_ag620_probe,
 	.remove = meas_ag620_remove,
+	.shutdown = meas_ag620_shutdown,
 };
 
 MODULE_DEVICE_TABLE(idi, idi_ids);
