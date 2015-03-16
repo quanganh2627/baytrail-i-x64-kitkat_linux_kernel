@@ -29,6 +29,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/iio/driver.h>
 #include <sound/soc.h>
+#include <linux/wakelock.h>
 
 #ifdef CONFIG_X86_INTEL_SOFIA
 #include <sofia/pal_shared_data.h>
@@ -90,6 +91,7 @@ struct hs_key_cfg {
 #define XGOLD_DETECT_HOOK_RELEASE	0xC2F3
 
 #define VBIAS_SETTLING_TIME_MS		20
+#define JACK_DET_RETRY_TIMES		4
 
 /* Headset keymap */
 struct hs_key_cfg xgold_hs_keymap[] = {
@@ -168,19 +170,26 @@ static void xgold_jack_check(struct xgold_jack *jack)
 	u32 detect;
 	int status = 0;
 	enum xgold_vbias vbias;
+	int i;
 
+	wake_lock_timeout(&jack->suspend_lock,
+			(JACK_DET_RETRY_TIMES/2 + 2) * HZ);
 	configure_vbias(XGOLD_VBIAS_ENABLE);
 
 	/* First, make sure we have a stable state.
 	   Headset insertion takes a bit of time(~> 500ms),
 	   so make sure that two consecutive reads agree.
 	*/
-	do {
-		msleep(250);
-		old_state = read_state(jack);
-		msleep(250);
-		state = read_state(jack);
-	} while (state != old_state);
+	state = XGOLD_ERROR;
+	for (i = 0; (i < JACK_DET_RETRY_TIMES) && (XGOLD_ERROR == state); i++) {
+		xgold_debug("Jack detect - try %d times\n", i);
+		do {
+			msleep(250);
+			old_state = read_state(jack);
+			msleep(250);
+			state = read_state(jack);
+		} while (state != old_state);
+	}
 
 	if (XGOLD_ERROR == state) {
 		xgold_err("Unable to determine state.\n");
@@ -334,6 +343,7 @@ struct xgold_jack *of_xgold_jack_probe(struct platform_device *pdev,
 	jack->buttons_enabled = false;
 	jack->jack_irq = jack->button_irq = -1;
 	jack->hs_jack = hs_jack;
+	wake_lock_init(&jack->suspend_lock, WAKE_LOCK_SUSPEND, "jack_wakelock");
 
 	if (of_address_to_resource(np, 0, &regs)) {
 		ret = -ENOENT;
@@ -382,7 +392,8 @@ struct xgold_jack *of_xgold_jack_probe(struct platform_device *pdev,
 	ret = devm_request_threaded_irq(&(pdev->dev), jack->jack_irq,
 			NULL,
 			xgold_jack_detection,
-			IRQF_SHARED | IRQF_ONESHOT, "jack_irq", jack);
+			IRQF_SHARED | IRQF_ONESHOT | IRQF_NO_SUSPEND,
+			"jack_irq", jack);
 	if (ret) {
 		xgold_err("setup of jack irq failed!\n");
 		ret = -EINVAL;
@@ -413,4 +424,6 @@ void xgold_jack_remove(struct xgold_jack *jack)
 {
 	if (jack && jack->iio_client)
 		iio_channel_release(jack->iio_client);
+	if (jack)
+		wake_lock_destroy(&jack->suspend_lock);
 }
