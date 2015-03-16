@@ -34,6 +34,8 @@
 #define PCI_VENDOR_ID_ETRON		0x1b6f
 #define PCI_DEVICE_ID_ASROCK_P67	0x7023
 
+#define PCI_DEVICE_ID_INTEL_BYT_XHCI	0x0f35
+
 static const char hcd_name[] = "xhci_hcd";
 
 /* called after powerup, by probe or system-pm "wakeup" */
@@ -105,6 +107,13 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 		 * PPT chipsets.
 		 */
 		xhci->quirks |= XHCI_SPURIOUS_REBOOT;
+		xhci->quirks |= XHCI_AVOID_BEI;
+	}
+	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
+	     pdev->device == PCI_DEVICE_ID_INTEL_BYT_XHCI) {
+		/* BYT does not support BEI, which may lead to XHCI stop
+		 * when XHCI is doing multiple TDs' ISOC transfer.
+		 */
 		xhci->quirks |= XHCI_AVOID_BEI;
 	}
 	if (pdev->vendor == PCI_VENDOR_ID_ETRON &&
