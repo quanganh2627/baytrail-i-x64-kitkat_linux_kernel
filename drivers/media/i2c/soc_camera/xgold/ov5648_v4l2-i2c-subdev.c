@@ -117,6 +117,7 @@ struct ov5648_otp_struct {
 };
 
 static struct ov5648_otp_struct *otp_ptr;
+static bool is_probed;
 
 /* ======================================================================== */
 /* Base sensor configs */
@@ -532,6 +533,63 @@ static const struct ov_camera_module_reg ov5648_init_tab_1304_976_30fps_vfifo[] 
 };
 #endif
 
+/*refined 1296x736 setting*/
+static const
+struct ov_camera_module_reg ov5648_init_tab_1296_736_30fps_vfifo_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3708, 0x66},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3709, 0x52},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x370c, 0xcf},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3800, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3801, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3802, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3803, 0xe2},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3804, 0x0a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3805, 0x2f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3806, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3807, 0xa5},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0xe0},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x09},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3810, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3812, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x31},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3815, 0x31},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3817, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4004, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4005, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x350b, 0x80},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3501, 0x2d},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3502, 0xc0},
+
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3034, 0x1a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3035, 0x21},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3036, 0x3f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3037, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3038, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3039, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3106, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3105, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303a, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303b, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303c, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303d, 0x20},
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
+};
+
 static const struct ov_camera_module_reg ov5648_init_tab_1296_736_30fps_vfifo[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x301a, 0xf1},
@@ -740,6 +798,62 @@ static const struct ov_camera_module_reg ov5648_init_tab_1296_736_30fps_vfifo[] 
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
 };
 
+/*refined 2592x1944 setting*/
+static const
+struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3708, 0x63},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3709, 0x12},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x370c, 0xcc},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3800, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3801, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3802, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3803, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3804, 0x0a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3805, 0x3f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3806, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3807, 0xa3},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x0a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0x20},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0x98},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x0b},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3810, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3812, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3815, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3817, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x40},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x06},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4004, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4005, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x350b, 0x40},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3501, 0x7b},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3502, 0x00},
+
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3034, 0x1a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3035, 0x21},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3036, 0x65},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3037, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3038, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3039, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3106, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3105, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303a, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303b, 0x19},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303c, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303d, 0x30},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
+};
+
 static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[] = {
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0103, 0x01},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x301a, 0xf1},
@@ -908,6 +1022,63 @@ static const struct ov_camera_module_reg ov5648_init_tab_2592_1944_15fps_vfifo[]
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b01, 0x40},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b02, 0x00},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x5b03, 0xf0},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
+};
+
+/*refined 1296x972 setting*/
+static const
+struct ov_camera_module_reg ov5648_init_tab_1296_972_30fps_vfifo_light[] = {
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3708, 0x66},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3709, 0x52},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x370c, 0xcf},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3800, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3801, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3802, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3803, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3804, 0x0a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3805, 0x3f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3806, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3807, 0xa3},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3808, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3809, 0x10},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380a, 0x03},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380b, 0xcc},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380c, 0x09},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380d, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380e, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x380f, 0x60},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3810, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3811, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3812, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3813, 0x04},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3814, 0x31},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3815, 0x31},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3817, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3820, 0x08},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3821, 0x07},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4004, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4005, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4837, 0x18},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x350b, 0x80},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3501, 0x3d},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3502, 0x00},
+
+
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3034, 0x1a},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3035, 0x21},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3036, 0x3f},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3037, 0x02},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3038, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3039, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3106, 0x05},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x3105, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303a, 0x00},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303b, 0x19},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303c, 0x11},
+	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x303d, 0x30},
+
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x4800, 0x24},
 	{OV_CAMERA_MODULE_REG_TYPE_DATA, 0x0100, 0x01},
 };
@@ -1111,11 +1282,12 @@ static struct ov_camera_module_config ov5648_configs[] = {
 		.auto_exp_enabled      = false,
 		.auto_gain_enabled     = false,
 		.auto_wb_enabled       = false,
-		.reg_table       = (void *)ov5648_init_tab_1296_972_30fps_vfifo,
+		.reg_table             =
+			(void *)ov5648_init_tab_1296_972_30fps_vfifo_light,
 		.reg_table_num_entries =
-			sizeof(ov5648_init_tab_1296_972_30fps_vfifo)
+			sizeof(ov5648_init_tab_1296_972_30fps_vfifo_light)
 			/
-			sizeof(ov5648_init_tab_1296_972_30fps_vfifo[0]),
+			sizeof(ov5648_init_tab_1296_972_30fps_vfifo_light[0]),
 		.v_blanking_time_us    = 4405 /*empirically measured time*/
 	},
 	{
@@ -1134,11 +1306,12 @@ static struct ov_camera_module_config ov5648_configs[] = {
 		.auto_exp_enabled      = false,
 		.auto_gain_enabled     = false,
 		.auto_wb_enabled       = false,
-		.reg_table             = (void *)ov5648_init_tab_1296_736_30fps_vfifo,
+		.reg_table             =
+			(void *)ov5648_init_tab_1296_736_30fps_vfifo_light,
 		.reg_table_num_entries =
-			sizeof(ov5648_init_tab_1296_736_30fps_vfifo)
+			sizeof(ov5648_init_tab_1296_736_30fps_vfifo_light)
 			/
-			sizeof(ov5648_init_tab_1296_736_30fps_vfifo[0]),
+			sizeof(ov5648_init_tab_1296_736_30fps_vfifo_light[0]),
 		.v_blanking_time_us    = 11400 /*empirically measured time*/
 	},
 	{
@@ -1157,11 +1330,12 @@ static struct ov_camera_module_config ov5648_configs[] = {
 		.auto_exp_enabled      = false,
 		.auto_gain_enabled     = false,
 		.auto_wb_enabled       = false,
-		.reg_table             = (void *)ov5648_init_tab_2592_1944_15fps_vfifo,
+		.reg_table             =
+			(void *)ov5648_init_tab_2592_1944_15fps_vfifo_light,
 		.reg_table_num_entries =
-			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo)
+			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo_light)
 			/
-			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo[0]),
+			sizeof(ov5648_init_tab_2592_1944_15fps_vfifo_light[0]),
 		.v_blanking_time_us    = 4100 /*empirically measured time*/
 	},
 };
@@ -2202,6 +2376,16 @@ static int ov5648_check_camera_id(struct ov_camera_module *cam_mod)
 		goto err;
 	}
 
+	/*As this function check_camera_id will be invoked at power on stage,
+	*so add writing init_common setting and applying otp data here.
+	*No need to do this in probe stage.
+	*/
+	if (is_probed) {
+		ov_camera_module_write_reglist(cam_mod,
+			ov5648_init_tab_2592_1944_15fps_vfifo,
+			ARRAY_SIZE(ov5648_init_tab_2592_1944_15fps_vfifo));
+	}
+
 	return 0;
 
 err:
@@ -2270,6 +2454,7 @@ static int __init ov5648_probe(
 	if (!IS_ERR_VALUE(ov5648_otp_read(&ov5648)))
 		otp_ptr->otp_en = 1;
 
+	is_probed = true;
 	ov_camera_module_s_power(&ov5648.sd, 0);
 
 	dev_info(&client->dev, "probing successful\n");
@@ -2298,6 +2483,7 @@ static int __exit ov5648_remove(
 	if (otp_ptr != NULL)
 		kfree(otp_ptr);
 
+	is_probed = false;
 	dev_info(&client->dev, "removed\n");
 
 	return 0;
