@@ -21,6 +21,7 @@
 #include <linux/input.h>
 #include <sound/jack.h>
 #include <linux/platform_device.h>
+#include <linux/wakelock.h>
 
 
 struct xgold_jack {
@@ -31,6 +32,7 @@ struct xgold_jack {
 	void __iomem *mmio_base;
 	unsigned base_phys;
 	int buttons_enabled;
+	struct wake_lock suspend_lock;
 };
 
 struct xgold_jack *of_xgold_jack_probe(struct platform_device *,
