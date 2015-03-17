@@ -1002,14 +1002,24 @@ kp_sleep_pins:kp_sleep_pins {
 	};
 	i2c1_inactive_pins:i2c1_inactive_pins {
 		pinctrl-single,pins = <
+#ifdef SOFIA3G_MRD5S
+			0x324 0x0100	/* i2c1_scl */
+			0x328 0x0100	/* i2c1_sda */
+#else
 			0x324 0x2100	/* i2c1_scl */
 			0x328 0x2100	/* i2c1_sda */
+#endif
 		>;
 	};
 	i2c1_sleep_pins:i2c1_sleep_pins {
 		pinctrl-single,pins = <
+#ifdef SOFIA3G_MRD5S
+			0x324 0x0100	/* i2c1_scl */
+			0x328 0x0100	/* i2c1_sda */
+#else
 			0x324 0x2100	/* i2c1_scl */
 			0x328 0x2100	/* i2c1_sda */
+#endif
 		>;
 	};
 	i2c2_default_pins:i2c2_default_pins {
