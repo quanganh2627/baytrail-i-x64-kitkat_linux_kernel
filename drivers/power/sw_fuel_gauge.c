@@ -596,7 +596,7 @@ static void sw_fuel_gauge_enqueue_function(
 		 * kfifo() needs explicit locking when there
 		 * are multiple consumers or producers.
 		 */
-		BUG_ON(0 == kfifo_in(&sw_fuel_gauge_work.fifo,
+		WARN_ON(0 == kfifo_in(&sw_fuel_gauge_work.fifo,
 						&payload,
 						1));
 
