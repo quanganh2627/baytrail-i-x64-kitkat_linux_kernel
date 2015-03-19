@@ -927,8 +927,6 @@ int dcc_main_probe(struct platform_device *pdev)
 	struct resource *res;
 	resource_size_t res_size;
 	struct dcc_drvdata *pdata;
-	unsigned int stat = 0;
-	unsigned int pllstat;
 
 	/* Allocate driver data record */
 	pdata = devm_kzalloc(&pdev->dev,
@@ -947,9 +945,6 @@ int dcc_main_probe(struct platform_device *pdev)
 	pdata->debug.boot = 1;
 	pdata->drv_suspend = dcc_main_suspend;
 	pdata->drv_resume = dcc_main_resume;
-	/* it is depend on dts and pll check */
-	pdata->display_bootinit = 0;
-	pdata->display_boot_initialized = 0;
 
 	/* Map registers */
 	res = platform_get_resource_byname(pdev,
@@ -988,9 +983,6 @@ int dcc_main_probe(struct platform_device *pdev)
 	if (pdata->display_preinit)
 		dcc_boot_info("\t%s: display pre-init\n",
 			pdata->display_preinit ? "ON " : "OFF");
-	if (pdata->display_bootinit)
-		dcc_boot_info("\t%s: display boot-init\n",
-			pdata->display_bootinit ? "enable " : "disable");
 	if (pdata->use_fences)
 		dcc_boot_info("\t%s: use fences\n",
 			pdata->use_fences ? "ON " : "OFF");
@@ -1023,29 +1015,16 @@ int dcc_main_probe(struct platform_device *pdev)
 	}
 #endif
 
-	if (pdata->display_bootinit) {
-		pllstat = BITFLDS(EXR_DIF_STAT_DSILOCK, 1);
-		gra_read_field(pdata, EXR_DIF_STAT, &stat);
-		if ((stat & pllstat) == pllstat) {
-			pdata->display_boot_initialized = 1;
-			dcc_boot_info("0x%x,display is initialized in bootsystem\n",
-				stat);
-		}
-	}
-
 	ret = dcc_core_probe(pdev);
 	if (ret) {
 		dcc_err("Failed to initialize hardware(%d)", ret);
 		goto exit;
 	}
+	/* display boot animation */
+	dcc_clearscreen(pdata);
 
-	if (!pdata->display_boot_initialized) {
-		/* display boot animation */
-		dcc_clearscreen(pdata);
-
-		if (pdata->test.bootscreen)
-			dcc_bootscreen(pdata);
-	}
+	if (pdata->test.bootscreen)
+		dcc_bootscreen(pdata);
 
 	pdata->devfile.minor = MISC_DYNAMIC_MINOR;
 	pdata->devfile.name = DCC_DRIVER_NAME;

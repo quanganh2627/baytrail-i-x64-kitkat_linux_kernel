@@ -247,8 +247,6 @@ struct dcc_drvdata {
 	int use_fbapi;
 	int fbapi_nr_buffers;
 	int display_preinit;
-	int display_bootinit;
-	int display_boot_initialized;
 	int display_autorefresh;
 	struct dcc_test_t test;	/* tests configuration */
 #ifdef CONFIG_PLATFORM_DEVICE_PM
@@ -393,7 +391,7 @@ int dcc_dbi_set_bitmux(struct dcc_drvdata *gradrv);
 /* Display interfaces */
 int dcc_dsi_probe(struct dcc_display *lcd);
 int dcc_dbi_probe(struct dcc_display *lcd);
-void dcc_display_reset(int gpio, struct dcc_display *lcd);
+
 
 extern struct dcc_drvdata *gradata;
 

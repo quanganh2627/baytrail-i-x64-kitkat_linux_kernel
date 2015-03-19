@@ -217,7 +217,6 @@ int dcc_core_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct dcc_drvdata *pdata =
 		(struct dcc_drvdata *)platform_get_drvdata(pdev);
-	struct dcc_display *lcd = &pdata->display;
 
 	if (!dev || !pdata)
 		return -EINVAL;
@@ -280,10 +279,8 @@ int dcc_core_probe(struct platform_device *pdev)
 	accesses. */
 	wake_lock_init(&pdata->esd_suspend_lock, WAKE_LOCK_SUSPEND, "esd_wake_lock");
 
-	if (!pdata->display_boot_initialized) {
-		/* setup hardware: DCC*/
-		dcc_core_hwstart(pdata);
-	}
+	/* setup hardware: DCC*/
+	dcc_core_hwstart(pdata);
 	/* Read DCC revision number */
 	gra_read_field(pdata, EXR_DIF_ID_NUMBER, &pdata->id);
 
@@ -324,24 +321,10 @@ int dcc_core_probe(struct platform_device *pdev)
 	}
 
 	xgold_noc_qos_set("DCC2");
-	if (pdata->display_boot_initialized) {
-		lcd->panel_reset = dcc_display_reset;
-
-		if (DISPLAY_IS_MIPI_DBI_IF(lcd->dif.type))
-			dcc_dbi_probe(lcd);
-		else if (DISPLAY_IS_MIPI_DSI_IF(lcd->dif.type))
-			dcc_dsi_probe(lcd);
-		else
-			dcc_err("Display setup failed\n");
-
-		if ((lcd->dif_config == NULL) || (lcd->panel_init == NULL))
-			dcc_err("Display setup failed\n");
-	} else {
-		dcc_display_setup(pdata);
-		dcc_core_hwsetup(pdata);
-	}
+	dcc_display_setup(pdata);
 	dcc_boot_info("Display device %dx%d\n",
 			pdata->display.xres, pdata->display.yres);
+	dcc_core_hwsetup(pdata);
 
 	dcc_boot_info("HWID 0x%x / DCC@%d MHz / %dMB RAM [0x%08x->0x%p]\n",
 			pdata->id, pdata->clk_rate/1000/1000,
