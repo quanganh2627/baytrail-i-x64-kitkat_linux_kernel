@@ -35,12 +35,15 @@
 #include <linux/iio/machine.h>
 #include <linux/iio/consumer.h>
 #include <linux/iio/driver.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
 
 #include "xgold_jack.h"
 
 #define PCL_LOCK_EXCLUSIVE	1
 #define PCL_OPER_ACTIVATE	0
 #define PROP_CODEC_DAI_NAME	"intel,codec_dai_name"
+#define PROP_EXT_AMP_GPIO "intel,ext_amp_gpio"
 
 
 #define	xgold_err(fmt, arg...) \
@@ -50,6 +53,8 @@
 		pr_debug("snd: mac: "fmt, ##arg)
 
 int audio_native_mode;
+
+static int ext_amp_gpio;
 
 struct xgold_mc_private {
 	struct xgold_jack *jack;
@@ -84,6 +89,66 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Handset Mic", NULL, "AMIC1"}
 };
 
+static int xgold_get_ext_amp_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.max = 1;
+	return 0;
+}
+
+/* Read current external amp gpio value */
+static int xgold_get_ext_amp_val(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *uinfo)
+{
+	if (ext_amp_gpio > 0) {
+		uinfo->value.integer.value[0] = gpio_get_value(ext_amp_gpio);
+		xgold_debug("%s: ext_amp_gpio %d is %ld\n", __func__,
+			ext_amp_gpio, uinfo->value.integer.value[0]);
+	} else {
+		xgold_debug("%s: ext_amp_gpio not found\n", __func__);
+		uinfo->value.integer.value[0] = 0;
+	}
+
+	return 0;
+}
+
+/* Set external amp gpio value */
+static int xgold_set_ext_amp_val(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *uinfo)
+{
+	int value;
+
+	value = uinfo->value.integer.value[0];
+	if (value != 0 && value != 1) {
+		xgold_err("%s:invalid value\n", __func__);
+		return -EINVAL;
+	}
+
+	if (ext_amp_gpio > 0) {
+		gpio_set_value(ext_amp_gpio, value);
+		xgold_debug("%s : ext_amp_gpio %d set to %d\n", __func__,
+			ext_amp_gpio, value);
+	} else {
+		xgold_debug("%s: ext_amp_gpio not found\n", __func__);
+	}
+
+	return 0;
+}
+
+
+static const struct snd_kcontrol_new xgold_controls[] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "EXT AMP",
+		.info = xgold_get_ext_amp_info,
+		.get = xgold_get_ext_amp_val,
+		.put = xgold_set_ext_amp_val,
+	},
+};
+
+
 static int xgold_snd_init(struct snd_soc_pcm_runtime *runtime)
 {
 	struct snd_soc_codec *codec = runtime->codec;
@@ -117,6 +182,10 @@ static int xgold_snd_init(struct snd_soc_pcm_runtime *runtime)
 
 	/* Set up jack detection */
 	ret = xgold_jack_setup(codec, &hs_jack);
+	if (ret) {
+		xgold_err("Failed to set up jack detection\n");
+		return ret;
+	}
 
 	return ret;
 }
@@ -360,6 +429,32 @@ static int xgold_mc_probe(struct platform_device *pdev)
 		/* Allow machine probe to succeed anyway */
 	}
 
+	ret = snd_soc_add_card_controls(&xgold_snd_card, xgold_controls,
+		ARRAY_SIZE(xgold_controls));
+	if (ret) {
+		xgold_err("Failed to add xgold_controls\n");
+		return ret;
+	}
+
+	/* spk gpio */
+	ext_amp_gpio = of_get_named_gpio_flags(np,
+		PROP_EXT_AMP_GPIO, 0, NULL);
+
+	if (ext_amp_gpio <= 0) {
+		xgold_err("%s: ext_amp_gpio node not found\n", __func__);
+	} else {
+		xgold_err("%s: ext_amp_gpio number is %d\n", __func__,
+			ext_amp_gpio);
+		ret = gpio_request(ext_amp_gpio, PROP_EXT_AMP_GPIO);
+		if (!ret) {
+			xgold_err("gpio_request ext_amp_gpio success!\n");
+			gpio_direction_output(ext_amp_gpio, 0);
+		} else {
+			xgold_err("gpio_request ext_amp_gpio failed\n");
+		}
+	}
+
+
 	return 0;
 }
 
@@ -369,6 +464,9 @@ static int xgold_mc_remove(struct platform_device *pdev)
 
 	if (mc_drv_ctx)
 		xgold_jack_remove(mc_drv_ctx->jack);
+
+	if (ext_amp_gpio > 0)
+		gpio_free(ext_amp_gpio);
 
 	xgold_debug("%s:\n", __func__);
 	return 0;
