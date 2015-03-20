@@ -774,6 +774,8 @@ static ssize_t apds990x_store_enable_ps_sensor(struct device *dev,
 			} else
 				apds990x_set_enable(client, 0x37);
 		}
+		/* report for first time */
+		apds990x_change_ps_threshold(client);
 	} else {
 		/* turn off p sensor - kk 25 Apr 2011 .
 		 * we can't turn off the entire sensor,
@@ -803,6 +805,10 @@ static ssize_t apds990x_store_enable_ps_sensor(struct device *dev,
 				apds990x_power_off(data);
 			}
 		}
+		/* ABS's repeat values will be filtered by input subsystem,
+		 * so we need report a fake value when disable device */
+		input_report_abs(data->input_dev_ps, ABS_DISTANCE, -1);
+		input_sync(data->input_dev_ps);
 	}
 
 	return count;
