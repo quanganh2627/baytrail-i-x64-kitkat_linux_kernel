@@ -30,9 +30,11 @@
 #include <linux/dmaengine.h>
 #include <linux/amba/pl08x.h>
 #include <linux/miscdevice.h>
+#include <linux/wakelock.h>
 #include <asm/cacheflush.h>
 #include "sofia/lpmp3.h"
 
+static struct wake_lock lpmp3_wakelock;
 static int lpmp3_mode;
 static struct device *lpmp3_dev;
 static phys_addr_t lpmp3_dmac_addr;
@@ -289,9 +291,26 @@ static int lpmp3_probe(struct platform_device *pdev)
 	lpmp3_ctrl = phys_to_virt(lpmp3_ctrl_addr);
 	memset(lpmp3_ctrl, 0, sizeof(*lpmp3_ctrl));
 
+	wake_lock_init(&lpmp3_wakelock, WAKE_LOCK_SUSPEND, "lpmp3_wakelock");
 	misc_register(&lpmp3_misc_dev);
 	return 0;
 }
+
+static int lpmp3_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int lpmp3_resume(struct device *dev)
+{
+	if (xgold_lpmp3_mode())
+		wake_lock_timeout(&lpmp3_wakelock, 3 * HZ);
+	return 0;
+}
+
+static const struct dev_pm_ops lpmp3_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(lpmp3_suspend, lpmp3_resume)
+};
 
 static struct of_device_id lpmp3_of_match[] = {
 	{ .compatible = "intel,xgold-lpmp3", },
@@ -303,6 +322,7 @@ static struct platform_driver lpmp3_drv = {
 		.name = "XGOLD_LPMP3",
 		.owner = THIS_MODULE,
 		.of_match_table = lpmp3_of_match,
+		.pm = &lpmp3_pm,
 	},
 	.probe = lpmp3_probe,
 };
