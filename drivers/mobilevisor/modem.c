@@ -29,8 +29,10 @@
 
 #ifdef CONFIG_SOFIA_LOWMEM_DEV
 #define NVM_ADDR_SHIFT	(0x1ED80000 - 0x1E000000)
+#define NVM_ADDR_LEN  (0x100000)
 #else
 #define NVM_ADDR_SHIFT	(0x3D100000 - 0x3C000000)
+#define NVM_ADDR_LEN  (0x180000)
 #endif
 #define SEC_PACK_SIZE 2048
 
@@ -144,7 +146,7 @@ static int reload_nvm(struct vmodem_drvdata *p)
 	fs = get_fs();
 	set_fs(get_ds());
 	fd->f_op->read(fd, (p->mex_buffer + NVM_ADDR_SHIFT),
-			0x180000, &(fd->f_pos));
+			NVM_ADDR_LEN, &(fd->f_pos));
 	set_fs(fs);
 	filp_close(fd, NULL);
 	return 1;
