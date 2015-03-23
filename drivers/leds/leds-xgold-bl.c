@@ -328,7 +328,10 @@ static int xgold_led_bl_cbinit(struct device *dev , void *mmio_base)
 
 	hrtimer_init(&bl->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	bl->timer.function = xgold_bl_hrtimer_callback;
+	/* since splash show in kernel boot no need to shut down backlight */
+#if 0
 	led_write32(bl, LED_CTRL, SCU_LED_DOWN);
+#endif
 
 	return ret;
 }
