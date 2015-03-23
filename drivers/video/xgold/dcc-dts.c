@@ -332,6 +332,12 @@ int dcc_of_parse_graphics(struct platform_device *pdev,
 	if (ret < 0)
 		pdata->display_preinit = 0;
 
+	/* disable driver screen operations */
+	ret = of_property_read_u32(ngraphics, "intel,display-bootinit",
+			&pdata->display_bootinit);
+	if (ret < 0)
+		pdata->display_bootinit = 0;
+
 	/* debug */
 	ret = of_property_read_u32(ngraphics, "intel,dcc-debug-level",
 			&pdata->debug.level);
