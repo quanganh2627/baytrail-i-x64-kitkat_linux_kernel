@@ -5443,6 +5443,7 @@ int marvin_mipi_isr(void *cntxt)
 	    (struct cif_isp20_device *)cntxt;
 	unsigned int mipi_mis = 0;
 	unsigned int i = 0;
+	static unsigned long max_err_time;
 
 	mipi_mis =
 	    cif_ioread32(dev->config.base_addr + CIF_MIPI_MIS);
@@ -5513,8 +5514,10 @@ int marvin_mipi_isr(void *cntxt)
 			if (marvin_hw_errors[i].
 			    mask & (mipi_mis & CIF_MIPI_SYNC_FIFO_OVFLW(3))) {
 				marvin_hw_errors[i].count++;
-				cif_isp20_pltfrm_pr_err(dev->dev,
-					"CIF_MIPI_SYNC_FIFO_OVFLW\n");
+				if (printk_timed_ratelimit(&max_err_time,
+							10 * 1000))
+					cif_isp20_pltfrm_pr_err(dev->dev,
+						"CIF_MIPI_SYNC_FIFO_OVFLW\n");
 				break;
 			}
 		}
