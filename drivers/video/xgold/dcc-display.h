@@ -137,6 +137,7 @@ struct dcc_display_if_mipi_dsi {
 	int video_pixel;
 	int bllp_time;
 	int line_time;
+	int te_enable;
 };
 
 struct dcc_display_if_mipi_dbi {
@@ -202,6 +203,7 @@ struct dcc_display {
 	int (*set_rate) (struct dcc_display *lcd, int val);
 	int (*get_rate) (struct dcc_display *lcd);
 	struct dcc_display_if dif;
+	int board_mrd5s;
 };
 
 int dcc_dsi_set_phy_lock(struct dcc_display *lcd);

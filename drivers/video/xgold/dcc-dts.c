@@ -63,6 +63,7 @@ static struct of_device_id xgold_graphics_of_match[] = {
 #define PROP_DISPLAY_TIM_CYCLE		"intel,access-cycle"
 
 #define PROP_DISPLAY_GPIO_LCD_BIAS	"intel,lcd-bias-en"
+#define PROP_ESD_GPIO_TE	"intel,esd-gpio-te"
 #define PROP_DISPLAY_GPIO_RST		"intel,dcc-gpio-reset"
 #define PROP_DISPLAY_GPIO_RST_DLY	"intel,dcc-gpio-reset-delay"
 #define PROP_DISPLAY_GPIO_CD		"intel,dcc-gpio-cd"
@@ -507,6 +508,18 @@ int dcc_of_parse_dcc(struct platform_device *pdev, struct device_node *ndcc)
 	if (pdata->gpio_lcd_bias <= 0)
 		pdata->gpio_lcd_bias = 0;
 
+	of_property_read_u32(ndcc, "intel,board-mrd5s",
+			&pdata->display.board_mrd5s);
+	dev_info(&pdev->dev, "Sofia MRD board is %s\n",
+			pdata->display.board_mrd5s ? "mrd5s" : "mrd7s");
+
+	pdata->gpio_esd_te = of_get_named_gpio_flags(ndcc,
+			PROP_ESD_GPIO_TE, 0, NULL);
+	if (pdata->gpio_esd_te <= 0) {
+		pdata->gpio_esd_te = 0;
+		dcc_err("Can't find node %s\n", PROP_ESD_GPIO_TE);
+	}
+
 	if (of_parse_phandle(ndcc, PROP_DISPLAY_GPIO_CD, 0)) {
 		pdata->gpio_cd = of_get_named_gpio_flags(ndcc,
 				PROP_DISPLAY_GPIO_CD, 0, NULL);
@@ -807,6 +820,15 @@ int dcc_of_parse_display(struct platform_device *pdev,
 		} else {
 			dcc_err("%s unknown dsi video mode type %s\n",
 					"intel,display-vid-mode", string);
+		}
+
+		ret = of_property_read_string(
+				ndisplay, "intel,display-te-mode", &string);
+		if (ret < 0)
+			dif->te_enable = 0;
+
+		if (strncmp("enable", string, strlen("enable")) == 0) {
+			dif->te_enable = 1;
 		}
 
 		OF_GET_U32(ndisplay, "intel,display-vid-id", &dif->id, ret);
