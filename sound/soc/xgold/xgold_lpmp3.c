@@ -97,8 +97,10 @@ static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
 				DMA_SL_MEM_TO_MEM,
 				0,
 				NULL);
+/*
 	memset(phys_to_virt(lpmp3_dma_addr), 0,
 			LPMP3_DMA_BLOCK_SIZE * LPMP3_DMA_BLOCK_NUM);
+*/
 	lpmp3_mode = 1;
 	return desc;
 }
@@ -106,6 +108,7 @@ static struct dma_async_tx_descriptor *dma_setup(struct dma_chan *dmach)
 static void dma_release(struct dma_chan *dmach)
 {
 	dev_info(lpmp3_dev, "%s\n", __func__);
+	lpmp3_ctrl->dma_ptr = NULL;
 	lpmp3_mode = 0;
 }
 
