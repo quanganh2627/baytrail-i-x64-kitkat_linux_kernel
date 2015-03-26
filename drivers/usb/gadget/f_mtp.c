@@ -869,8 +869,11 @@ static void receive_file_work(struct work_struct *data)
 				dev->rx_done || dev->state != STATE_BUSY);
 			if (dev->state == STATE_CANCELED) {
 				r = -ECANCELED;
-				if (!dev->rx_done)
+				if (!dev->rx_done) {
+					read_req->complete = NULL;
 					usb_ep_dequeue(dev->ep_out, read_req);
+					read_req->complete = mtp_complete_out;
+				}
 				break;
 			}
 			/* if xfer_file_length is 0xFFFFFFFF, then we read until
