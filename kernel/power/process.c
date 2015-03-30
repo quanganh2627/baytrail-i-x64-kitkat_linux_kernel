@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 #include <linux/kmod.h>
+#include <linux/reboot.h>
 
 /* 
  * Timeout for stopping processes
@@ -222,3 +223,48 @@ void thaw_kernel_threads(void)
 	schedule();
 	printk("done.\n");
 }
+
+static int freeze_reboot(struct notifier_block *notifier,
+		unsigned long event, void *data)
+{
+	int error;
+
+	error = __usermodehelper_disable(UMH_FREEZING);
+	if (error)
+		pr_err("usermodehelper_disable fail\n");
+
+	/* Make sure this task doesn't get frozen */
+	current->flags |= PF_SUSPEND_TASK;
+
+	if (!pm_freezing)
+		atomic_inc(&system_freezing_cnt);
+
+	pr_err("%s:Freezing user space processes ... ", __func__);
+	pm_freezing = true;
+	error = try_to_freeze_tasks(true);
+	if (!error) {
+		pr_err("done.");
+		__usermodehelper_set_disable_depth(UMH_DISABLED);
+		oom_killer_disable();
+	}
+	pr_err("\n");
+	BUG_ON(in_atomic());
+
+	if (error)
+		pr_err("freeze_reboot fail with error = %d\n", error);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block freeze_reboot_notifier = {
+	.notifier_call = freeze_reboot
+};
+
+static int freeze_initcall(void)
+{
+	register_reboot_notifier(&freeze_reboot_notifier);
+
+	return 0;
+}
+
+device_initcall(freeze_initcall);
