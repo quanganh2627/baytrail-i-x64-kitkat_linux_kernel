@@ -47,6 +47,7 @@ extern int lpmp3_debug_enable;
 #define LPMP3_IOCTRL_STOP		_IOWR('A', 11, u32)
 #define LPMP3_IOCTRL_ENABLE		_IOWR('A', 12, u32)
 #define LPMP3_IOCTRL_DISABLE		_IOWR('A', 13, u32)
+#define LPMP3_IOCTRL_WAKELOCK		_IOWR('A', 14, u32)
 
 #define LPMP3_CMD_DEBUG			0x0
 #define LPMP3_CMD_OPEN			0x1

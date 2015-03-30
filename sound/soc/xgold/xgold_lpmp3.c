@@ -179,7 +179,7 @@ static int lpmp3_fs_mmap(struct file *file, struct vm_area_struct *vma)
 static long lpmp3_fs_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
-	u32 ret;
+	int ret = 0;
 
 	dev_dbg(lpmp3_dev, "%s: cmd: %x\n", __func__, cmd);
 	switch (cmd) {
@@ -203,10 +203,15 @@ static long lpmp3_fs_ioctl(struct file *file,
 		lpmp3_dma_release = NULL;
 		lpmp3_trigger = NULL;
 		break;
+	case LPMP3_IOCTRL_WAKELOCK:
+		dev_info(lpmp3_dev, "%s: wakelock, timeout = %d sec\n",
+				__func__, (int)arg);
+		wake_lock_timeout(&lpmp3_wakelock, arg * HZ);
+		break;
 	default:
 		return -EINVAL;
 	}
-	return copy_to_user((void __user *)arg, &ret, sizeof(ret));
+	return ret;
 }
 
 static int lpmp3_fs_open(struct inode *inode, struct file *file)
