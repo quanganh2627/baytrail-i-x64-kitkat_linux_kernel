@@ -675,9 +675,7 @@ static ssize_t ffs_epfile_io(struct file *file,
 
 		if (unlikely(ret < 0)) {
 			/* nop */
-		} else if (unlikely(
-				!wait_for_completion_timeout(&done, 2*HZ))) {
-			pr_err("%s: wait timeout!\n", __func__);
+		} else if (unlikely(wait_for_completion_interruptible(&done))) {
 			ret = -EINTR;
 			usb_ep_dequeue(ep->ep, req);
 		} else {
