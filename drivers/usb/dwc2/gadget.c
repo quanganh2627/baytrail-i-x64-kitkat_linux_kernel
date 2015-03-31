@@ -2800,6 +2800,26 @@ static bool on_list(struct s3c_hsotg_ep *ep, struct s3c_hsotg_req *test)
 	return false;
 }
 
+static void s3c_hsotg_stop_active_transfer(struct s3c_hsotg_ep *hs_ep)
+{
+	struct dwc2_hsotg *hsotg = hs_ep->parent;
+	int dir_in = hs_ep->dir_in;
+	int index = hs_ep->index;
+	int timeout;
+	u32 epctrl_reg, ctrl;
+
+	/* stop transfer */
+	epctrl_reg = dir_in ? DIEPCTL(index) : DOEPCTL(index);
+	ctrl = readl(hsotg->regs + epctrl_reg);
+	ctrl &= ~DXEPCTL_EPENA;
+	ctrl &= ~DXEPCTL_USBACTEP;
+	ctrl |= DXEPCTL_SNAK;
+	dev_dbg(hsotg->dev, "%s: DxEPCTL=0x%08x\n", __func__, ctrl);
+	writel(ctrl, hsotg->regs + epctrl_reg);
+
+	udelay(100);
+}
+
 /**
  * s3c_hsotg_ep_dequeue - dequeue given endpoint
  * @ep: The endpoint to dequeue.
@@ -2821,6 +2841,7 @@ static int s3c_hsotg_ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 		return -EINVAL;
 	}
 
+	s3c_hsotg_stop_active_transfer(hs_ep);
 	s3c_hsotg_complete_request(hs, hs_ep, hs_req, -ECONNRESET);
 	spin_unlock_irqrestore(&hs->lock, flags);
 
