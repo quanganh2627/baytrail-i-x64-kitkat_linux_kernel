@@ -190,8 +190,6 @@ static void xgold_vibrator_enable(struct timed_output_dev *dev, int value)
 		container_of(dev, struct xgold_vibra_device, vibrator);
 	unsigned long flags;
 
-	if (value < 50)
-		value += 50;
 retry:
 	spin_lock_irqsave(&vib->lock, flags);
 	if (hrtimer_try_to_cancel(&vib->timer) < 0) {
