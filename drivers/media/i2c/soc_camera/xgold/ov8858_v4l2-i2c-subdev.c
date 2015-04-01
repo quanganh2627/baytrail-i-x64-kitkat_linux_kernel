@@ -2413,13 +2413,7 @@ int  __ov8858_read_otp_wb(struct ov_camera_module *cam_mod)
 		ov_camera_module_pr_debug(cam_mod,
 			"no valid module info and awb data in otp\n");
 		otp_ptr->flag = 0;
-		otp_ptr->module_integrator_id = 0;
-		otp_ptr->lens_id = 0;
-		otp_ptr->production_year = 0;
-		otp_ptr->production_month = 0;
-		otp_ptr->production_day = 0;
-		otp_ptr->rg_ratio = 0;
-		otp_ptr->bg_ratio = 0;
+		return ret;
 	}
 
 	otp_ptr->R_gain = (RG_Ratio_Typical*1000)/otp_ptr->rg_ratio;
@@ -2480,9 +2474,6 @@ int  __ov8858_read_otp_vcm(struct ov_camera_module *cam_mod)
 	} else {
 		ov_camera_module_pr_debug(cam_mod,
 					"no valid vcm data in otp\n");
-		otp_ptr->VCM_end = 0;
-		otp_ptr->VCM_end = 0;
-		otp_ptr->VCM_dir = 0;
 	}
 
 	return ret;
@@ -2539,11 +2530,8 @@ int  __ov8858_read_otp_lenc(struct ov_camera_module *cam_mod)
 				"otp lenc checksum no match!\n");
 
 	} else {
-		for (i = 0; i < 240; i++) {
 			ov_camera_module_pr_debug(cam_mod,
 				"no valid lenc data in otp\n");
-			otp_ptr->lenc[i] = 0;
-		}
 	}
 
 	return ret;
@@ -2691,9 +2679,13 @@ static int OV8858_check_camera_id(struct ov_camera_module *cam_mod)
 	/*apply otp data*/
 	if (otp_ptr != NULL && otp_ptr->otp_en == 1) {
 		ov_camera_module_pr_debug(cam_mod,
-					"apply otp data for R2A module...\n");
-		update_awb_gain(cam_mod);
-		update_lenc(cam_mod);
+					"apply otp as flag: %0x\n",
+					otp_ptr->flag);
+		if ((otp_ptr->flag & 0xc0) == 0xc0)
+			update_awb_gain(cam_mod);
+
+		if ((otp_ptr->flag & 0x10) == 0x10)
+			update_lenc(cam_mod);
 
 #ifdef DUMP_OTP
 		dump_otp(cam_mod);
@@ -2791,7 +2783,8 @@ static int __init OV8858_probe(
 					OV8858_custom_config.num_configs);
 	} else {
 		dev_info(&client->dev, "get otp data for r2a...\n");
-		if (!IS_ERR_VALUE(ov8858_otp_read(&OV8858)))
+		if (!IS_ERR_VALUE(ov8858_otp_read(&OV8858))
+			&& (otp_ptr->flag != 0))
 			otp_ptr->otp_en = 1;
 	}
 	is_probed = true;
