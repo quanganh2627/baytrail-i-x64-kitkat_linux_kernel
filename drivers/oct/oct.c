@@ -712,7 +712,8 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     oldfs = get_fs();
     set_fs(KERNEL_DS);
 
-    filp = filp_open(devname, O_RDWR, 0);
+	filp = filp_open(devname, O_RDWR | O_NONBLOCK, 0);
+	OCT_LOG("filp_open %s O_RDWR | O_NONBLOCK\n", devname);
 
     if (!filp || IS_ERR(filp)) {
         OCT_LOG("can not open [%s],filp=%ld\n", devname, PTR_ERR(filp));
@@ -730,11 +731,18 @@ static void oct_offlog_chat_cmd(const char *devname,char *atcmd)
     set_fs(oldfs);
 }
 
-static void oct_offlog_send_init_at( void ){
+static void oct_offlog_send_init_at(void)
+{
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "ATE0V1\r");
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "at+trace=1\r");
 //    oct_offlog_chat_cmd("/dev/vbpipe14", "at+xsio=0\r");
-    oct_offlog_chat_cmd("/dev/mvpipe-bplog", "at+xsystrace=1,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
+	oct_offlog_chat_cmd("/dev/mvpipe-bplog",
+		"at+xsystrace=1,\"bb_sw=1;3g_sw=1;digrf=1\",\"digrf=0x84;bb_sw=sdl:th,tr,st,db,pr,lt,li,gt,ae,mo\",\"oct=4\"\r");
+}
+
+static void oct_offlog_send_shut_at(void)
+{
+	oct_offlog_chat_cmd("/dev/mvpipe-bplog", "at+xsystrace=0\r");
 }
 
 
@@ -914,14 +922,15 @@ static int oct_thread(void *param)
     OCT_LOG("oct_out_path %d",oct_out_path);
 
 
-	if (oct_out_path == OCT_PATH_TTY)
+	if (oct_out_path == OCT_PATH_TTY) {
+		oct_offlog_send_shut_at();
 		fp = oct_open_gadget(USB_CH_NAME);
-	else if (oct_out_path == OCT_PATH_FILE)	{
-        oct_offlog_check_mk_dirs();
-        if(oct_offlog_if_rotate()){
-            oct_offlog_rotate_files();
-        }
-        oct_offlog_send_init_at();
+	} else if (oct_out_path == OCT_PATH_FILE) {
+		oct_offlog_check_mk_dirs();
+		if (oct_offlog_if_rotate())
+			oct_offlog_rotate_files();
+
+		oct_offlog_send_init_at();
 		fp = oct_open_gadget(oct_offlog_path);
     }
 	while (!kthread_should_stop()) {
