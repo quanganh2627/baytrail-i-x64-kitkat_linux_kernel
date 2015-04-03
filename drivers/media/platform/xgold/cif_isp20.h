@@ -33,11 +33,9 @@
 #include <media/v4l2-device.h>
 
 /*****************************************************************************/
-#define CONFIG_CIF_ISP_AUTO_UPD_CFG_BUG
-#if defined(CONFIG_CIF_ISP_AUTO_UPD_CFG_BUG)
-#endif
-
 /* Definitions */
+
+#define CONFIG_CIF_ISP_AUTO_UPD_CFG_BUG
 
 #define CIF_ISP20_NUM_CSI_INPUTS 2
 
@@ -396,7 +394,7 @@ struct cif_isp20_mi_path_config {
 
 struct cif_isp20_mi_config {
 	bool raw_enable;
-	bool async_updt;
+	u32 async_updt;
 	struct cif_isp20_mi_path_config mp;
 	struct cif_isp20_mi_path_config sp;
 	struct cif_isp20_mi_path_config dma;
@@ -418,6 +416,7 @@ struct cif_isp20_buffer {
 #endif
 
 struct cif_isp20_stream {
+	enum cif_isp20_stream_id id;
 	enum cif_isp20_state state;
 	enum cif_isp20_state saved_state;
 	struct list_head buf_queue;
@@ -425,7 +424,6 @@ struct cif_isp20_stream {
 	struct videobuf_buffer *next_buf;
 	bool updt_cfg;
 	bool stall;
-	bool first_frame;
 	bool stop;
 	CIF_ISP20_PLTFRM_EVENT done;
 
@@ -481,6 +479,7 @@ struct cif_isp20_config {
 	struct cif_isp20_mp_config mp_config;
 	struct cif_isp20_strm_fmt img_src_output;
 	struct cif_isp20_isp_config isp_config;
+	bool out_of_buffer_stall;
 };
 
 struct cif_isp20_mi_state {
@@ -525,6 +524,14 @@ struct cif_isp20_device {
 	struct cif_isp20_stream mp_stream;
 	struct cif_isp20_stream dma_stream;
 	struct timeval curr_frame_time; /* updated each frame */
+	void (*sof_event)(__u32 frame_sequence);
+	/* requeue_bufs() is used to clean and rebuild the local buffer
+	lists xx_stream.buf_queue. This is used e.g. in the CAPTURE use
+	case where we start MP and SP separately and needs to shortly
+	stop and start SP when start MP */
+	void (*requeue_bufs)(enum cif_isp20_stream_id stream_id);
+	bool   b_isp_frame_in;
+	bool   b_mi_frame_end;
 #ifdef SOFIA_ES1_BU_PM_NATIVE
 	struct clk *clk_kernel;
 	struct clk *clk_slave;
@@ -549,7 +556,9 @@ int get_xgold_output_format_desc_size(void);
 /*Clean code starts from here*************************************************/
 
 struct cif_isp20_device *cif_isp20_create(
-	CIF_ISP20_PLTFRM_DEVICE pdev);
+	CIF_ISP20_PLTFRM_DEVICE pdev,
+	void (*sof_event)(__u32 frame_sequence),
+	void (*requeue_bufs)(enum cif_isp20_stream_id stream_id));
 
 void cif_isp20_destroy(
 	struct cif_isp20_device *dev);

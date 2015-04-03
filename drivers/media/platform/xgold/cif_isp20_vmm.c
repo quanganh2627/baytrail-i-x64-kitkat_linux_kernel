@@ -50,6 +50,9 @@ static struct {
 	loff_t reg_trace_write_pos;
 	size_t reg_trace_max_size;
 	void __iomem *base_addr;
+	bool rtrace;
+	bool ftrace;
+	bool internal;
 	spinlock_t lock;
 } cif_isp20_reg_trace;
 #endif
@@ -67,6 +70,7 @@ struct cif_isp20_pltfrm_data {
 	struct pinctrl_state *pins_sleep;
 	struct pinctrl_state *pins_inactive;
 	struct device_pm_platdata *pm_platdata;
+	void __iomem *base_addr;
 	struct {
 		int irq;
 		int (*isr)(void *cntxt);
@@ -76,11 +80,14 @@ struct cif_isp20_pltfrm_data {
 #ifdef CONFIG_DEBUG_FS
 	struct {
 		struct dentry *dir;
+		struct dentry *cif_isp20_file;
 		struct dentry *csi0_file;
 		struct dentry *csi1_file;
 #ifdef CONFIG_CIF_ISP20_REG_TRACE
 		struct dentry *reg_trace_file;
 #endif
+		void (*print_func)(void *cntxt, const char *block_name);
+		void *print_cntxt;
 	} dbgfs;
 #endif
 };
@@ -129,14 +136,12 @@ static int cif_isp20_pltfrm_fill_csi_config_from_node(
 		goto err;
 	}
 
-	ret = of_property_read_u32(csi_config_node,
+	/* analog bandgap settings are optinal and not supoorted
+		on all platforms */
+	if (IS_ERR_VALUE(of_property_read_u32(csi_config_node,
 		"intel,csi-ana-bandgap-bias",
-		&csi_config->ana_bandgab_bias);
-	if (IS_ERR_VALUE(ret)) {
-		cif_isp20_pltfrm_pr_err(dev,
-			"reading property 'intel,csi-ana-bandgap-bias'\n");
-		goto err;
-	}
+		&csi_config->ana_bandgab_bias)))
+		csi_config->ana_bandgab_bias = (u32)-1;
 
 	return 0;
 err:
@@ -338,9 +343,19 @@ err:
 	return ret;
 }
 
+void cif_isp20_pltfrm_debug_register_print_cb(
+	struct device *dev,
+	void (*print)(void *cntxt, const char *block),
+	void *cntxt) {
+#ifdef CONFIG_DEBUG_FS
+	struct cif_isp20_pltfrm_data *pdata = dev->platform_data;
+	pdata->dbgfs.print_cntxt = cntxt;
+	pdata->dbgfs.print_func = print;
+#endif
+}
 
 #ifdef CONFIG_DEBUG_FS
-#define CIF_ISP20_DBGFS_BUF_SIZE 256
+#define CIF_ISP20_DBGFS_BUF_SIZE 1024
 static char cif_isp20_dbgfs_buf[CIF_ISP20_DBGFS_BUF_SIZE];
 
 static int cif_isp20_dbgfs_fill_csi_config_from_string(
@@ -375,11 +390,12 @@ static int cif_isp20_dbgfs_fill_csi_config_from_string(
 			&csi_config->dphy2)))
 		goto wrong_token_format;
 	token = strsep(&strp, " ");
-	if (IS_ERR_OR_NULL(token))
-		goto missing_token;
-	if (IS_ERR_VALUE(kstrtou32(token, 10,
-			&csi_config->ana_bandgab_bias)))
-		goto wrong_token_format;
+	if (!IS_ERR_OR_NULL(token)) {
+		if (IS_ERR_VALUE(kstrtou32(token, 10,
+				&csi_config->ana_bandgab_bias)))
+			goto wrong_token_format;
+	} else
+		csi_config->ana_bandgab_bias = (u32)-1;
 
 	return 0;
 missing_token:
@@ -459,7 +475,7 @@ err:
 	return ret;
 }
 
-static ssize_t cif_isp20_dbgfs_read(
+static ssize_t cif_isp20_dbgfs_csi_read(
 	struct file *f,
 	char __user *out,
 	size_t count,
@@ -530,7 +546,7 @@ static ssize_t cif_isp20_dbgfs_read(
 	return out_size;
 }
 
-static ssize_t cif_isp20_dbgfs_write(
+static ssize_t cif_isp20_dbgfs_csi_write(
 	struct file *f,
 	const char __user *in,
 	size_t count,
@@ -604,25 +620,157 @@ static ssize_t cif_isp20_dbgfs_write(
 	return count;
 }
 
+static ssize_t cif_isp20_dbgfs_write(
+	struct file *f,
+	const char __user *in,
+	size_t count,
+	loff_t *pos)
+{
+	ssize_t ret;
+	char *strp = cif_isp20_dbgfs_buf;
+	char *token;
+	struct device *dev = f->f_inode->i_private;
+	struct cif_isp20_pltfrm_data *pdata = dev->platform_data;
+
+	if (count > CIF_ISP20_DBGFS_BUF_SIZE) {
+		cif_isp20_pltfrm_pr_err(dev, "command line too large\n");
+		return -EINVAL;
+	}
+
+	memset(cif_isp20_dbgfs_buf, 0, CIF_ISP20_DBGFS_BUF_SIZE);
+	ret = simple_write_to_buffer(strp,
+		CIF_ISP20_DBGFS_BUF_SIZE, pos, in, count);
+	if (IS_ERR_VALUE(ret))
+		return ret;
+
+	token = strsep(&strp, " ");
+	if (!strncmp(token, "print", 5)) {
+		token = strsep(&strp, " ");
+		if (IS_ERR_OR_NULL(token)) {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'print all|<list of block name>'\n");
+			return -EINVAL;
+		}
+		if (!strncmp(token, "register", 8)) {
+			u32 addr;
+			struct cif_isp20_pltfrm_data *pdata =
+				dev->platform_data;
+			token = strsep(&strp, " ");
+			while (token) {
+				if (IS_ERR_VALUE(kstrtou32(token,
+					16, &addr))) {
+					cif_isp20_pltfrm_pr_err(dev,
+						"malformed token, must be a hexadecimal register address\n");
+					return -EINVAL;
+				}
+				pr_info("0x%04x: 0x%08x\n",
+					addr,
+					ioread32(pdata->base_addr +
+						addr));
+				token = strsep(&strp, " ");
+			}
+		} else if (pdata->dbgfs.print_func) {
+			unsigned long flags;
+			local_irq_save(flags);
+			while (token) {
+				pdata->dbgfs.print_func(
+					pdata->dbgfs.print_cntxt,
+					token);
+				token = strsep(&strp, " ");
+			}
+			local_irq_restore(flags);
+		}
+	} else if (!strncmp(token, "power", 5)) {
+		token = strsep(&strp, " ");
+		if (IS_ERR_OR_NULL(token)) {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'power [off|on]'\n");
+			return -EINVAL;
+		}
+		if (!strncmp(token, "on", 2)) {
+			if (IS_ERR_VALUE(cif_isp20_pltfrm_pm_set_state(dev,
+				CIF_ISP20_PM_STATE_SW_STNDBY, NULL)))
+				cif_isp20_pltfrm_pr_err(dev,
+					"power on failed\n");
+			else
+				cif_isp20_pltfrm_pr_info(dev,
+					"switched on\n");
+		} else if (!strncmp(token, "off", 3)) {
+			if (IS_ERR_VALUE(cif_isp20_pltfrm_pm_set_state(dev,
+				CIF_ISP20_PM_STATE_OFF, NULL)))
+				cif_isp20_pltfrm_pr_err(dev,
+					"power off failed\n");
+			else
+				cif_isp20_pltfrm_pr_info(dev,
+					"switched off\n");
+		} else {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'power [off|on]'\n");
+			return -EINVAL;
+		}
+	} else if (!strncmp(token, "set", 3)) {
+		token = strsep(&strp, " ");
+		if (IS_ERR_OR_NULL(token)) {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'set register <hex addr>=<hex val>'\n");
+			return -EINVAL;
+		}
+		if (!strncmp(token, "register", 8)) {
+			u32 addr;
+			u32 val;
+			struct cif_isp20_pltfrm_data *pdata =
+				dev->platform_data;
+			token = strsep(&strp, "=");
+			if (IS_ERR_VALUE(kstrtou32(token,
+				16, &addr))) {
+				cif_isp20_pltfrm_pr_err(dev,
+					"malformed token, address must be a hexadecimal register address\n");
+				return -EINVAL;
+			}
+			token = strp;
+			if (IS_ERR_VALUE(kstrtou32(token,
+				16, &val))) {
+				cif_isp20_pltfrm_pr_err(dev,
+					"malformed token, value must be a hexadecimal value\n");
+				return -EINVAL;
+			}
+			iowrite32(val, pdata->base_addr + addr);
+		} else {
+			cif_isp20_pltfrm_pr_err(dev,
+				"unkown command %s\n", token);
+			return -EINVAL;
+		}
+	} else {
+		cif_isp20_pltfrm_pr_err(dev,
+			"unkown command %s\n", token);
+		return -EINVAL;
+	}
+	return count;
+}
+
+static const struct file_operations cif_isp20_dbgfs_csi_fops = {
+	.read = cif_isp20_dbgfs_csi_read,
+	.write = cif_isp20_dbgfs_csi_write
+};
+
 static const struct file_operations cif_isp20_dbgfs_fops = {
-	.read = cif_isp20_dbgfs_read,
 	.write = cif_isp20_dbgfs_write
 };
 
 #ifdef CONFIG_CIF_ISP20_REG_TRACE
 
-int cif_isp20_pltfrm_reg_trace_printf(
+static inline int cif_isp20_pltfrm_trace_printf(
 	struct device *dev,
 	const char *fmt,
-	...)
+	va_list args)
 {
-	va_list args;
 	int i;
 	u32 rem_size;
 	unsigned long flags = 0;
 
 	if (!in_irq())
 		spin_lock_irqsave(&cif_isp20_reg_trace.lock, flags);
+	cif_isp20_reg_trace.internal = true;
 
 	rem_size = cif_isp20_reg_trace.reg_trace_max_size -
 		cif_isp20_reg_trace.reg_trace_write_pos;
@@ -631,15 +779,14 @@ int cif_isp20_pltfrm_reg_trace_printf(
 		if (!in_irq())
 			spin_unlock_irqrestore(
 				&cif_isp20_reg_trace.lock, flags);
+		cif_isp20_reg_trace.internal = false;
 		return 0;
 	}
 
-	va_start(args, fmt);
 	i = vsnprintf(cif_isp20_reg_trace.reg_trace +
 		cif_isp20_reg_trace.reg_trace_write_pos,
 		rem_size,
 		fmt, args);
-	va_end(args);
 	if (i == rem_size) /* buffer full */
 		i = 0;
 	else if (i < 0)
@@ -647,8 +794,44 @@ int cif_isp20_pltfrm_reg_trace_printf(
 			"error writing trace buffer, error %d\n", i);
 	else
 		cif_isp20_reg_trace.reg_trace_write_pos += i;
+	cif_isp20_reg_trace.internal = false;
 	if (!in_irq())
 		spin_unlock_irqrestore(&cif_isp20_reg_trace.lock, flags);
+
+	return i;
+}
+
+inline int cif_isp20_pltfrm_rtrace_printf(
+	struct device *dev,
+	const char *fmt,
+	...)
+{
+	va_list args;
+	int i;
+
+	va_start(args, fmt);
+	i = cif_isp20_pltfrm_trace_printf(dev, fmt, args);
+	va_end(args);
+
+	return i;
+}
+
+inline int cif_isp20_pltfrm_ftrace_printf(
+	struct device *dev,
+	const char *fmt,
+	...)
+{
+	va_list args;
+	int i;
+
+	if (!cif_isp20_reg_trace.ftrace ||
+		cif_isp20_reg_trace.internal)
+		return 0;
+
+	va_start(args, fmt);
+	i = cif_isp20_pltfrm_trace_printf(dev, fmt, args);
+	va_end(args);
+
 	return i;
 }
 
@@ -669,10 +852,8 @@ static ssize_t cif_isp20_dbgfs_reg_trace_read(
 	size_t available = cif_isp20_reg_trace.reg_trace_write_pos -
 		cif_isp20_reg_trace.reg_trace_read_pos;
 	size_t rem = count;
-	unsigned long flags = 0;
 
-	if (!in_irq())
-		spin_lock_irqsave(&cif_isp20_reg_trace.lock, flags);
+	cif_isp20_reg_trace.internal = true;
 
 	if (!available)
 		cif_isp20_reg_trace.reg_trace_read_pos = 0;
@@ -684,9 +865,10 @@ static ssize_t cif_isp20_dbgfs_reg_trace_read(
 			cif_isp20_reg_trace.reg_trace,
 			cif_isp20_reg_trace.reg_trace_write_pos);
 		if (bytes < 0) {
-			cif_isp20_pltfrm_pr_err(dev,
+			cif_isp20_pltfrm_pr_err(NULL,
 				"buffer read failed with error %d\n",
 				bytes);
+			cif_isp20_reg_trace.internal = false;
 			return bytes;
 		}
 		rem -= bytes;
@@ -694,8 +876,7 @@ static ssize_t cif_isp20_dbgfs_reg_trace_read(
 			cif_isp20_reg_trace.reg_trace_read_pos;
 	}
 
-	if (!in_irq())
-		spin_unlock_irqrestore(&cif_isp20_reg_trace.lock, flags);
+	cif_isp20_reg_trace.internal = false;
 	return count - rem;
 }
 
@@ -714,6 +895,8 @@ static ssize_t cif_isp20_dbgfs_reg_trace_write(
 
 	if (!in_irq())
 		spin_lock_irqsave(&cif_isp20_reg_trace.lock, flags);
+
+	cif_isp20_reg_trace.internal = true;
 
 	if (count > CIF_ISP20_DBGFS_BUF_SIZE) {
 		cif_isp20_pltfrm_pr_err(dev, "command line too long\n");
@@ -765,15 +948,61 @@ static ssize_t cif_isp20_dbgfs_reg_trace_write(
 				"register trace buffer size set to %d Byte\n",
 				max_size);
 		}
+	} else if (!strncmp(token, "rtrace", 6)) {
+		token = strsep(&strp, " ");
+		if (IS_ERR_OR_NULL(token)) {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'rtrace [off|on]'\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		if (!strncmp(token, "on", 2)) {
+			cif_isp20_reg_trace.rtrace = true;
+			cif_isp20_pltfrm_pr_info(dev,
+				"register trace enabled\n");
+		} else if (!strncmp(token, "off", 3)) {
+			cif_isp20_reg_trace.rtrace = false;
+			cif_isp20_pltfrm_pr_info(dev,
+				"register trace disabled\n");
+		} else {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'rtrace [off|on]'\n");
+			ret = -EINVAL;
+			goto err;
+		}
+	} else if (!strncmp(token, "ftrace", 6)) {
+		token = strsep(&strp, " ");
+		if (IS_ERR_OR_NULL(token)) {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'ftrace [off|on]'\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		if (!strncmp(token, "on", 2)) {
+			cif_isp20_reg_trace.ftrace = true;
+			cif_isp20_pltfrm_pr_info(dev,
+				"function trace enabled\n");
+		} else if (!strncmp(token, "off", 3)) {
+			cif_isp20_reg_trace.ftrace = false;
+			cif_isp20_pltfrm_pr_info(dev,
+				"function trace disabled\n");
+		} else {
+			cif_isp20_pltfrm_pr_err(dev,
+				"missing token, command format is 'ftrace [off|on]'\n");
+			ret = -EINVAL;
+			goto err;
+		}
 	} else {
 		cif_isp20_pltfrm_pr_err(dev, "unkown command %s\n", token);
 		ret = -EINVAL;
 		goto err;
 	}
+	cif_isp20_reg_trace.internal = false;
 	if (!in_irq())
 		spin_unlock_irqrestore(&cif_isp20_reg_trace.lock, flags);
 	return count;
 err:
+	cif_isp20_reg_trace.internal = false;
 	if (!in_irq())
 		spin_unlock_irqrestore(&cif_isp20_reg_trace.lock, flags);
 	return ret;
@@ -859,9 +1088,11 @@ inline void cif_isp20_pltfrm_write_reg(
 		unsigned long flags = 0;
 		if (!in_irq())
 			spin_lock_irqsave(&cif_isp20_reg_trace.lock, flags);
-		if ((cif_isp20_reg_trace.reg_trace_write_pos +
+		cif_isp20_reg_trace.internal = true;
+		if (((cif_isp20_reg_trace.reg_trace_write_pos +
 			(20 * sizeof(char))) <
-			cif_isp20_reg_trace.reg_trace_max_size) {
+			cif_isp20_reg_trace.reg_trace_max_size) &&
+			cif_isp20_reg_trace.rtrace) {
 			int bytes =
 				sprintf(cif_isp20_reg_trace.reg_trace +
 					cif_isp20_reg_trace.reg_trace_write_pos,
@@ -876,6 +1107,7 @@ inline void cif_isp20_pltfrm_write_reg(
 					"error writing trace buffer, error %d\n",
 					bytes);
 		}
+		cif_isp20_reg_trace.internal = false;
 		if (!in_irq())
 			spin_unlock_irqrestore(
 				&cif_isp20_reg_trace.lock, flags);
@@ -955,6 +1187,7 @@ int cif_isp20_pltfrm_dev_init(
 			ret = -ENODEV;
 	}
 	*reg_base_addr = base_addr;
+	pdata->base_addr = base_addr;
 
 	/* FIXME:
 	 * In case of CSI platform, no need for pinctrl
@@ -1022,10 +1255,16 @@ int cif_isp20_pltfrm_dev_init(
 		0644,
 		pdata->dbgfs.dir,
 		dev,
-		&cif_isp20_dbgfs_fops);
+		&cif_isp20_dbgfs_csi_fops);
 	pdata->dbgfs.csi1_file = debugfs_create_file(
 		"csi-1",
 		0644,
+		pdata->dbgfs.dir,
+		dev,
+		&cif_isp20_dbgfs_csi_fops);
+	pdata->dbgfs.cif_isp20_file = debugfs_create_file(
+		"cif_isp20",
+		0200,
 		pdata->dbgfs.dir,
 		dev,
 		&cif_isp20_dbgfs_fops);
@@ -1041,6 +1280,9 @@ int cif_isp20_pltfrm_dev_init(
 	cif_isp20_dbgfs_reg_trace_clear(dev);
 	cif_isp20_reg_trace.reg_trace_max_size = 0;
 	cif_isp20_reg_trace.base_addr = base_addr;
+	cif_isp20_reg_trace.rtrace = true;
+	cif_isp20_reg_trace.ftrace = false;
+	cif_isp20_reg_trace.internal = false;
 #endif
 #endif
 
@@ -1107,6 +1349,9 @@ int cif_isp20_pltfrm_write_cif_ana_bandgap_bias(
 	u32 offset;
 	u32 mask;
 	u32 shift;
+
+	if (val == (u32)-1)
+		return 0;
 
 	np = of_find_compatible_node(NULL, NULL, "intel,scu");
 	if (IS_ERR_OR_NULL(np)) {
@@ -1453,7 +1698,9 @@ struct device *cif_isp20_pltfrm_get_img_src_device(
 	struct device_node *camera_list_node = NULL;
 	struct i2c_client *client = NULL;
 	int ret = 0;
-	u32 index;
+	u32 index, size = 0;
+	const void *phandle;
+	const char *facing = "";
 
 	node = of_node_get(dev->of_node);
 	if (IS_ERR_OR_NULL(node)) {
@@ -1464,37 +1711,58 @@ struct device *cif_isp20_pltfrm_get_img_src_device(
 
 	if ((inp == CIF_ISP20_INP_CSI_0) ||
 		(inp == CIF_ISP20_INP_CSI_1)) {
-		if (inp == CIF_ISP20_INP_CSI_0)
-			index = 0;
-		else
-			index = 1;
 
-		camera_list_node = of_parse_phandle(node,
-			"intel,camera-modules-attached", index);
-		of_node_put(node);
-		if (IS_ERR_OR_NULL(camera_list_node)) {
+		phandle = of_get_property(node,
+				"intel,camera-modules-attached", &size);
+		if (IS_ERR_OR_NULL(phandle)) {
 			cif_isp20_pltfrm_pr_err(dev,
-				"invalid index %d for property 'intel,camera-modules-attached'\n",
-				index);
+				"no camera-modules-attached'\n");
 				ret = -EINVAL;
 				goto err;
 		}
 
-		if (!strcmp(camera_list_node->type, "v4l2-i2c-subdev")) {
-			client = of_find_i2c_device_by_node(camera_list_node);
-			of_node_put(camera_list_node);
-			if (IS_ERR_OR_NULL(client)) {
-				cif_isp20_pltfrm_pr_warn(dev,
-					"could not get camera i2c client, maybe not yet created, deferring device probing...\n");
-				ret = -EPROBE_DEFER;
-				goto err;
+		for (index = 0; index < size/sizeof(phandle); index++) {
+			camera_list_node = of_parse_phandle(node,
+				"intel,camera-modules-attached", index);
+			of_node_put(node);
+			if (IS_ERR_OR_NULL(camera_list_node)) {
+				cif_isp20_pltfrm_pr_err(dev,
+					"invalid index %d for property 'intel,camera-modules-attached'\n",
+					index);
+					ret = -EINVAL;
+					goto err;
 			}
-		} else {
-			cif_isp20_pltfrm_pr_err(dev,
-				"device of type %s not supported\n",
-				camera_list_node->type);
-				ret = -EINVAL;
-				goto err;
+
+			of_property_read_string(camera_list_node,
+					"intel,camera-module-facing", &facing);
+
+			if (!strcmp(camera_list_node->type,
+						"v4l2-i2c-subdev")) {
+				client = of_find_i2c_device_by_node(
+					camera_list_node);
+				of_node_put(camera_list_node);
+				if (IS_ERR_OR_NULL(client)) {
+					cif_isp20_pltfrm_pr_warn(dev,
+						"could not get camera i2c client, maybe not yet created, deferring device probing...\n");
+					ret = -EPROBE_DEFER;
+					goto err;
+				}
+			} else {
+				cif_isp20_pltfrm_pr_err(dev,
+					"device of type %s not supported\n",
+					camera_list_node->type);
+					ret = -EINVAL;
+					goto err;
+			}
+
+			if ((!IS_ERR_OR_NULL(
+				cif_isp20_img_src_to_img_src(&client->dev))) &&
+				(((inp == CIF_ISP20_INP_CSI_0)
+				&& (!strcmp(facing, "back"))) ||
+				((inp == CIF_ISP20_INP_CSI_1)
+				&& (!strcmp(facing, "front"))))) {
+				break;
+			}
 		}
 	} else {
 		cif_isp20_pltfrm_pr_err(dev,
@@ -1521,14 +1789,17 @@ void cif_isp20_pltfrm_dev_release(
 	struct device *dev)
 {
 	int ret;
-	struct cif_isp20_pltfrm_data *pdata = dev->platform_data;
 
 	cif_isp20_reset_csi_configs(dev, CIF_ISP20_INP_CSI_0);
 	cif_isp20_reset_csi_configs(dev, CIF_ISP20_INP_CSI_1);
 #ifdef CONFIG_DEBUG_FS
-	debugfs_remove(pdata->dbgfs.csi0_file);
-	debugfs_remove(pdata->dbgfs.csi1_file);
-	debugfs_remove_recursive(pdata->dbgfs.dir);
+	{
+		struct cif_isp20_pltfrm_data *pdata =
+			dev->platform_data;
+		debugfs_remove(pdata->dbgfs.csi0_file);
+		debugfs_remove(pdata->dbgfs.csi1_file);
+		debugfs_remove_recursive(pdata->dbgfs.dir);
+	}
 #endif
 	ret = device_state_pm_remove_device(dev);
 	if (IS_ERR_VALUE(ret))

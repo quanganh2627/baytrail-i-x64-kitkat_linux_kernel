@@ -29,9 +29,11 @@
 /****************************************************************************
 *                                                     ISP device struct
 ****************************************************************************/
+enum cif_isp20_pix_fmt;
+
 struct xgold_isp_dev {
 
-	struct video_device *vdev_cifisp;
+	int open_count;
 
 	bool bpc_en;
 	bool bls_en;
@@ -114,19 +116,22 @@ struct xgold_isp_dev {
 
 	unsigned int frame_id;
 	unsigned int active_meas;
-	struct timeval frame_start_tv;
 };
 
-struct video_device *register_cifisp_device(
+int register_cifisp_device(
 	struct xgold_isp_dev *isp_dev,
+	struct video_device *vdev_cifisp,
 	struct v4l2_device *v4l2_dev,
 	void __iomem *cif_reg_baseaddress);
 void unregister_cifisp_device(struct video_device *vdev_cifisp);
 void cifisp_configure_isp(
-	struct xgold_isp_dev *isp_dev, unsigned int capture);
+	struct xgold_isp_dev *isp_dev,
+	enum cif_isp20_pix_fmt in_pix_fmt,
+	bool capture);
 void cifisp_disable_isp(struct xgold_isp_dev *isp_dev);
 int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis);
 void cifisp_ycflt_config(const struct xgold_isp_dev *isp_dev);
-void cifisp_v_start(struct xgold_isp_dev *isp_dev);
+void cifisp_ycflt_en(const struct xgold_isp_dev *isp_dev);
+void cifisp_ycflt_end(const struct xgold_isp_dev *isp_dev);
 
 #endif

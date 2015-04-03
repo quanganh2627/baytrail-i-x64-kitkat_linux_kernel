@@ -182,11 +182,8 @@
 #define CIFISP_AFC_WINDOW_X(value) ((value)<<16)
 #define CIFISP_AFC_WINDOW_Y(value) (value)
 
-#define CIFISP_DEBUG_ISR	(1<<3)
-#define CIFISP_DEBUG_QUEUE	(1<<2)
-#define CIFISP_DEBUG_INFO	(1<<1)
-#define CIFISP_DEBUG_ERROR	(1<<0)
-
+#define CIFISP_DEBUG (1<<0)
+#define CIFISP_ERROR (1<<1)
 
 /* Empirical rough (relative) times it takes to perform
     given function. */
@@ -232,12 +229,15 @@
 
 #define CIFISP_MODULE_DEFAULT_VBLANKING_TIME 2000
 
-static int cifisp_dbg_level = CIFISP_DEBUG_ERROR;
-
 #define V4L2_DEV_DEBUG_LEVEL 0
 
-#define CIFISP_DPRINT(level, fmt, arg...) { if (cifisp_dbg_level & level)\
-						pr_info(fmt, ##arg); }
+#define CIFISP_DPRINT(level, fmt, arg...) \
+	do { \
+		if (level == CIFISP_ERROR) \
+			pr_err(fmt, ##arg); \
+		else \
+			pr_debug(fmt, ##arg); \
+	} while (0)
 
 #define cifisp_iowrite32(d, a) \
 	cif_isp20_pltfrm_write_reg(NULL, (d), isp_dev->base_addr + (a))
@@ -293,7 +293,7 @@ static int cifisp_bpc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->bpc_en != *value) {
@@ -316,7 +316,7 @@ static int cifisp_bls_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->bls_en != *value) {
@@ -339,7 +339,7 @@ static int cifisp_lsc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->lsc_en != *value) {
@@ -362,7 +362,7 @@ static int cifisp_flt_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->flt_en != *value) {
@@ -385,7 +385,7 @@ static int cifisp_bdm_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->bdm_en != *value) {
@@ -408,7 +408,7 @@ static int cifisp_sdg_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->sdg_en != *value) {
@@ -431,7 +431,7 @@ static int cifisp_goc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->goc_en != *value) {
@@ -454,7 +454,7 @@ static int cifisp_ctk_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->ctk_en != *value) {
@@ -477,7 +477,7 @@ static int cifisp_awb_meas_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->awb_meas_en != *value) {
@@ -500,7 +500,7 @@ static int cifisp_awb_gain_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->awb_gain_en != *value) {
@@ -523,7 +523,7 @@ static int cifisp_cproc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->cproc_en != *value) {
@@ -546,7 +546,7 @@ static int cifisp_macc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->macc_en != *value) {
@@ -569,7 +569,7 @@ static int cifisp_tmap_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->tmap_en != *value) {
@@ -592,7 +592,7 @@ static int cifisp_hst_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->tmap_en != *value) {
@@ -615,7 +615,7 @@ static int cifisp_aec_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->aec_en != *value) {
@@ -638,7 +638,7 @@ int cifisp_ycflt_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->ycflt_en != *value) {
@@ -664,7 +664,7 @@ static int cifisp_afc_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->afc_en != *value) {
@@ -687,7 +687,7 @@ static int cifisp_ie_enable(struct xgold_isp_dev *isp_dev,
 		return 0;
 	}
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 			  "%s %d\n", __func__, *value);
 
 	if (isp_dev->ie_en != *value) {
@@ -710,7 +710,7 @@ static int cifisp_bpc_param(struct xgold_isp_dev *isp_dev,
 	unsigned long lock_flags = 0;
 
 	if (arg == NULL) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "arg is NULL: %s\n", __func__);
 
 		return -EINVAL;
@@ -724,7 +724,7 @@ static int cifisp_bpc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_BPC);
 
 	if (memcmp(arg, &(isp_dev->bpc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -742,7 +742,7 @@ static int cifisp_bpc_param(struct xgold_isp_dev *isp_dev,
 	    CIFISP_BPC_MAX_HOT_GRAD_TRIG
 	    || arg->det_config.bp_dev_dead_grad_trig_lvl >
 	    CIFISP_BPC_MAX_DEAD_GRAD_TRIG) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -772,7 +772,7 @@ static int cifisp_bls_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_BLS);
 
 	if (memcmp(arg, &(isp_dev->bls_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -794,7 +794,7 @@ static int cifisp_bls_param(struct xgold_isp_dev *isp_dev,
 	    arg->fixed_val.fixed_b < (s16) CIFISP_BLS_FIX_SUB_MIN ||
 	    arg->fixed_val.fixed_c < (s16) CIFISP_BLS_FIX_SUB_MIN ||
 	    arg->fixed_val.fixed_d < (s16) CIFISP_BLS_FIX_SUB_MIN) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -825,7 +825,7 @@ static int cifisp_lsc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_LSC);
 
 	if (memcmp(arg, &(isp_dev->lsc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -833,7 +833,7 @@ static int cifisp_lsc_param(struct xgold_isp_dev *isp_dev,
 	for (i = 0; i < CIFISP_LSC_SIZE_TBL_SIZE; i++) {
 		if ((*(arg->x_size_tbl + i) & CIFISP_LSC_SECT_SIZE_RESERVED) ||
 		    (*(arg->y_size_tbl + i) & CIFISP_LSC_SECT_SIZE_RESERVED)) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible sect size x 0x%x y 0x%x in function: %s\n",
 				      *(arg->x_size_tbl + i),
 				      *(arg->y_size_tbl + i), __func__);
@@ -844,7 +844,7 @@ static int cifisp_lsc_param(struct xgold_isp_dev *isp_dev,
 	for (i = 0; i < CIFISP_LSC_GRAD_TBL_SIZE; i++) {
 		if ((*(arg->x_grad_tbl + i) & CIFISP_LSC_GRAD_RESERVED) ||
 		    (*(arg->y_grad_tbl + i) & CIFISP_LSC_GRAD_RESERVED)) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible grad x 0x%x y 0x%xin function: %s\n",
 				      *(arg->x_grad_tbl + i),
 				      *(arg->y_grad_tbl + i), __func__);
@@ -856,7 +856,7 @@ static int cifisp_lsc_param(struct xgold_isp_dev *isp_dev,
 		if ((*(arg->r_data_tbl + i) & CIFISP_LSC_SAMPLE_RESERVED) ||
 		    (*(arg->g_data_tbl + i) & CIFISP_LSC_SAMPLE_RESERVED) ||
 		    (*(arg->b_data_tbl + i) & CIFISP_LSC_SAMPLE_RESERVED)) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible sample r 0x%x g 0x%x b 0x%x in function: %s\n",
 				      *(arg->r_data_tbl + i),
 				      *(arg->g_data_tbl + i),
@@ -890,7 +890,7 @@ static int cifisp_flt_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_FLT);
 
 	if (memcmp(arg, &(isp_dev->flt_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -914,7 +914,7 @@ static int cifisp_flt_param(struct xgold_isp_dev *isp_dev,
 	    arg->flt_sharp0_th > CIFISP_FILT_DIAG_TH_MAX ||
 	    arg->flt_sharp1_th > CIFISP_FILT_DIAG_TH_MAX ||
 	    arg->flt_lum_weight & CIFISP_FILTER_LUM_WEIGHT_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -944,7 +944,7 @@ static int cifisp_bdm_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_BDM);
 
 	if (memcmp(arg, &(isp_dev->bdm_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -978,7 +978,7 @@ static int cifisp_sdg_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_SDG);
 
 	if (memcmp(arg, &(isp_dev->sdg_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1036,7 +1036,7 @@ static int cifisp_sdg_param(struct xgold_isp_dev *isp_dev,
 	    arg->curve_b.gamma_y14 & CIFISP_DEGAMMA_Y_RESERVED ||
 	    arg->curve_b.gamma_y15 & CIFISP_DEGAMMA_Y_RESERVED ||
 	    arg->curve_b.gamma_y16 & CIFISP_DEGAMMA_Y_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1068,7 +1068,7 @@ static int cifisp_goc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_GOC);
 
 	if (memcmp(arg, &(isp_dev->goc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1077,7 +1077,7 @@ static int cifisp_goc_param(struct xgold_isp_dev *isp_dev,
 		if (arg->gamma_r[i] & CIFISP_GOC_RESERVED ||
 		    arg->gamma_g[i] & CIFISP_GOC_RESERVED ||
 		    arg->gamma_b[i] & CIFISP_GOC_RESERVED) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible param 0x%x 0x%x 0x%x in  function: %s\n",
 				      arg->gamma_r[i],
 				      arg->gamma_g[i],
@@ -1111,7 +1111,7 @@ static int cifisp_ctk_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_CTK);
 
 	if (memcmp(arg, &(isp_dev->ctk_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1129,7 +1129,7 @@ static int cifisp_ctk_param(struct xgold_isp_dev *isp_dev,
 	    arg->ct_offset_r & CIFISP_XTALK_OFFSET_RESERVED ||
 	    arg->ct_offset_g & CIFISP_XTALK_OFFSET_RESERVED ||
 	    arg->ct_offset_b & CIFISP_XTALK_OFFSET_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1159,7 +1159,7 @@ static int cifisp_awb_meas_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_AWB);
 
 	if (memcmp(arg, &(isp_dev->awb_meas_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1185,7 +1185,7 @@ static int cifisp_awb_meas_param(struct xgold_isp_dev *isp_dev,
 	    arg->grid_v_dist > CIFISP_AWB_GRID_MAX_DIST ||
 	    arg->grid_v_dim == 0 ||
 	    arg->grid_h_dim == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1215,7 +1215,7 @@ static int cifisp_awb_gain_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_AWB_GAIN);
 
 	if (memcmp(arg, &(isp_dev->awb_gain_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1224,7 +1224,7 @@ static int cifisp_awb_gain_param(struct xgold_isp_dev *isp_dev,
 	    arg->gain_green_r > CIFISP_AWB_GAINS_MAX_VAL ||
 	    arg->gain_green_b > CIFISP_AWB_GAINS_MAX_VAL ||
 	    arg->gain_blue > CIFISP_AWB_GAINS_MAX_VAL) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1254,7 +1254,7 @@ static int cifisp_aec_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_AEC);
 
 	if (memcmp(arg, &(isp_dev->aec_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1265,7 +1265,7 @@ static int cifisp_aec_param(struct xgold_isp_dev *isp_dev,
 	    arg->meas_window.v_offs > CIFISP_EXP_MAX_VOFFS ||
 	    arg->meas_window.v_size > CIFISP_EXP_MAX_VSIZE ||
 	    arg->meas_window.v_size < CIFISP_EXP_MIN_VSIZE) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1294,7 +1294,7 @@ static int cifisp_cproc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_CPROC);
 
 	if (memcmp(arg, &(isp_dev->cproc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1306,7 +1306,7 @@ static int cifisp_cproc_param(struct xgold_isp_dev *isp_dev,
 	    arg->brightness & CIFISP_CPROC_BRIGHTNESS_RESERVED ||
 	    arg->sat & CIFISP_CPROC_SATURATION_RESERVED ||
 	    arg->hue & CIFISP_CPROC_HUE_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1335,7 +1335,7 @@ static int cifisp_macc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_MACC);
 
 	if (memcmp(arg, &(isp_dev->macc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1370,7 +1370,7 @@ static int cifisp_macc_param(struct xgold_isp_dev *isp_dev,
 	    arg->seg14.coeff1 & CIFISP_CPROC_MACC_RESERVED ||
 	    arg->seg15.coeff0 & CIFISP_CPROC_MACC_RESERVED ||
 	    arg->seg15.coeff1 & CIFISP_CPROC_MACC_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1400,7 +1400,7 @@ static int cifisp_tmap_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_TMAP);
 
 	if (memcmp(arg, &(isp_dev->tmap_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1408,7 +1408,7 @@ static int cifisp_tmap_param(struct xgold_isp_dev *isp_dev,
 	for (i = 0; i < CIFISP_TONE_MAP_TABLE_SIZE; i++)
 		if (arg->tmap_y[i] & CIFISP_CPROC_TONE_RESERVED ||
 		    arg->tmap_c[i] & CIFISP_CPROC_TONE_RESERVED) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible param in function: %s\n",
 				      __func__);
 			return -EINVAL;
@@ -1436,7 +1436,7 @@ static int cifisp_hst_param(struct xgold_isp_dev *isp_dev,
 	}
 
 	if (memcmp(arg, &(isp_dev->hst_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1446,7 +1446,7 @@ static int cifisp_hst_param(struct xgold_isp_dev *isp_dev,
 	    arg->meas_window.h_offs & CIFISP_HIST_WINDOW_RESERVED ||
 	    arg->meas_window.v_size & CIFISP_HIST_WINDOW_RESERVED ||
 	    arg->meas_window.h_size & CIFISP_HIST_WINDOW_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1475,7 +1475,7 @@ static int cifisp_ycflt_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_YCFLT);
 
 	if (memcmp(arg, &(isp_dev->ycflt_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1491,7 +1491,7 @@ static int cifisp_ycflt_param(struct xgold_isp_dev *isp_dev,
 	    arg->lum_eenr_fc_crop_neg & CIFISP_YCFLT_FC_CROP_NEG_RESERVED ||
 	    arg->lum_eenr_fc_gain_pos & CIFISP_YCFLT_FC_GAIN_POS_RESERVED ||
 	    arg->lum_eenr_fc_gain_neg & CIFISP_YCFLT_FC_GAIN_NEG_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1521,7 +1521,7 @@ static int cifisp_afc_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_AFC);
 
 	if (memcmp(arg, &(isp_dev->afc_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1529,7 +1529,7 @@ static int cifisp_afc_param(struct xgold_isp_dev *isp_dev,
 	if (arg->num_afm_win > CIFISP_AFM_MAX_WINDOWS ||
 	    arg->thres & CIFISP_AFC_THRES_RESERVED ||
 	    arg->var_shift & CIFISP_AFC_VAR_SHIFT_RESERVED) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1541,7 +1541,7 @@ static int cifisp_afc_param(struct xgold_isp_dev *isp_dev,
 		    arg->afm_win[i].v_offs < CIFISP_AFC_WINDOW_Y_MIN ||
 		    arg->afm_win[i].h_size & CIFISP_AFC_WINDOW_X_RESERVED ||
 		    arg->afm_win[i].v_size & CIFISP_AFC_WINDOW_Y_RESERVED) {
-			CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+			CIFISP_DPRINT(CIFISP_ERROR,
 				      "incompatible param in function: %s\n",
 				      __func__);
 			return -EINVAL;
@@ -1574,7 +1574,7 @@ static int cifisp_ie_param(struct xgold_isp_dev *isp_dev,
 	cifisp_param_dump(arg, CIFISP_MODULE_IE);
 
 	if (memcmp(arg, &(isp_dev->ie_config), sizeof(*arg)) == 0) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "same param in function: %s\n", __func__);
 		return 0;
 	}
@@ -1587,7 +1587,7 @@ static int cifisp_ie_param(struct xgold_isp_dev *isp_dev,
 			arg->effect != V4L2_COLORFX_SKETCH &&
 			arg->effect != V4L2_COLORFX_AQUA &&
 			arg->effect != V4L2_COLORFX_SET_CBCR) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+		CIFISP_DPRINT(CIFISP_ERROR,
 			      "incompatible param in function: %s\n", __func__);
 		return -EINVAL;
 	}
@@ -1729,7 +1729,7 @@ static bool cifisp_lsc_config(struct xgold_isp_dev *isp_dev)
 
 	if (isp_dev->lsc_config.config_width != isp_dev->input_width ||
 		isp_dev->lsc_config.config_height != isp_dev->input_height) {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			"LSC config: lsc_w %d lsc_h %d act_w %d act_h %d\n",
 			isp_dev->lsc_config.config_width,
 			isp_dev->lsc_config.config_height,
@@ -1737,7 +1737,7 @@ static bool cifisp_lsc_config(struct xgold_isp_dev *isp_dev)
 			isp_dev->input_height);
 		return false;
 	} else
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			"LSC config: lsc_w %d lsc_h %d\n",
 			isp_dev->lsc_config.config_width,
 			isp_dev->lsc_config.config_height);
@@ -2584,7 +2584,8 @@ static void cifisp_ctk_end(const struct xgold_isp_dev *isp_dev)
 
 /* CPROC */
 /*****************************************************************************/
-static void cifisp_cproc_config(const struct xgold_isp_dev *isp_dev)
+static void cifisp_cproc_config(const struct xgold_isp_dev *isp_dev,
+	bool capture)
 {
 	const struct cifisp_cproc_config *pconfig = &(isp_dev->cproc_config);
 
@@ -2593,9 +2594,19 @@ static void cifisp_cproc_config(const struct xgold_isp_dev *isp_dev)
 	cifisp_iowrite32(pconfig->sat, CIF_C_PROC_SATURATION);
 	cifisp_iowrite32(pconfig->brightness, CIF_C_PROC_BRIGHTNESS);
 
-	cifisp_iowrite32OR(pconfig->c_out_range << 3 |
+	if (!capture) {
+		cifisp_iowrite32OR(
+			pconfig->c_out_range << 3 |
 			pconfig->y_in_range << 2 |
-			pconfig->y_out_range << 1, CIF_C_PROC_CTRL);
+			pconfig->y_out_range << 1,
+			CIF_C_PROC_CTRL);
+	} else {
+		cifisp_iowrite32OR(
+			1 << 3 |
+			1 << 2 |
+			1 << 1,
+			CIF_C_PROC_CTRL);
+	}
 }
 
 #ifdef LOG_CAPTURE_PARAMS
@@ -2784,7 +2795,6 @@ void cifisp_ycflt_config(const struct xgold_isp_dev *isp_dev)
 {
 	const struct cifisp_ycflt_config *pconfig = &(isp_dev->ycflt_config);
 
-	cifisp_iowrite32(pconfig->chr_ss_ctrl, CIF_YC_FLT_CHR_SS_CTRL);
 	cifisp_iowrite32(pconfig->chr_ss_fac, CIF_YC_FLT_CHR_SS_FAC);
 	cifisp_iowrite32(pconfig->chr_ss_offs, CIF_YC_FLT_CHR_SS_OFFS);
 	cifisp_iowrite32(pconfig->chr_nr_ctrl, CIF_YC_FLT_CHR_NR_CTRL);
@@ -2826,17 +2836,19 @@ static void cifisp_ycflt_config_read(const struct xgold_isp_dev *isp_dev,
 #endif
 
 /*****************************************************************************/
-static void cifisp_ycflt_en(struct xgold_isp_dev *isp_dev)
+void cifisp_ycflt_en(const struct xgold_isp_dev *isp_dev)
 {
 	const struct cifisp_ycflt_config *pconfig = &(isp_dev->ycflt_config);
 
 	cifisp_iowrite32(pconfig->ctrl, CIF_YC_FLT_CTRL);
+	cifisp_iowrite32(pconfig->chr_ss_ctrl, CIF_YC_FLT_CHR_SS_CTRL);
 }
 
 /*****************************************************************************/
-static void cifisp_ycflt_end(struct xgold_isp_dev *isp_dev)
+void cifisp_ycflt_end(const struct xgold_isp_dev *isp_dev)
 {
-	cifisp_iowrite32(0, CIF_YC_FLT_CTRL);
+	cifisp_iowrite32(1<<6|1<<5|1<<4, CIF_YC_FLT_CTRL);
+	cifisp_iowrite32(3<<8|2<<4, CIF_YC_FLT_CHR_SS_CTRL);
 }
 
 static void cifisp_afc_config(const struct xgold_isp_dev *isp_dev)
@@ -3050,6 +3062,42 @@ static void cifisp_ie_end(const struct xgold_isp_dev *isp_dev)
 	cifisp_iowrite32AND(~CIF_ICCL_IE_CLK, CIF_ICCL);
 }
 
+/*****************************************************************************/
+static void cifisp_csm_config(const struct xgold_isp_dev *isp_dev,
+				bool capture)
+{
+	if (!capture) {
+		/* Reduced range conversion */
+		cifisp_iowrite32(0x21, CIF_ISP_CC_COEFF_0);
+		cifisp_iowrite32(0x40, CIF_ISP_CC_COEFF_1);
+		cifisp_iowrite32(0xd, CIF_ISP_CC_COEFF_2);
+		cifisp_iowrite32(0x1ed, CIF_ISP_CC_COEFF_3);
+		cifisp_iowrite32(0x1db, CIF_ISP_CC_COEFF_4);
+		cifisp_iowrite32(0x38, CIF_ISP_CC_COEFF_5);
+		cifisp_iowrite32(0x38, CIF_ISP_CC_COEFF_6);
+		cifisp_iowrite32(0x1d1, CIF_ISP_CC_COEFF_7);
+		cifisp_iowrite32(0x1f7, CIF_ISP_CC_COEFF_8);
+		cifisp_iowrite32AND(~CIF_ISP_CTRL_ISP_CSM_Y_FULL_ENA,
+			CIF_ISP_CTRL);
+		cifisp_iowrite32AND(~CIF_ISP_CTRL_ISP_CSM_C_FULL_ENA,
+			CIF_ISP_CTRL);
+	} else {
+		cifisp_iowrite32(0x26, CIF_ISP_CC_COEFF_0);
+		cifisp_iowrite32(0x4b, CIF_ISP_CC_COEFF_1);
+		cifisp_iowrite32(0xf, CIF_ISP_CC_COEFF_2);
+		cifisp_iowrite32(0x1ea, CIF_ISP_CC_COEFF_3);
+		cifisp_iowrite32(0x1d6, CIF_ISP_CC_COEFF_4);
+		cifisp_iowrite32(0x40, CIF_ISP_CC_COEFF_5);
+		cifisp_iowrite32(0x40, CIF_ISP_CC_COEFF_6);
+		cifisp_iowrite32(0x1ca, CIF_ISP_CC_COEFF_7);
+		cifisp_iowrite32(0x1f6, CIF_ISP_CC_COEFF_8);
+		cifisp_iowrite32OR(CIF_ISP_CTRL_ISP_CSM_Y_FULL_ENA,
+			CIF_ISP_CTRL);
+		cifisp_iowrite32OR(CIF_ISP_CTRL_ISP_CSM_C_FULL_ENA,
+			CIF_ISP_CTRL);
+	}
+}
+
 /* ================================QUEUE OPS ================== */
 static int cifisp_stat_vbq_setup(struct videobuf_queue *vq,
 				 unsigned int *cnt, unsigned int *size)
@@ -3062,13 +3110,13 @@ static int cifisp_stat_vbq_setup(struct videobuf_queue *vq,
 static void cifisp_stat_vbq_release(struct videobuf_queue *vq,
 				    struct videobuf_buffer *vb)
 {
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE, "Releasing buffer entry!\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "Releasing buffer entry!\n");
 
 	videobuf_waiton(vq, vb, 0, 0);
 
 	videobuf_vmalloc_free(vb);
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE, "Releasing buffer exit!\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "Releasing buffer exit!\n");
 }
 
 static int cifisp_stat_vbq_prepare(struct videobuf_queue *vq,
@@ -3100,7 +3148,7 @@ static void cifisp_stat_vbq_queue(struct videobuf_queue *vq,
 
 	vb->state = VIDEOBUF_QUEUED;
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE, "Queueing stat buffer!\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "Queueing stat buffer!\n");
 
 	list_add_tail(&vb->queue, &isp_dev->stat);
 }
@@ -3119,7 +3167,7 @@ static int cifisp_reqbufs(struct file *file, void *priv,
 {
 	struct xgold_isp_dev *isp_dev = video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      " %s: %s: p->type %d p->count %d\n",
 		      ISP_DEV_NAME, __func__, p->type, p->count);
 
@@ -3130,7 +3178,7 @@ static int cifisp_querybuf(struct file *file, void *priv, struct v4l2_buffer *p)
 {
 	struct xgold_isp_dev *isp_dev = video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      " %s: %s: p->type %d p->index %d\n",
 		      ISP_DEV_NAME, __func__, p->type, p->index);
 
@@ -3141,7 +3189,7 @@ static int cifisp_qbuf(struct file *file, void *priv, struct v4l2_buffer *p)
 {
 	struct xgold_isp_dev *isp_dev = video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      " %s: %s: p->type %d p->index %d\n",
 		      ISP_DEV_NAME, __func__, p->type, p->index);
 
@@ -3154,7 +3202,7 @@ static int cifisp_dqbuf(struct file *file, void *priv, struct v4l2_buffer *p)
 {
 	struct xgold_isp_dev *isp_dev = video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      " %s: %s: p->type %d p->index %d\n",
 		      ISP_DEV_NAME, __func__, p->type, p->index);
 
@@ -3171,7 +3219,7 @@ static int cifisp_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 	if (ret == 0)
 		isp_dev->streamon = true;
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      " %s: %s: ret %d\n", ISP_DEV_NAME, __func__, ret);
 
 	return ret;
@@ -3190,7 +3238,7 @@ static int cifisp_streamoff(struct file *file, void *priv, enum v4l2_buf_type i)
 	if (ret == 0)
 		isp_dev->streamon = false;
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		" %s: %s: ret %d\n", ISP_DEV_NAME, __func__, ret);
 
 	return ret;
@@ -3405,7 +3453,7 @@ static unsigned int cifisp_poll(struct file *file,
 
 	ret = videobuf_poll_stream(file, &isp_dev->vbq_stat, wait);
 
-	CIFISP_DPRINT(CIFISP_DEBUG_QUEUE,
+	CIFISP_DPRINT(CIFISP_DEBUG,
 		      "Polling on vbq_stat buffer %d\n", ret);
 
 	return ret;
@@ -3424,7 +3472,11 @@ static int cifisp_open(struct file *file)
 	struct xgold_isp_dev *isp_dev =
 		video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_open\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "cifisp_open\n");
+
+	if (isp_dev->open_count)
+		return -EBUSY;
+	isp_dev->open_count++;
 
 	isp_dev->bpc_en = false;
 	isp_dev->bls_en = false;
@@ -3489,6 +3541,7 @@ static int cifisp_open(struct file *file)
 	isp_dev->streamon = false;
 	isp_dev->active_meas = 0;
 
+	isp_dev->ycflt_update = false;
 	return 0;
 }
 
@@ -3497,17 +3550,18 @@ static int cifisp_close(struct file *file)
 	struct xgold_isp_dev *isp_dev =
 		video_get_drvdata(video_devdata(file));
 
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_close\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "cifisp_close\n");
 
 	videobuf_stop(&isp_dev->vbq_stat);
 	videobuf_mmap_free(&isp_dev->vbq_stat);
+	isp_dev->open_count--;
 
 	return 0;
 }
 
 struct v4l2_file_operations cifisp_fops = {
 	.mmap = cifisp_mmap,
-	.ioctl = video_ioctl2,
+	.unlocked_ioctl = video_ioctl2,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = video_ioctl2,
 #endif
@@ -3518,7 +3572,7 @@ struct v4l2_file_operations cifisp_fops = {
 
 static void cifisp_release(struct video_device *vdev)
 {
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "cifisp_release\n");
+	CIFISP_DPRINT(CIFISP_DEBUG, "cifisp_release\n");
 
 	video_device_release(vdev);
 
@@ -3526,24 +3580,15 @@ static void cifisp_release(struct video_device *vdev)
 }
 
 /************************************************************/
-struct video_device *register_cifisp_device(struct xgold_isp_dev *isp_dev,
+int register_cifisp_device(struct xgold_isp_dev *isp_dev,
+	struct video_device *vdev_cifisp,
 	struct v4l2_device *v4l2_dev,
 	void __iomem *cif_reg_baseaddress)
 {
-	struct video_device *vdev_cifisp = NULL;
-
 	memset(isp_dev, 0, sizeof(struct xgold_isp_dev));
 
 	isp_dev->base_addr = cif_reg_baseaddress;
 	BUG_ON(!(isp_dev->base_addr));
-
-	vdev_cifisp = video_device_alloc();
-
-	if (!vdev_cifisp) {
-		CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
-			      "Could not allocate device\n");
-		return ERR_PTR(-ENOMEM);
-	}
 
 	INIT_LIST_HEAD(&isp_dev->stat);
 	spin_lock_init(&isp_dev->irq_lock);
@@ -3577,9 +3622,9 @@ struct video_device *register_cifisp_device(struct xgold_isp_dev *isp_dev,
 	if (video_register_device(vdev_cifisp, VFL_TYPE_GRABBER, -1) < 0) {
 		dev_err(&(vdev_cifisp->dev),
 			"could not register Video for Linux device\n");
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 	} else {
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			"%s: CIFISP vdev minor =  %d\n",
 			__func__, vdev_cifisp->minor);
 	}
@@ -3589,11 +3634,11 @@ struct video_device *register_cifisp_device(struct xgold_isp_dev *isp_dev,
 			WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 
 	if (!measurement_wq)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	isp_dev->v_blanking_us = CIFISP_MODULE_DEFAULT_VBLANKING_TIME;
 
-	return vdev_cifisp;
+	return 0;
 }
 
 void unregister_cifisp_device(struct video_device *vdev_cifisp)
@@ -3656,82 +3701,79 @@ static void cifisp_dump_reg(struct xgold_isp_dev *isp_dev, int level)
 }
 
 /* Not called when the camera active, thus not isr protection. */
-void cifisp_configure_isp(struct xgold_isp_dev *isp_dev,
-						unsigned int capture)
+void cifisp_configure_isp(
+		struct xgold_isp_dev *isp_dev,
+		enum cif_isp20_pix_fmt in_pix_fmt,
+		bool capture)
 {
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "%s\n", __func__);
+	CIFISP_DPRINT(CIFISP_DEBUG, "%s\n", __func__);
 
 	mutex_lock(&isp_dev->mutex);
 
+	if (CIF_ISP20_PIX_FMT_IS_RAW_BAYER(in_pix_fmt)) {
 #ifndef CIFISP_DEBUG_DISABLE_BLOCKS
-	if (isp_dev->bpc_en) {
-		cifisp_bp_config(isp_dev);
-		cifisp_bp_en(isp_dev);
-		isp_dev->isp_param_bpc_update_needed = false;
-	}
+		if (isp_dev->bpc_en) {
+			cifisp_bp_config(isp_dev);
+			cifisp_bp_en(isp_dev);
+			isp_dev->isp_param_bpc_update_needed = false;
+		}
 
-	if (isp_dev->lsc_en) {
-		if (cifisp_lsc_config(isp_dev))
-			isp_dev->isp_param_lsc_update_needed = false;
-	}
+		if (isp_dev->lsc_en) {
+			if (cifisp_lsc_config(isp_dev))
+				isp_dev->isp_param_lsc_update_needed = false;
+		}
 
-	if (isp_dev->bls_en) {
-		cifisp_bls_config(isp_dev);
-		cifisp_bls_en(isp_dev);
-		isp_dev->isp_param_bls_update_needed = false;
-	}
+		if (isp_dev->bls_en) {
+			cifisp_bls_config(isp_dev);
+			cifisp_bls_en(isp_dev);
+			isp_dev->isp_param_bls_update_needed = false;
+		}
 
-	if (isp_dev->sdg_en) {
-		cifisp_sdg_config(isp_dev);
-		cifisp_sdg_en(isp_dev);
-		isp_dev->isp_param_sdg_update_needed = false;
-	}
+		if (isp_dev->sdg_en) {
+			cifisp_sdg_config(isp_dev);
+			cifisp_sdg_en(isp_dev);
+			isp_dev->isp_param_sdg_update_needed = false;
+		}
 
-	if (isp_dev->goc_en) {
-		cifisp_goc_config(isp_dev);
-		cifisp_goc_en(isp_dev);
-		isp_dev->isp_param_goc_update_needed = false;
-	}
+		if (isp_dev->goc_en) {
+			cifisp_goc_config(isp_dev);
+			cifisp_goc_en(isp_dev);
+			isp_dev->isp_param_goc_update_needed = false;
+		}
 
-	if (isp_dev->bdm_en) {
-		cifisp_bdm_config(isp_dev);
-		cifisp_bdm_en(isp_dev);
-		isp_dev->isp_param_bdm_update_needed = false;
-	}
+		if (isp_dev->bdm_en) {
+			cifisp_bdm_config(isp_dev);
+			cifisp_bdm_en(isp_dev);
+			isp_dev->isp_param_bdm_update_needed = false;
+		}
 
-	if (isp_dev->flt_en) {
-		cifisp_flt_config(isp_dev);
-		cifisp_flt_en(isp_dev);
-		isp_dev->isp_param_flt_update_needed = false;
-	}
+		if (isp_dev->flt_en) {
+			cifisp_flt_config(isp_dev);
+			cifisp_flt_en(isp_dev);
+			isp_dev->isp_param_flt_update_needed = false;
+		}
 
-	if (isp_dev->awb_gain_en) {
-		cifisp_awb_gain_config(isp_dev);
-		cifisp_awb_gain_en(isp_dev);
-		isp_dev->isp_param_awb_gain_update_needed = false;
-	}
+		if (isp_dev->awb_gain_en) {
+			cifisp_awb_gain_config(isp_dev);
+			cifisp_awb_gain_en(isp_dev);
+			isp_dev->isp_param_awb_gain_update_needed = false;
+		}
 
-	if (isp_dev->ctk_en) {
-		cifisp_ctk_config(isp_dev);
-		cifisp_ctk_en(isp_dev);
-		isp_dev->isp_param_ctk_update_needed = false;
-	}
+		if (isp_dev->ctk_en) {
+			cifisp_ctk_config(isp_dev);
+			cifisp_ctk_en(isp_dev);
+			isp_dev->isp_param_ctk_update_needed = false;
+		}
 
-	if (isp_dev->cproc_en) {
-		cifisp_cproc_config(isp_dev);
-		cifisp_cproc_en(isp_dev);
-		isp_dev->isp_param_cproc_update_needed = false;
-	}
+		if (isp_dev->cproc_en) {
+			cifisp_cproc_config(isp_dev, capture);
+			cifisp_cproc_en(isp_dev);
+			isp_dev->isp_param_cproc_update_needed = false;
+		}
 
-	if (isp_dev->ycflt_en) {
-		cifisp_ycflt_config(isp_dev);
-		cifisp_ycflt_en(isp_dev);
+		isp_dev->ycflt_update = true;
 		isp_dev->isp_param_ycflt_update_needed = false;
-	}
-	isp_dev->ycflt_update = false;
 
-#if defined(CONFIG_CIF_ISP_AUTO_UPD_CFG_BUG)
-	if (capture) {
 		if (isp_dev->macc_en) {
 			cifisp_macc_config(isp_dev);
 			cifisp_macc_en(isp_dev);
@@ -3742,76 +3784,127 @@ void cifisp_configure_isp(struct xgold_isp_dev *isp_dev,
 			cifisp_tmap_config(isp_dev);
 			cifisp_tmap_en(isp_dev);
 			isp_dev->isp_param_tmap_update_needed = false;
-	}
+		}
+
+		if (isp_dev->ie_en) {
+			cifisp_ie_config(isp_dev);
+			cifisp_ie_en(isp_dev);
+			isp_dev->isp_param_ie_update_needed = false;
+		}
+
+		cifisp_csm_config(isp_dev, capture);
+#endif
+
+		if (isp_dev->afc_en) {
+			cifisp_afc_config(isp_dev);
+			cifisp_afc_en(isp_dev);
+			isp_dev->isp_param_afc_update_needed = false;
+		}
+
+		if (isp_dev->awb_meas_en) {
+			cifisp_awb_meas_config(isp_dev);
+			cifisp_awb_meas_en(isp_dev);
+			isp_dev->isp_param_awb_meas_update_needed = false;
+		}
+
+		if (isp_dev->aec_en) {
+			cifisp_aec_config(isp_dev);
+			cifisp_aec_en(isp_dev);
+			isp_dev->isp_param_aec_update_needed = false;
+		}
+
+		if (isp_dev->hst_en) {
+			cifisp_hst_config(isp_dev);
+			cifisp_hst_en(isp_dev);
+			isp_dev->isp_param_hst_update_needed = false;
+		}
+
+		if (capture)
+			cifisp_reg_dump_capture(isp_dev);
 	} else {
+		/* Disable modules for yuv */
+		cifisp_bp_end(isp_dev);
+		isp_dev->bpc_en = false;
+
+		cifisp_lsc_end(isp_dev);
+		isp_dev->lsc_en = false;
+
+		cifisp_bls_end(isp_dev);
+		isp_dev->bls_en = false;
+
+		cifisp_sdg_end(isp_dev);
+		isp_dev->sdg_en = false;
+
+		cifisp_goc_end(isp_dev);
+		isp_dev->goc_en = false;
+
+		cifisp_bdm_end(isp_dev);
+		isp_dev->bdm_en = false;
+
+		cifisp_flt_end(isp_dev);
+		isp_dev->flt_en = false;
+
+		cifisp_awb_meas_end(isp_dev);
+		isp_dev->awb_meas_en = false;
+
+		cifisp_awb_gain_end(isp_dev);
+		isp_dev->awb_gain_en = false;
+
+		cifisp_aec_end(isp_dev);
+		isp_dev->aec_en = false;
+
+		cifisp_ctk_end(isp_dev);
+		isp_dev->ctk_en = false;
+
+		/* cproc can be used for yuv in reduced range */
+		if (isp_dev->cproc_en) {
+			cifisp_cproc_config(isp_dev, false);
+			cifisp_cproc_en(isp_dev);
+			isp_dev->isp_param_cproc_update_needed = false;
+		}
+
+		/* ycflt can be used for yuv */
+		if (isp_dev->ycflt_en) {
+			cifisp_ycflt_config(isp_dev);
+			cifisp_ycflt_en(isp_dev);
+			isp_dev->isp_param_ycflt_update_needed = false;
+		} else {
+			cifisp_ycflt_end(isp_dev);
+		}
+		isp_dev->ycflt_update = false;
+
 		cifisp_macc_end(isp_dev);
+		isp_dev->macc_en = false;
+
 		cifisp_tmap_end(isp_dev);
-	}
-#else
-	if (isp_dev->macc_en) {
-		cifisp_macc_config(isp_dev);
-		cifisp_macc_en(isp_dev);
-		isp_dev->isp_param_macc_update_needed = false;
-	}
+		isp_dev->tmap_en = false;
 
-	if (isp_dev->tmap_en) {
-		cifisp_tmap_config(isp_dev);
-		cifisp_tmap_en(isp_dev);
-		isp_dev->isp_param_tmap_update_needed = false;
-	}
-#endif
-#endif
+		cifisp_hst_end(isp_dev);
+		isp_dev->hst_en = false;
 
-	if (isp_dev->afc_en) {
-		cifisp_afc_config(isp_dev);
-		cifisp_afc_en(isp_dev);
-		isp_dev->isp_param_afc_update_needed = false;
+		cifisp_afc_end(isp_dev);
+		isp_dev->afc_en = false;
+
+		/* ie can be used for yuv */
+		if (isp_dev->ie_en) {
+			cifisp_ie_config(isp_dev);
+			cifisp_ie_en(isp_dev);
+			isp_dev->isp_param_ie_update_needed = false;
+		} else {
+			cifisp_ie_end(isp_dev);
+		}
 	}
 
-	if (isp_dev->awb_meas_en) {
-		cifisp_awb_meas_config(isp_dev);
-		cifisp_awb_meas_en(isp_dev);
-		isp_dev->isp_param_awb_meas_update_needed = false;
-	}
-
-	if (isp_dev->aec_en) {
-		cifisp_aec_config(isp_dev);
-		cifisp_aec_en(isp_dev);
-		isp_dev->isp_param_aec_update_needed = false;
-	}
-
-	if (isp_dev->hst_en) {
-		cifisp_hst_config(isp_dev);
-		cifisp_hst_en(isp_dev);
-		isp_dev->isp_param_hst_update_needed = false;
-	}
-
-	if (isp_dev->ie_en) {
-		cifisp_ie_config(isp_dev);
-		cifisp_ie_en(isp_dev);
-		isp_dev->isp_param_ie_update_needed = false;
-	}
-
-	if (capture)
-		cifisp_reg_dump_capture(isp_dev);
-
-	cifisp_dump_reg(isp_dev, CIFISP_DEBUG_INFO);
+	cifisp_dump_reg(isp_dev, CIFISP_DEBUG);
 
 	mutex_unlock(&isp_dev->mutex);
 
 }
 
-void cifisp_v_start(struct xgold_isp_dev *isp_dev)
-{
-	/* Called in an interrupt context. */
-	isp_dev->frame_id += 2;
-	do_gettimeofday(&isp_dev->frame_start_tv);
-}
-
 /* Not called when the camera active, thus not isr protection. */
 void cifisp_disable_isp(struct xgold_isp_dev *isp_dev)
 {
-	CIFISP_DPRINT(CIFISP_DEBUG_INFO, "%s\n", __func__);
+	CIFISP_DPRINT(CIFISP_DEBUG, "%s\n", __func__);
 
 	mutex_lock(&isp_dev->mutex);
 
@@ -3912,7 +4005,9 @@ static void cif_isp_send_measurement(struct work_struct *work)
 		spin_unlock_irqrestore(&isp_dev->irq_lock, lock_flags);
 
 		if (bufs_needed == 0) {
+			struct timeval tv;
 			unsigned int frame_id;
+			do_gettimeofday(&tv);
 
 			if (active_meas & CIF_ISP_AWB_DONE) {
 				vb = vb_array[index];
@@ -3945,8 +4040,7 @@ static void cif_isp_send_measurement(struct work_struct *work)
 				int i;
 				for (i = 0; i < 3; i++) {
 					if (vb_array[i] != NULL) {
-						vb_array[i]->ts =
-						isp_dev->frame_start_tv;
+						vb_array[i]->ts = tv;
 						vb_array[i]->field_count =
 							meas_work->frame_id;
 						vb_array[i]->state =
@@ -3955,16 +4049,16 @@ static void cif_isp_send_measurement(struct work_struct *work)
 					}
 				}
 
-				CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+				CIFISP_DPRINT(CIFISP_DEBUG,
 					"Measurement done\n");
 			} else {
 				cleanup = 1;
-				CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+				CIFISP_DPRINT(CIFISP_ERROR,
 					"Measurement late\n");
 			}
 		} else {
 			cleanup = 1;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"Not enought measurement bufs\n");
 		}
 
@@ -4000,7 +4094,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			CIF_ISP_AWB_DONE|CIF_ISP_AFM_FIN|CIF_ISP_EXP_END,
 			CIF_ISP_ICR);
 
-		CIFISP_DPRINT(CIFISP_DEBUG_ISR, "isp_ris 0x%x\n", isp_ris);
+		CIFISP_DPRINT(CIFISP_DEBUG, "isp_ris 0x%x\n", isp_ris);
 
 		if (!isp_dev->isp_param_awb_meas_update_needed &&
 			!isp_dev->isp_param_afc_update_needed &&
@@ -4024,17 +4118,17 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 
 				if (!queue_work(measurement_wq,
 					(struct work_struct *)work)) {
-					CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+					CIFISP_DPRINT(CIFISP_ERROR,
 					"Could not schedule work\n");
 					kfree((void *)work);
 				}
 			} else {
-				CIFISP_DPRINT(CIFISP_DEBUG_ERROR,
+				CIFISP_DPRINT(CIFISP_ERROR,
 				"Could not allocate work\n");
 			}
 		}
 
-		CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			"time-left 0:%d\n", time_left);
 
 		/* Then update  changed configs. Some of them involve
@@ -4057,7 +4151,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			isp_dev->isp_param_tmap_update_needed ||
 			isp_dev->isp_param_ie_update_needed) {
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 1:%d %d\n",
 				time_left,
 				isp_dev->isp_param_bpc_update_needed);
@@ -4076,7 +4170,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_BPC_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 2:%d %d\n",
 				time_left,
 				isp_dev->isp_param_bls_update_needed);
@@ -4096,7 +4190,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_BLS_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 3:%d %d\n",
 				time_left,
 				isp_dev->isp_param_sdg_update_needed);
@@ -4116,7 +4210,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_SDG_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 4:%d %d\n",
 				time_left,
 				isp_dev->isp_param_lsc_update_needed);
@@ -4138,7 +4232,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_LSC_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 5:%d %d\n",
 				time_left,
 				isp_dev->isp_param_awb_gain_update_needed);
@@ -4159,7 +4253,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_AWB_GAIN_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 6:%d %d\n",
 				time_left,
 				isp_dev->isp_param_bdm_update_needed);
@@ -4179,7 +4273,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_BDM_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 7:%d %d\n",
 				time_left,
 				isp_dev->isp_param_flt_update_needed);
@@ -4199,26 +4293,21 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_FLT_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 8:%d %d\n",
 				time_left,
 				isp_dev->isp_param_ycflt_update_needed);
 
+			/* This filter is outside of the Bayer ISP block. */
+			/* Configured later in the MI ISR.*/
 			if (isp_dev->isp_param_ycflt_update_needed &&
 				time_left >= CIFISP_MODULE_YCFLT_PROC_TIME) {
-				cifisp_ycflt_config(isp_dev);
-
-				if (isp_dev->ycflt_en)
-					cifisp_ycflt_en(isp_dev);
-				else
-					cifisp_ycflt_end(isp_dev);
-
 				isp_dev->isp_param_ycflt_update_needed = false;
 				isp_dev->ycflt_update = true;
 				time_left -= CIFISP_MODULE_YCFLT_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 9:%d %d\n",
 				time_left,
 				isp_dev->isp_param_ctk_update_needed);
@@ -4238,7 +4327,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_CTK_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 10:%d %d\n",
 				time_left,
 				isp_dev->isp_param_goc_update_needed);
@@ -4258,7 +4347,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_GOC_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 11:%d %d\n",
 				time_left,
 				isp_dev->isp_param_cproc_update_needed);
@@ -4266,7 +4355,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			if (isp_dev->isp_param_cproc_update_needed &&
 				time_left >= CIFISP_MODULE_CPROC_PROC_TIME) {
 				/*update cprc config */
-				cifisp_cproc_config(isp_dev);
+				cifisp_cproc_config(isp_dev, false);
 
 				if (isp_dev->cproc_en)
 					cifisp_cproc_en(isp_dev);
@@ -4278,7 +4367,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_CPROC_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 12:%d %d\n",
 				time_left,
 				isp_dev->isp_param_macc_update_needed);
@@ -4298,7 +4387,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_MACC_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 13:%d %d\n",
 				time_left,
 				isp_dev->isp_param_tmap_update_needed);
@@ -4318,7 +4407,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				time_left -= CIFISP_MODULE_TMAP_PROC_TIME;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 14:%d %d\n",
 				time_left,
 				isp_dev->isp_param_ie_update_needed);
@@ -4339,7 +4428,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 			}
 		} else {
 #endif
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 15:%d %d\n",
 				time_left,
 				isp_dev->isp_param_awb_meas_update_needed);
@@ -4357,7 +4446,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 					false;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 16:%d %d\n",
 				time_left,
 				isp_dev->isp_param_afc_update_needed);
@@ -4375,7 +4464,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 					false;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 17:%d %d\n",
 				time_left,
 				isp_dev->isp_param_hst_update_needed);
@@ -4392,7 +4481,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 				isp_dev->isp_param_hst_update_needed = false;
 			}
 
-			CIFISP_DPRINT(CIFISP_DEBUG_ISR,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"time-left 18:%d %d\n",
 				time_left,
 				isp_dev->isp_param_aec_update_needed);
@@ -4413,7 +4502,7 @@ int cifisp_isp_isr(struct xgold_isp_dev *isp_dev, u32 isp_mis)
 		}
 #endif
 
-		cifisp_dump_reg(isp_dev, CIFISP_DEBUG_ISR);
+		cifisp_dump_reg(isp_dev, CIFISP_DEBUG);
 	}
 #ifdef LOG_ISR_EXE_TIME
 	if (isp_mis & (CIF_ISP_EXP_END | CIF_ISP_AWB_DONE | CIF_ISP_FRAME)) {
@@ -4437,18 +4526,18 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_AWB_GAIN:{
 			struct cifisp_awb_gain_config *pconfig =
 			    (struct cifisp_awb_gain_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AWB Gain Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, "g_g: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, "g_g: %d\n",
 				      pconfig->gain_green_r);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, "g_b: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, "g_b: %d\n",
 				      pconfig->gain_green_b);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, "r: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, "r: %d\n",
 				      pconfig->gain_red);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, "b: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, "b: %d\n",
 				      pconfig->gain_blue);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AWB Gain Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		}
@@ -4458,26 +4547,26 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 			    (struct cifisp_bpc_config *)config;
 			struct cifisp_bp_correction_config *pcor_config =
 			    &pconfig->corr_config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BPC Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " corr_type: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " corr_type: %d\n",
 				      pcor_config->corr_type);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " corr_rep: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " corr_rep: %d\n",
 				      pcor_config->corr_rep);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " corr_mode: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " corr_mode: %d\n",
 				      pcor_config->corr_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " abs_hot_thres: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " abs_hot_thres: %d\n",
 				      pcor_config->abs_hot_thres);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " abs_dead_thres: %d\n",
 				      pcor_config->abs_dead_thres);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " dev_hot_thres: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " dev_hot_thres: %d\n",
 				      pcor_config->dev_hot_thres);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " dev_dead_thres: %d\n",
 				      pcor_config->dev_dead_thres);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BPC Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		}
@@ -4488,110 +4577,110 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 			    (struct cifisp_bls_config *)config;
 			struct cifisp_bls_fixed_val *pval = &pconfig->fixed_val;
 
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BLS Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " enable_auto: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " enable_auto: %d\n",
 				      pconfig->enable_auto);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " en_windows: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " en_windows: %d\n",
 				      pconfig->en_windows);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window1.h_offs: %d\n",
 				      pconfig->bls_window1.h_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window1.v_offs: %d\n",
 				      pconfig->bls_window1.v_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window1.h_size: %d\n",
 				      pconfig->bls_window1.h_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window1.v_size: %d\n",
 				      pconfig->bls_window1.v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window2.h_offs: %d\n",
 				      pconfig->bls_window2.h_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window2.v_offs: %d\n",
 				      pconfig->bls_window2.v_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window2.h_size: %d\n",
 				      pconfig->bls_window2.h_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " bls_window2.v_size: %d\n",
 				      pconfig->bls_window2.v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " bls_samples: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " bls_samples: %d\n",
 				      pconfig->bls_samples);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " fixed_A: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " fixed_A: %d\n",
 				      pval->fixed_a);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " fixed_B: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " fixed_B: %d\n",
 				      pval->fixed_b);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " fixed_C: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " fixed_C: %d\n",
 				      pval->fixed_c);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " fixed_D: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " fixed_D: %d\n",
 				      pval->fixed_d);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BLS Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
 	case CIFISP_MODULE_LSC:{
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### LSC Parameters - BEGIN ####\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### LSC Parameters - END ####\n");
 		}
 		break;
 	case CIFISP_MODULE_FLT:{
 			struct cifisp_flt_config *pconfig =
 			    (struct cifisp_flt_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: FLT Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_mask_sharp0: %d\n",
 				      pconfig->flt_mask_sharp0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_mask_sharp1: %d\n",
 				      pconfig->flt_mask_sharp1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_mask_diag: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_mask_diag: %d\n",
 				      pconfig->flt_mask_diag);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_mask_blur_max: %d\n",
 				      pconfig->flt_mask_blur_max);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_mask_blur: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_mask_blur: %d\n",
 				      pconfig->flt_mask_blur);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_mask_lin: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_mask_lin: %d\n",
 				      pconfig->flt_mask_lin);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_mask_orth: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_mask_orth: %d\n",
 				      pconfig->flt_mask_orth);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_mask_v_diag: %d\n",
 				      pconfig->flt_mask_v_diag);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_mask_h_diag: %d\n",
 				      pconfig->flt_mask_h_diag);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_lum_weight: %d\n",
 				      pconfig->flt_lum_weight);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_blur_th0: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_blur_th0: %d\n",
 				      pconfig->flt_blur_th0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_blur_th1: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_blur_th1: %d\n",
 				      pconfig->flt_blur_th1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_sharp0_th: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_sharp0_th: %d\n",
 				      pconfig->flt_sharp0_th);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_sharp1_th: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_sharp1_th: %d\n",
 				      pconfig->flt_sharp1_th);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_chrom_h_mode: %d\n",
 				      pconfig->flt_chrom_h_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_chrom_v_mode: %d\n",
 				      pconfig->flt_chrom_v_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " flt_diag_sharp_mode: %d\n",
 				      pconfig->flt_diag_sharp_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " flt_mode: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " flt_mode: %d\n",
 				      pconfig->flt_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: FLT Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4599,12 +4688,12 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_BDM:{
 			struct cifisp_bdm_config *pconfig =
 			    (struct cifisp_bdm_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BDM Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " demosaic_th: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " demosaic_th: %d\n",
 				      pconfig->demosaic_th);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: BDM Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4612,127 +4701,127 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_SDG:{
 			struct cifisp_sdg_config *pconfig =
 			    (struct cifisp_sdg_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: SDG Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " RED -Curve parameters\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y0: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y0: %d\n",
 				      pconfig->curve_r.gamma_y0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y1: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y1: %d\n",
 				      pconfig->curve_r.gamma_y1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y2: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y2: %d\n",
 				      pconfig->curve_r.gamma_y2);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y3: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y3: %d\n",
 				      pconfig->curve_r.gamma_y3);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y4: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y4: %d\n",
 				      pconfig->curve_r.gamma_y4);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y5: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y5: %d\n",
 				      pconfig->curve_r.gamma_y5);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y6: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y6: %d\n",
 				      pconfig->curve_r.gamma_y6);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y7: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y7: %d\n",
 				      pconfig->curve_r.gamma_y7);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y8: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y8: %d\n",
 				      pconfig->curve_r.gamma_y8);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y9: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y9: %d\n",
 				      pconfig->curve_r.gamma_y9);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y10: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y10: %d\n",
 				      pconfig->curve_r.gamma_y10);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y11: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y11: %d\n",
 				      pconfig->curve_r.gamma_y11);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y12: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y12: %d\n",
 				      pconfig->curve_r.gamma_y12);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y13: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y13: %d\n",
 				      pconfig->curve_r.gamma_y13);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y14: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y14: %d\n",
 				      pconfig->curve_r.gamma_y14);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y15: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y15: %d\n",
 				      pconfig->curve_r.gamma_y15);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y16: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y16: %d\n",
 				      pconfig->curve_r.gamma_y16);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " GREEN -Curve parameters\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y0: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y0: %d\n",
 				      pconfig->curve_g.gamma_y0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y1: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y1: %d\n",
 				      pconfig->curve_g.gamma_y1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y2: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y2: %d\n",
 				      pconfig->curve_g.gamma_y2);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y3: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y3: %d\n",
 				      pconfig->curve_g.gamma_y3);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y4: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y4: %d\n",
 				      pconfig->curve_g.gamma_y4);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y5: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y5: %d\n",
 				      pconfig->curve_g.gamma_y5);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y6: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y6: %d\n",
 				      pconfig->curve_g.gamma_y6);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y7: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y7: %d\n",
 				      pconfig->curve_g.gamma_y7);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y8: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y8: %d\n",
 				      pconfig->curve_g.gamma_y8);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y9: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y9: %d\n",
 				      pconfig->curve_g.gamma_y9);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y10: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y10: %d\n",
 				      pconfig->curve_g.gamma_y10);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y11: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y11: %d\n",
 				      pconfig->curve_g.gamma_y11);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y12: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y12: %d\n",
 				      pconfig->curve_g.gamma_y12);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y13: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y13: %d\n",
 				      pconfig->curve_g.gamma_y13);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y14: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y14: %d\n",
 				      pconfig->curve_g.gamma_y14);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y15: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y15: %d\n",
 				      pconfig->curve_g.gamma_y15);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y16: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y16: %d\n",
 				      pconfig->curve_g.gamma_y16);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " BLUE -Curve parameters\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y0: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y0: %d\n",
 				      pconfig->curve_b.gamma_y0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y1: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y1: %d\n",
 				      pconfig->curve_b.gamma_y1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y2: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y2: %d\n",
 				      pconfig->curve_b.gamma_y2);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y3: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y3: %d\n",
 				      pconfig->curve_b.gamma_y3);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y4: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y4: %d\n",
 				      pconfig->curve_b.gamma_y4);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y5: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y5: %d\n",
 				      pconfig->curve_b.gamma_y5);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y6: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y6: %d\n",
 				      pconfig->curve_b.gamma_y6);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y7: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y7: %d\n",
 				      pconfig->curve_b.gamma_y7);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y8: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y8: %d\n",
 				      pconfig->curve_b.gamma_y8);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y9: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y9: %d\n",
 				      pconfig->curve_b.gamma_y9);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y10: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y10: %d\n",
 				      pconfig->curve_b.gamma_y10);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y11: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y11: %d\n",
 				      pconfig->curve_b.gamma_y11);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y12: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y12: %d\n",
 				      pconfig->curve_b.gamma_y12);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y13: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y13: %d\n",
 				      pconfig->curve_b.gamma_y13);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y14: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y14: %d\n",
 				      pconfig->curve_b.gamma_y14);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y15: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y15: %d\n",
 				      pconfig->curve_b.gamma_y15);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gamma_y16: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gamma_y16: %d\n",
 				      pconfig->curve_b.gamma_y16);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: SDG Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
 
 	case CIFISP_MODULE_GOC:{
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: GOC Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: GOC Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4740,34 +4829,34 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_CTK:{
 			struct cifisp_ctk_config *pconfig =
 			    (struct cifisp_ctk_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: CTK Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff0: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff0: %d\n",
 				      pconfig->coeff0);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff1: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff1: %d\n",
 				      pconfig->coeff1);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff2: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff2: %d\n",
 				      pconfig->coeff2);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff3: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff3: %d\n",
 				      pconfig->coeff3);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff4: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff4: %d\n",
 				      pconfig->coeff4);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff5: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff5: %d\n",
 				      pconfig->coeff5);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff6: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff6: %d\n",
 				      pconfig->coeff6);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff7: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff7: %d\n",
 				      pconfig->coeff7);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " coeff8: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " coeff8: %d\n",
 				      pconfig->coeff8);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " ct_offset_r: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " ct_offset_r: %d\n",
 				      pconfig->ct_offset_r);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " ct_offset_g: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " ct_offset_g: %d\n",
 				      pconfig->ct_offset_g);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " ct_offset_b: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " ct_offset_b: %d\n",
 				      pconfig->ct_offset_b);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: CTK Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4775,54 +4864,54 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_AWB:{
 			struct cifisp_awb_meas_config *pconfig =
 			    (struct cifisp_awb_meas_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AWB Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " awb_mode: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " awb_mode: %d\n",
 				      pconfig->awb_mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " max_y: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " max_y: %d\n",
 				      pconfig->max_y);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " min_y: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " min_y: %d\n",
 				      pconfig->min_y);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " max_csum: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " max_csum: %d\n",
 				      pconfig->max_csum);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " min_c: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " min_c: %d\n",
 				      pconfig->min_c);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " frames: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " frames: %d\n",
 				      pconfig->frames);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " awb_ref_cr: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " awb_ref_cr: %d\n",
 				      pconfig->awb_ref_cr);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " awb_ref_cb: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " awb_ref_cb: %d\n",
 				      pconfig->awb_ref_cb);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gb_sat: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gb_sat: %d\n",
 				      pconfig->gb_sat);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " gr_sat: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " gr_sat: %d\n",
 				      pconfig->gr_sat);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " r_sat: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " r_sat: %d\n",
 				      pconfig->b_sat);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " grid_h_dim: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " grid_h_dim: %d\n",
 				      pconfig->grid_h_dim);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " grid_v_dim: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " grid_v_dim: %d\n",
 				      pconfig->grid_v_dim);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " grid_h_dist: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " grid_h_dist: %d\n",
 				      pconfig->grid_h_dist);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " grid_v_dist: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " grid_v_dist: %d\n",
 				      pconfig->grid_v_dist);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " enable_ymax_cmp: %d\n",
 				      pconfig->enable_ymax_cmp);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " rgb_meas_pnt: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " rgb_meas_pnt: %d\n",
 				      pconfig->rgb_meas_pnt);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " AWB Window size\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " AWB Window size\n");
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_offs: %d\n",
 				      pconfig->awb_wnd.h_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_offs: %d\n",
 				      pconfig->awb_wnd.v_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_size: %d\n",
 				      pconfig->awb_wnd.h_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_size: %d\n",
 				      pconfig->awb_wnd.v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AWB Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4830,24 +4919,24 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_HST:{
 			struct cifisp_hst_config *pconfig =
 			    (struct cifisp_hst_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: HST Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " mode: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " mode: %d\n",
 				      pconfig->mode);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " histogram_predivider: %d\n",
 				      pconfig->histogram_predivider);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " HST Window size\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " HST Window size\n");
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_offs: %d\n",
 				      pconfig->meas_window.h_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_offs: %d\n",
 				      pconfig->meas_window.v_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_size: %d\n",
 				      pconfig->meas_window.h_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_size: %d\n",
 				      pconfig->meas_window.v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: HST Parameters - END ####\n",
 				      ISP_DEV_NAME);
 
@@ -4856,21 +4945,21 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_AEC:{
 			struct cifisp_aec_config *pconfig =
 			    (struct cifisp_aec_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AEC Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " autostop: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " autostop: %d\n",
 				      pconfig->autostop);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " AEC Window size\n");
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " AEC Window size\n");
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_offs: %d\n",
 				      pconfig->meas_window.h_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_offs: %d\n",
 				      pconfig->meas_window.v_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " h_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " h_size: %d\n",
 				      pconfig->meas_window.h_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " v_size: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " v_size: %d\n",
 				      pconfig->meas_window.v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AEC Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
@@ -4878,54 +4967,57 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_CPROC:{
 			struct cifisp_cproc_config *pconfig =
 			    (struct cifisp_cproc_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: CPROC Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " contrast: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " contrast: %d\n",
 				      pconfig->contrast);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " hue: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " hue: %d\n",
 				      pconfig->hue);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " sat: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " sat: %d\n",
 				      pconfig->sat);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " brightness: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " brightness: %d\n",
 				      pconfig->brightness);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: CPROC Parameters - END ####\n",
 				      ISP_DEV_NAME);
 		} break;
 	case CIFISP_MODULE_YCFLT:{
 			struct cifisp_ycflt_config *pconfig =
 			    (struct cifisp_ycflt_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: YCFLT Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " chr_ss_ctrl: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " chr_ss_ctrl: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " ctrl: %d\n",
+					pconfig->ctrl);
+			CIFISP_DPRINT(CIFISP_DEBUG, " chr_ss_ctrl: %d\n",
 				      pconfig->chr_ss_ctrl);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " chr_ss_fac: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " chr_ss_fac: %d\n",
 				      pconfig->chr_ss_fac);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " chr_ss_offs: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " chr_ss_offs: %d\n",
 				      pconfig->chr_ss_offs);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " chr_nr_ctrl: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " chr_nr_ctrl: %d\n",
 				      pconfig->chr_nr_ctrl);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_edge_gain: %d\n",
 				      pconfig->lum_eenr_edge_gain);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_corner_gain: %d\n",
 				      pconfig->lum_eenr_corner_gain);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_fc_crop_neg: %d\n",
 				      pconfig->lum_eenr_fc_crop_neg);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_fc_crop_pos: %d\n",
 				      pconfig->lum_eenr_fc_crop_pos);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_fc_gain_neg: %d\n",
 				      pconfig->lum_eenr_fc_gain_neg);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " lum_eenr_fc_gain_pos: %d\n",
 				      pconfig->lum_eenr_fc_gain_pos);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: YCFLT Parameters - END ####\n",
 				      ISP_DEV_NAME);
 			break;
@@ -4933,37 +5025,37 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 	case CIFISP_MODULE_AFC:{
 			struct cifisp_afc_config *pconfig =
 			    (struct cifisp_afc_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      "#### %s: AFC Parameters - BEGIN ####\n",
 				      ISP_DEV_NAME);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " window A %d %d %d %d\n",
 				      pconfig->afm_win[0].h_offs,
 				      pconfig->afm_win[0].v_offs,
 				      pconfig->afm_win[0].h_size,
 				      pconfig->afm_win[0].v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " window B %d %d %d %d\n",
 				      pconfig->afm_win[1].h_offs,
 				      pconfig->afm_win[1].v_offs,
 				      pconfig->afm_win[1].h_size,
 				      pconfig->afm_win[1].v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				      " window C %d %d %d %d\n",
 				      pconfig->afm_win[2].h_offs,
 				      pconfig->afm_win[2].v_offs,
 				      pconfig->afm_win[2].h_size,
 				      pconfig->afm_win[2].v_size);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " thres: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " thres: %d\n",
 				      pconfig->thres);
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO, " var_shift: %d\n",
+			CIFISP_DPRINT(CIFISP_DEBUG, " var_shift: %d\n",
 				      pconfig->var_shift);
 			break;
 		}
 	case CIFISP_MODULE_IE: {
 			struct cifisp_ie_config *pconfig =
 			    (struct cifisp_ie_config *)config;
-			CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+			CIFISP_DPRINT(CIFISP_DEBUG,
 				"effect %d, %x, %x, %x, %x, %x, %x %d\n",
 				pconfig->effect, pconfig->color_sel,
 				pconfig->eff_mat_1, pconfig->eff_mat_2,
@@ -4972,7 +5064,7 @@ static void cifisp_param_dump(const void *config, unsigned int module)
 			break;
 		}
 	default:
-		CIFISP_DPRINT(CIFISP_DEBUG_INFO,
+		CIFISP_DPRINT(CIFISP_DEBUG,
 			      "####%s: Invalid Module ID ####\n", ISP_DEV_NAME);
 		break;
 	}
