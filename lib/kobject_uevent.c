@@ -506,7 +506,9 @@ int uevent_buffer_pm_notify(struct notifier_block *nb,
 			kobject_deliver_uevent(ub->kobj, ub->env, ub->action,
 					       ub->devpath, ub->subsys);
 			list_del(&ub->buffer_list);
+			mutex_unlock(&uevent_buffer_mutex);
 			kobject_put(ub->kobj);
+			mutex_lock(&uevent_buffer_mutex);
 			kfree(ub->env);
 			kfree(ub->devpath);
 			kfree(ub->subsys);
