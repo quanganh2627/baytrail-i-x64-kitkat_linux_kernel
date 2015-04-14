@@ -42,6 +42,7 @@
 #include <linux/idi/idi_interface.h>
 #include <linux/idi/idi_controller.h>
 #include <linux/idi/idi_ids.h>
+#include <linux/workqueue.h>
 
 #include "agold_afe.h"
 
@@ -436,6 +437,45 @@ static int agold_afe_get_reg_addr(unsigned int reg)
 	return -1;
 }
 
+static void afe_trigger_work_handler(struct work_struct *work)
+{
+	u32 reg = 0;
+
+	struct agold_afe_data *afe =
+		container_of(work, struct agold_afe_data, afe_trigger_work);
+	struct snd_soc_codec *codec = afe->codec;
+
+	afe_debug(" %s cmd %d:\n", __func__, afe->cmd);
+	switch (afe->cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		mutex_lock(&codec->mutex);
+		reg = snd_soc_read(codec, AGOLD_AFE_BCON);
+		/* For capture stream, ensure that AUDINSTART
+		is not set in DAC mode */
+		if (afe->stream == SNDRV_PCM_STREAM_CAPTURE &&
+			!(reg & AFE_BCON_FMR_DIRECT)) {
+			afe_debug("%s : Enabling In start bit\n", __func__);
+			/* Enable AUDINSTRT */
+			reg |= AFE_BCON_AUDINSTRT;
+			snd_soc_write(codec, AGOLD_AFE_BCON, reg);
+			/* Program the INRATE bits */
+			reg &= 0xFFFFFF3F;
+			reg |= (afe->afe_in_samplerate <<
+					AFE_BCON_AUD_INRATE_POS);
+			afe_debug("%s: AFE IN RATE is set to  %d\n", __func__,
+			afe->afe_in_samplerate);
+			snd_soc_write(codec, AGOLD_AFE_BCON, reg);
+
+		}
+		mutex_unlock(&codec->mutex);
+		break;
+
+	default:
+		break;
+	}
+}
 #ifdef CONFIG_SND_SOC_AGOLD_HSOFC_SUPPORT
 
 /* Read AFE Power register */
@@ -1382,11 +1422,7 @@ static int agold_afe_dmic_event(struct snd_soc_dapm_widget *w,
 	struct agold_afe_data *agold_afe =
 		(struct agold_afe_data *)snd_soc_codec_get_drvdata(w->codec);
 	int ret;
-	u32 reg = 0;
 	afe_debug("%s\n", __func__);
-
-	reg = snd_soc_read(w->codec, AGOLD_AFE_BCON);
-	reg &= 0xFFFFFF3F;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -1394,8 +1430,8 @@ static int agold_afe_dmic_event(struct snd_soc_dapm_widget *w,
 
 		/* Program the INRATE bits */
 		/* For DigMic set sampling rate to 48KHz */
-		reg |= (0x3 << AFE_BCON_AUD_INRATE_POS);
 
+		agold_afe->afe_in_samplerate = 3;
 		ret = agold_afe_set_pinctrl_state(w->codec->dev,
 				agold_afe->pins_default);
 		if (ret)
@@ -1415,13 +1451,11 @@ static int agold_afe_dmic_event(struct snd_soc_dapm_widget *w,
 		ret = agold_afe_set_pinctrl_state(w->codec->dev,
 				agold_afe->pins_sleep);
 		/* Set default sampling rate to 16KHz */
-		reg |= (0x1 << AFE_BCON_AUD_INRATE_POS);
+		agold_afe->afe_in_samplerate = 1;
 		if (ret)
 			afe_err("%s: Deactivating PCL pad failed\n", __func__);
 		break;
 	}
-	snd_soc_write(w->codec, AGOLD_AFE_BCON, reg);
-
 	return 0;
 }
 #endif
@@ -1819,32 +1853,13 @@ static void agold_afe_shutdown(struct snd_pcm_substream *substream,
 static int agold_afe_trigger(struct snd_pcm_substream *substream,
 			int cmd, struct snd_soc_dai *dai)
 {
-	u32 reg = 0;
+	struct agold_afe_data *agold_afe =
+		snd_soc_codec_get_drvdata(dai->codec);
 
-	reg = snd_soc_read(dai->codec, AGOLD_AFE_BCON);
+	agold_afe->stream = substream->stream;
+	agold_afe->cmd = cmd;
+	schedule_work(&agold_afe->afe_trigger_work);
 
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-	case SNDRV_PCM_TRIGGER_RESUME:
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		mutex_lock(&dai->codec->mutex);
-
-		/* For capture stream, ensure that AUDINSTART
-		 * is not set  in DAC mode */
-		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE &&
-				!(reg & AFE_BCON_FMR_DIRECT)) {
-			afe_debug("%s : Enabling In start bit\n", __func__);
-			reg = snd_soc_read(dai->codec, AGOLD_AFE_BCON);
-			/* Enable AUDINSTRT */
-			reg |= AFE_BCON_AUDINSTRT;
-			snd_soc_write(dai->codec, AGOLD_AFE_BCON, reg);
-		}
-		mutex_unlock(&dai->codec->mutex);
-		break;
-
-	default:
-		break;
-	}
 	return 0;
 }
 
@@ -1868,16 +1883,9 @@ static int agold_afe_hw_params(struct snd_pcm_substream *substream,
 	reg = snd_soc_read(codec, AGOLD_AFE_BCON);
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-		/* Program the INRATE bits */
-		reg &= 0xFFFFFF3F;
-
-		/* Default to 16KHz input sampling rate */
-		reg |= (0x1 << AFE_BCON_AUD_INRATE_POS);
-
 		if (*audio_native)
 			reg |= BIT(5); /* INSTART */
 
-		snd_soc_write(codec, AGOLD_AFE_BCON, reg);
 	}
 
 	/* DSP always output 48kHz */
@@ -1914,6 +1922,8 @@ static int agold_afe_codec_probe(struct snd_soc_codec *codec)
 		afe_err("NULL pointer check failed for agold_afe\n");
 		return -EINVAL;
 	}
+	/* Default AFE IN sample rate to 16KHz */
+	agold_afe->afe_in_samplerate = 1;
 
 	agold_afe_handle_codec_power(codec, SND_SOC_BIAS_STANDBY);
 	if (*audio_native) {
@@ -2329,6 +2339,10 @@ static int agold_afe_device_probe(struct idi_peripheral_device *pdev,
 	}
 	agold_afe->dev = pdev;
 	agold_afe->codec_force_shutdown = 0;
+
+	/* Use a workqueue to avoid calling a mutex (sleeping function)
+	 * in an atomic context. */
+	INIT_WORK(&agold_afe->afe_trigger_work, afe_trigger_work_handler);
 
 	/* pm */
 	ret = device_state_pm_set_class(&pdev->device,
