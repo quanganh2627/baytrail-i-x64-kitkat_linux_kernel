@@ -182,7 +182,8 @@ static const struct i2c_device_id wv511_id[] = {
 };
 
 static struct of_device_id wv511_of_match[] = {
-	{.compatible = "whitus vision," WV511_DRIVER_NAME "-v4l2-i2c-subdev"}
+	{.compatible = "whitus vision," WV511_DRIVER_NAME "-v4l2-i2c-subdev"},
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, wv511_id);

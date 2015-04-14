@@ -232,7 +232,8 @@ static const struct i2c_device_id ad5823_id[] = {
 };
 
 static struct of_device_id ad5823_of_match[] = {
-	{.compatible = "analog devices," AD5823_DRIVER_NAME "-v4l2-i2c-subdev"}
+	{.compatible = "analog devices," AD5823_DRIVER_NAME "-v4l2-i2c-subdev"},
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, ad5823_id);
