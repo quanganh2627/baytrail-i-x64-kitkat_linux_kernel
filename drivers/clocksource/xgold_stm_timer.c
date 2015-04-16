@@ -307,7 +307,7 @@ static struct clocksource xgold_stm_clocksource = {
 	.read = xgold_stm_clock_source_read,
 	.mask = CLOCKSOURCE_MASK(56),
 	.shift = 24,		/*FIXME: Refine this choice */
-	.flags = CLOCK_SOURCE_IS_CONTINUOUS | CLOCK_SOURCE_SUSPEND_NONSTOP,
+	.flags = CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
 #ifdef CONFIG_ARM
