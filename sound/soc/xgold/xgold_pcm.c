@@ -832,6 +832,7 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 {
 	struct xgold_runtime_data *xrtd = substream->runtime->private_data;
 	struct xgold_pcm *xgold_pcm;
+	struct dma_chan *dma_chan;
 	unsigned long flags;
 
 	xgold_debug("%s\n", __func__);
@@ -855,17 +856,16 @@ static int xgold_pcm_hw_free(struct snd_pcm_substream *substream)
 				STREAM_PLAY2 == xrtd->stream_type)
 				lpmp3_dma_release(xrtd->dmach);
 
-			/* request DMA shutdown */
-			xgold_debug("terminate all dma: %p\n", xrtd->dmach);
-			spin_lock_irqsave(&xrtd->lock, flags);
-			dmaengine_terminate_all(xrtd->dmach);
-			spin_unlock_irqrestore(&xrtd->lock, flags);
+		/* request DMA shutdown */
+		xgold_debug("terminate all dma: %p\n", xrtd->dmach);
+		dmaengine_terminate_all(xrtd->dmach);
+		dma_chan = xrtd->dmach;
+		xrtd->dmach = NULL;
+		spin_unlock_irqrestore(&xrtd->lock, flags);
 
-			/* Release the DMA channel */
-			dma_release_channel(xrtd->dmach);
-			xrtd->dmach = NULL;
+		/* Release the DMA channel */
+		dma_release_channel(dma_chan);
 		}
-
 		/* Free scatter list memory*/
 		kfree(xrtd->dma_sgl);
 	}
