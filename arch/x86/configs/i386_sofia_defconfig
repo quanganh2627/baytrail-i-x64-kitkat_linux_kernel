@@ -491,6 +491,7 @@ CONFIG_HOTPLUG_CPU=y
 # CONFIG_DEBUG_HOTPLUG_CPU0 is not set
 # CONFIG_COMPAT_VDSO is not set
 # CONFIG_CMDLINE_BOOL is not set
+CONFIG_SOFIA_LOWMEM_DEV=y
 
 #
 # Power management and ACPI options

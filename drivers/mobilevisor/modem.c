@@ -27,7 +27,7 @@
 #include <linux/proc_fs.h>
 #include <sofia/mv_gal.h>
 
-#ifdef CONFIG_SOFIA_LOWMEM_DEV
+#ifdef CONFIG_SOFIA_512M_DEV
 #define NVM_ADDR_SHIFT	(0x1ED80000 - 0x1E000000)
 #define NVM_ADDR_LEN  (0x100000)
 #else

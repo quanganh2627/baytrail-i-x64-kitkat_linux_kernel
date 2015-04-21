@@ -24,4 +24,13 @@ menuconfig SOFIA_LOWMEM_DEV
 	depends on X86_INTEL_SOFIA
 	help
 	Select this if the target sofia platform
-	only has limited memory
+	only has limited memory which needs special
+	memory optimization
+
+menuconfig SOFIA_512M_DEV
+	bool "Sofia device with 512MB RAM"
+	default n
+	depends on X86_INTEL_SOFIA
+	help
+	Select this if the target sofia platform
+	only has 512M memory
