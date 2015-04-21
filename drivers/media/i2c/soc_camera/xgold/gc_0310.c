@@ -338,11 +338,13 @@ out_free:
 
 static struct of_device_id gc_of_match[] = {
 	{.compatible = "galaxycore," GC0310_NAME "-v4l2-i2c-subdev"},
+	{ }
 };
 
 
 static const struct i2c_device_id gc_ids[] = {
 	{GC0310_NAME, (kernel_ulong_t)&gc0310_product_info },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, gc_ids);
