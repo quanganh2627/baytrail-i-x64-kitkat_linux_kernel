@@ -114,7 +114,7 @@ struct device_pm_platdata *pm_platdata;
 // offline bplog definition
 #define OFFLOG_PATH_LEN 255
 
-#define OFFLOG_CONFIG_FILE "/system/etc/offlogcfg.txt"
+#define OFFLOG_CONFIG_FILE "/data/system/offlogcfg.txt"
 #define OFFLOG_CONFIG_FILE_SIZE 500
 
 #define OFFLOG_CONFIG_TAG_ONOFF "on_off"
@@ -929,7 +929,9 @@ static int oct_thread(void *param)
 		oct_offlog_check_mk_dirs();
 		if (oct_offlog_if_rotate())
 			oct_offlog_rotate_files();
-
+		OCT_DBG("sleep 10s to ensure modem prepared");
+		msleep(10000);
+		OCT_DBG("sleep 10s finished");
 		oct_offlog_send_init_at();
 		fp = oct_open_gadget(oct_offlog_path);
     }
