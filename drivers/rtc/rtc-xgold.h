@@ -1,6 +1,8 @@
 #ifndef __RTC_XGOLD_H
 #define __RTC_XGOLD_H
 
+#include <sofia/mv_svc_hypercalls.h>
+
 #define OF_SCU_RTCIF "intel,scu_rtcif"
 #define OF_SCU_PHYS "intel,scu-phys"
 #define OF_PM_IRQ_NR "intel,pm_irq_nr"
@@ -19,6 +21,9 @@ struct rtc_driver_data {
 	spinlock_t lock;
 	struct rtc_device *rtc;
 	struct xgold_rtc_ops *core_ops;
+
+	int enabled;
+	struct rtc_datetime_shared_data cur_rtcsd;
 };
 
 extern struct rtc_driver_data *xgold_rtc_init_driver(struct device *);

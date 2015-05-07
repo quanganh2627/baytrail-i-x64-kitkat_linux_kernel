@@ -31,6 +31,10 @@ static irqreturn_t xgold_rtc_irq(int irq, void *rtc_d)
 
 	spin_lock(&rtcd->lock);
 	XGOLD_RTC_ENTER;
+
+	/*update current alarm sharedata when alarm expired*/
+	mv_svc_rtc_get_alarm(&rtcd->cur_rtcsd);
+
 	rtc_update_irq(rtcd->rtc, 1, events);
 	spin_unlock(&rtcd->lock);
 	return IRQ_HANDLED;
@@ -186,22 +190,28 @@ static int xgold_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 		rtc_dbg("%s: clear alarm\n", __func__);
 	}
 
-
 	if (!rtc_valid_tm(tm)) {
-		struct rtc_datetime_shared_data rtc_data;
+		struct rtc_datetime_shared_data *rtc_data;
+		rtc_data = &rtcd->cur_rtcsd;
 
-		rtc_data.m_year = tm->tm_year + DELTA_Y;
-		rtc_data.m_month = tm->tm_mon + DELTA_M;
-		rtc_data.m_day = tm->tm_mday;
-		rtc_data.m_hour = tm->tm_hour;
-		rtc_data.m_minute = tm->tm_min;
-		rtc_data.m_second = tm->tm_sec;
-		rtc_data.m_msecond = 0;
+		rtc_data->m_year = tm->tm_year + DELTA_Y;
+		rtc_data->m_month = tm->tm_mon + DELTA_M;
+		rtc_data->m_day = tm->tm_mday;
+		rtc_data->m_hour = tm->tm_hour;
+		rtc_data->m_minute = tm->tm_min;
+		rtc_data->m_second = tm->tm_sec;
+		rtc_data->m_msecond = 0;
 		rtc_info("%s: hum time %4d-%02d-%02d %02d:%02d:%02d\n",
 			__func__,
-			rtc_data.m_year, rtc_data.m_month, rtc_data.m_day,
-			rtc_data.m_hour, rtc_data.m_minute, rtc_data.m_second);
-		mv_svc_rtc_set_alarm(&rtc_data);
+			rtc_data->m_year, rtc_data->m_month,
+			rtc_data->m_day, rtc_data->m_hour,
+			rtc_data->m_minute, rtc_data->m_second);
+
+		if (alm->enabled) {
+			rtc_info("%s: alarm set enable\n", __func__);
+			mv_svc_rtc_set_alarm(rtc_data);
+			rtcd->enabled = 1;
+		}
 	}
 	spin_unlock(&rtcd->lock);
 
@@ -210,8 +220,43 @@ static int xgold_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 
 static int xgold_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
 {
+	struct rtc_driver_data *rtcd = dev_get_drvdata(dev);
+	struct rtc_datetime_shared_data vmm_rtcsd;
+	struct rtc_datetime_shared_data *rtc_data;
+
 	XGOLD_RTC_ENTER;
-	/* NOTHING TO DO */
+
+	spin_lock(&rtcd->lock);
+	if (enabled) {
+		/*if we get valid alarm from vmm, we keep the vmm*/
+		/* alarm setting. otherwise we restore previous alarm*/
+		/* if not expired*/
+		mv_svc_rtc_get_alarm(&vmm_rtcsd);
+		if (vmm_rtcsd.m_year != 0) {
+			rtc_info("%s: alarm irq en keep vmm\n", __func__);
+			rtcd->enabled = 1;
+		} else {
+			rtc_info("%s: alarm irq enable set\n", __func__);
+			rtc_data = &rtcd->cur_rtcsd;
+			if (rtc_data->m_year != 0) {
+				mv_svc_rtc_set_alarm(rtc_data);
+				rtcd->enabled = 1;
+			}
+		}
+	} else {
+		rtc_info("%s: alarm irq disable set\n", __func__);
+
+		/*if we don't check vmm alarm state,*/
+		/* mv_svc_rtc_clear_alarm() will cause */
+		/*unknown problem*/
+		mv_svc_rtc_get_alarm(&vmm_rtcsd);
+		if (vmm_rtcsd.m_year != 0) {
+			mv_svc_rtc_clear_alarm();
+			rtc_dbg("%s: clear alarm\n", __func__);
+		}
+		rtcd->enabled = 0;
+	}
+	spin_unlock(&rtcd->lock);
 
 	return 0;
 }
